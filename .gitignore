@@ -1,0 +1,11 @@
+# Generated build and cache artifacts
+**/build/
+**/__pycache__/
+**/.pytest_cache/
+*.pyc
+
+# Python packaging artifacts
+**/*.egg-info/
+
+# Local editor/runtime noise
+.vscode/

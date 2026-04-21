@@ -1,0 +1,56 @@
+# Integration contract for the hit_decoder HLS module
+#
+# IP: hit_decoder
+# ip_info_key: dec
+# Policy: framework/IP_INTERFACE_POLICY.md
+
+ip_interface:
+  module_name: hit_decoder
+  ip_info_key: dec
+  source_type: hls
+  normalization_status: ready
+  notes: >
+    Decodes a 32-bit packed detector hit {phi[31:16], eta[15:0]}.
+    Applies phi+1 calibration offset. Valid gating: output is valid
+    only if raw_valid=1 AND raw_hit!=0. Pipelined at II=1.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    raw_hit:
+      raw_port: raw_hit
+      direction: input
+      width: 32
+      wiring_kind: raw_detector_hit
+      notes: "Packed detector hit from frontend"
+
+    raw_valid:
+      raw_port: raw_valid
+      direction: input
+      width: 1
+      wiring_kind: raw_hit_valid
+      notes: "Hit valid strobe"
+
+    decoded_hit:
+      raw_port: decoded_hit
+      direction: output
+      width: 32
+      wiring_kind: decoded_hit
+      notes: "Calibrated hit {phi+1, eta}"
+
+    decoded_valid:
+      raw_port: decoded_valid
+      direction: output
+      width: 1
+      wiring_kind: decoded_valid
+      notes: "Decoded hit valid"

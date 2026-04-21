@@ -1,0 +1,5 @@
+set project_dir "{{ project_dir }}"
+close_project
+puts "🧹 Removing $project_dir"
+file delete -force $project_dir
+exit

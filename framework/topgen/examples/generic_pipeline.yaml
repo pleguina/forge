@@ -1,0 +1,71 @@
+part: xczu7ev-ffvc1156-2-e
+clock_period: 5.0
+max_parallel_jobs: 4
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+modules:
+  - name: source
+    top: stream_source
+    src: [src/stream_source.cpp]
+    includes: [include]
+    stages: [project, synth, ip]
+    kind: hls
+    instances: 2
+    external_in_ports: [in_data]
+    external_out_ports: []
+
+  - name: merge
+    top: merge_stage
+    src: [src/merge_stage.cpp]
+    includes: [include]
+    stages: [project, synth, ip]
+    kind: hls
+    instances: 1
+    external_in_ports: []
+    external_out_ports: []
+
+  - name: delay
+    top: signal_delay
+    src: [../hdl/verilog/signal_delay.v]
+    includes: []
+    stages: []
+    kind: rtl
+    rtl_lang: verilog
+    instances: 1
+    external_in_ports: []
+    external_out_ports: []
+
+  - name: sink
+    top: packet_sink
+    src: [src/packet_sink.cpp]
+    includes: [include]
+    stages: [project, synth, ip]
+    kind: hls
+    instances: 1
+    external_in_ports: []
+    external_out_ports: [out_packet]
+
+connections:
+  - from: source
+    to: merge
+    port_map_ranges:
+      - src_prefix: out_stream
+        dst_prefix: in_stream
+        count: 2
+        src_start: 0
+        dst_start: 0
+
+  - from: merge
+    to: delay
+    port_map:
+      - [out_payload, in_data]
+      - [out_valid, in_valid]
+
+  - from: delay
+    to: sink
+    port_map:
+      - [out_data, in_payload]
+      - [out_valid, in_valid]

@@ -1,0 +1,126 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Trigger Demo — Module Registry
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 4 HLS modules forming a simple trigger-detection pipeline:
+#   hit_decoder × 4 ──(gather)──→ hit_collector ──→ trigger_logic
+#                                ├─(instance_assign)→ decoded_partition_sink
+#                                └─(contract_wiring via RTL fanout/sink)──→ trigger_output
+#
+# registry_version: used by loaders to detect registry format.
+# ═══════════════════════════════════════════════════════════════════════════
+registry_version: '1'
+
+defaults:
+  part: xcvu9p-flga2104-2L-e
+  clock_period: 4.0
+  vendor: TriggerDemo
+  version: '1.0'
+
+modules:
+
+# ─── Hit Decoder (4 instances — fan-in source) ────────────────────────────
+- name: hit_decoder
+  kind: hls
+  top: hit_decoder
+  interface_contract: plugins/trigger_demo/interfaces/hit_decoder_ip.interface.yaml
+  src: [algo/hit_decoder/hit_decoder.cpp]
+  includes: [algo/common, algo/hit_decoder, verify/src]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+  verify:
+    tb_src:
+      - algo/hit_decoder/hit_decoder.cpp
+      - verify/tests/tb_hit_decoder.cpp
+    tb_args: verify/schemas/data/trigger_demo_golden.xml
+    testbench_target: tb_hit_decoder
+
+# ─── Hit Collector (1 instance — aggregates decoded hits) ─────────────────
+- name: hit_collector
+  kind: hls
+  top: hit_collector
+  interface_contract: plugins/trigger_demo/interfaces/hit_collector_ip.interface.yaml
+  src: [algo/hit_collector/hit_collector.cpp]
+  includes: [algo/common, algo/hit_decoder, algo/hit_collector, verify/src]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+  verify:
+    tb_src:
+      - algo/hit_decoder/hit_decoder.cpp
+      - algo/hit_collector/hit_collector.cpp
+      - verify/tests/tb_hit_collector.cpp
+    tb_args: verify/schemas/data/trigger_demo_golden.xml
+    testbench_target: tb_hit_collector
+
+# ─── Trigger Logic (1 instance — majority trigger decision) ───────────────
+- name: trigger_logic
+  kind: hls
+  top: trigger_logic
+  interface_contract: plugins/trigger_demo/interfaces/trigger_logic_ip.interface.yaml
+  src: [algo/trigger_logic/trigger_logic.cpp]
+  includes: [algo/common, algo/hit_decoder, algo/hit_collector, algo/trigger_logic, verify/src]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+  verify:
+    tb_src:
+      - algo/hit_decoder/hit_decoder.cpp
+      - algo/hit_collector/hit_collector.cpp
+      - algo/trigger_logic/trigger_logic.cpp
+      - verify/tests/tb_trigger_logic.cpp
+    tb_args: verify/schemas/data/trigger_demo_golden.xml
+    testbench_target: tb_trigger_logic
+
+# ─── Trigger Output (1 instance — packs result for readout) ──────────────
+- name: trigger_output
+  kind: hls
+  top: trigger_output
+  interface_contract: plugins/trigger_demo/interfaces/trigger_output_ip.interface.yaml
+  src: [algo/trigger_output/trigger_output.cpp]
+  includes: [algo/common, algo/hit_decoder, algo/hit_collector, algo/trigger_logic, algo/trigger_output, verify/src]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+  verify:
+    tb_src:
+      - algo/hit_decoder/hit_decoder.cpp
+      - algo/hit_collector/hit_collector.cpp
+      - algo/trigger_logic/trigger_logic.cpp
+      - algo/trigger_output/trigger_output.cpp
+      - verify/tests/tb_trigger_output.cpp
+    tb_args: verify/schemas/data/trigger_demo_golden.xml
+    testbench_target: tb_trigger_output
+
+# ─── Partitioned consumer proof (RTL) ───────────────────────────────────
+- name: decoded_partition_sink
+  kind: rtl
+  rtl_lang: verilog
+  top: decoded_partition_sink
+  interface_contract: plugins/trigger_demo/interfaces/decoded_partition_sink.interface.yaml
+  src: [algo/rtl/decoded_partition_sink.v]
+
+# ─── Contract-wiring producer proof (RTL) ───────────────────────────────
+- name: trigger_fanout
+  kind: rtl
+  rtl_lang: verilog
+  top: trigger_fanout
+  interface_contract: plugins/trigger_demo/interfaces/trigger_fanout.interface.yaml
+  src: [algo/rtl/trigger_fanout.v]
+
+# ─── Contract-wiring consumer proof (RTL) ───────────────────────────────
+- name: trigger_contract_sink
+  kind: rtl
+  rtl_lang: verilog
+  top: trigger_contract_sink
+  interface_contract: plugins/trigger_demo/interfaces/trigger_contract_sink.interface.yaml
+  src: [algo/rtl/trigger_contract_sink.v]

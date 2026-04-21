@@ -1,0 +1,69 @@
+# Integration contract for the hit_collector HLS module
+#
+# IP: hit_collector
+# ip_info_key: col
+# Policy: framework/IP_INTERFACE_POLICY.md
+
+ip_interface:
+  module_name: hit_collector
+  ip_info_key: col
+  source_type: hls
+  normalization_status: ready
+  notes: >
+    Collects decoded hits from 4 decoder channels (fan-in).
+    Counts valid channels and sums their phi coordinates.
+    Port arrays in_hit_0..3 and in_valid_0..3 are populated via
+    gather topology group from 4 hit_decoder instances.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    # ── Gathered input arrays (from 4 decoder instances) ─────────────
+
+    input_hit_array:
+      array: true
+      raw_port_prefix: in_hit_
+      count: 4
+      direction: input
+      width: 32
+      wiring_kind: decoded_hit
+      notes: "Decoded hits from 4 decoder channels"
+
+    input_valid_array:
+      array: true
+      raw_port_prefix: in_valid_
+      count: 4
+      direction: input
+      width: 1
+      wiring_kind: decoded_valid
+      notes: "Valid strobes from 4 decoder channels"
+
+    # ── Scalar summary outputs ───────────────────────────────────────
+
+    n_hits:
+      raw_port: n_hits
+      direction: output
+      width: 3
+      notes: "Number of valid channels (0..4)"
+
+    phi_sum:
+      raw_port: phi_sum
+      direction: output
+      width: 16
+      notes: "Sum of phi coordinates of valid hits"
+
+    collector_valid:
+      raw_port: collector_valid
+      direction: output
+      width: 1
+      notes: "High when at least one hit is valid"

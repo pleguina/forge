@@ -1,0 +1,221 @@
+# Canonical IP interface role vocabulary — topgen framework
+#
+# Schema version: 1.1
+# Policy document: framework/IP_INTERFACE_POLICY.md
+#
+# Rules:
+#  - Add a role only when the framework must consume it across modules.
+#  - Module-local or design-specific ports use a plugin-scoped prefix (e.g.
+#    <plugin>_<role>) and carry extension: true. They MUST NOT appear here;
+#    declare them in the plugin's own ip_interface.yaml.
+#  - required: true means the verifier flags absence as an error (not a warning).
+#
+# generation_authoritative: true
+#   Marks roles that the generator must wire from the contract directly.
+#   For these roles, heuristic port-name matching is NOT used for contract-
+#   supported modules. See framework/IP_INTERFACE_POLICY.md §4.
+
+schema_version: "1.1"
+
+roles:
+
+  # ── Clock / Reset ─────────────────────────────────────────────────────────
+
+  clock_primary:
+    description: "Primary clock input"
+    direction: input
+    width: 1
+    required: true
+    generation_authoritative: true
+    category: clock_reset
+
+  reset_primary:
+    description: >
+      Primary synchronous reset. Active high unless the mapping spec sets
+      active_level: low.
+    direction: input
+    width: 1
+    required: true
+    generation_authoritative: true
+    active_level: high
+    category: clock_reset
+
+  clock_secondary:
+    description: "Secondary clock (cross-clock-domain modules only)"
+    direction: input
+    width: 1
+    required: false
+    category: clock_reset
+
+  reset_secondary:
+    description: "Secondary reset (optional complement to reset_primary)"
+    direction: input
+    width: 1
+    required: false
+    category: clock_reset
+
+  # ── Configuration inputs ───────────────────────────────────────────────────
+
+  cfg_word:
+    description: "64-bit packed configuration word (CSP-format cfg64 input)"
+    direction: input
+    width: 64
+    required: false
+    generation_authoritative: true
+    category: config
+
+  cfg_valid:
+    description: "Configuration-word valid strobe (1-bit, same cycle as cfg_word)"
+    direction: input
+    width: 1
+    required: false
+    generation_authoritative: true
+    category: config
+
+  # ── Configuration outputs (for distribution modules) ──────────────────────
+
+  cfg_word_out:
+    description: "64-bit packed configuration word output forwarded downstream"
+    direction: output
+    width: 64
+    required: false
+    category: config
+
+  cfg_valid_out:
+    description: "Forwarded configuration-valid output"
+    direction: output
+    width: 1
+    required: false
+    category: config
+
+  cfg_source_reg:
+    description: "64-bit framework register driving the config distribution block"
+    direction: input
+    width: 64
+    required: false
+    category: config
+
+  # ── Data ingress ───────────────────────────────────────────────────────────
+
+  input_stream_0:
+    description: >
+      Primary scalar data input stream. Width is determined by the IP; 67 bits
+      is the standard CSP packed-stub format.
+    direction: input
+    required: false
+    category: ingress
+
+  input_stream_1:
+    description: "Second scalar data input stream (if IP has two independent inputs)"
+    direction: input
+    required: false
+    category: ingress
+
+  input_stream_array:
+    description: >
+      Array of homogeneous input streams sharing the same width. Use
+      raw_port_prefix + count in the mapping spec entry.
+    direction: input
+    required: false
+    array: true
+    category: ingress
+
+  # ── Data egress ───────────────────────────────────────────────────────────
+
+  output_stream_0:
+    description: "Primary scalar data output stream"
+    direction: output
+    required: false
+    category: egress
+
+  output_stream_1:
+    description: "Second scalar data output stream"
+    direction: output
+    required: false
+    category: egress
+
+  output_stream_array:
+    description: "Array of homogeneous output streams"
+    direction: output
+    required: false
+    array: true
+    category: egress
+
+  # ── Timing / BX control ───────────────────────────────────────────────────
+
+  bx_sync_in:
+    description: "BX0 synchronisation pulse input (marks start-of-BX0 from LHC clock)"
+    direction: input
+    width: 1
+    required: false
+    category: timing
+
+  timing_new_event:
+    description: >
+      New-event strobe broadcast output. Asserted at the start of each BX
+      when new detector data is expected.
+    direction: output
+    width: 1
+    required: false
+    category: timing
+
+  timing_cycle_in_bx:
+    description: "Cycle-within-BX counter output (0–8, resets each BX)"
+    direction: output
+    width: 4
+    required: false
+    category: timing
+
+  timing_bx_counter:
+    description: "Running BX counter output used for latency tracing"
+    direction: output
+    width: 12
+    required: false
+    category: timing
+
+  # ── Event control ─────────────────────────────────────────────────────────
+
+  ctrl_new_event:
+    description: "New-event strobe input consumed by a downstream processing module"
+    direction: input
+    width: 1
+    required: false
+    category: control
+
+  # ── Scalar reference data ─────────────────────────────────────────────────
+
+  input_ref_ptr:
+    description: >
+      Scalar reference-hit pointer / selector word entering a processing module
+      (e.g., layermem ref_ptr input from the priority arbiter).
+    direction: input
+    required: false
+    category: data
+
+  output_ref_ptr:
+    description: "Scalar reference-hit pointer / selector word output"
+    direction: output
+    required: false
+    category: data
+
+  output_ref_hit:
+    description: "Scalar reference-hit data output"
+    direction: output
+    required: false
+    category: data
+
+  # ── Plugin extension roles ────────────────────────────────────────────────
+  #
+  # Plugin-specific roles MUST NOT be declared here. They belong in the
+  # plugin's own ip_interface.yaml files using a plugin-scoped prefix and
+  # carrying extension: true.  See framework/IP_INTERFACE_POLICY.md §5.
+  #
+  # Example (in plugins/<plugin>/interfaces/<ip>.interface.yaml):
+  #
+  #   roles:
+  #     <plugin>_my_custom_role:
+  #       description: "Plugin-specific role description"
+  #       direction: output
+  #       required: false
+  #       extension: true
+  #       category: data

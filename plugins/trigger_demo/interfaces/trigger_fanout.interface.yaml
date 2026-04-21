@@ -1,0 +1,61 @@
+# Integration contract for the trigger_fanout RTL helper
+
+ip_interface:
+  module_name: trigger_fanout
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Duplicates scalar trigger metadata into 2-lane arrays so the design can
+    prove contract_wiring on a non-OMTF plugin.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    trigger_accept:
+      raw_port: trigger_accept
+      direction: input
+      width: 1
+
+    trigger_quality:
+      raw_port: trigger_quality
+      direction: input
+      width: 8
+
+    trigger_valid:
+      raw_port: trigger_valid
+      direction: input
+      width: 1
+
+    accept_lane_array:
+      array: true
+      raw_port_prefix: accept_lane_
+      count: 2
+      direction: output
+      width: 1
+      wiring_kind: trigger_accept_lane
+
+    quality_lane_array:
+      array: true
+      raw_port_prefix: quality_lane_
+      count: 2
+      direction: output
+      width: 8
+      wiring_kind: trigger_quality_lane
+
+    valid_lane_array:
+      array: true
+      raw_port_prefix: valid_lane_
+      count: 2
+      direction: output
+      width: 1
+      wiring_kind: trigger_valid_lane

@@ -1,0 +1,37 @@
+ports:
+  - name:       in_hit_0
+    direction:  input
+    width:      32
+  - name:       in_valid_0
+    direction:  input
+    width:      1
+  - name:       in_hit_1
+    direction:  input
+    width:      32
+  - name:       in_valid_1
+    direction:  input
+    width:      1
+  - name:       in_hit_2
+    direction:  input
+    width:      32
+  - name:       in_valid_2
+    direction:  input
+    width:      1
+  - name:       in_hit_3
+    direction:  input
+    width:      32
+  - name:       in_valid_3
+    direction:  input
+    width:      1
+  - name:       n_hits
+    direction:  output
+    width:      3
+  - name:       phi_sum
+    direction:  output
+    width:      16
+  - name:       collector_valid
+    direction:  output
+    width:      1
+  - name:       ap_rst
+    direction:  input
+    width:      1

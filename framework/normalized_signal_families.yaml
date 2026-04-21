@@ -1,0 +1,206 @@
+# Normalized Signal Families — Canonical Vocabulary
+
+**Version:** 2.0
+**Date:** 2026-04-06
+**Status:** Complete — reflects full Topology A migration
+
+---
+
+## Purpose
+
+This file defines the canonical semantic vocabulary for all signal families
+that cross module boundaries. Each family groups related `wiring_kind` values
+that share physical encoding and dataflow stage.
+
+The goal is to:
+1. Provide a closed vocabulary for `wiring_kind` values in interface contracts
+2. Drive topology_groups matching (auto_match, role_pairs, instance_assign)
+3. Make the dataflow pipeline stages explicit and auditable
+
+---
+
+## Signal Family Registry
+
+### Family: `configuration`
+
+Configuration broadcast signals distributed from cfg instances to processing IPs.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `cfg64_word` | cfg → dt/csc IFs | cfg64_from_framework | dt_interface_ip, csc_interface_ip |
+| `cfg_valid_strobe` | cfg → dt/csc IFs | cfg64_from_framework | dt_interface_ip, csc_interface_ip |
+
+---
+
+### Family: `frontend_packed`
+
+Packed stubs from frontend (CSP) before detector-specific processing.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `csp_packed_stub` | Frontend → Detector IF | (external / csp_pack) | dt_interface_ip, csc_interface_ip |
+
+---
+
+### Family: `detector_processed`
+
+Detector-processed stubs after initial decoding/unpacking. These carry
+per-station hit information ready for concentration and region filtering.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `dt_processed_stub` | DT IF → Conc → RgF/Mem | dt_interface_ip | concentrator_ip, region_filter_ip, layermem_ip |
+| `csc_processed_stub` | CSC IF → Conc → RgF/Mem | csc_interface_ip | concentrator_ip, region_filter_ip, layermem_ip |
+| `rpc_stub` | RPC tieoff → Conc → delays → RgF/Mem | (rpc_tieoff) | concentrator_ip, signal_delay, region_filter_ip, layermem_ip |
+
+---
+
+### Family: `region_encoded`
+
+Stubs after region filtering — assigned to processing regions.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `region_encoded_stub` | RgF → Arb | region_filter_ip | priority_arbiter_ip |
+
+---
+
+### Family: `layer_memory`
+
+Per-layer output streams from the memory lookup block.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `dt_layer_stub` | Mem → PhiExtrap | layermem_ip | phi_extrapolation_ip |
+| `csc_layer_stub` | Mem → PhiExtrap | layermem_ip | phi_extrapolation_ip |
+
+---
+
+### Family: `phi_extrapolation`
+
+Phi-extrapolated stub coordinates output by the phi extrapolation stage.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `dt_phi_extrap_stub` | PhiExtrap → PhiDist | phi_extrapolation_ip | phi_dist_processor_ip |
+| `csc_phi_extrap_stub` | PhiExtrap → PhiDist | phi_extrapolation_ip | phi_dist_processor_ip |
+
+---
+
+### Family: `phi_match`
+
+Phi-distance matching scores.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `omtf_phi_match_score` | PhiDist → PDF | phi_dist_processor_ip | pdf_lookup_ip |
+
+---
+
+### Family: `pdf_quality`
+
+PDF lookup scores and quality metrics.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `omtf_distphi` | PDF → BestCand | pdf_lookup_ip | best_candidate_ip |
+| `omtf_dt_quality` | (pipeline) → BestCand | (pipeline) | best_candidate_ip |
+| `omtf_pdf_score` | PDF → BestCand | pdf_lookup_ip | best_candidate_ip |
+
+---
+
+### Family: `best_candidate_nd`
+
+N-dimensional arrays consumed by the best candidate selector.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `omtf_pdf_nd_array` | Pipeline → BestCand | (merged) | best_candidate_ip |
+| `omtf_layer_fired_array` | Pipeline → BestCand | (merged) | best_candidate_ip |
+| `omtf_distphi_nd_array` | Pipeline → BestCand | (merged) | best_candidate_ip |
+| `omtf_distphi_valid_nd_array` | Pipeline → BestCand | (merged) | best_candidate_ip |
+| `omtf_dt_quality_nd_array` | Pipeline → BestCand | (merged) | best_candidate_ip |
+| `omtf_layer_nd_array` | Mem → BestCand | layermem_ip | best_candidate_ip |
+
+---
+
+### Family: `winner_arrays`
+
+Winner candidate data arrays forwarded to the NN inference stage.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `omtf_winner_distphi_array` | BestCand → NN IF | best_candidate_ip | nn_interface_ip |
+| `omtf_winner_distphi_valid_array` | BestCand → NN IF | best_candidate_ip | nn_interface_ip |
+| `omtf_winner_dtqual_array` | BestCand → NN IF | best_candidate_ip | nn_interface_ip |
+
+---
+
+### Family: `nn_inference`
+
+NN input features and inference results.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `omtf_nn_input` | NN IF → RegNN | nn_interface_ip | regression_nn_ip |
+
+---
+
+### Family: `phi_extrap_nd`
+
+N-dimensional arrays for phi extrapolation stage passthrough.
+
+| wiring_kind | Stage | Producers | Consumers |
+|-------------|-------|-----------|-----------|
+| `omtf_phi_extrap_nd_array` | PhiDist passthrough | phi_dist_processor_ip | (downstream) |
+| `omtf_phi_match_nd_array` | PhiDist passthrough | phi_dist_processor_ip | (downstream) |
+
+---
+
+## Family Coverage Summary
+
+| Family | wiring_kind count | Topology group strategy | Notes |
+|--------|-------------------|------------------------|-------|
+| `configuration` | 2 | role_pairs + src_instance_offset | cfg broadcast |
+| `frontend_packed` | 1 | (external input) | Stable |
+| `detector_processed` | 3 | instance_assign + auto_match | Core pipeline entry |
+| `region_encoded` | 1 | auto_match | Fully partitioned |
+| `layer_memory` | 2 | (contract_wiring) | Stable |
+| `phi_extrapolation` | 2 | (contract_wiring) | Stable |
+| `phi_match` | 1 | (contract_wiring) | Stable |
+| `pdf_quality` | 3 | (contract_wiring) | Stable |
+| `best_candidate_nd` | 6 | (contract_wiring) | N-D arrays |
+| `winner_arrays` | 3 | (contract_wiring) | Stable |
+| `nn_inference` | 1 | (contract_wiring) | Stable |
+| `phi_extrap_nd` | 2 | (contract_wiring) | Passthrough |
+| **Total** | **27** | | |
+
+---
+
+## Validation Rules
+
+1. Every `wiring_kind` value in a contract MUST appear in this registry
+2. New `wiring_kind` values require a PR that updates this file
+3. A `wiring_kind` value belongs to exactly one family
+4. Producer and consumer columns must be kept in sync with actual contracts
+5. Families map 1:1 to dataflow pipeline stages (no family spans >1 stage boundary)
+
+---
+
+## Usage in Topology A
+
+In the target architecture, `topology_groups` in design.yml will reference
+signal families (not individual wiring_kind values) when wiring heterogeneous
+boundaries such as "all detector stubs from concentrator to region filter":
+
+```yaml
+# Future topology_groups syntax (Step 9 draft):
+topology_groups:
+  - name: concentrator_to_region_filter
+    family: detector_processed
+    producers: [concentrator]
+    consumers: [region_filter]
+```
+
+The generator resolves family → wiring_kind values → individual contract roles
+→ physical ports.

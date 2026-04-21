@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "topgen"
+version = "1.1.0"
+description = "Algorithm Top-Level Generator - Generate HDL wrappers from IP metadata"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "OMTF Framework Team", email = "omtf-framework@cern.ch"}
+]
+keywords = ["hdl", "vhdl", "fpga", "ip", "vivado", "top-level", "generator"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "jinja2>=3.0",
+]
+
+[project.optional-dependencies]
+# Note: VHDL linting uses GHDL (system package)
+# Install with: apt-get install ghdl (Ubuntu/Debian)
+#              dnf install ghdl (Fedora/RHEL)
+#              brew install ghdl (macOS)
+# Note: Verilog linting uses Verilator (system package only; RTL simulation is XSIM-first)
+# Install with: apt-get install verilator (Ubuntu/Debian)
+#              dnf install verilator (Fedora/RHEL)
+#              brew install verilator (macOS)
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "mypy>=1.0",
+]
+all = [
+    "topgen[dev]",
+]
+
+[project.urls]
+Homepage = "https://gitlab.cern.ch/pleguina/omtf_v2"
+Documentation = "https://gitlab.cern.ch/pleguina/omtf_v2/-/blob/main/framework/topgen/README.md"
+Repository = "https://gitlab.cern.ch/pleguina/omtf_v2"
+Issues = "https://gitlab.cern.ch/pleguina/omtf_v2/-/issues"
+
+[project.scripts]
+topgen = "topgen.cli.main:main"
+
+[tool.setuptools]
+packages = ["topgen", "topgen.ip", "topgen.generators",
+            "topgen.utils", "topgen.cli", "topgen.hls"]
+
+[tool.setuptools.package-data]
+topgen = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=topgen --cov-report=html --cov-report=term"

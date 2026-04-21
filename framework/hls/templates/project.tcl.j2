@@ -1,0 +1,69 @@
+#-------------------------------------------------------------
+# project.tcl — auto-generated for {{ module_name }}. DO NOT EDIT BY HAND.
+#-------------------------------------------------------------
+
+# ---------- core project variables --------------------------
+# Absolute path to the HLS project dir for this module
+set project_dir   "{{ project_dir }}"
+
+# Logical metadata (not strictly required by Vitis, but useful)
+set project_name  "{{ module_name }}"
+set top_function  "{{ top }}"
+set part_name     "{{ part }}"
+set clock_period  {{ clock_period }}
+
+set description   "Streaming HLS Module"
+set display_name  "{{ module_name }}"
+set vendor        "{{ vendor | default("user") }}"
+set version       "{{ version }}"
+
+puts "=========================================="
+puts "  PROJECT SETUP - {{ module_name }}"
+puts "=========================================="
+puts "▶ project_dir   = $project_dir"
+puts "▶ top_function  = $top_function"
+puts "▶ part_name     = $part_name"
+puts "▶ clock_period  = $clock_period"
+puts ""
+
+# ---------- (re)create project ------------------------------
+open_project -reset $project_dir
+set_top $top_function
+
+# ---------- solution / timing / device ----------------------
+open_solution -reset "solution1" -flow_target vivado
+set_part     $part_name
+create_clock -period $clock_period -name default
+
+# ---------- sources / testbench -----------------------------
+# These filenames are intentionally kept RELATIVE (../../src/...)
+# so that Vitis HLS copies them into the out-of-context project
+# instead of baking absolute /home/... paths.
+set src_files { {% for f in src %}"{{ f }}" {% endfor %} }
+set tb_files  { {% for f in tb  %}"{{ f }}" {% endfor %} }
+
+# ---------- include directories -----------------------------
+# We build one giant cflags string with all include dirs and any
+# extra flags the Python config gave us.
+set cflags "{% if cfg_dir is defined and cfg_dir %}-I{{ cfg_dir }} {% endif %}{% for inc in includes %}-I{{ inc }} {% endfor %}{% for flag in cflags %}{{ flag }} {% endfor %}"
+
+puts "▶ Adding source files..."
+foreach file $src_files {
+    puts "   + $file"
+    add_files $file -cflags $cflags
+}
+
+puts "▶ Adding testbench files..."
+foreach file $tb_files {
+    puts "   + $file (TB)"
+    add_files $file -cflags $cflags -tb
+}
+
+puts ""
+puts "✅ project.tcl setup complete for {{ module_name }}"
+puts "   Project dir: $project_dir"
+puts "   Solution   : solution1"
+puts ""
+
+close_project
+exit

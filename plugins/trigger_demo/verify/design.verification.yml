@@ -1,0 +1,130 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# trigger_demo — Verification Design Contract
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Declares all verification flows for the trigger_demo plugin.
+# Four single-module HLS CSIM flows, four single-module RTL flows,
+# and one full-chip RTL integration flow over the generated algo_top.
+# ═══════════════════════════════════════════════════════════════════════════
+
+plugin: trigger_demo
+
+# ─── Datasets ────────────────────────────────────────────────────────────
+datasets:
+  trigger_demo_golden:
+    xml: plugins/trigger_demo/verify/schemas/data/trigger_demo_golden.xml
+    description: Golden reference dataset for trigger_demo pipeline stages
+
+# ─── Simulation Defaults ─────────────────────────────────────────────────
+defaults:
+  clk_period_ns:              4.0
+  reset_cycles:               4
+  idle_cycles_after_reset:    0
+  post_stimulus_drain_cycles: 4
+
+# ─── Flows ────────────────────────────────────────────────────────────────
+
+flows:
+
+  - name:             hit_decoder_csim
+    kind:             hls_csim
+    backend:          csim
+    top_module:       hit_decoder
+    tb_module:        tb_hit_decoder
+    dut_rtl_source:   build_hls/hit_decoder
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+  - name:             hit_collector_csim
+    kind:             hls_csim
+    backend:          csim
+    top_module:       hit_collector
+    tb_module:        tb_hit_collector
+    dut_rtl_source:   build_hls/hit_collector
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+  - name:             trigger_logic_csim
+    kind:             hls_csim
+    backend:          csim
+    top_module:       trigger_logic
+    tb_module:        tb_trigger_logic
+    dut_rtl_source:   build_hls/trigger_logic
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+  - name:             trigger_output_csim
+    kind:             hls_csim
+    backend:          csim
+    top_module:       trigger_output
+    tb_module:        tb_trigger_output
+    dut_rtl_source:   build_hls/trigger_output
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+# ─── Single-module RTL / XSIM flows ──────────────────────────────────────
+# Self-contained SV testbenches compiled against HLS syn/verilog output.
+# Runs without external stimulus — test vectors are hardcoded in the TB.
+
+  - name:             hit_decoder_xsim
+    kind:             single_module_rtl
+    backend:          xsim
+    top_module:       hit_decoder
+    tb_module:        tb_hit_decoder_xsim
+    dut_rtl_source:   build_hls_trigger_demo/hit_decoder/solution1/syn/verilog
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+  - name:             hit_collector_xsim
+    kind:             single_module_rtl
+    backend:          xsim
+    top_module:       hit_collector
+    tb_module:        tb_hit_collector_xsim
+    dut_rtl_source:   build_hls_trigger_demo/hit_collector/solution1/syn/verilog
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+  - name:             trigger_logic_xsim
+    kind:             single_module_rtl
+    backend:          xsim
+    top_module:       trigger_logic
+    tb_module:        tb_trigger_logic_xsim
+    dut_rtl_source:   build_hls_trigger_demo/trigger_logic/solution1/syn/verilog
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+  - name:             trigger_output_xsim
+    kind:             single_module_rtl
+    backend:          xsim
+    top_module:       trigger_output
+    tb_module:        tb_trigger_output_xsim
+    dut_rtl_source:   build_hls_trigger_demo/trigger_output/solution1/syn/verilog
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    coverage_intent:  functional
+
+# ─── Full-chip RTL / XSIM flow ───────────────────────────────────────────
+# Generated algo_top integration proving the trigger_demo topology contract.
+
+  - name:             trigger_pipeline_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_trigger_demo_pipeline
+    dataset:          trigger_demo_golden
+    default_event_id: 1
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 12
+    xsim:
+      use_sv_flag: false
+    coverage_intent:  integration
