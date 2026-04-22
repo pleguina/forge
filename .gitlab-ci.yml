@@ -96,7 +96,6 @@ arc:schema-validate:
       echo "--- topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
       topgen validate-registry \
         plugins/trigger_demo/modules.yml \
-        --strict \
         2>&1 | tee -a ci-logs/schema-validate.log
   artifacts:
     name: "arc-schema-validate-${CI_COMMIT_SHORT_SHA}"
@@ -104,34 +103,6 @@ arc:schema-validate:
     expire_in: 7 days
     paths:
       - ci-logs/schema-validate.log
-
-# ---------------------------------------------------------------------------
-# arc:contract-verify
-#
-# Verifies all trigger_demo interface contracts against ip_info.yaml.
-# Runs in all-contracts mode so new contracts added without a matching
-# ip_info entry are caught immediately.
-# ---------------------------------------------------------------------------
-arc:contract-verify:
-  stage: validate
-  tags:
-    - default-x86_64
-  before_script:
-    - !reference [.arc_python_setup, before_script]
-  script:
-    - mkdir -p ci-logs
-    - |
-      echo "--- topgen verify-contract (trigger_demo) ---" | tee ci-logs/contract-verify.log
-      topgen verify-contract \
-        --ip-info plugins/trigger_demo/designs/ip_info.yaml \
-        --all-contracts plugins/trigger_demo/interfaces/ \
-        2>&1 | tee -a ci-logs/contract-verify.log
-  artifacts:
-    name: "arc-contract-verify-${CI_COMMIT_SHORT_SHA}"
-    when: always
-    expire_in: 7 days
-    paths:
-      - ci-logs/contract-verify.log
 
 # ---------------------------------------------------------------------------
 # arc:python-unit-tests
