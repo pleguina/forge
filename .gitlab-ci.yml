@@ -49,7 +49,7 @@ workflow:
 arc:lint:
   stage: lint
   tags:
-    - docker
+    - default-x86_64
   before_script:
     - !reference [.arc_python_setup, before_script]
   script:
@@ -84,7 +84,7 @@ arc:lint:
 arc:schema-validate:
   stage: validate
   tags:
-    - docker
+    - default-x86_64
   before_script:
     - !reference [.arc_python_setup, before_script]
   script:
@@ -118,7 +118,7 @@ arc:schema-validate:
 arc:contract-verify:
   stage: validate
   tags:
-    - docker
+    - default-x86_64
   before_script:
     - !reference [.arc_python_setup, before_script]
   script:
@@ -145,7 +145,7 @@ arc:contract-verify:
 arc:python-unit-tests:
   stage: test
   tags:
-    - docker
+    - default-x86_64
   before_script:
     - !reference [.arc_python_setup, before_script]
   script:
@@ -187,7 +187,7 @@ arc:python-unit-tests:
 arc:fw-verify-smoke:
   stage: smoke
   tags:
-    - docker
+    - default-x86_64
   before_script:
     - !reference [.arc_python_setup, before_script]
   script:
@@ -224,7 +224,7 @@ arc:fw-verify-smoke:
 arc:fresh-user-check:
   stage: smoke
   tags:
-    - docker
+    - default-x86_64
   script:
     - mkdir -p ci-logs
     - bash ci/fresh_user_check.sh 2>&1 | tee ci-logs/fresh-user-check.log

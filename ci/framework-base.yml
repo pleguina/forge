@@ -22,7 +22,7 @@ stages:
 default:
   image: python:3.11-slim
   tags:
-    - docker
+    - default-x86_64
   interruptible: true
 
 # ---------------------------------------------------------------------------

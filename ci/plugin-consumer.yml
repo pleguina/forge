@@ -47,7 +47,7 @@ stages:
 default:
   image: python:3.11-slim
   tags:
-    - docker
+    - default-x86_64
   interruptible: true
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ default:
 .arc_plugin_setup:
   image: python:3.11-slim
   tags:
-    - docker
+    - default-x86_64
   before_script:
     - pip install --quiet --cache-dir .pip-cache
         ${ARC_TOPGEN_PIP_REF:---index-url https://pypi.org/simple/ topgen}
