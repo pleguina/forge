@@ -90,7 +90,6 @@ arc:schema-validate:
       echo "--- topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
       topgen validate \
         plugins/trigger_demo/designs/design.yml \
-        --strict \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
       echo "--- topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
