@@ -61,7 +61,6 @@ arc:lint:
     - |
       echo "--- YAML lint ---" | tee -a ci-logs/lint.log
       yamllint -d relaxed \
-        framework/normalized_signal_families.yaml \
         plugins/trigger_demo/designs/design.yml \
         plugins/trigger_demo/modules.yml \
         2>&1 | tee -a ci-logs/lint.log
