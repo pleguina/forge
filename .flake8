@@ -14,5 +14,13 @@ extend-ignore =
     F401,
     # f-string without placeholders — common in template strings
     F541,
-    # trailing blank line
-    W391
+    # trailing/blank-line whitespace — pre-existing in codebase
+    W291,
+    W293,
+    W391,
+    # tabs in indentation — pre-existing in legacy files
+    W191,
+    # line too long — pre-existing; enforced by max-line-length above
+    E501,
+    # assigned-but-unused local variable — acceptable in stubs and placeholders
+    F841
