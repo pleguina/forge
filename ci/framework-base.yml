@@ -55,4 +55,4 @@ default:
     - pip install --quiet --cache-dir .pip-cache
         -e framework/topgen
         -e "framework/verify/python[parser]"
-        pytest pyyaml yamllint flake8
+        pytest pytest-cov pyyaml yamllint flake8
