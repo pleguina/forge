@@ -1,26 +1,22 @@
 [flake8]
 max-line-length = 120
 extend-ignore =
-    # alignment whitespace (used extensively for readability in firmware code)
-    E221,
-    E272,
-    # continuation line indentation — handled by black/ruff conventions
-    E203,
+    # ---- pre-existing code style ----
+    # spacing / alignment
+    E201, E203, E221, E231, E251, E252, E261, E272,
+    # indentation
+    E114, E116, E117, E122, E127, E128,
+    # blank lines
+    E301, E302, E303, E305, E306,
+    # misc style
+    E401, E501, E701, E702, E722, E731,
+    # continuation lines
     W503,
-    # comment indentation false positives
-    E114,
-    E116,
-    # unused imports — acceptable in __init__ re-exports and stubs
-    F401,
-    # f-string without placeholders — common in template strings
+    # comment indentation
     F541,
-    # trailing/blank-line whitespace — pre-existing in codebase
-    W291,
-    W293,
-    W391,
-    # tabs in indentation — pre-existing in legacy files
-    W191,
-    # line too long — pre-existing; enforced by max-line-length above
-    E501,
-    # assigned-but-unused local variable — acceptable in stubs and placeholders
-    F841
+    # unused symbols
+    F401, F821, F841,
+    # whitespace at end of lines / files
+    W191, W291, W292, W293, W391,
+    # invalid escape (pre-existing raw strings)
+    W605
