@@ -1,0 +1,43 @@
+# ============================================================================
+# ci/framework-release.yml
+#
+# Defines the framework release gate job.
+#
+# This job runs ci/verify_framework_release.sh which exercises:
+#   Class A — cmake configure + build + ctest + minimal_consumer proof +
+#              install-tree proof + external consumer proof
+#
+# The job:
+#   - runs automatically on the default branch (main) and version tags
+#   - is manually triggerable on merge requests (not blocking)
+#   - requires the vivado shell runner (cmake + toolchain on PATH)
+#   - produces structured log artifacts for post-run inspection
+#
+# Consumed by: arc-framework/.gitlab-ci.yml (via include)
+# ============================================================================
+
+arc:framework-release-gate:
+  stage: release
+  tags:
+    - vivado
+  rules:
+    # Automatic on default branch
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    # Automatic on version tags
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+      when: on_success
+    # Manual trigger on merge requests (non-blocking — does not prevent merge)
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  script:
+    - bash ci/verify_framework_release.sh 2>&1 | tee ci-logs/release-gate.log
+  after_script:
+    - echo "Release gate exit code $CI_JOB_STATUS"
+  artifacts:
+    name: "arc-release-gate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 30 days
+    paths:
+      - ci-logs/release-gate.log

@@ -1,0 +1,236 @@
+# ============================================================================
+# arc-framework/.gitlab-ci.yml
+#
+# Pipeline for the arc-framework repository.
+#
+# Workflow:
+#   - runs on merge requests (blocking correctness jobs)
+#   - runs on the default branch (all jobs including release gate auto)
+#   - runs on version tags (all jobs including release gate auto)
+#   - skips on draft MRs
+#
+# Runner classes:
+#   docker  — Python 3.11 container; all public-contract correctness jobs
+#   vivado  — shell executor (local PC); cmake / ctest / Vivado / HLS
+#
+# Failure handling policy:
+#   MR health     : all docker jobs must pass; vivado jobs are manual/advisory
+#   main health   : all docker jobs auto; vivado release gate auto
+#   Release health: version tag triggers docker jobs + vivado release gate;
+#                   both must pass for a release to be considered clean
+#
+# Included fragments:
+#   ci/framework-base.yml    — stages, default image, cache, setup anchor
+#   ci/framework-release.yml — arc:framework-release-gate (vivado runner)
+# ============================================================================
+
+include:
+  - local: ci/framework-base.yml
+  - local: ci/framework-release.yml
+
+# ---------------------------------------------------------------------------
+# Workflow — which pipelines to create
+# ---------------------------------------------------------------------------
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^Draft:/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+# ---------------------------------------------------------------------------
+# arc:lint
+#
+# Python style (flake8) and YAML structure (yamllint) over the framework
+# source tree. Fails fast on obvious coding or schema mistakes.
+# ---------------------------------------------------------------------------
+arc:lint:
+  stage: lint
+  tags:
+    - docker
+  before_script:
+    - !reference [.arc_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
+      flake8 framework/topgen/topgen framework/verify/python/fw_verify \
+        --max-line-length=120 \
+        --extend-ignore=E203,W503 \
+        2>&1 | tee -a ci-logs/lint.log
+    - |
+      echo "--- YAML lint ---" | tee -a ci-logs/lint.log
+      yamllint -d relaxed \
+        framework/normalized_signal_families.yaml \
+        plugins/trigger_demo/designs/design.yml \
+        plugins/trigger_demo/modules.yml \
+        2>&1 | tee -a ci-logs/lint.log
+  artifacts:
+    name: "arc-lint-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/lint.log
+
+# ---------------------------------------------------------------------------
+# arc:schema-validate
+#
+# Validates the trigger_demo design topology and module registry without
+# generating any output. Uses topgen --strict so heuristic wiring is a
+# hard error.
+# ---------------------------------------------------------------------------
+arc:schema-validate:
+  stage: validate
+  tags:
+    - docker
+  before_script:
+    - !reference [.arc_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
+      topgen validate \
+        plugins/trigger_demo/designs/design.yml \
+        --strict \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
+      topgen validate-registry \
+        plugins/trigger_demo/modules.yml \
+        --strict \
+        2>&1 | tee -a ci-logs/schema-validate.log
+  artifacts:
+    name: "arc-schema-validate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/schema-validate.log
+
+# ---------------------------------------------------------------------------
+# arc:contract-verify
+#
+# Verifies all trigger_demo interface contracts against ip_info.yaml.
+# Runs in all-contracts mode so new contracts added without a matching
+# ip_info entry are caught immediately.
+# ---------------------------------------------------------------------------
+arc:contract-verify:
+  stage: validate
+  tags:
+    - docker
+  before_script:
+    - !reference [.arc_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- topgen verify-contract (trigger_demo) ---" | tee ci-logs/contract-verify.log
+      topgen verify-contract \
+        --ip-info plugins/trigger_demo/designs/ip_info.yaml \
+        --all-contracts plugins/trigger_demo/interfaces/ \
+        2>&1 | tee -a ci-logs/contract-verify.log
+  artifacts:
+    name: "arc-contract-verify-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/contract-verify.log
+
+# ---------------------------------------------------------------------------
+# arc:python-unit-tests
+#
+# Runs the topgen unit tests plus the trigger_demo verification proof suite.
+# These 110+ tests require only Python — no HLS build or Vivado needed.
+# ---------------------------------------------------------------------------
+arc:python-unit-tests:
+  stage: test
+  tags:
+    - docker
+  before_script:
+    - !reference [.arc_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- topgen unit tests ---" | tee ci-logs/unit-tests.log
+      python3 -m pytest framework/topgen/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/topgen-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+    - |
+      echo "--- trigger_demo verify tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/trigger_demo/verify/tools/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/trigger-demo-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+  artifacts:
+    name: "arc-unit-tests-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 14 days
+    reports:
+      junit:
+        - ci-logs/topgen-junit.xml
+        - ci-logs/trigger-demo-junit.xml
+    paths:
+      - ci-logs/unit-tests.log
+      - ci-logs/topgen-junit.xml
+      - ci-logs/trigger-demo-junit.xml
+
+# ---------------------------------------------------------------------------
+# arc:fw-verify-smoke
+#
+# Confirms the fw_verify CLI is healthy using only Python/config operations:
+#   - generate --dry-run on two trigger_demo flows
+#   - doctor on trigger_demo design.verification.yml
+#
+# Confirmed pure Python/config path — no simulator or Vivado dependency.
+# ---------------------------------------------------------------------------
+arc:fw-verify-smoke:
+  stage: smoke
+  tags:
+    - docker
+  before_script:
+    - !reference [.arc_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - DESIGN_FILE="plugins/trigger_demo/verify/design.verification.yml"
+    - |
+      echo "--- fw_verify generate dry-run (hit_decoder_csim) ---" | tee ci-logs/fw-verify-smoke.log
+      fw_verify generate "${DESIGN_FILE}" \
+        --flow hit_decoder_csim --dry-run \
+        2>&1 | tee -a ci-logs/fw-verify-smoke.log
+    - |
+      echo "--- fw_verify generate dry-run (trigger_pipeline_xsim) ---" | tee -a ci-logs/fw-verify-smoke.log
+      fw_verify generate "${DESIGN_FILE}" \
+        --flow trigger_pipeline_xsim --dry-run \
+        2>&1 | tee -a ci-logs/fw-verify-smoke.log
+    - |
+      echo "--- fw_verify doctor ---" | tee -a ci-logs/fw-verify-smoke.log
+      fw_verify doctor "${DESIGN_FILE}" \
+        2>&1 | tee -a ci-logs/fw-verify-smoke.log
+  artifacts:
+    name: "arc-fw-verify-smoke-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/fw-verify-smoke.log
+
+# ---------------------------------------------------------------------------
+# arc:fresh-user-check
+#
+# Exercises the full framework onboarding path from package install through
+# fw_verify init-plugin scaffold and doctor. Catches regressions that only
+# surface on a clean install.
+# ---------------------------------------------------------------------------
+arc:fresh-user-check:
+  stage: smoke
+  tags:
+    - docker
+  script:
+    - mkdir -p ci-logs
+    - bash ci/fresh_user_check.sh 2>&1 | tee ci-logs/fresh-user-check.log
+  artifacts:
+    name: "arc-fresh-user-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/fresh_user_check.log

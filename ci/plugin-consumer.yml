@@ -1,0 +1,128 @@
+# ============================================================================
+# ci/plugin-consumer.yml
+#
+# Reusable CI fragments for downstream plugin repositories.
+#
+# DESIGN RULE (enforced):
+#   This file provides ONLY:
+#     - shared stage declarations that a plugin can extend
+#     - a hidden Python setup template (.arc_plugin_setup)
+#     - a hidden fw_verify smoke template (.arc_fw_verify_smoke)
+#   It must NOT:
+#     - define mandatory concrete jobs
+#     - reference plugins/trigger_demo/ or any arc-framework-internal path
+#     - assume any framework directory layout beyond the installed CLI surface
+#     - contain OMTF-specific logic or variables
+#
+# A plugin consumes this file via:
+#   include:
+#     - project: pleguina/arc-framework
+#       ref: main          # pin to a version tag after stabilisation
+#       file: ci/plugin-consumer.yml
+#
+# The plugin then extends the hidden templates:
+#   my-job:
+#     extends: .arc_plugin_setup
+#     stage: validate
+#     script:
+#       - topgen validate-registry modules.yml --strict
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Stages — plugins that do not define their own stages list will inherit
+# this order. Plugins that define stages: must include these names.
+# ---------------------------------------------------------------------------
+stages:
+  - lint
+  - validate
+  - test
+  - smoke
+  - build
+  - release
+
+# ---------------------------------------------------------------------------
+# Default image and tag for Docker-based correctness jobs.
+# Override in the consuming .gitlab-ci.yml if a different image is needed.
+# ---------------------------------------------------------------------------
+default:
+  image: python:3.11-slim
+  tags:
+    - docker
+  interruptible: true
+
+# ---------------------------------------------------------------------------
+# .arc_plugin_cache
+#
+# Pip cache key for a plugin that installs arc-framework packages.
+# Override ARC_FRAMEWORK_REF to match the pinned include ref.
+# ---------------------------------------------------------------------------
+.arc_plugin_cache:
+  cache:
+    key: "arc-plugin-py311-${ARC_FRAMEWORK_REF:-main}"
+    paths:
+      - .pip-cache/
+    policy: pull-push
+
+# ---------------------------------------------------------------------------
+# .arc_plugin_setup
+#
+# Installs topgen and fw_verify from the arc-framework project include path.
+# The plugin's .gitlab-ci.yml must set ARC_FRAMEWORK_PACKAGE_URL or provide
+# the packages via another mechanism (e.g. pip index, local path mount).
+#
+# Default: install from PyPI-compatible index using the variable
+#   ARC_TOPGEN_PIP_REF      — pip install target for topgen
+#   ARC_FW_VERIFY_PIP_REF   — pip install target for fw_verify
+#
+# For the initial monorepo-adjacent setup where the framework is available
+# as a local sibling, the plugin .gitlab-ci.yml should override before_script.
+# ---------------------------------------------------------------------------
+.arc_plugin_setup:
+  image: python:3.11-slim
+  tags:
+    - docker
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache
+        ${ARC_TOPGEN_PIP_REF:---index-url https://pypi.org/simple/ topgen}
+        ${ARC_FW_VERIFY_PIP_REF:---index-url https://pypi.org/simple/ fw-verify}
+        pytest pyyaml yamllint
+
+# ---------------------------------------------------------------------------
+# .arc_contract_validate
+#
+# Hidden template: validate the plugin module registry and all interface
+# contracts. Extend this in a concrete job; set PLUGIN_MODULES_YML and
+# PLUGIN_INTERFACES_DIR in the plugin's variables block.
+# ---------------------------------------------------------------------------
+.arc_contract_validate:
+  extends: .arc_plugin_setup
+  stage: validate
+  script:
+    - topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
+    - topgen verify-contract
+        --ip-info "${PLUGIN_IP_INFO_YML:-ip_info.yaml}"
+        --all-contracts "${PLUGIN_INTERFACES_DIR}"
+  artifacts:
+    name: "arc-contract-validate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 14 days
+    paths:
+      - ci-logs/contract-validate.log
+
+# ---------------------------------------------------------------------------
+# .arc_fw_verify_doctor
+#
+# Hidden template: run fw_verify doctor against the plugin verification
+# contract. Extend this in a concrete job; set PLUGIN_VERIFY_CONTRACT_PATH.
+# ---------------------------------------------------------------------------
+.arc_fw_verify_doctor:
+  extends: .arc_plugin_setup
+  stage: smoke
+  script:
+    - fw_verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
+  artifacts:
+    name: "arc-fw-verify-doctor-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 14 days
+    paths:
+      - ci-logs/fw-verify-doctor.log
