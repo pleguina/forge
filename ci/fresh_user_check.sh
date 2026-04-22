@@ -56,7 +56,7 @@ if $SKIP_INSTALL; then
     echo "  [skipped] --skip-install flag provided"
 else
     # Install with the optional pyverilog parser extra
-    pip install -q -e "${FW_PYTHON}[parser]"
+    pip install -q -e "${FW_PYTHON}[parser]" pytest pytest-cov
     pass "pip install -e framework/verify/python[parser]"
 fi
 
