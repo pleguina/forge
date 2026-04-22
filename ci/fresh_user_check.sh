@@ -108,6 +108,7 @@ done
 pass "init-plugin created all expected files"
 
 # design.verification.yml must be loadable
+export SCAFFOLDED_VERIFY
 PYTHONPATH="${FW_PYTHON}:${PYTHONPATH:-}" python3 - <<'EOF'
 import sys
 from pathlib import Path
