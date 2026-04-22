@@ -1,0 +1,18 @@
+[flake8]
+max-line-length = 120
+extend-ignore =
+    # alignment whitespace (used extensively for readability in firmware code)
+    E221,
+    E272,
+    # continuation line indentation — handled by black/ruff conventions
+    E203,
+    W503,
+    # comment indentation false positives
+    E114,
+    E116,
+    # unused imports — acceptable in __init__ re-exports and stubs
+    F401,
+    # f-string without placeholders — common in template strings
+    F541,
+    # trailing blank line
+    W391

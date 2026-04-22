@@ -57,8 +57,6 @@ arc:lint:
     - |
       echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
       flake8 framework/topgen/topgen framework/verify/python/fw_verify \
-        --max-line-length=120 \
-        --extend-ignore=E203,W503 \
         2>&1 | tee -a ci-logs/lint.log
     - |
       echo "--- YAML lint ---" | tee -a ci-logs/lint.log
