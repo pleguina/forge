@@ -33,7 +33,6 @@ default:
   cache:
     key:
       files:
-        - verify/python/pyproject.toml
         - arc/pyproject.toml
     paths:
       - .pip-cache/
@@ -46,13 +45,11 @@ default:
 #   before_script:
 #     - !reference [.arc_python_setup, before_script]
 #
-# Installs both framework Python packages (topgen + fw_verify) from source
-# into the CI container. Does NOT require setup_env.sh or a venv — the
-# container already provides an isolated Python environment.
+# Installs the arc package (topgen + hls + verify subpackages) from source
+# into the CI container.
 # ---------------------------------------------------------------------------
 .arc_python_setup:
   before_script:
     - pip install --quiet --cache-dir .pip-cache
         -e arc
-        -e "verify/python[parser]"
         pytest pytest-cov pyyaml yamllint flake8

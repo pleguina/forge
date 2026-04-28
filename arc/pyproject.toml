@@ -57,14 +57,20 @@ Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
 Issues = "https://gitlab.cern.ch/pleguina/omtf_v2/-/issues"
 
 [project.scripts]
-arc = "arc.cli.main:main"
+arc = "arc.core.cli.main:main"
 
 [tool.setuptools]
-packages = ["arc", "arc.ip", "arc.generators",
-            "arc.utils", "arc.cli", "arc.hls"]
+package-dir = {"arc" = "."}
+packages = [
+    "arc",
+    "arc.core", "arc.core.cli", "arc.core.utils",
+    "arc.topgen", "arc.topgen.generators", "arc.topgen.ip",
+    "arc.hls",
+    "arc.verify",
+]
 
 [tool.setuptools.package-data]
-arc = ["py.typed"]
+arc = ["py.typed", "topgen/ip/*.yaml", "hls/templates/*.tcl.j2"]
 
 [tool.black]
 line-length = 100
