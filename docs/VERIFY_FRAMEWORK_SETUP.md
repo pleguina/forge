@@ -27,20 +27,21 @@ when you need to execute a full simulation.
 
 ---
 
-## 2. Create the Python environment
+## 2. Create the Python environment and install `arc`
 
-From the repo root:
+From the repo root, create a virtualenv and install the `arc` package:
 
 ```bash
-source setup_env.sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e arc/
 ```
 
-`setup_env.sh` creates `.venv/` and installs `topgen` plus its
-required dependencies (including `PyYAML`).  The venv is activated
-automatically when the script is **sourced**; otherwise activate it with:
+This installs `topgen`, `fw_verify`, and all orchestration tooling under the
+single `arc` entry point.  To verify:
 
 ```bash
-source .venv/bin/activate
+arc --version
 ```
 
 Then install `pytest` (not included in the default dependencies):
@@ -51,34 +52,7 @@ pip install pytest
 
 ---
 
-## 3. Install `fw_verify`
-
-`fw_verify` is an installable framework package rooted at `framework/verify/python/`.
-
-Install it into the active environment with:
-
-```bash
-pip install -e framework/verify/python/
-```
-
-Optional parser support remains available with:
-
-```bash
-pip install -e "framework/verify/python/[parser]"
-```
-
-After installation you can use either:
-
-- `fw_verify ...`
-- `python3 -m fw_verify ...`
-
-The OMTF env script still adds `plugins/omtf/verify/tools/` to `PYTHONPATH` so
-plugin-local modules remain importable, but it no longer depends on
-`framework/verify/python` source-tree injection as the primary consumption model.
-
----
-
-## 4. Run the framework proof suites
+## 3. Run the framework proof suites
 
 ```bash
 cd /path/to/repo
@@ -119,7 +93,7 @@ set `PYTHONPATH` manually to run that downstream test suite with pytest.
 
 ---
 
-## 5. Run the framework CLI on supported proof consumers
+## 4. Run the framework CLI on supported proof consumers
 
 The framework CLI is the supported entrypoint for verification generation,
 preflight, health checks, and execution.
@@ -128,9 +102,9 @@ Framework-owned smoke examples:
 
 ```bash
 source .venv/bin/activate
-pip install -e framework/verify/python/
+pip install -e arc/
 
-fw_verify doctor \
+arc verify doctor \
   plugins/trigger_demo/verify/design.verification.yml \
   --flow trigger_pipeline_xsim \
   --dry-run
@@ -140,16 +114,16 @@ The current downstream OMTF flow still uses the OMTF env script for plugin
 tool discovery and path variables, but it now consumes `fw_verify` through the
 installed package surface.
 
-## 6. Generate DUT artifacts (example consumer flow)
+## 5. Generate DUT artifacts (example consumer flow)
 
 The exact DUT-generation command depends on the consumer design you are using.
-For a plugin-owned design, use `topgen gen-top` with explicit plugin
+For a plugin-owned design, use `arc topgen gen-top` with explicit plugin
 paths:
 
 ```bash
-source setup_env.sh
+source .venv/bin/activate
 
-topgen gen-top \
+arc topgen gen-top \
   plugins/<plugin>/designs/design.yml \
   --mode verilog \
   --consumer-root . \
@@ -164,17 +138,16 @@ This writes `out/<design>/` with:
 
 ---
 
-## 7. Run the current OMTF downstream XSIM simulation (requires Vivado)
+## 6. Run the current OMTF downstream XSIM simulation (requires Vivado)
 
 With DUT artifacts and Vivado available, the current OMTF downstream path is:
 
 ```bash
-source setup_env.sh
 source .venv/bin/activate
-pip install -e framework/verify/python/
+pip install -e arc/
 source plugins/omtf/verify/tools/omtf_verify_env.sh
 
-fw_verify run \
+arc verify run \
   plugins/omtf/verify/full_chip_algo_top_xsim/verify.flow.yml \
   --plugin omtf \
   --xml-input plugins/omtf/verify/schemas/data/TestEvents.xml \
@@ -184,13 +157,13 @@ fw_verify run \
 Or with explicit overrides:
 
 ```bash
-fw_verify run \
+arc verify run \
   plugins/omtf/verify/full_chip_algo_top_xsim/verify.flow.yml \
   --plugin omtf \
   --xml-input /path/to/events.xml \
   --event-id 55
 
-fw_verify run \
+arc verify run \
   plugins/omtf/verify/full_chip_algo_top_xsim/verify.flow.yml \
   --plugin omtf \
   --xml-input plugins/omtf/verify/schemas/data/TestEvents.xml \
@@ -206,31 +179,31 @@ not the canonical new-user path.
 
 ---
 
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom                                                  | Fix                                                     |
 |----------------------------------------------------------|---------------------------------------------------------|
-| `ModuleNotFoundError: No module named 'fw_verify'`       | `pip install -e framework/verify/python/` or set `OMTF_FW_VERIFY_PACKAGE_DIR` before sourcing `omtf_verify_env.sh` |
+| `ModuleNotFoundError: No module named 'arc'`        | `pip install -e arc/`                                   |
 | `ModuleNotFoundError: No module named 'yaml'`            | `pip install pyyaml`                                    |
 | `ModuleNotFoundError: No module named 'pytest'`          | `pip install pytest`                                    |
-| `LookupError: Plugin 'omtf' has not been declared`       | Source the env script before calling `python -m fw_verify` |
+| `LookupError: Plugin 'omtf' has not been declared`       | Source the env script before calling `arc verify`       |
 | `RuntimeError: Plugin 'omtf' has not been bootstrapped`  | Tests: check conftest imports bootstrap; scripts: source env first |
-| `[preflight] FAILED: Port signature not found`           | Run `topgen gen-top ...` to regenerate artifacts  |
+| `[preflight] FAILED: Port signature not found`           | Run `arc topgen gen-top ...` to regenerate artifacts    |
 | `verify.flow.yml missing required fields`                | Check YAML has: `flow.plugin`, `flow.kind`, `flow.backend`, `dut.*`, `simulation.*` |
 | `xvlog: command not found`                               | Source your Vivado settings: `source $XILINX_VIVADO/settings64.sh` |
 
 ---
 
-## 9. Repo layout reference
+## 8. Repo layout reference
 
 ```
-framework/verify/python/fw_verify/   ← framework Python package source
+arc/verify/                          ← framework verification Python package source
 plugins/omtf/verify/tools/           ← OMTF plugin Python files
 plugins/omtf/verify/tools/tests/     ← OMTF pytest test suite
 plugins/omtf/verify/full_chip_algo_top_xsim/    ← full-chip XSIM flow
 plugins/omtf/verify/*_xsim/                     ← current generated/maintained XSIM flows
-out/algorithm/                       ← topgen generated DUT artifacts
-framework/MINIMAL_CONSUMER_QUICKSTART.md ← canonical new-plugin quickstart
-framework/verify/PLUGIN_AUTHOR_GUIDE.md  ← canonical verification integration guide
+out/algorithm/                       ← arc topgen gen-top generated DUT artifacts
+docs/MINIMAL_CONSUMER_QUICKSTART.md  ← canonical new-plugin quickstart
+docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md   ← canonical verification integration guide
 plugins/omtf/verify/ADAPTER_CONTRACT.md  ← backend adapter API reference
 ```

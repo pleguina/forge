@@ -1,6 +1,7 @@
-# topgen
+# arc
 
-`topgen` turns a design YAML plus IP metadata into a generated DUT and a machine-readable contract set.
+`arc` is the unified CLI for the ARC framework — topology generation,
+HLS orchestration, and verification.
 
 ## Inputs
 
@@ -11,17 +12,17 @@
 ## Main commands
 
 ```bash
-topgen ip-summary plugins/<plugin>/designs/design.yml \
+arc topgen ip-summary plugins/<plugin>/designs/design.yml \
   --ip-root ips \
   --output out/<design>/ip_info.yaml
 
-topgen gen-top plugins/<plugin>/designs/design.yml \
+arc topgen gen-top plugins/<plugin>/designs/design.yml \
   --mode verilog \
   --ip-root ips \
   --ip-info out/<design>/ip_info.yaml \
   --output out/<design>/algo_top.v
 
-topgen clean plugins/<plugin>/designs/design.yml \
+arc topgen clean plugins/<plugin>/designs/design.yml \
   --output out/<design>/algo_top.v
 ```
 
@@ -75,7 +76,7 @@ Example:
 Use `--debug` if you want traceback details for unexpected failures:
 
 ```bash
-topgen --debug clean plugins/<plugin>/designs/design.yml --output out/<design>/algo_top.v
+arc --debug topgen clean plugins/<plugin>/designs/design.yml --output out/<design>/algo_top.v
 ```
 
 This is the intended support model for framework consumers: concise guidance by default, traceback output only on explicit debug opt-in.

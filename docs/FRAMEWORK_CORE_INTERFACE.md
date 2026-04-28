@@ -14,8 +14,8 @@ It does not cover optional HLS convenience tooling or implementation details ins
 
 The current public Layer 1 surface is:
 
-- `fw_verify` installed CLI
-- `python -m fw_verify` module entrypoint
+- `arc verify` installed CLI sub-commands
+- `python -m arc.verify` module entrypoint
 - `framework/verify/include/` exported verification headers and interfaces
 - `framework/verify/src/` linked runtime implementation through the packaged verification core target
 - `framework/verify/PLUGIN_AUTHOR_GUIDE.md`
@@ -55,7 +55,7 @@ The plugin does not need to author framework-generated artifacts such as `verify
 The following are considered public Layer 1 behavior for the current release line:
 
 - framework-owned verification file layout and generation model
-- `fw_verify` CLI subcommands and documented flags
+- `arc verify` CLI subcommands and documented flags
 - documented plugin bootstrap lifecycle
 - documented verification contract fields
 - documented default error-handling behavior and `--debug` traceback opt-in

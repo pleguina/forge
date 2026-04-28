@@ -99,19 +99,19 @@ plugins/trigger_demo/
     ├── src/                      ← authored: shared testbench headers
     ├── tests/                    ← authored: HLS C-sim testbench sources (tb_*.cpp)
     ├── tools/
-    │   ├── bootstrap.py          ← authored: plugin registration with fw_verify
+    │   ├── bootstrap.py          ← authored: plugin registration with arc verify
     │   ├── gen_stimulus.py       ← authored: xsim stimulus generator
     │   ├── trigger_demo_verify_env.sh ← authored: shell PYTHONPATH helper
     │   └── tests/                ← authored: unit tests for verify tooling
-    ├── <flow>/verify.flow.yml    ← generated: fw_verify generate design.verification.yml
-    ├── <flow>/tb_*.sv            ← generated: fw_verify generate ...
-    ├── <flow>/wave.tcl           ← generated: fw_verify generate ...
+    ├── <flow>/verify.flow.yml    ← generated: arc verify generate design.verification.yml
+    ├── <flow>/tb_*.sv            ← generated: arc verify generate ...
+    ├── <flow>/wave.tcl           ← generated: arc verify generate ...
     └── <flow>/stimulus_current.svh ← plugin-generated: gen_stimulus.py
 ```
 
 > **What you author vs what the framework generates:**
 > Files under `verify/<flow>/` are framework-generated or plugin-generated — do **not**
-> hand-edit them. Regenerate with `fw_verify generate` and `gen_stimulus.py`.
+> hand-edit them. Regenerate with `arc verify generate` and `gen_stimulus.py`.
 > Committed copies serve as the CI baseline.
 > See [docs/MINIMAL_CONSUMER_QUICKSTART.md](../../docs/MINIMAL_CONSUMER_QUICKSTART.md).
 
@@ -127,17 +127,17 @@ export CONSUMER_ROOT="$(pwd)"
 ### Step 1 — HLS synthesis (all modules)
 
 ```bash
-topgen hls run \
+arc hls run \
   --registry plugins/trigger_demo/modules.yml \
   --modules all \
-  --build-root build_hls_trigger_demo \
+  --hls-build-root build_hls_trigger_demo \
   --stages csim,synth,cosim,export
 ```
 
 ### Step 2 — Generate Verilog top
 
 ```bash
-topgen gen-top \
+arc topgen gen-top \
   plugins/trigger_demo/designs/design.yml \
   --consumer-root "$CONSUMER_ROOT" \
   --contracts-from plugins/trigger_demo/modules.yml \
@@ -150,7 +150,7 @@ topgen gen-top \
 ### Step 3 — Generate verification flow configs
 
 ```bash
-fw_verify generate plugins/trigger_demo/verify/design.verification.yml
+arc verify generate plugins/trigger_demo/verify/design.verification.yml
 ```
 
 Writes `verify.flow.yml`, `tb_*.sv`, and `wave.tcl` into each of the 9 flow
@@ -168,7 +168,7 @@ Use `--module <name>` or `--dry-run` for selective runs.
 ### Step 5 — Contract health check
 
 ```bash
-fw_verify doctor plugins/trigger_demo/verify/design.verification.yml
+arc verify doctor plugins/trigger_demo/verify/design.verification.yml
 ```
 
 ### Step 6 — Run verification flows
@@ -176,16 +176,16 @@ fw_verify doctor plugins/trigger_demo/verify/design.verification.yml
 ```bash
 # C-sim (HLS — requires Vitis HLS)
 for flow in hit_decoder_csim hit_collector_csim trigger_logic_csim trigger_output_csim; do
-  fw_verify run plugins/trigger_demo/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  arc verify run plugins/trigger_demo/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Single-module RTL (requires Vivado/xsim)
 for flow in hit_decoder_xsim hit_collector_xsim trigger_logic_xsim trigger_output_xsim; do
-  fw_verify run plugins/trigger_demo/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  arc verify run plugins/trigger_demo/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Full-chip RTL integration (requires gen-top output from Step 2)
-fw_verify run \
+arc verify run \
   plugins/trigger_demo/verify/trigger_pipeline_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```

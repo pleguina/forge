@@ -15,7 +15,7 @@ This index lists the minimum user-facing documentation required to adopt and use
 
 ### Introduction
 
-- `framework/README.md` - framework scope, boundaries, and workflow summary
+- `arc/README.md` - CLI command reference and generated output summary
 
 ### Quickstart
 
@@ -32,12 +32,11 @@ This index lists the minimum user-facing documentation required to adopt and use
 - `docs/FRAMEWORK_CORE_INTERFACE.md` - Layer 1 runtime and verification interface
 - `docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md` - verification integration for plugin authors
 - `docs/VERIFY_FRAMEWORK_SETUP.md` - framework-side setup and runnable proof path
-- `framework/verify/README.md` - verification runtime package details
 
 ### Tooling
 
 - `docs/FRAMEWORK_TOOLING_INTERFACE.md` - Layer 2 topology/HLS tooling interface
-- `framework/topgen/README.md` - topgen command usage and outputs
+- `arc/README.md` - arc CLI command usage and outputs
 
 ### Support Boundaries
 

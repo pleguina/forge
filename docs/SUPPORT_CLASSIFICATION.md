@@ -18,7 +18,7 @@ This inventory defines the support status for maintained surfaces referenced by 
 
 | Surface | Class | Why |
 |---|---|---|
-| `topgen` CLI (`validate`, `gen-top`, `ip-summary`, `match-ports`, `unpack-ips`, `resources`) | Public framework API | primary installed framework entrypoint |
+| `arc` CLI (`arc topgen validate`, `arc topgen gen-top`, `arc topgen ip-summary`, `arc topgen match-ports`, `arc topgen unpack-ips`, `arc core resources`, `arc core verify-contract`) | Public framework API | primary installed framework entrypoint |
 | `framework::verif_core` and exported headers documented in `FRAMEWORK_CORE_INTERFACE.md` | Public framework API | installable verification package boundary |
 | `framework/FRAMEWORK_CORE_INTERFACE.md` | Public framework API | defines Layer 1 contract |
 | `framework/MINIMAL_CONSUMER_QUICKSTART.md` | Public framework API | shortest supported adoption path |
@@ -27,10 +27,10 @@ This inventory defines the support status for maintained surfaces referenced by 
 | `docs/OMTF_FRAMEWORK_DEPENDENCY_MATRIX_2026-04-20.md` | Reference consumer only | maintained dependency audit for separating the OMTF consumer from framework internals |
 | `plugins/trigger_demo/README.md` | Supported proof consumer | multi-flow non-OMTF consumer documentation |
 | `plugins/trigger_demo/verify/` | Supported proof consumer | supported proof that topology contracts plus framework-owned csim/xsim/full-chip flows work for a non-OMTF plugin |
-| `topgen hls gen-tcl` | Supported optional tooling | preferred Layer 2 TCL-generation interface |
-| `topgen hls run` | Supported optional tooling | preferred Layer 2 batch execution interface |
-| `framework/hls/parallel_hls.sh` | Supported optional tooling | compatibility/backend batch entrypoint behind `topgen hls run` |
-| `framework/hls/generate_hls_tcl.py` | Supported optional tooling | compatibility/backend entrypoint behind `topgen hls gen-tcl` |
+| `arc hls gen-tcl` | Supported optional tooling | preferred Layer 2 TCL-generation interface |
+| `arc hls run` | Supported optional tooling | preferred Layer 2 batch execution interface |
+| `framework/hls/parallel_hls.sh` | Supported optional tooling | compatibility/backend batch entrypoint behind `arc hls run` |
+| `framework/hls/generate_hls_tcl.py` | Supported optional tooling | compatibility/backend entrypoint behind `arc hls gen-tcl` |
 | `framework/hls/extract_hls_metrics.py` | Supported optional tooling | structured metrics extraction surface |
 | `framework/FRAMEWORK_TOOLING_INTERFACE.md` | Supported optional tooling | defines Layer 2 contract |
 | `framework/validate_framework.sh` | Supported convenience only | framework standalone validation helper for export-readiness checks |

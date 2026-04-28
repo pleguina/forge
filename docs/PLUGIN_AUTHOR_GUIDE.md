@@ -15,10 +15,10 @@ to generate an exported IP package in `ips/<module_name>/`.
 
 ### 2. Extract port metadata
 
-Run the `ip_info` extractor to update `ip_info.yaml` with your module's physical ports:
+Run the `ip-summary` extractor to update `ip_info.yaml` with your module's physical ports:
 
 ```bash
-topgen collect-ip-info --ip-root ips --output ip_info.yaml
+arc topgen ip-summary plugins/<plugin>/designs/design.yml --ip-root ips --output ip_info.yaml
 ```
 
 ### 3. Write the interface contract
@@ -95,18 +95,18 @@ connections:
 
 ```bash
 # Verify contract against ip_info
-topgen verify-contract --ip-info ip_info.yaml \
+arc core verify-contract --ip-info ip_info.yaml \
     --contract plugins/<plugin>/interfaces/my_module.interface.yaml
 
 # Generate structural Verilog
-topgen gen-top plugins/<plugin>/designs/design.yml \
+arc topgen gen-top plugins/<plugin>/designs/design.yml \
     --mode verilog --consumer-root . --build-dir build \
     --hls-build-root build_hls --ip-root ips \
     --contracts-from plugins/<plugin>/modules.yml \
     --output algo_top.v
 
 # Strict mode (CI grade — rejects port_map_ranges, auto-match, missing contracts)
-topgen gen-top ... --strict
+arc topgen gen-top ... --strict
 ```
 
 ---

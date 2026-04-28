@@ -32,10 +32,10 @@ If your plugin fits that contract, the framework path below is the supported rou
 4. Author `plugins/<plugin>/verify/tools/bootstrap.py`
 5. Author `plugins/<plugin>/verify/tools/gen_stimulus.py`
 6. Place XML datasets under `plugins/<plugin>/verify/schemas/data/`
-7. Run `topgen` to generate DUT artifacts
-8. Run `fw_verify generate plugins/<plugin>/verify/design.verification.yml`
+7. Run `arc topgen gen-top` to generate DUT artifacts
+8. Run `arc verify generate plugins/<plugin>/verify/design.verification.yml`
 9. Run your plugin stimulus generator so each flow gets `stimulus_current.svh`
-10. Run `fw_verify doctor` and then `fw_verify run`
+10. Run `arc verify doctor` and then `arc verify run`
 
 ## What you author versus what the framework generates
 
@@ -73,10 +73,10 @@ Generated working artifacts:
 Topology generation:
 
 ```bash
-topgen verify-contract --ip-info ip_info.yaml \
+arc core verify-contract --ip-info ip_info.yaml \
     --contract plugins/<plugin>/interfaces/<module>.interface.yaml
 
-topgen gen-top plugins/<plugin>/designs/design.yml \
+arc topgen gen-top plugins/<plugin>/designs/design.yml \
     --mode verilog \
     --consumer-root . \
     --build-dir build \
@@ -89,14 +89,14 @@ topgen gen-top plugins/<plugin>/designs/design.yml \
 Verification generation and health checks:
 
 ```bash
-fw_verify generate plugins/<plugin>/verify/design.verification.yml
-fw_verify doctor   plugins/<plugin>/verify/design.verification.yml
+arc verify generate plugins/<plugin>/verify/design.verification.yml
+arc verify doctor   plugins/<plugin>/verify/design.verification.yml
 ```
 
 Verification run:
 
 ```bash
-fw_verify run plugins/<plugin>/verify/<flow>/verify.flow.yml --plugin <plugin>
+arc verify run plugins/<plugin>/verify/<flow>/verify.flow.yml --plugin <plugin>
 ```
 
 ## If you want a dataset standard other than XML

@@ -19,23 +19,23 @@ These tools are supported, but a consumer should still treat them as tooling sur
 
 The supported Layer 2 tooling surface is:
 
-- `topgen validate`
-- `topgen gen-top`
-- `topgen ip-summary`
-- `topgen match-ports`
-- `topgen unpack-ips`
-- `topgen verify-contract`
-- `topgen resources`
-- `topgen hls gen-tcl`
-- `topgen hls run`
+- `arc topgen validate`
+- `arc topgen gen-top`
+- `arc topgen ip-summary`
+- `arc topgen match-ports`
+- `arc topgen unpack-ips`
+- `arc core verify-contract`
+- `arc core resources`
+- `arc hls gen-tcl`
+- `arc hls run`
 - `framework/hls/parallel_hls.sh`
 - `framework/hls/generate_hls_tcl.py`
 - `framework/hls/extract_hls_metrics.py`
 
 For HLS flows, the preferred public interface is the installed CLI:
 
-- `topgen hls gen-tcl`
-- `topgen hls run`
+- `arc hls gen-tcl`
+- `arc hls run`
 
 The standalone script entry points remain supported as compatibility backends for existing automation. They are framework tooling, but they are not the primary first-class interface a new consumer should build around.
 
