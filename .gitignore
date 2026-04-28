@@ -9,3 +9,8 @@
 
 # Local editor/runtime noise
 .vscode/
+
+# Local plugin mounts (not committed — populated manually for local dev/testing)
+# Use both forms: with and without trailing slash to cover real dirs and symlinks
+plugins/omtf
+plugins/omtf/
