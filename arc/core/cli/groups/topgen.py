@@ -1378,9 +1378,11 @@ def cmd_gen_top(args):
             print(f"✓ Block Design TCL generated: {output}")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback as _tb
-        _tb.print_exc()
+        print_cli_error(
+            "Generation failed",
+            e,
+            hint="Check the design file, mode, and IP paths, then re-run arc topgen gen-top.",
+        )
         sys.exit(1)
 
 

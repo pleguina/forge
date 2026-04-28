@@ -37,55 +37,76 @@ def cmd_resources(args):
 
 def cmd_verify_contract(args):
     """Verify one or more ip_interface.yaml contracts against ip_info.yaml."""
-    from arc.topgen.ip.contract_verifier import (
-        ContractVerifier,
-        verify_all,
-    )
+    try:
+        from arc.topgen.ip.contract_verifier import (
+            ContractVerifier,
+            verify_all,
+        )
+    except ImportError as exc:
+        print(f"❌ Cannot import contract verifier: {exc}", file=sys.stderr)
+        sys.exit(2)
 
     ip_info_path = Path(args.ip_info)
     if not ip_info_path.exists():
-        print(f"❌ ip_info file not found: {ip_info_path}")
+        print(f"❌ ip_info file not found: {ip_info_path}", file=sys.stderr)
         sys.exit(2)
 
     verbose = getattr(args, "verbose", False)
 
-    # ── Single-contract mode ──────────────────────────────────────────────
-    if args.contract:
-        contract_path = Path(args.contract)
-        if not contract_path.exists():
-            print(f"❌ Contract file not found: {contract_path}")
+    try:
+        # ── Single-contract mode ──────────────────────────────────────────
+        if args.contract:
+            contract_path = Path(args.contract)
+            if not contract_path.exists():
+                print(f"❌ Contract file not found: {contract_path}", file=sys.stderr)
+                sys.exit(2)
+            verifier = ContractVerifier(ip_info_path, contract_path)
+            result = verifier.verify()
+            result.print_report(verbose=verbose)
+            sys.exit(result.exit_code())
+
+        # ── All-contracts mode ────────────────────────────────────────────
+        search_dirs = [Path(d) for d in (args.all_contracts or [])]
+        if not search_dirs:
+            print(
+                "❌ Provide --contract <file> or --all-contracts <dir> [<dir> …]",
+                file=sys.stderr,
+            )
             sys.exit(2)
-        verifier = ContractVerifier(ip_info_path, contract_path)
-        result = verifier.verify()
-        result.print_report(verbose=verbose)
-        sys.exit(result.exit_code())
 
-    # ── All-contracts mode ────────────────────────────────────────────────
-    search_dirs = [Path(d) for d in (args.all_contracts or [])]
-    if not search_dirs:
-        print("❌ Provide --contract <file> or --all-contracts <dir> [<dir> …]")
+        results = verify_all(ip_info_path, search_dirs, verbose=verbose)
+        if not results:
+            print("❌ No contracts found in the specified directories.", file=sys.stderr)
+            sys.exit(1)
+
+        n_pass = sum(1 for r in results if r.passed)
+        n_warn = sum(1 for r in results if r.passed and r.warnings)
+        n_fail = sum(1 for r in results if not r.passed)
+
+        print()
+        print(
+            f"Summary: {len(results)} contracts checked — "
+            f"{n_pass} pass ({n_warn} with warnings), {n_fail} fail"
+        )
+
+        if n_fail:
+            sys.exit(2)
+        elif n_warn:
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print(f"❌ Contract verification failed: {exc}", file=sys.stderr)
+        from arc.core.cli._shared import debug_enabled
+        import traceback as _tb
+        if debug_enabled():
+            _tb.print_exc(file=sys.stderr)
+        else:
+            print("   Re-run with --debug for traceback details.", file=sys.stderr)
         sys.exit(2)
-
-    results = verify_all(ip_info_path, search_dirs, verbose=verbose)
-    if not results:
-        sys.exit(1)
-
-    n_pass = sum(1 for r in results if r.passed)
-    n_warn = sum(1 for r in results if r.passed and r.warnings)
-    n_fail = sum(1 for r in results if not r.passed)
-
-    print()
-    print(
-        f"Summary: {len(results)} contracts checked — "
-        f"{n_pass} pass ({n_warn} with warnings), {n_fail} fail"
-    )
-
-    if n_fail:
-        sys.exit(2)
-    elif n_warn:
-        sys.exit(1)
-    else:
-        sys.exit(0)
 
 
 # ---------------------------------------------------------------------------

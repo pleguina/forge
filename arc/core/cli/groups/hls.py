@@ -78,7 +78,21 @@ def cmd_hls_gen_tcl(args):
     ok = True
     for module_name in modules:
         print(f"\n=== Generating TCL for {module_name} ===")
-        if not generate_tcl(catalog, module_name, template_dir, output_dir, ip_packages_dir, config_override):
+        try:
+            if not generate_tcl(
+                catalog, module_name, template_dir, output_dir,
+                ip_packages_dir, config_override,
+            ):
+                print(
+                    f"ERROR: TCL generation failed for module '{module_name}'",
+                    file=sys.stderr,
+                )
+                ok = False
+        except Exception as exc:
+            print(
+                f"ERROR: unexpected failure generating TCL for '{module_name}': {exc}",
+                file=sys.stderr,
+            )
             ok = False
 
     sys.exit(0 if ok else 1)
@@ -119,7 +133,13 @@ def cmd_hls_run(args):
 
     # ── Load catalog if provided ──────────────────────────────────────────
     catalog = None
-    if registry_path and registry_path.exists():
+    if registry_path is not None:
+        if not registry_path.exists():
+            print(
+                f"ERROR: registry file not found: {registry_path}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         try:
             catalog = load_hls_catalog(str(registry_path))
         except Exception as exc:
@@ -158,8 +178,12 @@ def cmd_hls_run(args):
         sys.exit(1)
 
     # ── Build dir setup ───────────────────────────────────────────────────
-    build_root.mkdir(parents=True, exist_ok=True)
-    ip_pack_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        build_root.mkdir(parents=True, exist_ok=True)
+        ip_pack_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: cannot create build directories: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     # ── Completion detectors ──────────────────────────────────────────────
     def _is_project_initialized(module: str) -> bool:
@@ -221,14 +245,26 @@ def cmd_hls_run(args):
                 f.write("Generate TCL scripts first: arc hls gen-tcl ...\n")
             return False, log_path
 
-        with open(log_path, "w") as log_file:
-            result = subprocess.run(
-                [vitis_hls, "-f", tcl_name],
-                cwd=str(mod_dir),
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-            )
-        return result.returncode == 0, log_path
+        try:
+            with open(log_path, "w") as log_file:
+                result = subprocess.run(
+                    [vitis_hls, "-f", tcl_name],
+                    cwd=str(mod_dir),
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                )
+            return result.returncode == 0, log_path
+        except FileNotFoundError:
+            with open(log_path, "a") as f:
+                f.write(
+                    f"ERROR: vitis_hls executable not found: {vitis_hls}\n"
+                    "Install Vitis HLS or pass --vitis-hls <path>.\n"
+                )
+            return False, log_path
+        except OSError as exc:
+            with open(log_path, "a") as f:
+                f.write(f"ERROR: failed to launch vitis_hls: {exc}\n")
+            return False, log_path
 
     def _run_stage_for_module(module: str, step: str) -> "tuple[str, str, bool, str]":
         tcl_map = {
@@ -285,7 +321,16 @@ def cmd_hls_run(args):
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             futs = {pool.submit(_run_stage_for_module, m, step): m for m in module_list}
             for fut in concurrent.futures.as_completed(futs):
-                module, _step, ok, log_path = fut.result()
+                mod_name = futs[fut]
+                try:
+                    module, _step, ok, log_path = fut.result()
+                except Exception as exc:
+                    print(
+                        f"  [FAIL] {mod_name}  (worker exception: {exc})",
+                        file=sys.stderr,
+                    )
+                    results.append((mod_name, False))
+                    continue
                 status = "OK  " if ok else "FAIL"
                 log_hint = f"  (log: {log_path})" if log_path and not ok else ""
                 print(f"  [{status}] {module}{log_hint}")
