@@ -41,8 +41,8 @@ dev = [
 fw_verify = "fw_verify.__main__:main"
 
 [project.urls]
-Homepage = "https://gitlab.cern.ch/pleguina/omtf_v2"
-Repository = "https://gitlab.cern.ch/pleguina/omtf_v2"
+Homepage = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
+Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
 
 [tool.setuptools]
 packages = ["fw_verify"]

@@ -3,9 +3,9 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "topgen"
+name = "arc"
 version = "1.1.0"
-description = "Algorithm Top-Level Generator - Generate HDL wrappers from IP metadata"
+description = "ARC framework CLI — topology generation and verification orchestration"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -51,13 +51,13 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.cern.ch/pleguina/omtf_v2"
-Documentation = "https://gitlab.cern.ch/pleguina/omtf_v2/-/blob/main/framework/topgen/README.md"
-Repository = "https://gitlab.cern.ch/pleguina/omtf_v2"
+Homepage = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
+Documentation = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework/-/blob/main/framework/arc/README.md"
+Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
 Issues = "https://gitlab.cern.ch/pleguina/omtf_v2/-/issues"
 
 [project.scripts]
-topgen = "topgen.cli.main:main"
+arc = "topgen.cli.main:main"
 
 [tool.setuptools]
 packages = ["topgen", "topgen.ip", "topgen.generators",
