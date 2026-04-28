@@ -9,6 +9,7 @@ ip_interface:
   ip_info_key: dec
   source_type: hls
   normalization_status: ready
+  clock_free: true   # Synthesised as purely combinational (ap_ctrl_none, II=1) — no ap_clk port in RTL
   notes: >
     Decodes a 32-bit packed detector hit {phi[31:16], eta[15:0]}.
     Applies phi+1 calibration offset. Valid gating: output is valid

@@ -9,6 +9,7 @@ ip_interface:
   ip_info_key: trig
   source_type: hls
   normalization_status: ready
+  clock_free: true   # Synthesised as purely combinational (ap_ctrl_none, II=1) — no ap_clk port in RTL
   notes: >
     Simple majority trigger. Fires when the number of valid hits
     meets or exceeds a threshold (currently 2). Quality output

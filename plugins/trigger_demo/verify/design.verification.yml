@@ -31,7 +31,7 @@ flows:
     backend:          csim
     top_module:       hit_decoder
     tb_module:        tb_hit_decoder
-    dut_rtl_source:   build_hls/hit_decoder
+    dut_rtl_source:   build_hls_trigger_demo/hit_decoder/solution1/syn/verilog
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
@@ -41,7 +41,7 @@ flows:
     backend:          csim
     top_module:       hit_collector
     tb_module:        tb_hit_collector
-    dut_rtl_source:   build_hls/hit_collector
+    dut_rtl_source:   build_hls_trigger_demo/hit_collector/solution1/syn/verilog
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
@@ -51,7 +51,7 @@ flows:
     backend:          csim
     top_module:       trigger_logic
     tb_module:        tb_trigger_logic
-    dut_rtl_source:   build_hls/trigger_logic
+    dut_rtl_source:   build_hls_trigger_demo/trigger_logic/solution1/syn/verilog
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
@@ -61,7 +61,7 @@ flows:
     backend:          csim
     top_module:       trigger_output
     tb_module:        tb_trigger_output
-    dut_rtl_source:   build_hls/trigger_output
+    dut_rtl_source:   build_hls_trigger_demo/trigger_output/solution1/syn/verilog
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
@@ -79,6 +79,8 @@ flows:
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
+    xsim:
+      top_lib: xil_defaultlib
 
   - name:             hit_collector_xsim
     kind:             single_module_rtl
@@ -89,6 +91,8 @@ flows:
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
+    xsim:
+      top_lib: xil_defaultlib
 
   - name:             trigger_logic_xsim
     kind:             single_module_rtl
@@ -99,6 +103,8 @@ flows:
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
+    xsim:
+      top_lib: xil_defaultlib
 
   - name:             trigger_output_xsim
     kind:             single_module_rtl
@@ -109,6 +115,8 @@ flows:
     dataset:          trigger_demo_golden
     default_event_id: 1
     coverage_intent:  functional
+    xsim:
+      top_lib: xil_defaultlib
 
 # ─── Full-chip RTL / XSIM flow ───────────────────────────────────────────
 # Generated algo_top integration proving the trigger_demo topology contract.
@@ -126,5 +134,6 @@ flows:
       idle_cycles_after_reset:    0
       post_stimulus_drain_cycles: 12
     xsim:
+      top_lib: xil_defaultlib
       use_sv_flag: false
     coverage_intent:  integration

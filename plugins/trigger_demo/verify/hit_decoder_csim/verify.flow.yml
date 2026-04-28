@@ -13,7 +13,7 @@ flow:
   tb_module:  tb_hit_decoder
 
 dut:
-  rtl:            build_hls/hit_decoder/hit_decoder.v
+  rtl:            build_hls_trigger_demo/hit_decoder/solution1/syn/verilog/hit_decoder.v
   manifest:       ~
   port_map:       ~
   tb_bindings:    ~
@@ -28,3 +28,5 @@ simulation:
   reset_cycles:               4
   idle_cycles_after_reset:    0
   post_stimulus_drain_cycles: 4
+checker_mode: log_scan
+

@@ -147,6 +147,30 @@ def prepare_from_manifest(
     for f in manifest.get("verilog_include_files", []):
         _add_file(f)
 
+    # ── HLS module verilog from hls_build_root ─────────────────────────────
+    # Expand HLS modules whose verilog_files are empty (not yet resolved at
+    # topgen time).  For each module with kind=="hls", look for the synthesised
+    # Verilog under: <hls_build_root>/<top>/solution1/syn/verilog/<top>.v
+    hls_build_root_str = manifest.get("hls_build_root", "")
+    if hls_build_root_str:
+        hls_root = Path(hls_build_root_str)
+        for mod_info in manifest.get("modules", {}).values():
+            if mod_info.get("kind") != "hls":
+                continue
+            top = mod_info.get("top", "")
+            if not top:
+                continue
+            hls_v = hls_root / top / "solution1" / "syn" / "verilog" / f"{top}.v"
+            if hls_v.exists():
+                _add_file(str(hls_v))
+            else:
+                import warnings
+                warnings.warn(
+                    f"HLS verilog not found for module '{top}': {hls_v}\n"
+                    f"  Run 'arc hls run --stages synth' first.",
+                    stacklevel=2,
+                )
+
     # ── Extra sources (glbl.v, fp stubs, …) ───────────────────────────────
     for extra_path, lang in extra_sources:
         if extra_path is not None:

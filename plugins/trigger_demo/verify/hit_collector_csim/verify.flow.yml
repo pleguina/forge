@@ -13,7 +13,7 @@ flow:
   tb_module:  tb_hit_collector
 
 dut:
-  rtl:            build_hls/hit_collector/hit_collector.v
+  rtl:            build_hls_trigger_demo/hit_collector/solution1/syn/verilog/hit_collector.v
   manifest:       ~
   port_map:       ~
   tb_bindings:    ~
@@ -28,3 +28,5 @@ simulation:
   reset_cycles:               4
   idle_cycles_after_reset:    0
   post_stimulus_drain_cycles: 4
+checker_mode: log_scan
+

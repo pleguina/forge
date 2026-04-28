@@ -13,7 +13,7 @@ flow:
   tb_module:  tb_trigger_logic
 
 dut:
-  rtl:            build_hls/trigger_logic/trigger_logic.v
+  rtl:            build_hls_trigger_demo/trigger_logic/solution1/syn/verilog/trigger_logic.v
   manifest:       ~
   port_map:       ~
   tb_bindings:    ~
@@ -28,3 +28,5 @@ simulation:
   reset_cycles:               4
   idle_cycles_after_reset:    0
   post_stimulus_drain_cycles: 4
+checker_mode: log_scan
+

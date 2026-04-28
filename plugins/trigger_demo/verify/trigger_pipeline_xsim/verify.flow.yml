@@ -31,5 +31,5 @@ simulation:
 checker_mode: log_scan
 xsim:
   use_sv_flag: false
-  top_lib: ~
+  top_lib: xil_defaultlib
 

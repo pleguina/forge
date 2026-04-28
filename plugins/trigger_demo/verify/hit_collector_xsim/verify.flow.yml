@@ -28,3 +28,8 @@ simulation:
   reset_cycles:               4
   idle_cycles_after_reset:    0
   post_stimulus_drain_cycles: 4
+checker_mode: log_scan
+xsim:
+  use_sv_flag: false
+  top_lib: xil_defaultlib
+

@@ -309,6 +309,7 @@ def write_structural_verilog(
     *,
     top_name: str = "algo_top",
     system_yml: Path | None = None,          # framework awareness
+    contracts: Dict | None = None,           # loaded interface contracts (for clock_free)
 ) -> Dict[str, any]:
     """
     Generate a structural Verilog top that wires algorithm modules together.
@@ -667,6 +668,10 @@ def write_structural_verilog(
 
                 # clock/reset auto-map (support various naming conventions)
                 if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
+                    # Skip ap_clk connection for clock-free (combinatorial) modules
+                    _contract = (contracts or {}).get(mod.name)
+                    if _contract and _contract.clock_free:
+                        continue
                     pm.append(f"    .{pname}(ap_clk)")
                     continue
                 if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):

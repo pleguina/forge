@@ -19,7 +19,7 @@ def _dispatch_fw_verify(remaining: list) -> None:
     fw_verify remains the single source of truth for verification logic while
     its commands are exposed under the unified ``arc verify`` group.
     """
-    from arc.verify.__main__ import main as _fw_verify_main  # type: ignore[import]
+    from fw_verify.__main__ import main as _fw_verify_main  # type: ignore[import]
 
     old_argv = sys.argv[:]
     sys.argv = ["arc verify"] + list(remaining)

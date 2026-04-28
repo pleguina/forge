@@ -25,7 +25,7 @@ modules:
   top: hit_decoder
   interface_contract: plugins/trigger_demo/interfaces/hit_decoder_ip.interface.yaml
   src: [algo/hit_decoder/hit_decoder.cpp]
-  includes: [algo/common, algo/hit_decoder, verify/src]
+  includes: [algo/common, algo/hit_decoder, verify/include, verify/src]
 
   build:
     stages: [csim, synth, cosim, export]
@@ -34,6 +34,7 @@ modules:
   verify:
     tb_src:
       - algo/hit_decoder/hit_decoder.cpp
+      - verify/src/logging.cpp
       - verify/tests/tb_hit_decoder.cpp
     tb_args: verify/schemas/data/trigger_demo_golden.xml
     testbench_target: tb_hit_decoder
@@ -44,7 +45,7 @@ modules:
   top: hit_collector
   interface_contract: plugins/trigger_demo/interfaces/hit_collector_ip.interface.yaml
   src: [algo/hit_collector/hit_collector.cpp]
-  includes: [algo/common, algo/hit_decoder, algo/hit_collector, verify/src]
+  includes: [algo/common, algo/hit_decoder, algo/hit_collector, verify/include, verify/src]
 
   build:
     stages: [csim, synth, cosim, export]
@@ -54,6 +55,7 @@ modules:
     tb_src:
       - algo/hit_decoder/hit_decoder.cpp
       - algo/hit_collector/hit_collector.cpp
+      - verify/src/logging.cpp
       - verify/tests/tb_hit_collector.cpp
     tb_args: verify/schemas/data/trigger_demo_golden.xml
     testbench_target: tb_hit_collector
@@ -64,7 +66,7 @@ modules:
   top: trigger_logic
   interface_contract: plugins/trigger_demo/interfaces/trigger_logic_ip.interface.yaml
   src: [algo/trigger_logic/trigger_logic.cpp]
-  includes: [algo/common, algo/hit_decoder, algo/hit_collector, algo/trigger_logic, verify/src]
+  includes: [algo/common, algo/hit_decoder, algo/hit_collector, algo/trigger_logic, verify/include, verify/src]
 
   build:
     stages: [csim, synth, cosim, export]
@@ -75,6 +77,7 @@ modules:
       - algo/hit_decoder/hit_decoder.cpp
       - algo/hit_collector/hit_collector.cpp
       - algo/trigger_logic/trigger_logic.cpp
+      - verify/src/logging.cpp
       - verify/tests/tb_trigger_logic.cpp
     tb_args: verify/schemas/data/trigger_demo_golden.xml
     testbench_target: tb_trigger_logic
@@ -85,7 +88,7 @@ modules:
   top: trigger_output
   interface_contract: plugins/trigger_demo/interfaces/trigger_output_ip.interface.yaml
   src: [algo/trigger_output/trigger_output.cpp]
-  includes: [algo/common, algo/hit_decoder, algo/hit_collector, algo/trigger_logic, algo/trigger_output, verify/src]
+  includes: [algo/common, algo/hit_decoder, algo/hit_collector, algo/trigger_logic, algo/trigger_output, verify/include, verify/src]
 
   build:
     stages: [csim, synth, cosim, export]
@@ -97,6 +100,7 @@ modules:
       - algo/hit_collector/hit_collector.cpp
       - algo/trigger_logic/trigger_logic.cpp
       - algo/trigger_output/trigger_output.cpp
+      - verify/src/logging.cpp
       - verify/tests/tb_trigger_output.cpp
     tb_args: verify/schemas/data/trigger_demo_golden.xml
     testbench_target: tb_trigger_output

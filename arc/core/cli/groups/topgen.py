@@ -1209,6 +1209,7 @@ def cmd_gen_top(args):
                 out_path=output,
                 top_name=args.top_name,
                 system_yml=args.system,
+                contracts=_contracts,
             )
 
             print(f"✓ Verilog top generated: {output}")
