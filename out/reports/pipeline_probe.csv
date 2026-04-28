@@ -1,0 +1,7 @@
+cycle,signal,value
+0,dec_0_raw_valid,1
+8,dec_0_raw_valid,1
+16,dec_0_raw_valid,1
+10,tout_out_valid,1
+18,tout_out_valid,1
+26,tout_out_valid,1

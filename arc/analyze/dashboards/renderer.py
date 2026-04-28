@@ -170,9 +170,9 @@ def render_markdown_summary(report: AggregatedReport, out_path: Path) -> None:
     def _section(title: str, path: Optional[Path]) -> None:
         lines.append(f"## {title}")
         if path and path.exists():
-            lines += [f"→ [{path.name}]({path})", ""]
+            lines.extend([f"→ [{path.name}]({path})", ""])
         else:
-            lines += ["*not available*", ""]
+            lines.extend(["*not available*", ""])
 
     _section("HLS Synthesis Report",        report.hls_summary_md)
     _section("Static Latency Check",        report.latency_check_md)
