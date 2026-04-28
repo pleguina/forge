@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from arc.core.cli.groups import core, topgen, hls, verify
+from arc.core.cli.groups import core, topgen, hls, verify, analyze
 from arc.core.cli import _shared
 
 
@@ -20,7 +20,7 @@ def main() -> None:
         prog="arc",
         description=(
             "ARC framework CLI — topology generation, HLS build, "
-            "and verification orchestration"
+            "verification orchestration, and performance analysis"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Groups:
@@ -28,6 +28,7 @@ def main() -> None:
   topgen    Generate hardware topology structure
   hls       Build HLS modules and IPs
   verify    Run simulations and check correctness
+  analyze   Performance analysis, latency checks, and reporting
 
 Examples:
   arc topgen gen-top design.yml --mode verilog --output algo_top.v
@@ -39,6 +40,9 @@ Examples:
   arc verify doctor plugins/my_plugin/verify/design.verification.yml
   arc core resources
   arc core verify-contract --ip-info ip_info.yaml --contract ip_interface.yaml
+  arc analyze hls-report --hls-build-root build_hls --output out/reports
+  arc analyze latency-check design.yml --contracts-from modules.yml
+  arc analyze dashboard --input out/reports --output out/dashboard
         """,
     )
 
@@ -54,13 +58,14 @@ Examples:
         dest="group",
         required=True,
         metavar="GROUP",
-        help="Command group (core | topgen | hls | verify)",
+        help="Command group (core | topgen | hls | verify | analyze)",
     )
 
     core.register(sub)
     topgen.register(sub)
     hls.register(sub)
     verify.register(sub)
+    analyze.register(sub)
 
     args = parser.parse_args()
     _shared.set_debug(bool(getattr(args, "debug", False)))

@@ -67,6 +67,12 @@ packages = [
     "arc.topgen", "arc.topgen.generators", "arc.topgen.ip",
     "arc.hls",
     "arc.verify",
+    "arc.analyze",
+    "arc.analyze.hls_reports",
+    "arc.analyze.latency_static",
+    "arc.analyze.latency_runtime",
+    "arc.analyze.result_plots",
+    "arc.analyze.dashboards",
 ]
 
 [tool.setuptools.package-data]
