@@ -14,7 +14,7 @@ design.yml connections (``from:`` / ``to:``).
 
 Usage::
 
-    from topgen.ip.contract_loader import load_contracts_for_design
+    from arc.ip.contract_loader import load_contracts_for_design
 
     # Load all contracts referenced by modules referenced in design.yml:
     contracts = load_contracts_for_design(modules_yml_path, repo_root)

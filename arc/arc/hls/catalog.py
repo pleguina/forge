@@ -27,11 +27,11 @@ FILE_ARG_PATTERN = re.compile(r"(\S+\.(?:xml|csv|txt|dat|bin))")
 
 
 def _find_hls_dir() -> Path | None:
-    """Locate framework/hls/ by walking up from CWD then package location."""
+    """Locate hls/ by walking up from CWD then package location."""
     for start in (Path.cwd(), Path(__file__).resolve()):
         p = start
         for _ in range(15):
-            candidate = p / "framework" / "hls"
+            candidate = p / "hls"
             if (candidate / "templates").is_dir():
                 return candidate
             if p.parent == p:

@@ -56,7 +56,7 @@ arc:lint:
     - mkdir -p ci-logs
     - |
       echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
-      flake8 framework/topgen/topgen framework/verify/python/fw_verify \
+      flake8 arc/arc verify/python/fw_verify \
         2>&1 | tee -a ci-logs/lint.log
     - |
       echo "--- YAML lint ---" | tee -a ci-logs/lint.log
@@ -119,7 +119,7 @@ arc:python-unit-tests:
     - mkdir -p ci-logs
     - |
       echo "--- topgen unit tests ---" | tee ci-logs/unit-tests.log
-      python3 -m pytest framework/topgen/tests \
+      python3 -m pytest arc/tests \
         --tb=short -q \
         --junitxml=ci-logs/topgen-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log

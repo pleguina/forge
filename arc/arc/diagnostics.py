@@ -35,7 +35,7 @@ ATGDiagnosticReport    collection — build and emit all findings
 
 Usage example::
 
-    from topgen.diagnostics import ATGDiagnosticReport, Severity
+    from arc.diagnostics import ATGDiagnosticReport, Severity
 
     report = ATGDiagnosticReport()
     if not design_path.exists():
@@ -76,7 +76,7 @@ class Severity(Enum):
 
 @dataclass
 class ATGDiagnostic:
-    """One structured finding from topgen.
+    """One structured finding from arc.
 
     Attributes:
         code:     Stable ``ATGxxxx`` identifier.

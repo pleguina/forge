@@ -47,24 +47,24 @@ dev = [
     "mypy>=1.0",
 ]
 all = [
-    "topgen[dev]",
+    "arc[dev]",
 ]
 
 [project.urls]
 Homepage = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
-Documentation = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework/-/blob/main/framework/arc/README.md"
+Documentation = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework/-/blob/main/arc/README.md"
 Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
 Issues = "https://gitlab.cern.ch/pleguina/omtf_v2/-/issues"
 
 [project.scripts]
-arc = "topgen.cli.main:main"
+arc = "arc.cli.main:main"
 
 [tool.setuptools]
-packages = ["topgen", "topgen.ip", "topgen.generators",
-            "topgen.utils", "topgen.cli", "topgen.hls"]
+packages = ["arc", "arc.ip", "arc.generators",
+            "arc.utils", "arc.cli", "arc.hls"]
 
 [tool.setuptools.package-data]
-topgen = ["py.typed"]
+arc = ["py.typed"]
 
 [tool.black]
 line-length = 100
@@ -81,4 +81,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=topgen --cov-report=html --cov-report=term"
+addopts = "-v --cov=arc --cov-report=html --cov-report=term"

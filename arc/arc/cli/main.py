@@ -1123,7 +1123,7 @@ def _find_parallel_hls_script() -> "Path | None":
     for start in (Path.cwd(), Path(__file__).resolve()):
         p = start
         for _ in range(15):
-            candidate = p / "framework" / "hls" / "parallel_hls.sh"
+            candidate = p / "hls" / "parallel_hls.sh"
             if candidate.is_file():
                 return candidate
             if p.parent == p:
@@ -1148,7 +1148,7 @@ def _find_hls_templates_dir() -> "Path | None":
     for start in (Path.cwd(), Path(__file__).resolve()):
         p = start
         for _ in range(15):
-            candidate = p / "framework" / "hls" / "templates"
+            candidate = p / "hls" / "templates"
             if candidate.is_dir():
                 return candidate
             if p.parent == p:
@@ -1176,7 +1176,7 @@ def cmd_hls_gen_tcl(args):
         template_dir = _find_hls_templates_dir()
         if template_dir is None:
             print(
-                "ERROR: cannot locate framework/hls/templates/. "
+                "ERROR: cannot locate hls/templates/. "
                 "Pass --template-dir explicitly.",
                 file=sys.stderr,
             )
@@ -1675,7 +1675,7 @@ def cmd_gen_top(args):
 
         # Strict-mode gate: fail if topology_groups have verification issues
         if getattr(args, "strict", False) and _contracts and cfg.topology_groups:
-            from topgen.ip.contract_verifier import verify_topology_groups
+            from arc.ip.contract_verifier import verify_topology_groups
             tg_issues = verify_topology_groups(cfg, _contracts)
             tg_errors = [i for i in tg_issues if i.severity == "error"]
             if tg_errors:

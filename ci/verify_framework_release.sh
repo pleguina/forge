@@ -14,7 +14,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FW_PYTHON="${REPO_ROOT}/framework/verify/python"
+FW_PYTHON="${REPO_ROOT}/verify/python"
 
 PASS_COLOR='\033[0;32m'
 FAIL_COLOR='\033[0;31m'
@@ -31,8 +31,8 @@ if [[ -f "${REPO_ROOT}/.venv/bin/activate" ]]; then
 fi
 
 section "Framework standalone validation"
-bash "${REPO_ROOT}/framework/validate_framework.sh"
-pass "framework/validate_framework.sh"
+bash "${REPO_ROOT}/validate_framework.sh"
+pass "validate_framework.sh"
 
 run_test_suite() {
     local label="$1"

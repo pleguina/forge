@@ -29,7 +29,7 @@ NO_INSTALL=0
 TMP_DIR=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-FW_VERIFY_PYTHON_DIR="$REPO_ROOT/framework/verify/python"
+FW_VERIFY_PYTHON_DIR="$REPO_ROOT/verify/python"
 TRIGGER_PLUGIN="$REPO_ROOT/plugins/trigger_demo"
 
 # ── Argument parsing ────────────────────────────────────────────────────────
@@ -191,11 +191,11 @@ fi
 # ── Step 6: Run framework tests (no simulator required) ──────────────────────
 step "6 — Run framework unit tests"
 
-info "Running pytest on framework/ and reference plugins"
+info "Running pytest on ./ and reference plugins"
 (
     cd "$REPO_ROOT"
     python3 -m pytest \
-        framework/ \
+        ./ \
         plugins/trigger_demo/ \
         -q --tb=short \
         2>&1

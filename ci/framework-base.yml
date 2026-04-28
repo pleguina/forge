@@ -8,7 +8,7 @@
 #   - pip cache policy
 #   - reusable before_script anchor (.arc_python_setup)
 #
-# Consumed by: arc-framework/.gitlab-ci.yml
+# Consumed by: arc-./.gitlab-ci.yml
 # Exposed to plugins via: ci/plugin-consumer.yml
 # ============================================================================
 
@@ -33,8 +33,8 @@ default:
   cache:
     key:
       files:
-        - framework/verify/python/pyproject.toml
-        - framework/topgen/pyproject.toml
+        - verify/python/pyproject.toml
+        - arc/pyproject.toml
     paths:
       - .pip-cache/
     policy: pull-push
@@ -53,6 +53,6 @@ default:
 .arc_python_setup:
   before_script:
     - pip install --quiet --cache-dir .pip-cache
-        -e framework/topgen
-        -e "framework/verify/python[parser]"
+        -e arc
+        -e "verify/python[parser]"
         pytest pytest-cov pyyaml yamllint flake8

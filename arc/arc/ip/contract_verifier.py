@@ -12,7 +12,7 @@ port metadata in ip_info.yaml:
 
 Usage (Python API)::
 
-    from topgen.ip.contract_verifier import ContractVerifier
+    from arc.ip.contract_verifier import ContractVerifier
 
     verifier = ContractVerifier(ip_info_path, contract_path)
     issues = verifier.verify()

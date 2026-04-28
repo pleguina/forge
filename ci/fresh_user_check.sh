@@ -24,7 +24,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FW_PYTHON="${REPO_ROOT}/framework/verify/python"
+FW_PYTHON="${REPO_ROOT}/verify/python"
 
 PASS_COLOR='\033[0;32m'
 FAIL_COLOR='\033[0;31m'
@@ -57,7 +57,7 @@ if $SKIP_INSTALL; then
 else
     # Install with the optional pyverilog parser extra
     pip install -q -e "${FW_PYTHON}[parser]" pytest pytest-cov
-    pass "pip install -e framework/verify/python[parser]"
+    pass "pip install -e verify/python[parser]"
 fi
 
 # Verify import works
