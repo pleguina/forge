@@ -1,0 +1,9 @@
+{
+  "scheme": "sha256-trunc16",
+  "version": 1,
+  "hash": "5334c6f79077de61",
+  "top_module": "algo_top",
+  "source_file": "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/gen-top/design_trigger_demo_pipeline/algo_top.v",
+  "port_count": 12,
+  "generated_by": "topgen gen-top"
+}

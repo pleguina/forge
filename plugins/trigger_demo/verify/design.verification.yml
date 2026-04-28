@@ -102,6 +102,8 @@ flows:
     dut_rtl_source:   build_hls_trigger_demo/trigger_logic/solution1/syn/verilog
     dataset:          trigger_demo_golden
     default_event_id: 1
+    simulation:
+      post_stimulus_drain_cycles: 8   # +3 HLS LATENCY min=3 max=3 + 1 margin
     coverage_intent:  functional
     xsim:
       top_lib: xil_defaultlib
@@ -132,7 +134,7 @@ flows:
     simulation:
       reset_cycles:               4
       idle_cycles_after_reset:    0
-      post_stimulus_drain_cycles: 12
+      post_stimulus_drain_cycles: 25  # 12 base + 2 reg_stages + 3 trig_latency + 3 delay_cycles + 5 margin
     xsim:
       top_lib: xil_defaultlib
       use_sv_flag: false

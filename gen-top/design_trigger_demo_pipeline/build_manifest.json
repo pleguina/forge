@@ -1,0 +1,99 @@
+{
+  "project_root": "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework",
+  "design_file": "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/designs/design.yml",
+  "algorithm_top": "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/gen-top/design_trigger_demo_pipeline/algo_top.v",
+  "top_module": "algo_top",
+  "timestamp": "2026-04-28T18:38:25.090344",
+  "verilog_files": [
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/gen-top/design_trigger_demo_pipeline/algo_top.v",
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/decoded_partition_sink.v",
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/trigger_fanout.v",
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/trigger_contract_sink.v",
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/RegisterStage.v",
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/signal_delay.v"
+  ],
+  "include_dirs": [
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/gen-top/design_trigger_demo_pipeline",
+    "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl"
+  ],
+  "modules": {
+    "dec": {
+      "name": "dec",
+      "top": "hit_decoder",
+      "kind": "hls",
+      "verilog_files": [],
+      "include_dirs": []
+    },
+    "col": {
+      "name": "col",
+      "top": "hit_collector",
+      "kind": "hls",
+      "verilog_files": [],
+      "include_dirs": []
+    },
+    "trig": {
+      "name": "trig",
+      "top": "trigger_logic",
+      "kind": "hls",
+      "verilog_files": [],
+      "include_dirs": []
+    },
+    "partmon": {
+      "name": "partmon",
+      "top": "decoded_partition_sink",
+      "kind": "rtl",
+      "verilog_files": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/decoded_partition_sink.v"
+      ],
+      "include_dirs": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl"
+      ],
+      "rtl_sources": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/decoded_partition_sink.v"
+      ]
+    },
+    "tfan": {
+      "name": "tfan",
+      "top": "trigger_fanout",
+      "kind": "rtl",
+      "verilog_files": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/trigger_fanout.v"
+      ],
+      "include_dirs": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl"
+      ],
+      "rtl_sources": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/trigger_fanout.v"
+      ]
+    },
+    "tsink": {
+      "name": "tsink",
+      "top": "trigger_contract_sink",
+      "kind": "rtl",
+      "verilog_files": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/trigger_contract_sink.v"
+      ],
+      "include_dirs": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl"
+      ],
+      "rtl_sources": [
+        "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl/trigger_contract_sink.v"
+      ]
+    },
+    "tout": {
+      "name": "tout",
+      "top": "trigger_output",
+      "kind": "hls",
+      "verilog_files": [],
+      "include_dirs": []
+    }
+  },
+  "hls_build_root": "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo",
+  "statistics": {
+    "total_verilog_files": 6,
+    "total_include_dirs": 2,
+    "total_modules": 7,
+    "hls_modules": 4,
+    "rtl_modules": 3
+  }
+}

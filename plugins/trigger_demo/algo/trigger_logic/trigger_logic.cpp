@@ -9,6 +9,11 @@ void trigger_logic(
     ap_uint<1>         &trigger_valid
 ) {
 #pragma HLS PIPELINE II=1
+// LATENCY=3 forces HLS to insert 3 pipeline register stages in RTL,
+// making ap_clk visible in the synthesised Verilog and demonstrating
+// the framework latency-tracking + register_stages infrastructure.
+// C-sim is unaffected (LATENCY is an RTL-synthesis-only constraint).
+#pragma HLS LATENCY min=3 max=3
 #pragma HLS INTERFACE ap_ctrl_none port=return
 #pragma HLS INTERFACE ap_none port=n_hits
 #pragma HLS INTERFACE ap_none port=phi_sum

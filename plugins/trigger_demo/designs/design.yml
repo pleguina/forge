@@ -63,6 +63,7 @@ connections:
 
 - from: col
   to: trig
+  register_stages: 2   # 2 pipeline register stages: balance latency across the col→trig boundary
   port_map:
     - [n_hits, n_hits]
     - [phi_sum, phi_sum]
@@ -70,6 +71,7 @@ connections:
 
 - from: trig
   to: tfan
+  delay_cycles: 3      # 3-cycle signal_delay: align trigger fanout with downstream RTL pipeline
   port_map:
     - [trigger_accept, trigger_accept]
     - [trigger_quality, trigger_quality]

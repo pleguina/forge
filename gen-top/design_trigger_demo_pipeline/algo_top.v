@@ -20,11 +20,17 @@ module algo_top (
 
   // Internal wires (one per driving output pin per instance)
   wire [2:0] net_col_n_hits;
+  wire [2:0] reg_net_col_trig_n_hits;
   wire [15:0] net_col_phi_sum;
+  wire [15:0] reg_net_col_trig_phi_sum;
   wire net_col_collector_valid;
+  wire reg_net_col_trig_collector_valid;
   wire net_trig_trigger_accept;
+  wire delay_net_trig_tfan_trigger_accept;
   wire [7:0] net_trig_trigger_quality;
+  wire [7:0] delay_net_trig_tfan_trigger_quality;
   wire net_trig_trigger_valid;
+  wire delay_net_trig_tfan_trigger_valid;
   wire net_tfan_accept_lane_0;
   wire net_tfan_accept_lane_1;
   wire [7:0] net_tfan_quality_lane_0;
@@ -99,10 +105,11 @@ module algo_top (
 
   // trig instance 1/1
   trigger_logic trig (
+    .ap_clk(ap_clk),
     .ap_rst(ap_rst),
-    .n_hits(net_col_n_hits),
-    .phi_sum(net_col_phi_sum),
-    .in_valid(net_col_collector_valid),
+    .n_hits(reg_net_col_trig_n_hits),
+    .phi_sum(reg_net_col_trig_phi_sum),
+    .in_valid(reg_net_col_trig_collector_valid),
     .trigger_accept(net_trig_trigger_accept),
     .trigger_quality(net_trig_trigger_quality),
     .trigger_valid(net_trig_trigger_valid)
@@ -126,9 +133,9 @@ module algo_top (
   trigger_fanout tfan (
     .ap_clk(ap_clk),
     .ap_rst(ap_rst),
-    .trigger_accept(net_trig_trigger_accept),
-    .trigger_quality(net_trig_trigger_quality),
-    .trigger_valid(net_trig_trigger_valid),
+    .trigger_accept(delay_net_trig_tfan_trigger_accept),
+    .trigger_quality(delay_net_trig_tfan_trigger_quality),
+    .trigger_valid(delay_net_trig_tfan_trigger_valid),
     .accept_lane_0(net_tfan_accept_lane_0),
     .accept_lane_1(net_tfan_accept_lane_1),
     .quality_lane_0(net_tfan_quality_lane_0),
@@ -167,7 +174,70 @@ module algo_top (
   assign tout_out_valid = net_tout_out_valid;
 
   // Register stages for pipelined connections
+  // Pipeline col.n_hits → trig (2 stages)
+  RegisterStage #(
+    .DATAWIDTH(3),
+    .STAGES(2)
+  ) reg_stage_0 (
+    .clk(ap_clk),
+    .data_in(net_col_n_hits),
+    .data_out(reg_net_col_trig_n_hits)
+  );
+
+  // Pipeline col.phi_sum → trig (2 stages)
+  RegisterStage #(
+    .DATAWIDTH(16),
+    .STAGES(2)
+  ) reg_stage_1 (
+    .clk(ap_clk),
+    .data_in(net_col_phi_sum),
+    .data_out(reg_net_col_trig_phi_sum)
+  );
+
+  // Pipeline col.collector_valid → trig (2 stages)
+  RegisterStage #(
+    .DATAWIDTH(1),
+    .STAGES(2)
+  ) reg_stage_2 (
+    .clk(ap_clk),
+    .data_in(net_col_collector_valid),
+    .data_out(reg_net_col_trig_collector_valid)
+  );
+
   // Signal delays for connection timing alignment
+  // Delay trig.trigger_accept → tfan (+3 cycles)
+  signal_delay #(
+    .WIDTH(1),
+    .DEPTH(3)
+  ) delay_0 (
+    .clk(ap_clk),
+    .rst(ap_rst),
+    .din(net_trig_trigger_accept),
+    .dout(delay_net_trig_tfan_trigger_accept)
+  );
+
+  // Delay trig.trigger_quality → tfan (+3 cycles)
+  signal_delay #(
+    .WIDTH(8),
+    .DEPTH(3)
+  ) delay_1 (
+    .clk(ap_clk),
+    .rst(ap_rst),
+    .din(net_trig_trigger_quality),
+    .dout(delay_net_trig_tfan_trigger_quality)
+  );
+
+  // Delay trig.trigger_valid → tfan (+3 cycles)
+  signal_delay #(
+    .WIDTH(1),
+    .DEPTH(3)
+  ) delay_2 (
+    .clk(ap_clk),
+    .rst(ap_rst),
+    .din(net_trig_trigger_valid),
+    .dout(delay_net_trig_tfan_trigger_valid)
+  );
+
   // Control signal distribution with delays
   // Output alignment delays
 endmodule

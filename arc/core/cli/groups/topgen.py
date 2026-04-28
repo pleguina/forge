@@ -281,6 +281,33 @@ def generate_build_manifest(
 
         manifest["modules"][module_name] = module_info
 
+    # ── Framework support RTL: RegisterStage, signal_delay ──────────────────
+    # When any connection uses register_stages or delay_cycles, topgen generates
+    # RegisterStage / signal_delay instances in algo_top.v.  Those modules must
+    # be present in the compile list for the xsim full-chip flow.
+    needs_register_stage = any(getattr(conn, "register_stages", 0) > 0 for conn in cfg.connections)
+    needs_signal_delay   = any(getattr(conn, "delay_cycles",    0) > 0 for conn in cfg.connections)
+    _search_roots = [r for r in [project_root, ip_root, manifest_output.parent] if r]
+    for target_name, needed in [("RegisterStage.v", needs_register_stage),
+                                  ("signal_delay.v",   needs_signal_delay)]:
+        if not needed:
+            continue
+        found = None
+        for sroot in _search_roots:
+            matches = sorted(Path(sroot).rglob(target_name)) if Path(sroot).is_dir() else []
+            if matches:
+                found = matches[0]
+                break
+        if found:
+            resolved = str(found.resolve())
+            if resolved not in manifest["verilog_files"]:
+                manifest["verilog_files"].append(resolved)
+            parent_str = str(found.parent.resolve())
+            if parent_str not in manifest["include_dirs"]:
+                manifest["include_dirs"].append(parent_str)
+        else:
+            print(f"  ⚠️  {target_name} not found — needed for register_stages/delay_cycles")
+
     manifest["verilog_files"] = list(dict.fromkeys(manifest["verilog_files"]))
     manifest["include_dirs"] = list(dict.fromkeys(manifest["include_dirs"]))
 
