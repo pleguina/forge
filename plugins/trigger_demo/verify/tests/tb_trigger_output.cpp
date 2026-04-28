@@ -1,14 +1,13 @@
 // ════════════════════════════════════════════════════════════════════════
-// C-sim testbench for trigger_output (full pipeline end-to-end)
-// Runs decoder→collector→trigger_logic→trigger_output against golden XML.
-// Verifies the packed trigger_word and out_valid.
+// C-sim testbench for trigger_output — full pipeline via verif_fw::Driver<>
+// TriggerOutputAdapter runs all 4 stages in a single tick().
+// Verifies the packed trigger_word and out_valid against golden XML.
 // Usage: tb_trigger_output <golden.xml>
 // ════════════════════════════════════════════════════════════════════════
-#include "trigger_output.h"
-#include "trigger_logic.h"
-#include "hit_collector.h"
-#include "hit_decoder.h"
+#include "trigger_output_adapter.h"
 #include "xml_event_reader.h"
+#include "driver.h"
+#include "logging.h"
 #include <cstdio>
 
 int main(int argc, char **argv) {
@@ -20,60 +19,51 @@ int main(int argc, char **argv) {
     auto events = load_trigger_events(argv[1]);
     if (events.empty()) { fprintf(stderr, "No events loaded\n"); return 1; }
 
-    int errors = 0;
+    trigger_demo::TriggerOutputAdapter adapter;
+    verif_fw::Driver<trigger_demo::TriggerPipelineStim,
+                     trigger_demo::TriggerPipelineOut> driver(&adapter);
+
+    verif_fw::ErrorLogger err_log;
+    verif_fw::RunLogger   run_log;
+    err_log.open("tb_trigger_output_errors.csv");
+    run_log.open("tb_trigger_output_run.json");
+
+    int global_cycle = 0;
+    int errors       = 0;
 
     for (const auto &ev : events) {
-        // ── Decoder stage ───────────────────────────────────────────────
-        ap_uint<DECODED_HIT_W> dec_hit[4];
-        ap_uint<1>             dec_valid[4];
-        for (int ch = 0; ch < 4; ch++) {
-            hit_decoder(
-                ap_uint<RAW_HIT_W>(ev.channels[ch].raw_hit),
-                ap_uint<1>(ev.channels[ch].valid),
-                dec_hit[ch], dec_valid[ch]
-            );
-        }
+        trigger_demo::TriggerPipelineStim stim;
+        stim.global_cycle = global_cycle++;
+        stim.event_id     = ev.id;
+        stim.new_event    = true;
+        for (int ch = 0; ch < 4; ch++)
+            stim.channels[ch] = ev.channels[ch];
 
-        // ── Collector stage ─────────────────────────────────────────────
-        ap_uint<NHITS_W> n_hits;
-        ap_uint<PHI_W>   phi_sum;
-        ap_uint<1>       col_valid;
-        hit_collector(
-            dec_hit[0], dec_valid[0],
-            dec_hit[1], dec_valid[1],
-            dec_hit[2], dec_valid[2],
-            dec_hit[3], dec_valid[3],
-            n_hits, phi_sum, col_valid
-        );
+        auto out = driver.drive(stim);
 
-        // ── Trigger logic stage ─────────────────────────────────────────
-        ap_uint<1>         trig_accept;
-        ap_uint<QUALITY_W> trig_quality;
-        ap_uint<1>         trig_valid;
-        trigger_logic(n_hits, phi_sum, col_valid,
-                      trig_accept, trig_quality, trig_valid);
-
-        // ── Trigger output stage ────────────────────────────────────────
-        ap_uint<TRIGGER_WORD_W> trigger_word;
-        ap_uint<1>              out_valid;
-        trigger_output(trig_accept, trig_quality, trig_valid,
-                       trigger_word, out_valid);
-
-        // ── Verify against golden ───────────────────────────────────────
-        if ((unsigned)trigger_word != ev.golden.word) {
-            printf("FAIL  event %d: trigger_word=0x%08x expected=0x%08x\n",
-                   ev.id, (unsigned)trigger_word, ev.golden.word);
-            errors++;
+        if (static_cast<unsigned>(out.trigger_word) != ev.golden.word) {
+            char msg[128];
+            snprintf(msg, sizeof(msg),
+                     "event %d: trigger_word=0x%08x expected=0x%08x",
+                     ev.id, (unsigned)out.trigger_word, ev.golden.word);
+            err_log.log_error(stim.global_cycle, msg);
+            ++errors;
         }
         bool expect_valid = (ev.golden.n_hits > 0);
-        if ((bool)out_valid != expect_valid) {
-            printf("FAIL  event %d: out_valid=%d expected=%d\n",
-                   ev.id, (int)out_valid, (int)expect_valid);
-            errors++;
+        if (static_cast<bool>(out.out_valid) != expect_valid) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "event %d: out_valid=%d expected=%d",
+                     ev.id, (int)out.out_valid, (int)expect_valid);
+            err_log.log_error(stim.global_cycle, msg);
+            ++errors;
         }
     }
 
-    printf("tb_trigger_output (end-to-end): %lu events, %d errors\n",
+    run_log.log_run_info("trigger_output", "csim", adapter.latency(), "local");
+    err_log.close();
+    run_log.close();
+
+    printf("tb_trigger_output (end-to-end): %zu events, %d errors\n",
            events.size(), errors);
     return errors > 0 ? 1 : 0;
 }

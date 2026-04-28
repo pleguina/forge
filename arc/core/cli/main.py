@@ -1082,26 +1082,11 @@ def cmd_verify_contract(args):
         sys.exit(0)
 
 
-def _cpp_sdk_root() -> "Path | None":
-    """Return the verify/ C++ SDK root relative to this repo, if it exists."""
-    # When running from a git checkout the layout is:
-    #   <repo>/arc/core/cli/main.py  →  <repo>/verify/
-    # When installed as a wheel there is no C++ SDK bundled.
-    candidate = Path(__file__).parent.parent.parent.parent / "verify"
-    return candidate if candidate.is_dir() else None
-
-
 def cmd_resources(args):
     """Print installed framework resource paths."""
     import json as _json
 
-    sdk = _cpp_sdk_root()
     resources: dict[str, str] = {}
-    if sdk is not None:
-        resources["cpp_sdk_root"]    = str(sdk)
-        resources["cpp_sdk_include"] = str(sdk / "include")
-        resources["cpp_sdk_src"]     = str(sdk / "src")
-        resources["cmake_prefix"]    = str(sdk / "cmake")
 
     if getattr(args, "key", None):
         value = resources.get(args.key)
