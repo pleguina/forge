@@ -1,0 +1,3 @@
+[submodule "plugins/omtf_firmware"]
+	path = plugins/omtf_firmware
+	url = ../omtf-firmware

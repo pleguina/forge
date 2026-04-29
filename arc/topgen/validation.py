@@ -443,6 +443,10 @@ _KNOWN_MODULE_KEYS: Set[str] = {
     'name', 'kind', 'top', 'src', 'includes', 'rtl_lang', 'vhdl_library',
     'vhdl_version', 'rtl_include_dirs', 'verilog_defines', 'rtl_packages',
     'cflags', 'stages', 'build', 'verify', 'description',
+    # Contract-driven topology extension fields (used by arc topgen gen-top)
+    'interface_contract',
+    # Latency annotation fields (used by arc analyze)
+    'latency_hint', 'latency_cycles',
 }
 _KNOWN_BUILD_KEYS: Set[str] = {
     'stages', 'csim_opts', 'synth_opts', 'cosim_opts', 'export_opts',

@@ -497,9 +497,18 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         idle  = flow_decl.idle_cycles_after_reset    or getattr(defaults, "idle_cycles_after_reset", 0)
         drain = flow_decl.post_stimulus_drain_cycles or getattr(defaults, "post_stimulus_drain_cycles", 8)
 
-        # Resolve dataset XML path
+        # Resolve dataset XML path.
+        # Paths in design.verification.yml are relative to the file's own
+        # directory (the plugin's verify/ root), not the consumer/framework root.
+        # This keeps plugins self-contained regardless of their mount point.
         ds = contract.get_dataset(flow_decl.dataset) if hasattr(contract, "get_dataset") else None
         dataset_xml_raw: str | None = getattr(ds, "xml", None) if ds else None
+        if dataset_xml_raw and not Path(dataset_xml_raw).is_absolute():
+            _abs_xml = (design_path.parent / dataset_xml_raw).resolve()
+            try:
+                dataset_xml_raw = str(_abs_xml.relative_to(consumer_root.resolve()))
+            except ValueError:
+                dataset_xml_raw = str(_abs_xml)
 
         # ── verify.flow.yml ───────────────────────────────────────────────
         flow_yml_path = flow_dir / "verify.flow.yml"

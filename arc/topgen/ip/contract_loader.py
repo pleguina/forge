@@ -212,7 +212,7 @@ class LoadedContract:
 
 def load_contracts_for_design(
     modules_yml: Path,
-    repo_root: Path,
+    repo_root: Path | None = None,
 ) -> Dict[str, LoadedContract]:
     """
     Load all contracts referenced via ``interface_contract:`` in *modules_yml*.
@@ -228,8 +228,16 @@ def load_contracts_for_design(
     modules_yml:
         Path to the plugin's ``modules.yml`` registry.
     repo_root:
-        Repository root; ``interface_contract`` paths are relative to this.
+        Deprecated / unused.  ``interface_contract`` paths are now resolved
+        relative to the ``modules_yml`` file's own directory (the plugin root),
+        so plugins remain self-contained regardless of where they are mounted.
     """
+    # interface_contract: values are resolved relative to the modules.yml
+    # directory (the plugin's own root), not the consumer/framework root.
+    # This lets a plugin live anywhere under plugins/ without knowing its
+    # mount point.
+    plugin_root = modules_yml.parent
+
     contracts: Dict[str, LoadedContract] = {}
 
     if not modules_yml.exists():
@@ -241,7 +249,7 @@ def load_contracts_for_design(
         if not contract_path_str:
             continue
 
-        contract_path = repo_root / contract_path_str
+        contract_path = plugin_root / contract_path_str
         if not contract_path.exists():
             continue
 
