@@ -58,7 +58,7 @@ pip install pytest
 cd /path/to/repo
 source .venv/bin/activate
 python3 -m pytest \
-  plugins/trigger_demo/verify/tools/tests \
+  plugins/trigger_demo/arc/verify/tools/tests \
   -q
 ```
 
@@ -74,10 +74,10 @@ require Vivado or DUT build artifacts.
 If you specifically want the current downstream OMTF Python suite, run:
 
 ```bash
-python3 -m pytest plugins/omtf/verify/tools/tests/ -q
+python3 -m pytest plugins/omtf_firmware/arc/verify/tools/tests/ -q
 ```
 
-The OMTF test conftest at `plugins/omtf/verify/tools/tests/conftest.py` sets up
+The OMTF test conftest at `plugins/omtf_firmware/arc/verify/tools/tests/conftest.py` sets up
 `sys.path` and bootstraps the OMTF plugin automatically. You do not need to
 set `PYTHONPATH` manually to run that downstream test suite with pytest.
 
@@ -105,7 +105,7 @@ source .venv/bin/activate
 pip install -e arc/
 
 arc verify doctor \
-  plugins/trigger_demo/verify/design.verification.yml \
+  plugins/trigger_demo/arc/verify/design.verification.yml \
   --flow trigger_pipeline_xsim \
   --dry-run
 ```

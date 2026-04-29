@@ -1,0 +1,40 @@
+#-----------------------------------------------------------
+# xsim v2024.1 (64-bit)
+# SW Build 5076996 on Wed May 22 18:36:09 MDT 2024
+# IP Build 5075265 on Wed May 22 21:45:21 MDT 2024
+# SharedData Build 5076995 on Wed May 22 18:29:18 MDT 2024
+# Start of session at: Tue Apr 28 18:38:44 2026
+# Process ID: 3229573
+# Current directory: /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/xsim_work
+# Command line: xsim -log /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/xsim_work/simulate.log -mode tcl -source {xsim.dir/tb_algo_top_snapshot/xsim_script.tcl}
+# Log file: /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/xsim_work/simulate.log
+# Journal file: /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/xsim_work/xsim.jou
+# Running On        :pcwaw10
+# Platform          :unknown
+# Operating System  :unknown
+# Processor Detail  :Intel(R) Core(TM) i9-14900K
+# CPU Frequency     :2551.768 MHz
+# CPU Physical cores:24
+# CPU Logical cores :32
+# Host memory       :134199 MB
+# Swap memory       :4294 MB
+# Total Virtual     :138494 MB
+# Available Virtual :87234 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_algo_top_snapshot/xsim_script.tcl
+# xsim {tb_algo_top_snapshot} -autoloadwcfg -tclbatch {/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/xsim_work/wave.tcl}
+Time resolution is 1 ps
+source /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/xsim_work/wave.tcl
+## log_wave /tb_algo_top/*
+## run all
+FAIL [E0] tout_out_valid=0 expect=1
+FAIL [E0] tout_trigger_word=0x00000000 expect=0x80030000
+FAIL [E1] tout_out_valid=0 expect=1
+FAIL [E1] tout_trigger_word=0x00000000 expect=0x00010000
+FAIL [E2] tout_out_valid=0 expect=1
+FAIL [E2] tout_trigger_word=0x00000000 expect=0x80040000
+Fatal: TB FAIL: trigger_pipeline_xsim — 1 assertion(s) failed
+Time: 143 ns  Iteration: 0  Process: /tb_algo_top/run_stimulus  Scope: tb_algo_top.run_stimulus  File: /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/stimulus_current.svh Line: 108
+$finish called at time : 143 ns
+## quit
+INFO: [Common 17-206] Exiting xsim at Tue Apr 28 18:38:46 2026...

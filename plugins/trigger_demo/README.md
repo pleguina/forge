@@ -55,7 +55,7 @@ it can serve as a complete reference for each:
 | 2 | 4 | yes | max occupancy |
 | 3 | 0 | no | empty event |
 
-Dataset: `verify/schemas/data/trigger_demo_golden.xml`
+Dataset: `arc/verify/schemas/data/trigger_demo_golden.xml`
 
 ## Verification Flows
 
@@ -71,49 +71,54 @@ Dataset: `verify/schemas/data/trigger_demo_golden.xml`
 | `trigger_output_xsim` | single_module_rtl | xsim | RTL packed word matches golden |
 | `trigger_pipeline_xsim` | full_chip_rtl | xsim | generated `algo_top` end-to-end integration |
 
-## File Structure
+## Directory Layout
 
 ```
 plugins/trigger_demo/
-├── modules.yml                   ← authored: module registry (7 modules)
-├── designs/
-│   └── design.yml                ← authored: topology (instances, connections, groups)
-├── interfaces/
-│   ├── hit_decoder_ip.interface.yaml
-│   ├── hit_collector_ip.interface.yaml
-│   ├── trigger_logic_ip.interface.yaml
-│   ├── trigger_output_ip.interface.yaml
-│   ├── decoded_partition_sink.interface.yaml
-│   ├── trigger_fanout.interface.yaml
-│   └── trigger_contract_sink.interface.yaml
-├── algo/
-│   ├── common/trigger_types.h    ← authored: shared type definitions
-│   ├── hit_decoder/              ← authored: HLS source + header
-│   ├── hit_collector/            ← authored: HLS source + header
-│   ├── trigger_logic/            ← authored: HLS source + header
-│   ├── trigger_output/           ← authored: HLS source + header
-│   └── rtl/                      ← authored: Verilog RTL helpers (3 modules)
-└── verify/
-    ├── design.verification.yml   ← authored: verification contract (9 flows)
-    ├── schemas/data/             ← authored: golden XML dataset
-    ├── src/                      ← authored: shared testbench headers
-    ├── tests/                    ← authored: HLS C-sim testbench sources (tb_*.cpp)
-    ├── tools/
-    │   ├── bootstrap.py          ← authored: plugin registration with arc verify
-    │   ├── gen_stimulus.py       ← authored: xsim stimulus generator
-    │   ├── trigger_demo_verify_env.sh ← authored: shell PYTHONPATH helper
-    │   └── tests/                ← authored: unit tests for verify tooling
-    ├── <flow>/verify.flow.yml    ← generated: arc verify generate design.verification.yml
-    ├── <flow>/tb_*.sv            ← generated: arc verify generate ...
-    ├── <flow>/wave.tcl           ← generated: arc verify generate ...
-    └── <flow>/stimulus_current.svh ← plugin-generated: gen_stimulus.py
+├── algo/                             ← algorithm sources (stays at plugin root)
+│   ├── common/trigger_types.h        ← shared type definitions
+│   ├── hit_decoder/                  ← HLS source + header
+│   ├── hit_collector/                ← HLS source + header
+│   ├── trigger_logic/                ← HLS source + header
+│   ├── trigger_output/               ← HLS source + header
+│   └── rtl/                          ← Verilog RTL helpers (3 modules)
+├── arc/                              ← ARC integration capsule
+│   ├── modules.yml                   ← authored: module registry (7 modules)
+│   ├── designs/
+│   │   └── design.yml                ← authored: topology (instances, connections, groups)
+│   ├── interfaces/
+│   │   ├── hit_decoder_ip.interface.yaml
+│   │   ├── hit_collector_ip.interface.yaml
+│   │   ├── trigger_logic_ip.interface.yaml
+│   │   ├── trigger_output_ip.interface.yaml
+│   │   ├── decoded_partition_sink.interface.yaml
+│   │   ├── trigger_fanout.interface.yaml
+│   │   └── trigger_contract_sink.interface.yaml
+│   └── verify/
+│       ├── design.verification.yml   ← authored: verification contract (9 flows)
+│       ├── schemas/data/             ← authored: golden XML dataset
+│       ├── src/                      ← authored: shared testbench sources
+│       ├── tests/                    ← authored: HLS C-sim testbench sources (tb_*.cpp)
+│       ├── include/                  ← authored: DUT adapter headers
+│       ├── tools/
+│       │   ├── bootstrap.py          ← authored: plugin registration with arc verify
+│       │   ├── gen_stimulus.py       ← authored: xsim stimulus generator
+│       │   └── tests/                ← authored: unit tests for verify tooling
+│       ├── <flow>/verify.flow.yml    ← generated: arc verify generate
+│       ├── <flow>/tb_*.sv            ← generated: arc verify generate
+│       ├── <flow>/wave.tcl           ← generated: arc verify generate
+│       └── <flow>/stimulus_current.svh  ← plugin-generated: gen_stimulus.py
+├── CANONICAL_PATTERNS.md
+└── README.md
 ```
 
+**Path anchor rule:** all paths in `arc/modules.yml` are relative to `arc/`.
+Sources in `algo/` are reached with `../algo/...`.
+See `docs/PLUGIN_AUTHOR_GUIDE.md` for the complete path model.
+
 > **What you author vs what the framework generates:**
-> Files under `verify/<flow>/` are framework-generated or plugin-generated — do **not**
+> Files under `arc/verify/<flow>/` are framework-generated or plugin-generated — do **not**
 > hand-edit them. Regenerate with `arc verify generate` and `gen_stimulus.py`.
-> Committed copies serve as the CI baseline.
-> See [docs/MINIMAL_CONSUMER_QUICKSTART.md](../../docs/MINIMAL_CONSUMER_QUICKSTART.md).
 
 ## End-to-end Workflow
 
@@ -128,7 +133,7 @@ export CONSUMER_ROOT="$(pwd)"
 
 ```bash
 arc hls run \
-  --registry plugins/trigger_demo/modules.yml \
+  --registry plugins/trigger_demo/arc/modules.yml \
   --modules all \
   --hls-build-root build_hls_trigger_demo \
   --stages csim,synth,cosim,export
@@ -138,9 +143,9 @@ arc hls run \
 
 ```bash
 arc topgen gen-top \
-  plugins/trigger_demo/designs/design.yml \
+  plugins/trigger_demo/arc/designs/design.yml \
   --consumer-root "$CONSUMER_ROOT" \
-  --contracts-from plugins/trigger_demo/modules.yml \
+  --contracts-from plugins/trigger_demo/arc/modules.yml \
   --build-dir build_hls_trigger_demo \
   --mode verilog \
   --strict \
@@ -150,7 +155,7 @@ arc topgen gen-top \
 ### Step 3 — Generate verification flow configs
 
 ```bash
-arc verify generate plugins/trigger_demo/verify/design.verification.yml
+arc verify generate plugins/trigger_demo/arc/verify/design.verification.yml
 ```
 
 Writes `verify.flow.yml`, `tb_*.sv`, and `wave.tcl` into each of the 9 flow
@@ -159,7 +164,7 @@ directories. Idempotent — safe to re-run.
 ### Step 4 — Generate stimulus SVH files
 
 ```bash
-python3 plugins/trigger_demo/verify/tools/gen_stimulus.py
+python3 plugins/trigger_demo/arc/verify/tools/gen_stimulus.py
 ```
 
 Writes `stimulus_current.svh` into every xsim flow directory.
@@ -168,7 +173,7 @@ Use `--module <name>` or `--dry-run` for selective runs.
 ### Step 5 — Contract health check
 
 ```bash
-arc verify doctor plugins/trigger_demo/verify/design.verification.yml
+arc verify doctor plugins/trigger_demo/arc/verify/design.verification.yml
 ```
 
 ### Step 6 — Run verification flows
@@ -176,24 +181,24 @@ arc verify doctor plugins/trigger_demo/verify/design.verification.yml
 ```bash
 # C-sim (HLS — requires Vitis HLS)
 for flow in hit_decoder_csim hit_collector_csim trigger_logic_csim trigger_output_csim; do
-  arc verify run plugins/trigger_demo/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  arc verify run plugins/trigger_demo/arc/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Single-module RTL (requires Vivado/xsim)
 for flow in hit_decoder_xsim hit_collector_xsim trigger_logic_xsim trigger_output_xsim; do
-  arc verify run plugins/trigger_demo/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  arc verify run plugins/trigger_demo/arc/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Full-chip RTL integration (requires gen-top output from Step 2)
 arc verify run \
-  plugins/trigger_demo/verify/trigger_pipeline_xsim/verify.flow.yml \
+  plugins/trigger_demo/arc/verify/trigger_pipeline_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```
 
 ### Running the Python unit tests
 
 ```bash
-python3 -m pytest plugins/trigger_demo/verify/tools/tests -q
+python3 -m pytest plugins/trigger_demo/arc/verify/tools/tests -q
 ```
 
 No Vivado or Vitis HLS required — these tests validate the Python tooling only.

@@ -1,0 +1,19 @@
+
+****** xsim v2024.1 (64-bit)
+  **** SW Build 5076996 on Wed May 22 18:36:09 MDT 2024
+  **** IP Build 5075265 on Wed May 22 21:45:21 MDT 2024
+  **** SharedData Build 5076995 on Wed May 22 18:29:18 MDT 2024
+  **** Start of session at: Tue Apr 28 18:38:40 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_trigger_output_xsim_snapshot/xsim_script.tcl
+# xsim {tb_trigger_output_xsim_snapshot} -autoloadwcfg -tclbatch {/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_output_xsim/xsim_work/wave.tcl}
+Time resolution is 1 ps
+source /data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_output_xsim/xsim_work/wave.tcl
+## log_wave /tb_trigger_output_xsim/*
+## run all
+TB PASS: trigger_output_xsim completed
+$finish called at time : 46 ns : File "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_output_xsim/tb_trigger_output_xsim.sv" Line 87
+## quit
+INFO: [Common 17-206] Exiting xsim at Tue Apr 28 18:38:42 2026...

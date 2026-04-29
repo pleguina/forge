@@ -1,0 +1,7 @@
+Running: xsim.dir/tb_hit_decoder_xsim_snapshot/xsimk -simmode gui -wdb tb_hit_decoder_xsim_snapshot.wdb -simrunnum 0 -socket 45515
+Design successfully loaded
+Design Loading Memory Usage: 20064 KB (Peak: 20184 KB)
+Design Loading CPU Usage: 0 ms
+Simulation completed
+Simulation Memory Usage: 102060 KB (Peak: 159332 KB)
+Simulation CPU Usage: 0 ms

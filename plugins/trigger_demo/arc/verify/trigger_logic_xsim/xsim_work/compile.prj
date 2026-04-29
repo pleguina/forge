@@ -1,0 +1,2 @@
+sv      xil_defaultlib "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_logic_xsim/tb_trigger_logic_xsim.sv"
+verilog xil_defaultlib "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/trigger_logic/solution1/syn/verilog/trigger_logic.v"

@@ -31,10 +31,11 @@ JOBS=4
 HLS_BUILD_ROOT="build_hls_trigger_demo"
 GEN_TOP_OUT="gen-top/design_trigger_demo_pipeline/algo_top.v"
 PLUGIN_ROOT="plugins/trigger_demo"
-DESIGN_YML="$PLUGIN_ROOT/designs/design.yml"
-MODULES_YML="$PLUGIN_ROOT/modules.yml"
-VERIFY_YML="$PLUGIN_ROOT/verify/design.verification.yml"
-GEN_STIMULUS="$PLUGIN_ROOT/verify/tools/gen_stimulus.py"
+ARC_ROOT="$PLUGIN_ROOT/arc"        # ARC integration capsule
+DESIGN_YML="$ARC_ROOT/designs/design.yml"
+MODULES_YML="$ARC_ROOT/modules.yml"
+VERIFY_YML="$ARC_ROOT/verify/design.verification.yml"
+GEN_STIMULUS="$ARC_ROOT/verify/tools/gen_stimulus.py"
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
 for arg in "$@"; do
@@ -90,11 +91,11 @@ ok "Validation passed"
 step "Preflight: check required HLS include headers and sources"
 _MISSING=0
 for _HDR in \
-  "$PLUGIN_ROOT/verify/include/dut_adapter.h" \
-  "$PLUGIN_ROOT/verify/include/transaction_concepts.h" \
-  "$PLUGIN_ROOT/verify/include/driver.h" \
+  "$ARC_ROOT/verify/include/dut_adapter.h" \
+  "$ARC_ROOT/verify/include/transaction_concepts.h" \
+  "$ARC_ROOT/verify/include/driver.h" \
   "$PLUGIN_ROOT/algo/common/trigger_types.h" \
-  "$PLUGIN_ROOT/verify/src/logging.cpp"
+  "$ARC_ROOT/verify/src/logging.cpp"
 do
   if [[ ! -f "$_HDR" ]]; then
     echo "  MISSING: $_HDR" >&2
@@ -198,7 +199,7 @@ FLOWS=(
 FAIL_COUNT=0
 for flow in "${FLOWS[@]}"; do
   step "arc verify run — $flow"
-  flow_yml="$PLUGIN_ROOT/verify/${flow}/verify.flow.yml"
+  flow_yml="$ARC_ROOT/verify/${flow}/verify.flow.yml"
   if arc verify run "$flow_yml" --plugin trigger_demo --consumer-root "$(pwd)"; then
     ok "$flow PASSED"
   else

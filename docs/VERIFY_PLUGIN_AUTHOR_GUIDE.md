@@ -17,16 +17,27 @@ Do not treat older repo notes or migration documents as normative unless they ar
 The intended minimal plugin authoring surface is:
 
 ```text
-plugins/<plugin>/verify/
-    design.verification.yml
-    schemas/data/
-    tools/
-        bootstrap.py
-        gen_stimulus.py
-        <optional checker code>
+plugins/<plugin>/
+    algo/                       ← implementation sources (C++, HDL)
+    arc/                        ← ARC integration capsule
+        modules.yml             ← module registry
+        designs/
+            design.yml
+        interfaces/
+            <module>.interface.yaml
+        verify/
+            design.verification.yml   ← verification contract (authored)
+            schemas/data/             ← dataset XML files (authored)
+            tools/
+                bootstrap.py          ← plugin identity (authored)
+                gen_stimulus.py       ← stimulus generation (authored)
+                <optional checker code>
 ```
 
-Everything else should be framework-owned, framework-generated, or plugin-generated from those authored inputs.
+Everything else (per-flow `verify.flow.yml`, `tb_*.sv`, `wave.tcl`) is
+framework-owned, framework-generated, or plugin-generated from those authored inputs.
+
+See `docs/PLUGIN_AUTHOR_GUIDE.md` for the full `arc/` layout rules and path anchor conventions.
 
 ## 2. Current framework-standard verification contract
 
@@ -63,7 +74,7 @@ The framework owns the generic verification lifecycle:
 These are generated or framework-owned and should not be treated as plugin-authored surfaces for a new plugin:
 
 ```text
-plugins/<plugin>/verify/<flow>/
+plugins/<plugin>/arc/verify/<flow>/
     verify.flow.yml
     tb_<module>.sv
     wave.tcl
@@ -98,7 +109,7 @@ plugin: myplugin
 
 datasets:
   my_dataset:
-    xml: plugins/myplugin/verify/schemas/data/events.xml
+    xml: schemas/data/events.xml   # relative to arc/verify/ (this file's directory)
 
 defaults:
   clk_period_ns: 4.0
@@ -247,7 +258,7 @@ and an HTML dashboard.  It requires a small amount of plugin-authored content:
 | What | Where | Used by |
 |------|-------|---------|
 | `latency_hint: N` on each module | `modules.yml` | `arc analyze latency-check` |
-| `plot_config.yml` with figure specs | `plugins/<plugin>/verify/plot_config.yml` | `arc analyze plot-results` |
+| `plot_config.yml` with figure specs | `plugins/<plugin>/arc/verify/plot_config.yml` | `arc analyze plot-results` |
 | Probe CSV (`cycle,signal,value`) | produced post-simulation | `arc analyze runtime-latency` |
 | Observed + reference CSVs | produced post-simulation | `arc analyze plot-results` |
 
@@ -257,8 +268,8 @@ Quick run sequence (after `arc verify run` passes):
 arc analyze hls-report \
     --hls-build-root build_hls_<plugin> --output out/reports
 
-arc analyze latency-check plugins/<plugin>/designs/design.yml \
-    --contracts-from plugins/<plugin>/modules.yml \
+arc analyze latency-check plugins/<plugin>/arc/designs/design.yml \
+    --contracts-from plugins/<plugin>/arc/modules.yml \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/latency_check.md
 
@@ -269,7 +280,7 @@ arc analyze runtime-latency \
     --output out/reports/runtime_latency.md
 
 arc analyze plot-results \
-    --config plugins/<plugin>/verify/plot_config.yml \
+    --config plugins/<plugin>/arc/verify/plot_config.yml \
     --observed out/reports/observed.csv \
     --reference out/reports/reference.csv \
     --output out/reports/plots
@@ -281,6 +292,6 @@ See `docs/ANALYSIS_GUIDE.md` for the complete reference.
 
 ## 10. Notes on current examples
 
-`trigger_demo` is the maintained supported proof consumer for the current public framework path. It demonstrates multiple framework-owned flows, contract-driven generation, and full-chip integration proof without relying on OMTF semantics.
+`trigger_demo` is the maintained supported proof consumer for the current public framework path. Its ARC capsule is at `plugins/trigger_demo/arc/`. It demonstrates multiple framework-owned flows, contract-driven generation, and full-chip integration proof without relying on OMTF semantics.
 
-`omtf` remains a valid reference consumer, but parts of its integration still reflect migration or advanced extension needs and should not be copied blindly into a new plugin.
+`omtf_firmware` (at `plugins/omtf_firmware/`) is a full real-detector plugin mounted as a git submodule. Its ARC capsule is at `plugins/omtf_firmware/arc/`. It uses the same path model: `src: [../algo/...]` reaching up from `arc/` to firmware sources.

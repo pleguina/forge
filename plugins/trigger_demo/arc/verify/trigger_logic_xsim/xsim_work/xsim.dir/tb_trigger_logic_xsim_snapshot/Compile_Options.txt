@@ -1,0 +1,1 @@
+--incr --debug "typical" --relax -L "xil_defaultlib" "xil_defaultlib.tb_trigger_logic_xsim" -s "tb_trigger_logic_xsim_snapshot" 

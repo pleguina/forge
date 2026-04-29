@@ -1,0 +1,8 @@
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/gen-top/design_trigger_demo_pipeline
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/algo/rtl
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/hit_decoder/solution1/syn/verilog
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/hit_collector/solution1/syn/verilog
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/trigger_logic/solution1/syn/verilog
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/trigger_output/solution1/syn/verilog
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim
+/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_pipeline_xsim/stimulus

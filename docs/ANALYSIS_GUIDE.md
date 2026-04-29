@@ -52,8 +52,8 @@ accumulated latency is equal on every incoming path.  A mismatch means data
 from two branches arrives at different cycles, which is almost always a bug.
 
 ```bash
-arc analyze latency-check plugins/<plugin>/designs/design.yml \
-  --contracts-from plugins/<plugin>/modules.yml \
+arc analyze latency-check plugins/<plugin>/arc/designs/design.yml \
+  --contracts-from plugins/<plugin>/arc/modules.yml \
   --hls-build-root build_hls_<plugin> \
   --output out/reports/latency_check.md
 ```
@@ -178,7 +178,7 @@ CSV.  The plot definitions live in a **plugin-owned** `plot_config.yml`.
 
 ```bash
 arc analyze plot-results \
-  --config plugins/<plugin>/verify/plot_config.yml \
+  --config plugins/<plugin>/arc/verify/plot_config.yml \
   --observed out/reports/observed.csv \
   --reference out/reports/reference.csv \
   --output out/reports/plots
@@ -187,7 +187,7 @@ arc analyze plot-results \
 **Plugin requirement — provide `plot_config.yml`:**
 
 ```yaml
-# plugins/<plugin>/verify/plot_config.yml
+# plugins/<plugin>/arc/verify/plot_config.yml
 plots:
 
   - name: out_valid_timeline     # becomes out_valid_timeline.png
@@ -252,7 +252,7 @@ Any missing file is silently skipped and its section shows "not available".
 ```bash
 # 1. Build HLS (synth stage required for latency numbers)
 arc hls run \
-  --registry plugins/trigger_demo/modules.yml \
+  --registry plugins/trigger_demo/arc/modules.yml \
   --hls-build-root build_hls_trigger_demo \
   --stages synth
 
@@ -268,8 +268,8 @@ arc analyze hls-report \
   --output out/reports
 
 # 5. Static latency check
-arc analyze latency-check plugins/trigger_demo/designs/design.yml \
-  --contracts-from plugins/trigger_demo/modules.yml \
+arc analyze latency-check plugins/trigger_demo/arc/designs/design.yml \
+  --contracts-from plugins/trigger_demo/arc/modules.yml \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports/latency_check.md
 
@@ -282,7 +282,7 @@ arc analyze runtime-latency \
 
 # 7. Result plots
 arc analyze plot-results \
-  --config plugins/trigger_demo/verify/plot_config.yml \
+  --config plugins/trigger_demo/arc/verify/plot_config.yml \
   --observed out/reports/observed_pipeline.csv \
   --reference out/reports/reference_pipeline.csv \
   --output out/reports/plots
@@ -302,7 +302,7 @@ arc analyze dashboard \
 |------|-------------------------------|----------------------|
 | Annotate all modules with known latency | `modules.yml`: `latency_hint: N` or `latency_cycles: N` | `latency-check` |
 | Mark variable-latency modules | `modules.yml`: `variable_latency: true` | `latency-check` |
-| Provide plot definitions | `plugins/<plugin>/verify/plot_config.yml` | `plot-results` |
+| Provide plot definitions | `plugins/<plugin>/arc/verify/plot_config.yml` | `plot-results` |
 | Produce probe CSV (long-format) | script or testbench `PROBE_LOG` | `runtime-latency` |
 | Produce observed CSV (wide-format) | post-process xsim output CSV | `plot-results` |
 | Produce reference CSV (wide-format) | golden stimulus data | `plot-results` |

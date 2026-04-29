@@ -6,6 +6,79 @@
 
 ---
 
+## Plugin Directory Layout — The `arc/` Capsule Convention
+
+Every plugin must separate its **implementation sources** (algorithm code, HDL) from
+its **ARC integration contract** (module registry, interface descriptions, verification
+contract). The ARC contract files are grouped in a single subdirectory called `arc/`:
+
+```
+plugins/<your_plugin>/          ← submodule root (git submodule or plain directory)
+├── algo/                       ← implementation sources — algo C++, HDL, CMakeLists
+│   ├── common/
+│   ├── my_module/
+│   │   └── my_module.cpp
+│   └── rtl/
+│       └── my_rtl.v
+├── arc/                        ← ARC integration capsule (all arc-facing files)
+│   ├── modules.yml             ← module registry  (plugin_root = arc/)
+│   ├── designs/
+│   │   └── design.yml         ← design topology   (registry: ../modules.yml)
+│   ├── interfaces/
+│   │   └── my_module.interface.yaml
+│   └── verify/
+│       ├── design.verification.yml
+│       ├── include/            ← DUT adapter headers
+│       ├── schemas/
+│       │   └── data/           ← dataset XML files
+│       ├── src/                ← shared testbench sources
+│       ├── tests/              ← per-module testbench cpp
+│       └── tools/              ← gen_stimulus.py, etc.
+├── docs/                       ← repo-level documentation (optional)
+├── README.md
+└── CMakeLists.txt
+```
+
+### Path anchor rules
+
+All relative paths in `arc/` files are **relative to their own file's directory**:
+
+| File | Anchor | Example |
+|------|--------|---------|
+| `arc/modules.yml` — `src:` / `includes:` / `tb_src:` | `arc/` (the file's own directory) | `src: [../algo/my_module/my_module.cpp]` |
+| `arc/modules.yml` — `interface_contract:` | `arc/` | `interface_contract: interfaces/my_module.interface.yaml` |
+| `arc/modules.yml` — `verify.tb_args:` | `arc/` | `tb_args: verify/schemas/data/events.xml` |
+| `arc/designs/design.yml` — `registry:` | `arc/designs/` | `registry: ../modules.yml` |
+| `arc/verify/design.verification.yml` — `datasets.xml:` | `arc/verify/` | `xml: schemas/data/events.xml` |
+
+Key point: **`algo/` sources live one level above `arc/`**, so all source paths use `../algo/...`.
+Interface contracts and verify artefacts live _inside_ `arc/`, so they do not need `../`.
+
+### Consumer-root paths (build artefacts only)
+
+`dut_rtl_source:` entries in generated `verify.flow.yml` are the only paths that are
+relative to the **consumer root** (the framework checkout root). These are build artefacts
+produced by `arc hls run synth` and placed under `build_hls_<plugin>/`. Plugins never
+hand-author consumer-root-relative paths.
+
+### Mounting the plugin
+
+The framework discovers a plugin by the path to its `arc/modules.yml`.
+Pass it explicitly on the command line:
+
+```bash
+# From the framework root:
+arc topgen validate-registry plugins/<plugin>/arc/modules.yml
+arc topgen gen-top  plugins/<plugin>/arc/designs/design.yml --contracts-from plugins/<plugin>/arc/modules.yml
+arc verify generate plugins/<plugin>/arc/verify/design.verification.yml
+arc verify run      plugins/<plugin>/arc/verify/<flow>/verify.flow.yml --consumer-root .
+```
+
+The plugin does not need to know where it is mounted — all paths inside `arc/` resolve
+correctly regardless of the consumer's directory structure.
+
+---
+
 ## Quick Start — Adding a New Module
 
 ### 1. Write and export your IP
@@ -23,7 +96,7 @@ arc topgen ip-summary plugins/<plugin>/designs/design.yml --ip-root ips --output
 
 ### 3. Write the interface contract
 
-Create `plugins/<plugin>/interfaces/<module_name>.interface.yaml`:
+Create `plugins/<plugin>/arc/interfaces/<module_name>.interface.yaml`:
 
 ```yaml
 ip_interface:
@@ -51,19 +124,19 @@ ip_interface:
 
 ### 4. Register the module
 
-Add to `plugins/<plugin>/modules.yml`:
+Add to `plugins/<plugin>/arc/modules.yml`:
 
 ```yaml
 - name: my_module
   kind: hls
   top: my_module
-  src: [L1Trigger/my_module/my_module.cpp]
-  interface_contract: plugins/<plugin>/interfaces/my_module.interface.yaml
+  src: [../algo/my_module/my_module.cpp]       # relative to arc/ — uses ../algo/ to reach sources
+  interface_contract: interfaces/my_module.interface.yaml   # relative to arc/
 ```
 
 ### 5. Add to design topology
 
-In `plugins/<plugin>/designs/design.yml`:
+In `plugins/<plugin>/arc/designs/design.yml`:
 
 **Module instance:**
 ```yaml
@@ -96,13 +169,13 @@ connections:
 ```bash
 # Verify contract against ip_info
 arc core verify-contract --ip-info ip_info.yaml \
-    --contract plugins/<plugin>/interfaces/my_module.interface.yaml
+    --contract plugins/<plugin>/arc/interfaces/my_module.interface.yaml
 
 # Generate structural Verilog
-arc topgen gen-top plugins/<plugin>/designs/design.yml \
+arc topgen gen-top plugins/<plugin>/arc/designs/design.yml \
     --mode verilog --consumer-root . --build-dir build \
     --hls-build-root build_hls --ip-root ips \
-    --contracts-from plugins/<plugin>/modules.yml \
+    --contracts-from plugins/<plugin>/arc/modules.yml \
     --output algo_top.v
 
 # Strict mode (CI grade — rejects port_map_ranges, auto-match, missing contracts)
@@ -337,8 +410,8 @@ Check: `grep "^ *my_module:" ip_info.yaml`.
 
 ### `--strict` fails: "modules have no interface contract"
 
-Pass `--contracts-from plugins/<plugin>/modules.yml` and ensure your module's
-`modules.yml` entry has `interface_contract:` pointing to the contract file.
+Pass `--contracts-from plugins/<plugin>/arc/modules.yml` and ensure your module's
+`arc/modules.yml` entry has `interface_contract:` pointing to the contract file.
 
 ### `--strict` fails: "connection(s) still use port_map_ranges"
 
@@ -364,9 +437,9 @@ Add `allowed_unconnected` patterns in `design.yml`.
 | Topology Groups Schema | `docs/TOPOLOGY_GROUPS_SCHEMA.md` | Schema for topology_groups |
 | IP Interface Policy | `framework/IP_INTERFACE_POLICY.md` | Contract rules |
 | Signal Families | `framework/normalized_signal_families.yaml` | Semantic family vocabulary |
-| OMTF contracts | `plugins/omtf/interfaces/*.interface.yaml` | Per-module contracts |
-| Module registry | `plugins/omtf/modules.yml` | Module identity + contract refs |
-| Design topology | `plugins/omtf/designs/design.yml` | Instances, connections, topology_groups |
+| OMTF contracts | `plugins/omtf_firmware/arc/interfaces/*.interface.yaml` | Per-module contracts |
+| Module registry | `plugins/omtf_firmware/arc/modules.yml` | Module identity + contract refs |
+| Design topology | `plugins/omtf_firmware/arc/designs/design.yml` | Instances, connections, topology_groups |
 
 ---
 
@@ -414,7 +487,7 @@ connections:
 Both fields are reflected in the generated `algo_top.v` and in the static latency
 check report.
 
-### `plugins/<plugin>/verify/plot_config.yml` — define result plots
+### `plugins/<plugin>/arc/verify/plot_config.yml` — define result plots
 
 ```yaml
 plots:

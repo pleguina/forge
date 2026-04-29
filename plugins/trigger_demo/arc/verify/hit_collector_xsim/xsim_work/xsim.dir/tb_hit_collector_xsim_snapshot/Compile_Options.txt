@@ -1,0 +1,1 @@
+--incr --debug "typical" --relax -L "xil_defaultlib" "xil_defaultlib.tb_hit_collector_xsim" -s "tb_hit_collector_xsim_snapshot" 
