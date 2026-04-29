@@ -8,6 +8,7 @@ Use it together with:
 
 - `framework/MINIMAL_CONSUMER_QUICKSTART.md` for the shortest supported adoption path
 - `framework/PLUGIN_AUTHOR_GUIDE.md` for topology-generation and contract-driven wiring
+- `docs/ANALYSIS_GUIDE.md` for latency measurement and performance reporting
 
 Do not treat older repo notes or migration documents as normative unless they are linked from the support-classified framework surface.
 
@@ -237,6 +238,46 @@ Before calling a plugin integrated, verify that it has:
 5. optional checker only if self-checking is not enough
 
 And verify that it does not require authored copies of generated artifacts.
+
+## 10. Post-verification analysis
+
+Once all flows pass, `arc analyze` provides latency measurement, static checks, plots,
+and an HTML dashboard.  It requires a small amount of plugin-authored content:
+
+| What | Where | Used by |
+|------|-------|---------|
+| `latency_hint: N` on each module | `modules.yml` | `arc analyze latency-check` |
+| `plot_config.yml` with figure specs | `plugins/<plugin>/verify/plot_config.yml` | `arc analyze plot-results` |
+| Probe CSV (`cycle,signal,value`) | produced post-simulation | `arc analyze runtime-latency` |
+| Observed + reference CSVs | produced post-simulation | `arc analyze plot-results` |
+
+Quick run sequence (after `arc verify run` passes):
+
+```bash
+arc analyze hls-report \
+    --hls-build-root build_hls_<plugin> --output out/reports
+
+arc analyze latency-check plugins/<plugin>/designs/design.yml \
+    --contracts-from plugins/<plugin>/modules.yml \
+    --hls-build-root build_hls_<plugin> \
+    --output out/reports/latency_check.md
+
+arc analyze runtime-latency \
+    --probe-csv out/reports/pipeline_probe.csv \
+    --probe-pairs "<module>:<in_valid>:<out_valid>" \
+    --hls-build-root build_hls_<plugin> \
+    --output out/reports/runtime_latency.md
+
+arc analyze plot-results \
+    --config plugins/<plugin>/verify/plot_config.yml \
+    --observed out/reports/observed.csv \
+    --reference out/reports/reference.csv \
+    --output out/reports/plots
+
+arc analyze dashboard --input out/reports --output out/dashboard
+```
+
+See `docs/ANALYSIS_GUIDE.md` for the complete reference.
 
 ## 10. Notes on current examples
 

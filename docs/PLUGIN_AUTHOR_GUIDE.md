@@ -367,3 +367,70 @@ Add `allowed_unconnected` patterns in `design.yml`.
 | OMTF contracts | `plugins/omtf/interfaces/*.interface.yaml` | Per-module contracts |
 | Module registry | `plugins/omtf/modules.yml` | Module identity + contract refs |
 | Design topology | `plugins/omtf/designs/design.yml` | Instances, connections, topology_groups |
+
+---
+
+## Latency and Performance Analysis
+
+After topology generation and verification pass, use `arc analyze` to measure latency,
+check pipeline balance, and produce plots and an HTML dashboard.
+
+**Plugin requirements for full analysis:**
+
+### `modules.yml` — annotate every module with a latency value
+
+```yaml
+modules:
+
+  - name: hit_decoder
+    kind: hls
+    latency_hint: 0          # combinational (ap_ctrl_none, clock_free)
+
+  - name: trigger_logic
+    kind: hls
+    latency_hint: 3          # HLS LATENCY min=3 max=3; overridden by
+                              # hls_report once synth runs
+
+  - name: trigger_fanout
+    kind: rtl
+    latency_hint: 0          # combinational passthrough
+```
+
+Resolution order: `latency_cycles` (explicit) → HLS report (`--hls-build-root`) → `latency_hint` → unknown.
+
+### `design.yml` — annotate timing-alignment connections
+
+```yaml
+connections:
+  - from: col
+    to: trig
+    register_stages: 2       # inserts RegisterStage instances in algo_top.v
+
+  - from: trig
+    to: tfan
+    delay_cycles: 3          # inserts signal_delay instances in algo_top.v
+```
+
+Both fields are reflected in the generated `algo_top.v` and in the static latency
+check report.
+
+### `plugins/<plugin>/verify/plot_config.yml` — define result plots
+
+```yaml
+plots:
+  - name: out_valid_timeline
+    kind: line
+    x: cycle
+    y: tout_out_valid
+    title: "Output Valid Timeline"
+    xlabel: "Clock Cycle"
+    ylabel: "tout_out_valid"
+
+  - name: trigger_quality
+    kind: scatter
+    x: cycle
+    y: trigger_quality
+    title: "Trigger Quality per Event"
+```
+
+See `docs/ANALYSIS_GUIDE.md` for the full command reference and probe CSV format.

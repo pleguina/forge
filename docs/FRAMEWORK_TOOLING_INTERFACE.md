@@ -31,6 +31,11 @@ The supported Layer 2 tooling surface is:
 - `framework/hls/parallel_hls.sh`
 - `framework/hls/generate_hls_tcl.py`
 - `framework/hls/extract_hls_metrics.py`
+- `arc analyze hls-report`
+- `arc analyze latency-check`
+- `arc analyze runtime-latency`
+- `arc analyze plot-results`
+- `arc analyze dashboard`
 
 For HLS flows, the preferred public interface is the installed CLI:
 
@@ -58,6 +63,26 @@ Generated DUT artifacts include:
 - `probe_map.yaml`
 - `tb_bindings.svh`
 
+## Analysis contract owned by Layer 2
+
+Layer 2 standardizes a post-verification analysis surface via `arc analyze`.
+
+Plugin-authored inputs:
+
+- `modules.yml` entries annotated with `latency_hint` or `latency_cycles` per module
+- `plugins/<plugin>/verify/plot_config.yml` defining result figures
+- a probe CSV in long format (`cycle,signal,value`) produced by the plugin
+
+Framework-provided outputs:
+
+- `out/reports/hls_summary.{csv,md,html}` — synthesis metrics for all HLS modules
+- `out/reports/latency_check.md` — static per-path latency balance report
+- `out/reports/runtime_latency.md` — HLS-predicted vs simulation-observed comparison
+- `out/reports/plots/*.png` — result comparison figures
+- `out/dashboard/dashboard.html` — self-contained HTML aggregating all of the above
+
+See `docs/ANALYSIS_GUIDE.md` for the full plugin author reference.
+
 ## Stability rule
 
 The following are public Layer 2 behavior for the current release line:
@@ -67,6 +92,8 @@ The following are public Layer 2 behavior for the current release line:
 - strict-mode enforcement semantics as described in the author guide
 - documented generated artifact set
 - documented default error-handling behavior and `--debug` traceback opt-in
+- `arc analyze` sub-commands and their plugin-owned input contracts
+- dashboard HTML structure and report file naming conventions
 
 The following are not public Layer 2 API:
 

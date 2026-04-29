@@ -8,6 +8,7 @@ Use this guide together with:
 
 - `framework/PLUGIN_AUTHOR_GUIDE.md` for topology-generation contract authoring
 - `framework/verify/PLUGIN_AUTHOR_GUIDE.md` for verification integration
+- `docs/ANALYSIS_GUIDE.md` for latency measurement, HLS reports, plots, and the HTML dashboard
 
 Do not treat older repo notes in `docs/` or `docs/archive/` as primary onboarding material unless they are explicitly linked from the support-classified framework surface.
 
@@ -36,6 +37,7 @@ If your plugin fits that contract, the framework path below is the supported rou
 8. Run `arc verify generate plugins/<plugin>/verify/design.verification.yml`
 9. Run your plugin stimulus generator so each flow gets `stimulus_current.svh`
 10. Run `arc verify doctor` and then `arc verify run`
+11. (Optional) Run `arc analyze` to measure latency and generate performance reports — see `docs/ANALYSIS_GUIDE.md`
 
 ## What you author versus what the framework generates
 
@@ -49,6 +51,7 @@ User-authored:
 - `plugins/<plugin>/verify/tools/gen_stimulus.py`
 - `plugins/<plugin>/verify/schemas/data/*.xml`
 - optional plugin checker code
+- `plugins/<plugin>/verify/plot_config.yml` (if using `arc analyze plot-results`)
 
 Framework-generated:
 
@@ -97,6 +100,39 @@ Verification run:
 
 ```bash
 arc verify run plugins/<plugin>/verify/<flow>/verify.flow.yml --plugin <plugin>
+```
+
+## Analysis (optional but recommended)
+
+After verification passes, `arc analyze` produces latency reports, plots, and an HTML dashboard.
+See `docs/ANALYSIS_GUIDE.md` for the full guide.  Quick reference:
+
+```bash
+# HLS synthesis metrics table
+arc analyze hls-report --hls-build-root build_hls_<plugin> --output out/reports
+
+# Static latency check (requires latency_hint or latency_cycles in modules.yml)
+arc analyze latency-check plugins/<plugin>/designs/design.yml \
+    --contracts-from plugins/<plugin>/modules.yml \
+    --hls-build-root build_hls_<plugin> \
+    --output out/reports/latency_check.md
+
+# HLS-predicted vs simulation-observed latency
+arc analyze runtime-latency \
+    --probe-csv out/reports/pipeline_probe.csv \
+    --probe-pairs "<module>:<in_valid_signal>:<out_valid_signal>" \
+    --hls-build-root build_hls_<plugin> \
+    --output out/reports/runtime_latency.md
+
+# Result comparison plots (requires plot_config.yml + observed/reference CSVs)
+arc analyze plot-results \
+    --config plugins/<plugin>/verify/plot_config.yml \
+    --observed out/reports/observed.csv \
+    --reference out/reports/reference.csv \
+    --output out/reports/plots
+
+# Self-contained HTML dashboard aggregating all of the above
+arc analyze dashboard --input out/reports --output out/dashboard
 ```
 
 ## If you want a dataset standard other than XML
