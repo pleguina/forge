@@ -14,3 +14,18 @@
 # Use both forms: with and without trailing slash to cover real dirs and symlinks
 plugins/omtf
 plugins/omtf/
+
+# HLS build outputs
+build_hls_trigger_demo/
+
+# Testbench run artifacts
+tb_*.csv
+tb_*.json
+
+# Simulation/tool logs and artifacts
+vitis_hls.log
+xvlog.log
+xvlog.pb
+
+# Generated outputs
+out/
