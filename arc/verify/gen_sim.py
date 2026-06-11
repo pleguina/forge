@@ -487,7 +487,7 @@ simulation:
   reset_cycles:               {reset_cycles}
   idle_cycles_after_reset:    {idle_cycles_after_reset}
   post_stimulus_drain_cycles: {post_stimulus_drain_cycles}
-checker_mode: {checker_mode}
+{extra_sim_text}checker_mode: {checker_mode}
 {xsim_section}
 {checker_section}"""
 
@@ -582,6 +582,7 @@ def generate_verify_flow_yml(
     dut_tb_bindings: "str | None" = None,
     dut_port_signature: "str | None" = None,
     dataset_xml: "str | None" = None,
+    extra_simulation_fields: tuple = (),  # (key, value) pairs from plugin defaults
     source_path: "str" = "design.verification.yml",
 ) -> Path:
     """Generate a ``verify.flow.yml`` from a ``FlowDeclaration`` and defaults.
@@ -614,6 +615,9 @@ def generate_verify_flow_yml(
     rst   = getattr(flow_decl, "reset_cycles",               None) or getattr(defaults, "reset_cycles", 4)
     idle  = getattr(flow_decl, "idle_cycles_after_reset",    None) or getattr(defaults, "idle_cycles_after_reset", 0)
     drain = getattr(flow_decl, "post_stimulus_drain_cycles", None) or getattr(defaults, "post_stimulus_drain_cycles", 8)
+    # Extra plugin-specific simulation fields passed through verbatim
+    _extra = extra_simulation_fields or getattr(defaults, "extra", ())
+    extra_sim_text = "".join(f"  {k}: {v}\n" for k, v in _extra) if _extra else ""
 
     checker = getattr(flow_decl, "checker", None)
     checker_mode = getattr(flow_decl, "checker_mode", "log_scan")
@@ -649,6 +653,7 @@ def generate_verify_flow_yml(
         reset_cycles=rst,
         idle_cycles_after_reset=idle,
         post_stimulus_drain_cycles=drain,
+        extra_sim_text=extra_sim_text,
         checker_mode=checker_mode,
         xsim_section=xsim_text,
         checker_section=checker_text,

@@ -535,6 +535,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                     dut_rtl=dut_rtl_rel,
                     dut_manifest=dut_manifest_rel,
                     dataset_xml=dataset_xml_raw,
+                    extra_simulation_fields=getattr(defaults, "extra", ()),
                     source_path=str(design_path.name),
                 )
                 generated.append(str(flow_yml_path))

@@ -158,6 +158,7 @@ class SimulationDefaults:
     reset_cycles:               int = 8
     idle_cycles_after_reset:    int = 8
     post_stimulus_drain_cycles: int = 160
+    extra:                      tuple = ()  # (key, value) pairs — plugin-specific fields passed through verbatim
 
 
 @dataclass(frozen=True)
@@ -413,11 +414,16 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
 
     # ── Defaults
     raw_defaults = raw.get("defaults", {}) or {}
+    _STANDARD_DEFAULT_KEYS = {"clk_period_ns", "reset_cycles", "idle_cycles_after_reset", "post_stimulus_drain_cycles"}
+    _extra_defaults = tuple(
+        (k, v) for k, v in raw_defaults.items() if k not in _STANDARD_DEFAULT_KEYS
+    )
     defaults = SimulationDefaults(
         clk_period_ns=float(raw_defaults.get("clk_period_ns", 2.78)),
         reset_cycles=int(raw_defaults.get("reset_cycles", 8)),
         idle_cycles_after_reset=int(raw_defaults.get("idle_cycles_after_reset", 8)),
         post_stimulus_drain_cycles=int(raw_defaults.get("post_stimulus_drain_cycles", 160)),
+        extra=_extra_defaults,
     )
 
     # ── Flows
