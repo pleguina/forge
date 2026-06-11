@@ -518,10 +518,22 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             f"{dut_rtl_source}/{flow_decl.top_module}.v" if dut_rtl_source else None
         )
         dut_manifest_rel: str | None = None
+        dut_port_map_rel: str | None = None
+        dut_tb_bindings_rel: str | None = None
+        dut_port_signature_rel: str | None = None
         if dut_rtl_source:
             manifest_candidate = consumer_root / dut_rtl_source / "build_manifest.json"
             if manifest_candidate.exists():
                 dut_manifest_rel = f"{dut_rtl_source}/build_manifest.json"
+            port_map_candidate = consumer_root / dut_rtl_source / "port_map.yaml"
+            if port_map_candidate.exists():
+                dut_port_map_rel = f"{dut_rtl_source}/port_map.yaml"
+            tb_bindings_candidate = consumer_root / dut_rtl_source / "tb_bindings.svh"
+            if tb_bindings_candidate.exists():
+                dut_tb_bindings_rel = f"{dut_rtl_source}/tb_bindings.svh"
+            port_signature_candidate = consumer_root / dut_rtl_source / "port_signature.json"
+            if port_signature_candidate.exists():
+                dut_port_signature_rel = f"{dut_rtl_source}/port_signature.json"
         if args.dry_run:
             print(f"[dry-run] would write {flow_yml_path.relative_to(output_base)}")
         else:
@@ -534,6 +546,9 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                     plugin_id=getattr(contract, "plugin", "") or "",
                     dut_rtl=dut_rtl_rel,
                     dut_manifest=dut_manifest_rel,
+                    dut_port_map=dut_port_map_rel,
+                    dut_tb_bindings=dut_tb_bindings_rel,
+                    dut_port_signature=dut_port_signature_rel,
                     dataset_xml=dataset_xml_raw,
                     extra_simulation_fields=getattr(defaults, "extra", ()),
                     source_path=str(design_path.name),
@@ -643,6 +658,14 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                     f"  → Run HLS synthesis first, then re-run fw_verify generate"
                 )
             continue
+
+        generated_port_map = flow_dir / "port_map.yaml"
+        if not args.dry_run and tb_port_map.resolve() != generated_port_map.resolve():
+            import shutil as _shutil  # noqa: PLC0415
+            flow_dir.mkdir(parents=True, exist_ok=True)
+            _shutil.copyfile(tb_port_map, generated_port_map)
+            generated.append(str(generated_port_map))
+            tb_port_map = generated_port_map
 
         if args.dry_run:
             tb_name = f"{flow_decl.tb_module}.sv"
@@ -1250,8 +1273,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             if gen_files.port_map.exists():
                 try:
                     import yaml as _yaml
+                    from arc.verify.gen_sim import _flatten_ports  # noqa: PLC0415
                     _pm_raw   = _yaml.safe_load(gen_files.port_map.read_text()) or {}
-                    _nports   = len(_pm_raw.get("ports", []) or [])
+                    _nports   = len(_flatten_ports(_pm_raw))
                 except Exception:
                     _nports = -1
 

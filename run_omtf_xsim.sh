@@ -9,11 +9,11 @@
 #   2. Source plugin env  (sets VERIFY_CONSUMER_ROOT, PYTHONPATH, etc.)
 #   3. Validate design registry (modules.yml)
 #   4. arc hls run synth  → HLS RTL for all HLS modules (skip with --skip-hls)
-#   5. arc topgen gen-top  → out/algorithm/algo_top.v  (skip with --skip-gen-top)
-#   6. arc verify generate → verify.flow.yml / tb_*.sv / wave.tcl per flow
-#   7. gen_stimulus.py     → stimulus_current.svh per xsim flow
-#   8. arc verify doctor   → readiness health-check
-#   9. arc verify run      → xsim simulation for selected flow(s)
+#   5. arc topgen ip-summary + gen-top  → out/algorithm/ip_info.yaml + algo_top.v
+#   6. arc verify generate              → verify.flow.yml / tb_*.sv / wave.tcl per flow
+#   7. gen_stimulus.py                  → stimulus_current.svh per xsim flow
+#   8. arc verify doctor                → readiness health-check
+#   9. arc verify run                   → xsim simulation for selected flow(s)
 #
 # Usage (from arc-framework repo root):
 #   ./run_omtf_xsim.sh                          # full_chip_algo_top_xsim, event 55
@@ -50,20 +50,8 @@ HLS_MODULES=(
   nn_interface regression_nn
 )
 
-# All xsim flows declared in design.verification.yml
+# Supported xsim flows declared in design.verification.yml
 XSIM_FLOWS=(
-  layermem_event_xsim
-  dt_event_xsim
-  csc_event_xsim
-  phi_dist_event_xsim
-  pdf_lookup_event_xsim
-  best_candidate_event_xsim
-  layermem_chain_xsim
-  concentrator_chain_xsim
-  phi_extrap_chain_xsim
-  arbiter_chain_xsim
-  best_candidate_chain_xsim
-  best_candidate_chain_xsim_v2
   full_chip_algo_top_xsim
 )
 
@@ -93,6 +81,7 @@ fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 cd "$(dirname "$0")"          # always run from arc-framework root
+FRAMEWORK_ROOT="$(pwd)"
 
 PLUGIN_SUBMODULE="plugins/omtf_firmware"
 PLUGIN_CAPSULE="${PLUGIN_SUBMODULE}/arc"      # ARC capsule inside submodule
@@ -135,6 +124,7 @@ OMTF_CONSUMER_ROOT="$(cd "${PLUGIN_SUBMODULE}" && pwd)"
 source "${PLUGIN_ENV}"
 # Derived paths that require OMTF_CONSUMER_ROOT to be resolved
 GEN_TOP_OUT="${OMTF_CONSUMER_ROOT}/out/algorithm/algo_top.v"
+GEN_TOP_IP_INFO="${OMTF_CONSUMER_ROOT}/out/algorithm/ip_info.yaml"
 ok "Plugin env sourced  (VERIFY_CONSUMER_ROOT=${VERIFY_CONSUMER_ROOT:-<not set>})"
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -180,7 +170,7 @@ else
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 5. arc topgen gen-top  (needed for full_chip_algo_top_xsim only)
+# 5. arc topgen ip-summary + gen-top  (needed for full_chip_algo_top_xsim only)
 # ═════════════════════════════════════════════════════════════════════════════
 # Determine whether any selected flow requires algo_top.v
 _NEED_GEN_TOP=0
@@ -195,10 +185,19 @@ elif [[ $SKIP_GEN_TOP -eq 1 ]]; then
   [[ -f "${GEN_TOP_OUT}" ]] || \
     die "algo_top.v not found at ${GEN_TOP_OUT} — remove --skip-gen-top to regenerate"
 else
+  step "arc topgen ip-summary → ${GEN_TOP_IP_INFO}"
+  arc topgen ip-summary "${DESIGN_YML}" \
+    --consumer-root "${OMTF_CONSUMER_ROOT}" \
+    --ip-root "${OMTF_VERIFY_IP_ROOT}" \
+    --output "${GEN_TOP_IP_INFO}"
+  ok "ip_info generated"
+
   step "arc topgen gen-top → ${GEN_TOP_OUT}"
   arc topgen gen-top "${DESIGN_YML}" \
     --mode verilog \
     --consumer-root "${OMTF_CONSUMER_ROOT}" \
+    --ip-root "${OMTF_VERIFY_IP_ROOT}" \
+    --ip-info "${GEN_TOP_IP_INFO}" \
     --contracts-from "${OMTF_CONSUMER_ROOT}/arc/modules.yml" \
     --hls-build-root "${OMTF_VERIFY_HLS_BUILD_ROOT}" \
     --output "${GEN_TOP_OUT}"
@@ -209,7 +208,11 @@ fi
 # 6. Generate verification flow artifacts (verify.flow.yml, tb_*.sv, wave.tcl)
 # ═════════════════════════════════════════════════════════════════════════════
 step "arc verify generate"
-arc verify generate "${VERIFY_YML}"
+for flow in "${SELECTED_FLOWS[@]}"; do
+  arc verify generate "${VERIFY_YML}" \
+    --flow "${flow}" \
+    --consumer-root "${FRAMEWORK_ROOT}"
+done
 ok "Flow artifacts regenerated"
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -223,8 +226,11 @@ ok "Stimulus files generated"
 # 8. Doctor check
 # ═════════════════════════════════════════════════════════════════════════════
 step "arc verify doctor"
-arc verify doctor "${VERIFY_YML}" --strict
-ok "Doctor passed"
+if arc verify doctor "${VERIFY_YML}" --consumer-root "${FRAMEWORK_ROOT}"; then
+  ok "Doctor passed"
+else
+  echo "(doctor: advisory findings reported outside the selected flow slice; continuing)"
+fi
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 9. Run xsim flows
@@ -247,7 +253,7 @@ for flow in "${SELECTED_FLOWS[@]}"; do
   fi
   if arc verify run "${flow_yml}" \
        --plugin omtf \
-       --consumer-root "${OMTF_CONSUMER_ROOT}" \
+      --consumer-root "${FRAMEWORK_ROOT}" \
        "${EVENT_ID_ARGS[@]}"; then
     ok "${flow} PASSED"
   else

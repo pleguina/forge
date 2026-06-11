@@ -149,24 +149,38 @@ def prepare_from_manifest(
 
     # ── HLS module verilog from hls_build_root ─────────────────────────────
     # Expand HLS modules whose verilog_files are empty (not yet resolved at
-    # topgen time).  For each module with kind=="hls", look for the synthesised
-    # Verilog under: <hls_build_root>/<top>/solution1/syn/verilog/<top>.v
+    # topgen time). Most workspaces key build_hls/ by canonical module name,
+    # while some older layouts key it by HLS top name, so try both.
     hls_build_root_str = manifest.get("hls_build_root", "")
     if hls_build_root_str:
         hls_root = Path(hls_build_root_str)
-        for mod_info in manifest.get("modules", {}).values():
+        for mod_key, mod_info in manifest.get("modules", {}).items():
             if mod_info.get("kind") != "hls":
                 continue
+            if mod_info.get("verilog_files"):
+                continue
+            mod_name = mod_info.get("name", mod_key)
             top = mod_info.get("top", "")
             if not top:
                 continue
-            hls_v = hls_root / top / "solution1" / "syn" / "verilog" / f"{top}.v"
-            if hls_v.exists():
-                _add_file(str(hls_v))
+            candidates = [
+                hls_root / mod_name / "solution1" / "syn" / "verilog" / f"{top}.v",
+            ]
+            if mod_name != top:
+                candidates.append(
+                    hls_root / top / "solution1" / "syn" / "verilog" / f"{top}.v"
+                )
+
+            for hls_v in candidates:
+                if hls_v.exists():
+                    _add_file(str(hls_v))
+                    break
             else:
                 import warnings
                 warnings.warn(
-                    f"HLS verilog not found for module '{top}': {hls_v}\n"
+                    f"HLS verilog not found for module '{mod_name}' (top '{top}'):\n"
+                    + "\n".join(f"  - {candidate}" for candidate in candidates)
+                    + "\n"
                     f"  Run 'arc hls run --stages synth' first.",
                     stacklevel=2,
                 )

@@ -14,12 +14,16 @@ import sys
 # ---------------------------------------------------------------------------
 
 def _dispatch_fw_verify(remaining: list) -> None:
-    """Delegate ``arc verify <subcommand> [args]`` to fw_verify.__main__.main().
+    """Delegate ``arc verify <subcommand> [args]`` to the active verify runtime.
 
-    fw_verify remains the single source of truth for verification logic while
-    its commands are exposed under the unified ``arc verify`` group.
+    Prefer the in-repo ``arc.verify`` implementation so workspace fixes take
+    effect immediately.  Fall back to the installed ``fw_verify`` package for
+    environments that still depend on the split runtime.
     """
-    from fw_verify.__main__ import main as _fw_verify_main  # type: ignore[import]
+    try:
+        from arc.verify.__main__ import main as _fw_verify_main  # type: ignore[import]
+    except ImportError:
+        from fw_verify.__main__ import main as _fw_verify_main  # type: ignore[import]
 
     old_argv = sys.argv[:]
     sys.argv = ["arc verify"] + list(remaining)

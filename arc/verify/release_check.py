@@ -294,8 +294,9 @@ def run_release_check(
             if gen.port_map.exists():
                 try:
                     import yaml as _yaml
+                    from arc.verify.gen_sim import _flatten_ports  # noqa: PLC0415
                     _pm_raw = _yaml.safe_load(gen.port_map.read_text()) or {}
-                    _nports = len(_pm_raw.get("ports", []) or [])
+                    _nports = len(_flatten_ports(_pm_raw))
                 except Exception:
                     _nports = -1
 
