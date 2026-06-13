@@ -173,7 +173,12 @@ def prepare_from_manifest(
 
             for hls_v in candidates:
                 if hls_v.exists():
+                    # Add the top .v and all sibling sub-function .v files
+                    # that HLS generates in the same directory.
                     _add_file(str(hls_v))
+                    for sibling in sorted(hls_v.parent.glob("*.v")):
+                        if sibling != hls_v:
+                            _add_file(str(sibling))
                     break
             else:
                 import warnings
