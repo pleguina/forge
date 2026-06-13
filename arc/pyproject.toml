@@ -94,3 +94,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=arc --cov-report=html --cov-report=term"
+markers = [
+    "integration: full-chain integration tests using real local repos (deselect with -m 'not integration')",
+]

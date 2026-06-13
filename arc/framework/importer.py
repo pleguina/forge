@@ -190,15 +190,17 @@ def load(
         dir_    = raw_e.get("direction", "")
 
         abi_tdata = abi_index.get((slr, gt_site, dir_))
+        is_selected = bool(raw_e.get("include_in_framework", False))
         if abi_tdata is None:
-            errors.append(
-                f"Endpoint '{ep_id}': no ABI port group for "
-                f"(slr={slr}, gt_site={gt_site}, direction={dir_})"
-            )
+            if is_selected:
+                errors.append(
+                    f"Endpoint '{ep_id}': no ABI port group for "
+                    f"(slr={slr}, gt_site={gt_site}, direction={dir_})"
+                )
             abi_prefix = None
         else:
             abi_lanes = abi_tdata.lanes() or 0
-            if lane is None or lane >= abi_lanes:
+            if is_selected and (lane is None or lane >= abi_lanes):
                 errors.append(
                     f"Endpoint '{ep_id}': lane {lane} out of range "
                     f"(ABI port '{abi_tdata.name}' has {abi_lanes} lanes)"
