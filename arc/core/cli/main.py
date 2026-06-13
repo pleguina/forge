@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from arc.core.cli.groups import core, topgen, hls, verify, analyze
+from arc.core.cli.groups import core, topgen, hls, verify, analyze, framework
 from arc.core.cli import _shared
 
 
@@ -66,6 +66,7 @@ Examples:
     hls.register(sub)
     verify.register(sub)
     analyze.register(sub)
+    framework.register(sub)
 
     args = parser.parse_args()
     _shared.set_debug(bool(getattr(args, "debug", False)))
