@@ -42,7 +42,7 @@ Usage
 ::
 
     fw_verify preflight verify.flow.yml
-    fw_verify run       verify.flow.yml --plugin omtf
+    fw_verify run       verify.flow.yml --plugin my_plugin
     fw_verify generate  design.verification.yml
     fw_verify generate  design.verification.yml --flow hit_decoder_xsim --strict
     fw_verify prepare   design.verification.yml
@@ -180,7 +180,7 @@ class XmlRunSelection:
     v1.0 of the framework verification contract standardizes XML-backed datasets
     and event-oriented run selection across framework launchers and backends.
     Plugins may still extend RuntimeContext, but these selectors are now an
-    explicit framework surface rather than an implicit OMTF-only convention.
+    explicit framework surface rather than an implicit plugin-local convention.
     """
 
     event_id: int | None

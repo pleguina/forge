@@ -10,10 +10,8 @@
 # Local editor/runtime noise
 .vscode/
 
-# Local plugin mounts (not committed — populated manually for local dev/testing)
-# Use both forms: with and without trailing slash to cover real dirs and symlinks
-plugins/omtf
-plugins/omtf/
+# Local plugin mounts should be named explicitly by developers and kept out of commits.
+plugins/*_local/
 
 # HLS build outputs
 build_hls_trigger_demo/
@@ -29,3 +27,5 @@ xvlog.pb
 
 # Generated outputs
 out/
+gen-top/
+**/xsim_work/

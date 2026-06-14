@@ -148,7 +148,7 @@ class DesignValidator:
                 for src_file in mod.src:
                     if self.design_path:
                         import os as _os
-                        # Expand environment variables (e.g. ${OMTF_FRAMEWORK_RTL_ROOT})
+                        # Expand environment variables (e.g. ${ARC_RTL_ROOT})
                         src_file_expanded = _os.path.expandvars(src_file)
                         # If fully resolved after expansion, check directly
                         if _os.path.isabs(src_file_expanded):

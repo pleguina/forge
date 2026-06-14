@@ -12,8 +12,8 @@
 //   xml_to_sv_stimulus → .sv/.dat files → xsim → CSV →
 //   algo_top_xsim_checker
 //
-// As of this writing only ONE XSI adapter exists in-tree:
-//   plugins/omtf/verify/adapters/xsim/mod_dt_interface_adapter_xsim.cpp
+// As of this writing this is an experimental helper for plugin-local XSI
+// adapters. Plugin-specific adapters should live with the plugin.
 //
 // XSI adapter development is in-progress and not yet integrated into
 // the CTest suite.  The loader is built only when XILINX_VIVADO is

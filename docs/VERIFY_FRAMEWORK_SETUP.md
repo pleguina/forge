@@ -1,8 +1,6 @@
 # Framework Setup Guide
 
-This guide is primarily a repo-local setup guide for the framework repository.
-
-It starts with framework-owned proof paths and only later shows the current OMTF downstream workflow.
+This guide is a repo-local setup guide for the framework repository. Downstream plugin flows should live in the plugin repository and call the installed `arc` package through explicit paths.
 
 For the canonical new-plugin adoption path, start with:
 
@@ -71,15 +69,7 @@ Expected output:
 These proof-consumer suites are framework-owned validation surfaces. They do not
 require Vivado or DUT build artifacts.
 
-If you specifically want the current downstream OMTF Python suite, run:
-
-```bash
-python3 -m pytest plugins/omtf_firmware/arc/verify/tools/tests/ -q
-```
-
-The OMTF test conftest at `plugins/omtf_firmware/arc/verify/tools/tests/conftest.py` sets up
-`sys.path` and bootstraps the OMTF plugin automatically. You do not need to
-set `PYTHONPATH` manually to run that downstream test suite with pytest.
+Downstream plugin test suites are run from the plugin repository. ARC should not require any particular downstream plugin to be mounted inside this repo.
 
 ### What the tests cover
 
@@ -110,9 +100,7 @@ arc verify doctor \
   --dry-run
 ```
 
-The current downstream OMTF flow still uses the OMTF env script for plugin
-tool discovery and path variables, but it now consumes `fw_verify` through the
-installed package surface.
+Downstream plugins may add their own environment setup for plugin-local tools and data. That setup belongs in the plugin repository, while ARC remains the installed framework package.
 
 ## 5. Generate DUT artifacts (example consumer flow)
 
@@ -138,44 +126,17 @@ This writes `out/<design>/` with:
 
 ---
 
-## 6. Run the current OMTF downstream XSIM simulation (requires Vivado)
+## 6. Run a downstream XSIM simulation (requires Vivado)
 
-With DUT artifacts and Vivado available, the current OMTF downstream path is:
+With DUT artifacts and Vivado available, run plugin simulations from the plugin repository using its own guide. A typical sibling-workspace setup looks like:
 
-```bash
-source .venv/bin/activate
-pip install -e arc/
-source plugins/omtf/verify/tools/omtf_verify_env.sh
-
-arc verify run \
-  plugins/omtf/verify/full_chip_algo_top_xsim/verify.flow.yml \
-  --plugin omtf \
-  --xml-input plugins/omtf/verify/schemas/data/TestEvents.xml \
-  --all-events
+```text
+workspace/
+  arc-framework/
+  my-plugin/
 ```
 
-Or with explicit overrides:
-
-```bash
-arc verify run \
-  plugins/omtf/verify/full_chip_algo_top_xsim/verify.flow.yml \
-  --plugin omtf \
-  --xml-input /path/to/events.xml \
-  --event-id 55
-
-arc verify run \
-  plugins/omtf/verify/full_chip_algo_top_xsim/verify.flow.yml \
-  --plugin omtf \
-  --xml-input plugins/omtf/verify/schemas/data/TestEvents.xml \
-  --event-id 1 \
-  --probe-log
-```
-
-The runtime path is: preflight → plugin stimulus generation → xvlog/xelab/xsim
-execution → optional checker invocation.
-
-OMTF flow-local wrappers may still exist as convenience helpers, but they are
-not the canonical new-user path.
+Install ARC from `arc-framework/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `arc/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
 
 ---
 
@@ -186,8 +147,8 @@ not the canonical new-user path.
 | `ModuleNotFoundError: No module named 'arc'`        | `pip install -e arc/`                                   |
 | `ModuleNotFoundError: No module named 'yaml'`            | `pip install pyyaml`                                    |
 | `ModuleNotFoundError: No module named 'pytest'`          | `pip install pytest`                                    |
-| `LookupError: Plugin 'omtf' has not been declared`       | Source the env script before calling `arc verify`       |
-| `RuntimeError: Plugin 'omtf' has not been bootstrapped`  | Tests: check conftest imports bootstrap; scripts: source env first |
+| `LookupError: Plugin '<id>' has not been declared`       | Source or import the plugin bootstrap before calling `arc verify` |
+| `RuntimeError: Plugin '<id>' has not been bootstrapped`  | Tests: check conftest imports bootstrap; scripts: source plugin setup first |
 | `[preflight] FAILED: Port signature not found`           | Run `arc topgen gen-top ...` to regenerate artifacts    |
 | `verify.flow.yml missing required fields`                | Check YAML has: `flow.plugin`, `flow.kind`, `flow.backend`, `dut.*`, `simulation.*` |
 | `xvlog: command not found`                               | Source your Vivado settings: `source $XILINX_VIVADO/settings64.sh` |
@@ -197,13 +158,12 @@ not the canonical new-user path.
 ## 8. Repo layout reference
 
 ```
-arc/verify/                          ← framework verification Python package source
-plugins/omtf/verify/tools/           ← OMTF plugin Python files
-plugins/omtf/verify/tools/tests/     ← OMTF pytest test suite
-plugins/omtf/verify/full_chip_algo_top_xsim/    ← full-chip XSIM flow
-plugins/omtf/verify/*_xsim/                     ← current generated/maintained XSIM flows
-out/algorithm/                       ← arc topgen gen-top generated DUT artifacts
-docs/MINIMAL_CONSUMER_QUICKSTART.md  ← canonical new-plugin quickstart
-docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md   ← canonical verification integration guide
-plugins/omtf/verify/ADAPTER_CONTRACT.md  ← backend adapter API reference
+arc/verify/                         <- framework verification Python package source
+plugins/trigger_demo/               <- supported proof consumer
+<plugin-repo>/arc/verify/tools/     <- plugin-owned Python files
+<plugin-repo>/arc/verify/*_xsim/    <- plugin-owned generated or maintained XSIM flows
+out/<design>/                       <- arc topgen gen-top generated DUT artifacts
+docs/MINIMAL_CONSUMER_QUICKSTART.md <- canonical new-plugin quickstart
+docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md  <- canonical verification integration guide
+<plugin-repo>/arc/verify/           <- plugin-local backend adapters and docs
 ```

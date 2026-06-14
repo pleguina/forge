@@ -1,7 +1,0 @@
-0.7
-2020.2
-May 22 2024
-18:54:44
-/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/hit_decoder/solution1/syn/verilog/hit_decoder.v,1777390915,verilog,,,,hit_decoder,,,/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/hit_decoder_xsim,,,,,
-/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/hit_decoder_xsim/stimulus_current.svh,1777394305,verilog,,,,,,,,,,,,
-/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/hit_decoder_xsim/tb_hit_decoder_xsim.sv,1777394305,systemVerilog,,,/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/hit_decoder_xsim/stimulus_current.svh,tb_hit_decoder_xsim,,,/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/hit_decoder_xsim,,,,,

@@ -466,7 +466,7 @@ def load_generic_flow(
     for contexts where the plugin extension fields are not needed — such as the
     framework preflight CLI.
 
-    For full plugin-specific loading (including OMTF fields), use the plugin's
+    For full plugin-specific loading (including extension fields), use the plugin's
     own ``load_flow()`` instead.
 
     Args:

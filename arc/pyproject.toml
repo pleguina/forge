@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "OMTF Framework Team", email = "omtf-framework@cern.ch"}
+    {name = "ARC Framework Team"}
 ]
 keywords = ["hdl", "vhdl", "fpga", "ip", "vivado", "top-level", "generator"]
 classifiers = [
@@ -54,7 +54,7 @@ all = [
 Homepage = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
 Documentation = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework/-/blob/main/arc/README.md"
 Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
-Issues = "https://gitlab.cern.ch/pleguina/omtf_v2/-/issues"
+Issues = "https://gitlab.cern.ch/pleguina/arc-framework/-/issues"
 
 [project.scripts]
 arc = "arc.core.cli.main:main"

@@ -23,9 +23,9 @@ Plugin extension
 Plugins subclass this to add plugin-specific execution state::
 
     @dataclass(kw_only=True)
-    class OmtfRuntimeContext(RuntimeContext):
-        event_id:  int   # OMTF: event index to simulate
-        xml_input: Path  # OMTF: absolute path to XML stimulus file
+    class PluginRuntimeContext(RuntimeContext):
+        event_id:  int   # plugin-specific event index to simulate
+        dataset:   Path  # plugin-specific stimulus or dataset path
 
 Plugin adapters type their ``ctx`` parameter against the plugin-specific
 subclass.  Framework code only ever accesses the generic fields declared here.

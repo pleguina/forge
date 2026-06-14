@@ -50,7 +50,7 @@ from typing import Any
 _HERE         = Path(__file__).resolve().parent
 _PLUGIN_ROOT  = _HERE.parent           # plugins/trigger_demo/verify/
 _PLUGIN_VERIFY = _PLUGIN_ROOT           # alias
-_REPO_ROOT    = _HERE.parents[3]       # omtf_v2/
+_REPO_ROOT    = _HERE.parents[3]       # arc-framework/
 
 _DEFAULT_XML = (
     _REPO_ROOT

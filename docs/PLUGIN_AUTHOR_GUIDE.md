@@ -239,12 +239,12 @@ Ports: `in_dt_mb1_0` through `in_dt_mb1_4`.
 A multi-dimensional grid of ports.
 
 ```yaml
-gen_nd_out_phi_layers:
-  raw_port_tpl: "out_phi_layer{0}_{1}"
+gen_nd_out_matrix:
+  raw_port_tpl: "out_matrix{0}_{1}"
   dims: [18, 8]
   direction: output
   width: 15
-  wiring_kind: omtf_phi_layers
+  wiring_kind: plugin_matrix
 ```
 
 ### Key fields for contract-driven wiring
@@ -437,9 +437,9 @@ Add `allowed_unconnected` patterns in `design.yml`.
 | Topology Groups Schema | `docs/TOPOLOGY_GROUPS_SCHEMA.md` | Schema for topology_groups |
 | IP Interface Policy | `framework/IP_INTERFACE_POLICY.md` | Contract rules |
 | Signal Families | `framework/normalized_signal_families.yaml` | Semantic family vocabulary |
-| OMTF contracts | `plugins/omtf_firmware/arc/interfaces/*.interface.yaml` | Per-module contracts |
-| Module registry | `plugins/omtf_firmware/arc/modules.yml` | Module identity + contract refs |
-| Design topology | `plugins/omtf_firmware/arc/designs/design.yml` | Instances, connections, topology_groups |
+| Interface contracts | `<plugin>/arc/interfaces/*.interface.yaml` | Per-module contracts |
+| Module registry | `<plugin>/arc/modules.yml` | Module identity + contract refs |
+| Design topology | `<plugin>/arc/designs/design.yml` | Instances, connections, topology_groups |
 
 ---
 

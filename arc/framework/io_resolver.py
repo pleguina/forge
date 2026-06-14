@@ -1,7 +1,7 @@
 """
 ARC Detector I/O Resolver
 
-Loads detector_io.yml from an OMTF plugin and resolves each detector input /
+Loads detector_io.yml from a plugin and resolves each detector input /
 trigger output against a FrameworkImport, producing a validated
 detector_io.resolved.json.
 

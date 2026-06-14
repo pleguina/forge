@@ -305,7 +305,7 @@ def register(sub):
         help="Path to detector_io.resolved.json (omit for dummy stub)",
     )
     p_emit.add_argument(
-        "--algo-module", default="arc_omtf_algo_top",
+        "--algo-module", default="arc_algo_top",
         help="Algorithm top module name to instantiate",
     )
     p_emit.add_argument(

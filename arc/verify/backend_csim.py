@@ -19,8 +19,8 @@ Plugin-specific concerns NOT owned here
 ----------------------------------------
   * What the testbench binary checks                → plugin-owned C++
   * How the binary is compiled / which HLS project  → plugin HLS build
-  * Custom CLI argument conventions beyond a common contract (see below)
-  * OMTF-style extended CLI (csim --xml --event --log)
+    * Custom CLI argument conventions beyond a common contract (see below)
+    * Plugin-specific extended CLI options
     → overridden by the plugin-local backend_csim.py if needed
 
 Binary discovery order

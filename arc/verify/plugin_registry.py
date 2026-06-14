@@ -98,7 +98,7 @@ def declare_plugin_bootstrap(plugin_id: str, module_name: str) -> None:
         declare_plugin_bootstrap("myplugin", __name__)
 
     Args:
-        plugin_id:   Short identifier, e.g. ``"omtf"``.
+        plugin_id:   Short identifier, e.g. ``"my_plugin"``.
         module_name: Importable module name that can be passed to
                      ``importlib.import_module()``.  The module must be on
                      ``sys.path`` when ``bootstrap_plugin()`` is called.
@@ -139,13 +139,13 @@ def require_plugin_bootstrapped(plugin_id: str) -> None:
 
     Example message::
 
-        RuntimeError: Plugin 'omtf' has not been bootstrapped.
+        RuntimeError: Plugin 'my_plugin' has not been bootstrapped.
         Import and call its bootstrap entry point before loading flows:
 
             import bootstrap
             bootstrap.bootstrap()
 
-        Or use bootstrap_plugin('omtf') if the plugin has been declared.
+        Or use bootstrap_plugin('my_plugin') if the plugin has been declared.
     """
     if plugin_id not in _BOOTSTRAPPED:
         _known = (
@@ -274,10 +274,10 @@ def introspect() -> dict[str, Any]:
     Returned structure::
 
         {
-          "bootstrapped_plugins": ["omtf", ...],
-          "declared_plugins":     ["omtf", ...],
+                    "bootstrapped_plugins": ["my_plugin", ...],
+                    "declared_plugins":     ["my_plugin", ...],
           "plugins": {
-            "omtf": {
+                        "my_plugin": {
               "bootstrapped": True,
               "declared":     True,
               "bootstrap_module": "bootstrap",

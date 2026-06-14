@@ -3,7 +3,7 @@
 #
 # Exercises only framework-owned surfaces and supported non-OMTF proof
 # consumers. This is the gate the future standalone framework repository must
-# pass without requiring plugins/omtf/ to be present.
+# pass without requiring any downstream plugin mount to be present.
 #
 # Stages:
 #   1. Framework standalone validation

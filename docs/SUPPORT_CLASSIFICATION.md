@@ -10,7 +10,7 @@ This inventory defines the support status for maintained surfaces referenced by 
 | Supported proof consumer | Maintained non-OMTF consumer used to prove the public framework path and release-readiness story |
 | Supported optional tooling | Supported Layer 2 tooling that is optional for basic framework adoption |
 | Supported convenience only | Maintained helper surface for repo-local productivity; not the primary contract |
-| Reference consumer only | OMTF-specific surface that demonstrates one consumer pattern, not framework API |
+| Downstream consumer only | Plugin-specific surface that demonstrates one consumer pattern, not framework API |
 | Internal / not supported | Maintainer-only or repo-local implementation surface; external consumers must not depend on it |
 | Historical / archived | Retained for history only; not part of the active route or supported contract |
 
@@ -24,7 +24,7 @@ This inventory defines the support status for maintained surfaces referenced by 
 | `framework/MINIMAL_CONSUMER_QUICKSTART.md` | Public framework API | shortest supported adoption path |
 | `docs/FRAMEWORK_PLUGIN_AGNOSTICITY_AUDIT_2026-04-20.md` | Supported convenience only | maintained boundary-analysis and export-readiness note |
 | `docs/FRAMEWORK_EXPORT_MANIFEST.md` | Supported convenience only | maintained extraction inventory for the planned framework repository split |
-| `docs/OMTF_FRAMEWORK_DEPENDENCY_MATRIX_2026-04-20.md` | Reference consumer only | maintained dependency audit for separating the OMTF consumer from framework internals |
+| downstream plugin guides | Downstream consumer only | plugin-specific integration guides belong in plugin repositories, not ARC core |
 | `plugins/trigger_demo/README.md` | Supported proof consumer | multi-flow non-OMTF consumer documentation |
 | `plugins/trigger_demo/verify/` | Supported proof consumer | supported proof that topology contracts plus framework-owned csim/xsim/full-chip flows work for a non-OMTF plugin |
 | `arc hls gen-tcl` | Supported optional tooling | preferred Layer 2 TCL-generation interface |
@@ -38,18 +38,13 @@ This inventory defines the support status for maintained surfaces referenced by 
 | `ci/verify_framework_release.sh` | Supported convenience only | framework-only release gate that excludes OMTF as a required dependency |
 | `ci/fresh_user_check.sh` | Supported convenience only | framework package-install and onboarding validation path |
 | `ci/fresh_user_path.sh` | Supported convenience only | framework fresh-user path validation from package install through consumer proof |
-| `ci/verify_omtf_downstream_compat.sh` | Reference consumer only | downstream compatibility gate for the OMTF consumer against framework tooling |
-| `ci/split_boundary_smoke.sh` | Supported convenience only | maintainer smoke gate spanning framework export checks plus downstream OMTF compatibility |
-| `build_all.sh` | Supported convenience only | repo-root end-to-end helper for the OMTF reference consumer |
+| downstream compatibility gates | Downstream consumer only | plugin-specific compatibility gates belong in plugin repositories or external integration CI |
+| `ci/split_boundary_smoke.sh` | Supported convenience only | maintainer smoke gate spanning framework export checks plus downstream compatibility |
 | `Makefile.hls` | Supported convenience only | repo-root facade over Layer 2 tooling |
 | `framework/hls/generate_reports.sh` | Supported convenience only | convenience wrapper around metrics tooling |
 | `framework/hls/visualize_hls_pipeline.py` | Supported convenience only | optional visualization helper |
-| `plugins/omtf/README.md` | Reference consumer only | OMTF-facing overview, not framework API |
-| `plugins/omtf/OMTF_INTEGRATION_PATTERN.md` | Reference consumer only | formal OMTF consumer pattern |
-| `plugins/omtf/hls_config.yaml` | Reference consumer only | OMTF Plugin Contract 1 |
-| `plugins/omtf/designs/` | Reference consumer only | OMTF Plugin Contract 2 |
-| `plugins/omtf/verify/` | Reference consumer only | OMTF Plugin Contracts 3 and 4 |
-| `scripts/regression_baseline.sh` | Reference consumer only | OMTF verification gate |
+| `plugins/<plugin>/` local mounts | Downstream consumer only | optional local mounts for development; not committed ARC core |
+| plugin-specific regression scripts | Downstream consumer only | plugin-owned verification gates |
 | `framework/hls/generate_algorithm_top.sh` | Internal / not supported | monorepo convenience wrapper only |
 | `framework/topgen/algo_top_gen/` Python internals | Internal / not supported | implementation detail behind installed CLI |
 | `framework/proof/` | Internal / not supported | validation proof material, not consumer API |

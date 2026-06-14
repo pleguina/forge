@@ -185,8 +185,8 @@ class TestResolvedPayload:
 
     def test_algo_module_instantiated(self, fw, resolved_io):
         content = generate_payload_verilog(fw, resolved_io,
-                                           algo_module="arc_omtf_algo_top")
-        assert "arc_omtf_algo_top u_algo_top" in content
+                                           algo_module="arc_algo_top")
+        assert "arc_algo_top u_algo_top" in content
 
     def test_dt_input_uses_generated_csp_port(self, fw, resolved_io):
         content = generate_payload_verilog(fw, resolved_io)

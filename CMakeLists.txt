@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(omtf_framework LANGUAGES CXX)
+project(arc_framework LANGUAGES CXX)
 
 include(CTest)
 

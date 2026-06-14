@@ -1,6 +1,0 @@
-module,status,target_clock_ns,estimated_clock_ns,estimated_fmax_mhz,timing_met,slack_ns,latency_best,latency_avg,latency_worst,pipeline_ii,pipeline_depth,pipeline_type,lut,ff,dsp,bram_18k,uram,lut_pct,ff_pct,dsp_pct,bram_pct,uram_pct
-hit_collector,ok,4.0,1.46,684.93,yes,2.54,0,0,0,1,1,yes,157,0,0,0,0,0.0,0.0,0.0,0.0,0.0
-hit_decoder,ok,4.0,1.002,998.0,yes,2.998,0,0,0,1,1,yes,64,0,0,0,0,0.0,0.0,0.0,0.0,0.0
-ip_packages,missing,,,,,,,,,,,,,,,,,,,,,
-trigger_logic,ok,4.0,0.436,2293.58,yes,3.564,3,3,3,1,4,yes,105,197,0,0,0,0.0,0.0,0.0,0.0,0.0
-trigger_output,ok,4.0,0.0,0,,0,0,0,0,1,1,yes,0,0,0,0,0,0.0,0.0,0.0,0.0,0.0

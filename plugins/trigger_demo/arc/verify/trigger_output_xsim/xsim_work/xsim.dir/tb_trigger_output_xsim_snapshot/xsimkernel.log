@@ -1,7 +1,0 @@
-Running: xsim.dir/tb_trigger_output_xsim_snapshot/xsimk -simmode gui -wdb tb_trigger_output_xsim_snapshot.wdb -simrunnum 0 -socket 51543
-Design successfully loaded
-Design Loading Memory Usage: 20044 KB (Peak: 20044 KB)
-Design Loading CPU Usage: 0 ms
-Simulation completed
-Simulation Memory Usage: 102040 KB (Peak: 159312 KB)
-Simulation CPU Usage: 0 ms

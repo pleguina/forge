@@ -1,7 +1,0 @@
-0.7
-2020.2
-May 22 2024
-18:54:44
-/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/trigger_logic/solution1/syn/verilog/trigger_logic.v,1777394220,verilog,,,,trigger_logic,,,/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_logic_xsim,,,,,
-/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_logic_xsim/stimulus_current.svh,1777394305,verilog,,,,,,,,,,,,
-/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_logic_xsim/tb_trigger_logic_xsim.sv,1777394305,systemVerilog,,,/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_logic_xsim/stimulus_current.svh,tb_trigger_logic_xsim,,,/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/trigger_logic_xsim,,,,,

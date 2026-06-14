@@ -1,2 +1,0 @@
-sv      xil_defaultlib "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/plugins/trigger_demo/verify/hit_collector_xsim/tb_hit_collector_xsim.sv"
-verilog xil_defaultlib "/data3/home/pleguina/work/l1t-omtf-ops/arc-framework/build_hls_trigger_demo/hit_collector/solution1/syn/verilog/hit_collector.v"

@@ -294,4 +294,4 @@ See `docs/ANALYSIS_GUIDE.md` for the complete reference.
 
 `trigger_demo` is the maintained supported proof consumer for the current public framework path. Its ARC capsule is at `plugins/trigger_demo/arc/`. It demonstrates multiple framework-owned flows, contract-driven generation, and full-chip integration proof without relying on OMTF semantics.
 
-`omtf_firmware` (at `plugins/omtf_firmware/`) is a full real-detector plugin mounted as a git submodule. Its ARC capsule is at `plugins/omtf_firmware/arc/`. It uses the same path model: `src: [../algo/...]` reaching up from `arc/` to firmware sources.
+Real downstream plugins may live outside this repository. For active development and integration, the preferred layout is sibling repositories in one workspace, for example `arc-framework/` next to a plugin repository. The plugin owns its ARC capsule, build products, generated artifacts, and domain-specific scripts; ARC is installed into the environment and consumed through `arc ...` commands. Use an in-tree mount or submodule only when a downstream project deliberately needs a pinned, vendored plugin snapshot.

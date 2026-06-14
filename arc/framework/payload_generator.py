@@ -12,7 +12,7 @@ The generated payload.v:
   2. Slices active RX lanes into named endpoint wires.
   3. Assigns TX lanes from named endpoint wires (unused → 0).
   4. Drives algo_clk, buffinc/buffdec, play_data, readback per policy.
-  5. Instantiates a named algorithm module (defaults to 'arc_omtf_algo_top').
+    5. Instantiates a named algorithm module (defaults to 'arc_algo_top').
 
 This module is framework-agnostic in structure; Blobfish-specific naming is
 entirely derived from the ABI manifest, not hardcoded here.
@@ -101,7 +101,7 @@ class PayloadWrapperGenerator:
         self,
         framework:   FrameworkImport,
         resolved_io: Any,              # DetectorIOResolved (optional; None → dummy stub)
-        algo_module: str = "arc_omtf_algo_top",
+        algo_module: str = "arc_algo_top",
         policies:    Optional[ControlPolicies] = None,
     ) -> None:
         self.fw          = framework
@@ -382,7 +382,7 @@ class PayloadWrapperGenerator:
 def generate_payload_verilog(
     framework:     FrameworkImport,
     resolved_io:   Any,
-    algo_module:   str = "arc_omtf_algo_top",
+    algo_module:   str = "arc_algo_top",
     policies:      Optional[ControlPolicies] = None,
     output_path:   Optional[Path] = None,
     module_name:   Optional[str]  = None,

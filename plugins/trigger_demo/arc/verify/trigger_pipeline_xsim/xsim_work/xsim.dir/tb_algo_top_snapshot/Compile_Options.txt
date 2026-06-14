@@ -1,1 +1,0 @@
---incr --debug "typical" --relax -L "xil_defaultlib" "xil_defaultlib.tb_algo_top" -s "tb_algo_top_snapshot" 
