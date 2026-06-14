@@ -91,8 +91,8 @@ _DET_IO = textwrap.dedent("""\
       - name: gmt_output_0
         blobfish_endpoint: tx_slr2_gt0_lane0
         source:
-          instance: algo_muon_packer
-          port: gmt_output_0
+                    instance: out_csp_nn
+                    port: csp_out
         wiring_kind: gmt_muon_output
 """)
 
@@ -170,6 +170,15 @@ class TestResolvedPayload:
         content = generate_payload_verilog(fw, resolved_io)
         assert "slr2_gt_0_rx_tdata[64*0 +: 64]" in content
 
+    def test_one_lane_control_ports_use_scalar_assignments(self, fw, resolved_io):
+        content = generate_payload_verilog(fw, resolved_io)
+        assert "input  wire slr2_gt_0_rx_tvalid" in content
+        assert "output wire slr2_gt_0_tx_tvalid" in content
+        assert "rx_slr2_gt0_lane0_tvalid = slr2_gt_0_rx_tvalid" in content
+        assert "slr2_gt_0_tx_tvalid = tx_slr2_gt0_lane0_tvalid" in content
+        assert "slr2_gt_0_rx_tvalid[0]" not in content
+        assert "slr2_gt_0_tx_tvalid[0]" not in content
+
     def test_tx_active_lane_wired(self, fw, resolved_io):
         content = generate_payload_verilog(fw, resolved_io)
         assert "tx_slr2_gt0_lane0_tdata" in content
@@ -178,6 +187,18 @@ class TestResolvedPayload:
         content = generate_payload_verilog(fw, resolved_io,
                                            algo_module="arc_omtf_algo_top")
         assert "arc_omtf_algo_top u_algo_top" in content
+
+    def test_dt_input_uses_generated_csp_port(self, fw, resolved_io):
+        content = generate_payload_verilog(fw, resolved_io)
+        assert ".dt_0_csp_in ({rx_slr2_gt0_lane0_tdata, rx_slr2_gt0_lane0_tlast, rx_slr2_gt0_lane0_tfirst, rx_slr2_gt0_lane0_tvalid})" in content
+        assert ".dt_inputs[0]" not in content
+
+    def test_csp_output_uses_generated_port_and_unpack(self, fw, resolved_io):
+        content = generate_payload_verilog(fw, resolved_io)
+        assert ".out_csp_nn_csp_out (tx_slr2_gt0_lane0_csp)" in content
+        assert "tx_slr2_gt0_lane0_tdata = tx_slr2_gt0_lane0_csp[66:3]" in content
+        assert "tx_slr2_gt0_lane0_tvalid = tx_slr2_gt0_lane0_csp[0]" in content
+        assert ".csp_out" not in content
 
     def test_custom_algo_module(self, fw, resolved_io):
         content = generate_payload_verilog(fw, resolved_io, algo_module="my_custom_top")

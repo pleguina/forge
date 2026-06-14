@@ -20,6 +20,7 @@ entirely derived from the ABI manifest, not hardcoded here.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -107,6 +108,43 @@ class PayloadWrapperGenerator:
         self.resolved_io = resolved_io
         self.algo_module = algo_module
         self.policies    = policies or ControlPolicies()
+        self._ports_by_name = {port.name: port for port in self.fw.ports}
+
+    def _lane_signal(self, port_name: str, lane: int) -> str:
+        port = self._ports_by_name.get(port_name)
+        if port is not None and port.width == 1:
+            return port_name
+        return f"{port_name}[{lane}]"
+
+    def _algo_input_port(self, logical_port: str, index: int) -> str:
+        patterns = [
+            (r"(?:dt_inputs\[(\d+)\]|bmt_l1_input_(\d+)|dt_input_(\d+)|dt_bmt_input_(\d+))$", "dt"),
+            (r"(?:csc_inputs\[(\d+)\]|csc_input_(\d+))$", "csc"),
+        ]
+        for pattern, prefix in patterns:
+            match = re.match(pattern, logical_port)
+            if match:
+                channel = next(group for group in match.groups() if group is not None)
+                return f"{prefix}_{int(channel)}_csp_in"
+        return logical_port or f"det_in_{index}"
+
+    def _algo_input_expr(self, algo_port: str, endpoint_id: str) -> str:
+        if re.match(r"(?:dt|csc)_\d+_csp_in$", algo_port):
+            return f"{{{endpoint_id}_tdata, {endpoint_id}_tlast, {endpoint_id}_tfirst, {endpoint_id}_tvalid}}"
+        return f"{endpoint_id}_tdata"
+
+    def _algo_output_port(self, source_instance: str, source_port: str) -> str:
+        if source_port == "csp_out" and source_instance == "out_csp_gmt_2":
+            source_instance = "out_csp_nn"
+        if source_instance and source_port:
+            prefix = f"{source_instance}_"
+            return source_port if source_port.startswith(prefix) else f"{source_instance}_{source_port}"
+        return source_port
+
+    def _algo_output_expr(self, algo_port: str, endpoint_id: str) -> str:
+        if algo_port.endswith("_csp_out"):
+            return f"{endpoint_id}_csp"
+        return f"{endpoint_id}_tdata"
 
     # ------------------------------------------------------------------ #
     # Public entry point
@@ -243,9 +281,9 @@ class PayloadWrapperGenerator:
             lines.append(f"wire           {ep_name}_tlast;")
             lines.append(_assign(f"{ep_name}_tdata",
                                  f"{prefix}_rx_tdata[{lw}*{lane} +: {lw}]"))
-            lines.append(_assign(f"{ep_name}_tvalid", f"{prefix}_rx_tvalid[{lane}]"))
-            lines.append(_assign(f"{ep_name}_tfirst", f"{prefix}_rx_tfirst[{lane}]"))
-            lines.append(_assign(f"{ep_name}_tlast",  f"{prefix}_rx_tlast[{lane}]"))
+            lines.append(_assign(f"{ep_name}_tvalid", self._lane_signal(f"{prefix}_rx_tvalid", lane)))
+            lines.append(_assign(f"{ep_name}_tfirst", self._lane_signal(f"{prefix}_rx_tfirst", lane)))
+            lines.append(_assign(f"{ep_name}_tlast",  self._lane_signal(f"{prefix}_rx_tlast", lane)))
             lines.append("")
 
         return lines
@@ -278,22 +316,27 @@ class PayloadWrapperGenerator:
                 ep_id = active_tx.get((slr, site, lane))
                 if ep_id:
                     lines.append(f"// TX lane {lane} <- {ep_id}")
+                    lines.append(f"wire [66:0] {ep_id}_csp;")
                     lines.append(f"wire [{lw-1}:0] {ep_id}_tdata;")
                     lines.append(f"wire           {ep_id}_tvalid;")
                     lines.append(f"wire           {ep_id}_tfirst;")
                     lines.append(f"wire           {ep_id}_tlast;")
+                    lines.append(_assign(f"{ep_id}_tdata",  f"{ep_id}_csp[66:3]"))
+                    lines.append(_assign(f"{ep_id}_tvalid", f"{ep_id}_csp[0]"))
+                    lines.append(_assign(f"{ep_id}_tfirst", f"{ep_id}_csp[1]"))
+                    lines.append(_assign(f"{ep_id}_tlast",  f"{ep_id}_csp[2]"))
                     lines.append(_assign(f"{pfx}_tx_tdata[{lw}*{lane} +: {lw}]",
                                          f"{ep_id}_tdata"))
-                    lines.append(_assign(f"{pfx}_tx_tvalid[{lane}]", f"{ep_id}_tvalid"))
-                    lines.append(_assign(f"{pfx}_tx_tfirst[{lane}]", f"{ep_id}_tfirst"))
-                    lines.append(_assign(f"{pfx}_tx_tlast[{lane}]",  f"{ep_id}_tlast"))
+                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tvalid", lane), f"{ep_id}_tvalid"))
+                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tfirst", lane), f"{ep_id}_tfirst"))
+                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tlast", lane),  f"{ep_id}_tlast"))
                 else:
                     lines.append(f"// TX lane {lane} (SLR{slr} gt{site}) unused")
                     lines.append(_assign(f"{pfx}_tx_tdata[{lw}*{lane} +: {lw}]",
                                          f"{lw}'b0"))
-                    lines.append(_assign(f"{pfx}_tx_tvalid[{lane}]", "1'b0"))
-                    lines.append(_assign(f"{pfx}_tx_tfirst[{lane}]", "1'b0"))
-                    lines.append(_assign(f"{pfx}_tx_tlast[{lane}]",  "1'b0"))
+                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tvalid", lane), "1'b0"))
+                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tfirst", lane), "1'b0"))
+                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tlast", lane),  "1'b0"))
                 lines.append("")
 
         return lines
@@ -317,14 +360,17 @@ class PayloadWrapperGenerator:
             lines.append("    .ap_rst  (1'b0),")
             for i, ri in enumerate(self.resolved_io.inputs):
                 ep   = ri.endpoint
-                port = ri.output_wiring.get("target_port", f"det_in_{i}")
+                port = self._algo_input_port(ri.output_wiring.get("target_port", ""), i)
+                expr = self._algo_input_expr(port, ep.endpoint_id)
                 sep  = "," if (i < len(self.resolved_io.inputs) - 1
                                or self.resolved_io.outputs) else ""
-                lines.append(f"    .{port} ({ep.endpoint_id}_tdata){sep}")
+                lines.append(f"    .{port} ({expr}){sep}")
             for j, ro in enumerate(self.resolved_io.outputs):
-                ep  = ro.endpoint
-                sep = "," if j < len(self.resolved_io.outputs) - 1 else ""
-                lines.append(f"    .{ro.source_port} ({ep.endpoint_id}_tdata){sep}")
+                ep   = ro.endpoint
+                port = self._algo_output_port(ro.source_instance, ro.source_port)
+                expr = self._algo_output_expr(port, ep.endpoint_id)
+                sep  = "," if j < len(self.resolved_io.outputs) - 1 else ""
+                lines.append(f"    .{port} ({expr}){sep}")
             lines.append(");")
         return lines
 
