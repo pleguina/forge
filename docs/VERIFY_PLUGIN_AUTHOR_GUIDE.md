@@ -70,6 +70,8 @@ The framework owns the generic verification lifecycle:
 - generation of `wave.tcl`
 - generic xsim and csim orchestration
 - checker launch orchestration when declared in flow config
+- checker argument formatting for generated paths such as `{observed_log}`,
+  `{dataset_xml}`, `{flow_dir}`, and `{work_dir}`
 
 These are generated or framework-owned and should not be treated as plugin-authored surfaces for a new plugin:
 
@@ -162,6 +164,25 @@ The plugin must ship its reference datasets under `schemas/data/` so the verific
 If the generated TB plus `run_stimulus()` can self-check using assertions or `$fatal`, no external checker is required.
 
 If not, the plugin may provide a checker binary or script that evaluates the framework-generated observation CSV.
+
+Checker arguments are declared in the authored `design.verification.yml` and
+rendered into generated `verify.flow.yml`. The framework formats standard
+placeholders at run time:
+
+| Placeholder | Meaning |
+|---|---|
+| `{observed_log}` | Observation CSV declared by the checker block |
+| `{dataset_xml}` | Dataset selected by `--xml-input` or the flow default |
+| `{event_id}` | Selected single-event ID |
+| `{latency_cycles}` | Checker latency value from the flow |
+| `{tolerance}` | Checker tolerance value from the flow |
+| `{consumer_root}` | Resolved consumer/plugin root |
+| `{flow_dir}` | Directory containing generated `verify.flow.yml` |
+| `{work_dir}` | Backend working directory, e.g. xsim compile/sim output area |
+
+Use `{work_dir}` for checker-generated reports, plots, and machine-readable
+artifacts. The framework supplies the location; the plugin still owns the
+domain-specific contents of those artifacts.
 
 ## 6. What should not be required from a new plugin
 

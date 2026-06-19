@@ -163,10 +163,27 @@ def build_graph(
             if not any(e.src == src and e.dst == dst for e in edges):
                 edges.append(LatencyEdge(src=src, dst=dst))
 
+    def _endpoints(value) -> List[str]:
+        """Normalise a connection endpoint into a list of module names.
+
+        A ``from``/``to`` endpoint may be a single module name or, for fan-out
+        and fan-in connections, a list of module names.  Both forms are
+        expanded into individual edges.
+        """
+        if isinstance(value, list):
+            return [v for v in value if isinstance(v, str) and v]
+        if isinstance(value, str) and value:
+            return [value]
+        return []
+
     edges: List[LatencyEdge] = []
     for conn in design.get("connections", []):
-        _add_edge(conn.get("from", ""), conn.get("to", ""), edges)
+        for src in _endpoints(conn.get("from", "")):
+            for dst in _endpoints(conn.get("to", "")):
+                _add_edge(src, dst, edges)
     for tg in design.get("topology_groups", []):
-        _add_edge(tg.get("from", ""), tg.get("to", ""), edges)
+        for src in _endpoints(tg.get("from", "")):
+            for dst in _endpoints(tg.get("to", "")):
+                _add_edge(src, dst, edges)
 
     return LatencyGraph(nodes=nodes, edges=edges)

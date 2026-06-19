@@ -584,6 +584,7 @@ class XsimBackend(BackendAdapter):
             "pass_condition": str(getattr(checker, "pass_condition", "")),
             "consumer_root": str(getattr(cfg, "consumer_root", "")),
             "flow_dir": str(Path(cfg.flow_file).parent.resolve()),
+            "work_dir": str(getattr(ctx, "work_dir", "") or result.backend_metadata.get("work_dir", "")),
         }
         return [str(a).format(**format_map) for a in args]
 

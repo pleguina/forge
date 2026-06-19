@@ -164,6 +164,14 @@ class Connection:
     delay_cycles: int = 0     # Number of delay cycles to insert (using signal_delay)
     contract_wiring: bool = False  # Derive array port_map_ranges from contract wiring_kind matching
 
+    # Opaque physical-boundary tag. When set, the generator emits a protected
+    # slr_crossing_delay instance instead of a plain signal_delay, gives it a
+    # stable deterministic name, and writes a stage-level crossing manifest.
+    # The tag is resolved to physical SLR placement exclusively by blobfish;
+    # arc-framework and omtf-firmware treat it as an opaque string.
+    # A boundary tag requires delay_cycles > 0 or register_stages > 0.
+    boundary: Optional[str] = None
+
 @dataclass
 class InstanceAssign:
     """Maps a range of producer instances to a consumer partition label."""
@@ -368,7 +376,19 @@ class DesignConfig:
             reg_stages = c.get("register_stages", 0)
             delay_cycles = c.get("delay_cycles", 0)
             contract_wiring = c.get("contract_wiring", False)
-            
+            boundary = c.get("boundary", None)
+
+            # Validation: a boundary tag without an actual register stage is
+            # meaningless — the generator cannot emit a protected crossing delay
+            # with zero depth.
+            if boundary and int(delay_cycles) <= 0 and int(reg_stages) <= 0:
+                raise ValueError(
+                    f"Connection {c['from']!r} -> {c.get('to')!r} sets "
+                    f"boundary={boundary!r} but delay_cycles and register_stages "
+                    "are both zero. A boundary tag must protect an inserted "
+                    "register stage."
+                )
+
             # Expand fan-out connections (to as list) into individual connections
             to_modules = c["to"] if isinstance(c["to"], list) else [c["to"]]
             for to_module in to_modules:
@@ -381,6 +401,7 @@ class DesignConfig:
                         register_stages = reg_stages,
                         delay_cycles    = delay_cycles,
                         contract_wiring = contract_wiring,
+                        boundary        = boundary,
                     )
                 )
 

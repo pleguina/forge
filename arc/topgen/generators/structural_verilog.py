@@ -1,7 +1,9 @@
 from __future__ import annotations
+import json
 import re
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple, Set
+from typing import Any, Dict, List, Tuple, Set
 
 import yaml  # To read system.yml
 
@@ -203,6 +205,112 @@ def _resolve_paths(paths: List[str] | None, root: Path) -> List[Path]:
 def _guess_lang(path: Path) -> str:
     return "vhdl" if path.suffix.lower() == ".vhd" else "verilog"
 
+
+# ---------------------------------------------------------------------------
+# SLR boundary crossing helpers
+# ---------------------------------------------------------------------------
+
+def _verilog_id_frag(text: str) -> str:
+    """Return a deterministic Verilog-safe identifier fragment from *text*."""
+    out = []
+    for ch in text:
+        if ch.isalnum() or ch == "_":
+            out.append(ch)
+        else:
+            out.append("_")
+    clean = "".join(out).strip("_")
+    if not clean:
+        clean = "unnamed"
+    if clean[0].isdigit():
+        clean = "n_" + clean
+    return clean
+
+
+def _boundary_inst_name(tag: str, src_pin: str, dst_pin: str) -> str:
+    """Stable, deterministic Verilog instance name for a boundary crossing FF."""
+    return f"bdry_{_verilog_id_frag(tag)}_{_verilog_id_frag(src_pin)}_to_{_verilog_id_frag(dst_pin)}"
+
+
+def _stage_patterns_for_instance(hier: str, depth: int) -> List[Dict[str, Any]]:
+    """Return the stage-level cell-pattern entries for a given hierarchy and depth.
+
+    Vivado synthesis flattens Verilog generate blocks: a named generate block
+    ``begin : gen_depth2`` does NOT create a ``/gen_depth2/`` sub-hierarchy.
+    Instead the generate-block name becomes a dot-prefix on the signal name, and
+    the tool appends ``_reg`` to every synthesised register.  So a register
+    declared as ``stage0_reg`` inside ``begin : gen_depth2`` becomes the cell
+    ``<inst>/gen_depth2.stage0_reg_reg[*]`` (same hierarchy level as the
+    parent module, not a child level).
+    """
+    if depth == 1:
+        return [{
+            "index": 0,
+            "role": "boundary",
+            "cell_pattern": f"{hier}/gen_depth1.stage0_reg_reg*",
+        }]
+    if depth == 2:
+        return [
+            {
+                "index": 0,
+                "role": "source_side",
+                "cell_pattern": f"{hier}/gen_depth2.stage0_reg_reg*",
+            },
+            {
+                "index": 1,
+                "role": "destination_boundary",
+                "cell_pattern": f"{hier}/gen_depth2.stage1_reg_reg*",
+            },
+        ]
+    # DEPTH > 2: same dot-prefix rule applies.
+    return [{
+        "index": i,
+        "role": f"stage{i}",
+        "cell_pattern": f"{hier}/gen_depth_general.stage_reg_{i}_reg*",
+    } for i in range(depth)]
+
+
+def _write_crossing_manifest(
+    out_verilog_path: Path,
+    top_name: str,
+    boundary_infos: List[Dict[str, Any]],
+) -> None:
+    """Write algo_top.crossings.json alongside the generated Verilog."""
+    grouped: Dict[Tuple, List[Dict]] = defaultdict(list)
+    for b in boundary_infos:
+        key = (b["tag"], b["src_inst"], b["dst_inst"], b["depth"])
+        grouped[key].append(b)
+
+    crossings = []
+    for (tag, src_inst, dst_inst, depth), infos in grouped.items():
+        instances = []
+        for b in infos:
+            hier = f"u_{top_name}/{b['instance_name']}"
+            instances.append({
+                "name": b["instance_name"],
+                "width": b["width"],
+                "hier": hier,
+                "src_pin": b["src_pin"],
+                "dst_pin": b["dst_pin"],
+                "stages": _stage_patterns_for_instance(hier, depth),
+            })
+        crossings.append({
+            "tag": tag,
+            "src_module": src_inst,
+            "dst_module": dst_inst,
+            "depth": depth,
+            "kind": "slr_crossing_delay",
+            "instances": instances,
+        })
+
+    manifest = {
+        "schema": 2,
+        "top": top_name,
+        "crossings": crossings,
+    }
+
+    manifest_path = out_verilog_path.with_suffix(".crossings.json")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
 def _gather_hdl_sources_for_mod(mod: Module, meta: Dict, src_root: Path) -> list[tuple[str,str]]:
     """
     Returns [(file,lang)] and now also includes any *package* files declared
@@ -327,9 +435,10 @@ def write_structural_verilog(
     emit = lines.append
     external_output_bindings: Dict[Tuple[str, str], str] = {}
 
-    # Build maps for register_stages and delay_cycles from cfg.connections
+    # Build maps for register_stages, delay_cycles, and boundary tags.
     reg_stages_map: Dict[Tuple[str, str], int] = {}
     delay_cycles_map: Dict[Tuple[str, str], int] = {}
+    boundary_map: Dict[Tuple[str, str], str] = {}  # (src_inst, dst_inst) -> tag
     for conn in cfg.connections:
         src_mod = next(m for m in cfg.modules if m.name == conn.from_)
         dst_mod = next(m for m in cfg.modules if m.name == conn.to)
@@ -342,6 +451,8 @@ def write_structural_verilog(
                     reg_stages_map[(src_inst, dst_inst)] = conn.register_stages
                 if conn.delay_cycles > 0:
                     delay_cycles_map[(src_inst, dst_inst)] = conn.delay_cycles
+                if conn.boundary:
+                    boundary_map[(src_inst, dst_inst)] = conn.boundary
 
     # ---------- helpers (local to this function) --------------------------
     def _parse_system_aliases(system_yml: Path | None) -> tuple[Dict[Tuple[str, str], str], Dict[Tuple[str, str], str]]:
@@ -817,31 +928,66 @@ def write_structural_verilog(
     # ====== Signal Delay Instances (connection delays) ====================
     emit("  // Signal delays for connection timing alignment")
     delay_counter = 0
+    boundary_infos: List[Dict[str, Any]] = []  # collected for crossing manifest
+
     for (src_i, dst_i), pairs in conn_map.items():
         num_delays = delay_cycles_map.get((src_i, dst_i), 0)
         if num_delays > 0:
             src_mod = inst_to_mod[src_i]
-            for s_pin_raw, _d_pin_raw in pairs:
+            tag = boundary_map.get((src_i, dst_i))
+
+            for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
+                dst_mod_name = inst_to_mod[dst_i]
+                d_pin = _canon_pin(ip_info, dst_mod_name, d_pin_raw)
                 w = _pin_width_for_inst(src_i, s_pin)
 
                 src_net = _verilog_ident(f"net_{src_i}_{s_pin}")
                 dst_net = _verilog_ident(f"delay_net_{src_i}_{dst_i}_{s_pin}")
-                inst_name = f"delay_{delay_counter}"
 
-                emit(f"  // Delay {src_i}.{s_pin} → {dst_i} (+{num_delays} cycles)")
-                emit(f"  signal_delay #(")
-                emit(f"    .WIDTH({w}),")
-                emit(f"    .DEPTH({num_delays})")
-                emit(f"  ) {inst_name} (")
-                emit(f"    .clk(ap_clk),")
-                emit(f"    .rst(ap_rst),")
-                emit(f"    .din({src_net}),")
-                emit(f"    .dout({dst_net})")
-                emit(f"  );")
-                emit("")
+                if tag:
+                    # Boundary crossing: emit a protected slr_crossing_delay with
+                    # a stable, deterministic instance name.
+                    inst_name = _boundary_inst_name(tag, s_pin, d_pin)
+                    emit(f"  // Boundary crossing {src_i}.{s_pin} → {dst_i}.{d_pin} [boundary={tag}]")
+                    emit(f'  (* KEEP_HIERARCHY = "TRUE" *)')
+                    emit(f"  slr_crossing_delay #(")
+                    emit(f"    .WIDTH({w}),")
+                    emit(f"    .DEPTH({num_delays})")
+                    emit(f"  ) {inst_name} (")
+                    emit(f"    .clk(ap_clk),")
+                    emit(f"    .rst(ap_rst),")
+                    emit(f"    .din({src_net}),")
+                    emit(f"    .dout({dst_net})")
+                    emit(f"  );")
+                    emit("")
 
-                delay_counter += 1
+                    boundary_infos.append({
+                        "tag": tag,
+                        "src_inst": src_i,
+                        "dst_inst": dst_i,
+                        "src_pin": s_pin,
+                        "dst_pin": d_pin,
+                        "depth": num_delays,
+                        "width": w,
+                        "instance_name": inst_name,
+                    })
+                else:
+                    # Normal delay: use signal_delay with a positional name.
+                    inst_name = f"delay_{delay_counter}"
+                    emit(f"  // Delay {src_i}.{s_pin} → {dst_i} (+{num_delays} cycles)")
+                    emit(f"  signal_delay #(")
+                    emit(f"    .WIDTH({w}),")
+                    emit(f"    .DEPTH({num_delays})")
+                    emit(f"  ) {inst_name} (")
+                    emit(f"    .clk(ap_clk),")
+                    emit(f"    .rst(ap_rst),")
+                    emit(f"    .din({src_net}),")
+                    emit(f"    .dout({dst_net})")
+                    emit(f"  );")
+                    emit("")
+
+                    delay_counter += 1
 
     # ====== Control Signal Distribution (NEW) =============================
     emit("  // Control signal distribution with delays")
@@ -900,6 +1046,10 @@ def write_structural_verilog(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(NL.join(lines))
+
+    # Write SLR crossing manifest if any boundary connections were emitted.
+    if boundary_infos:
+        _write_crossing_manifest(out_path, top_name, boundary_infos)
 
     # ========== Generate Report ==========
     report = {

@@ -482,10 +482,19 @@ connections:
   - from: trig
     to: tfan
     delay_cycles: 3          # inserts signal_delay instances in algo_top.v
+
+  - from: slr1_block
+    to: slr2_block
+    boundary: slr1_to_slr2
+    delay_cycles: 2          # emits a named slr_crossing_delay boundary helper
 ```
 
 Both fields are reflected in the generated `algo_top.v` and in the static latency
-check report.
+check report. Use `boundary` when the inserted registers are not just local
+alignment but an implementation boundary that downstream build tooling may want
+to constrain, floorplan, report, or include as a named crossing source. The
+consumer build must compile the generated boundary helper RTL together with the
+top-level manifest.
 
 ### `plugins/<plugin>/arc/verify/plot_config.yml` — define result plots
 
