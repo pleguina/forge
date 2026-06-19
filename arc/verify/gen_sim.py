@@ -480,7 +480,7 @@ dut:
 
 dataset:
   xml:              {dataset_xml}
-  default_event_id: {default_event_id}
+{dataset_parts_text}  default_event_id: {default_event_id}
 
 simulation:
   clk_period_ns:              {clk_period_ns}
@@ -582,6 +582,8 @@ def generate_verify_flow_yml(
     dut_tb_bindings: "str | None" = None,
     dut_port_signature: "str | None" = None,
     dataset_xml: "str | None" = None,
+    dataset_parts_glob: "str | None" = None,
+    dataset_parts: "tuple[str, ...]" = (),
     extra_simulation_fields: tuple = (),  # (key, value) pairs from plugin defaults
     source_path: "str" = "design.verification.yml",
 ) -> Path:
@@ -648,6 +650,7 @@ def generate_verify_flow_yml(
         dut_tb_bindings=_yaml_nullable(dut_tb_bindings),
         dut_port_signature=_yaml_nullable(dut_port_signature),
         dataset_xml=_yaml_nullable(dataset_xml),
+        dataset_parts_text=_render_dataset_parts(dataset_parts_glob, dataset_parts),
         default_event_id=getattr(flow_decl, "default_event_id", 1),
         clk_period_ns=clk,
         reset_cycles=rst,
@@ -664,3 +667,13 @@ def generate_verify_flow_yml(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(text)
     return output_path
+
+
+def _render_dataset_parts(parts_glob: str | None, parts: tuple[str, ...]) -> str:
+    lines: list[str] = []
+    if parts_glob:
+        lines.append(f"  parts_glob:       {parts_glob}")
+    if parts:
+        lines.append("  parts:")
+        lines.extend(f"    - {part}" for part in parts)
+    return ("\n".join(lines) + "\n") if lines else ""

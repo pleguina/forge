@@ -206,6 +206,7 @@ class FlowConfig:
     # ── dataset:
     # For v1.0 verification this is the framework-standard XML stimulus source.
     dataset_xml: Path
+    dataset_parts: tuple[Path, ...]
 
     # ── simulation:
     sim_clk_period_ns:     float
@@ -416,6 +417,24 @@ def parse_generic_flow_fields(
             extra_sources=tuple(extra_sources),
         )
 
+    dataset_parts: list[Path] = []
+    parts_glob = dataset.get("parts_glob")
+    if parts_glob:
+        pattern = Path(str(parts_glob))
+        if pattern.is_absolute():
+            dataset_parts.extend(sorted(pattern.parent.glob(pattern.name)))
+        else:
+            dataset_parts.extend(sorted(consumer_root.glob(str(pattern))))
+
+    parts_list = dataset.get("parts") or []
+    if parts_list:
+        if not isinstance(parts_list, list):
+            _raise_flow_error(
+                f"verify.flow.yml: dataset.parts must be a list ({flow_path})",
+                action="Rewrite dataset.parts as a YAML list of XML paths.",
+            )
+        dataset_parts.extend(_abs(str(part), consumer_root) for part in parts_list)
+
     # ── Build dut_tb_bindings (may be None for single-module HLS flows)
     dut_tb_bindings = _abs_opt(dut.get("tb_bindings"), consumer_root)
 
@@ -435,6 +454,7 @@ def parse_generic_flow_fields(
         "dut_port_signature":  _abs_opt(dut.get("port_signature"), consumer_root),
         "dut_probe_map":       _abs_opt(dut.get("probe_map"), consumer_root),
         "dataset_xml":         _abs(dataset["xml"], consumer_root),
+        "dataset_parts":       tuple(dict.fromkeys(path.resolve() for path in dataset_parts)),
         "sim_clk_period_ns":      float(sim["clk_period_ns"]),
         "sim_reset_cycles":       int(sim["reset_cycles"]),
         "sim_idle_after_reset":   int(sim["idle_cycles_after_reset"]),

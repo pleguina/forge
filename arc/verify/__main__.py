@@ -186,7 +186,9 @@ class XmlRunSelection:
     event_id: int | None
     event_list: str | None
     all_events: bool
+    all_dataset_parts: bool
     dataset_xml: Path | None
+    dataset_parts_glob: str | None
     probe_log: bool
 
 
@@ -206,6 +208,14 @@ def _resolve_xml_run_selection(args: argparse.Namespace, cfg) -> XmlRunSelection
         getattr(args, "all_events", False)
         or (os.environ.get("ALL_EVENTS", "0") == "1")
     )
+    all_dataset_parts = bool(
+        getattr(args, "all_dataset_parts", False)
+        or (os.environ.get("ALL_DATASET_PARTS", "0") == "1")
+    )
+    dataset_parts_glob = (
+        getattr(args, "dataset_parts_glob", None)
+        or os.environ.get("DATASET_PARTS_GLOB")
+    )
     xml_input_raw = (
         args.xml_input
         or os.environ.get("XML_INPUT")
@@ -216,7 +226,9 @@ def _resolve_xml_run_selection(args: argparse.Namespace, cfg) -> XmlRunSelection
         event_id=int(event_id_raw) if event_id_raw is not None else None,
         event_list=str(event_list_raw).strip() if event_list_raw else None,
         all_events=all_events,
+        all_dataset_parts=all_dataset_parts,
         dataset_xml=Path(xml_input_raw) if xml_input_raw else None,
+        dataset_parts_glob=str(dataset_parts_glob).strip() if dataset_parts_glob else None,
         probe_log=probe_log,
     )
 
@@ -226,6 +238,7 @@ def _build_runtime_context(
     cfg,
     selection: XmlRunSelection,
     importlib_module,
+    work_dir: Path | None = None,
 ) -> object:
     """Build framework-generic or plugin-specific runtime context.
 
@@ -238,7 +251,7 @@ def _build_runtime_context(
     if selection.all_events:
         extra_overrides["all_events"] = True
 
-    work_dir = flow_path.parent / "xsim_work"
+    work_dir = work_dir or (flow_path.parent / "xsim_work")
 
     plugin_ctx_type = None
     if importlib_module is not None:
@@ -310,26 +323,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     # ── 4. Build runtime context ─────────────────────────────────────────────
     selection = _resolve_xml_run_selection(args, cfg)
-    ctx = _build_runtime_context(flow_path, cfg, selection, locals().get("_il"))
-
-    # ── 5. Preflight ─────────────────────────────────────────────────────────
-    from arc.verify.preflight import run_preflight
-    pre = run_preflight(cfg, xml_input=selection.dataset_xml)
-    pre.print_summary()
-    if not pre.ok:
-        return 1
-
-    # ── Strict-mode layout check ──────────────────────────────────────────────
-    strict = getattr(args, "strict", False)
-    if strict:
-        from arc.verify.layout import validate_layout
-        _verify_root = flow_path.parent.parent
-        _layout_errors = validate_layout(_verify_root)
-        if _layout_errors:
-            print("[strict] Layout violations:", file=sys.stderr)
-            for le in _layout_errors:
-                print(f"  {le}", file=sys.stderr)
-            return 1
 
     # ── 6. Get backend adapter ────────────────────────────────────────────────
     from arc.verify.backend_registry import get_adapter
@@ -341,6 +334,35 @@ def _cmd_run(args: argparse.Namespace) -> int:
             exc,
             action="Use a supported backend id in the flow file or bootstrap a plugin-specific backend override.",
         )
+
+    strict = getattr(args, "strict", False)
+    if selection.all_dataset_parts:
+        return _run_dataset_parts(flow_path, cfg, selection, adapter, locals().get("_il"), strict=strict)
+
+    ctx = _build_runtime_context(flow_path, cfg, selection, locals().get("_il"))
+    return _run_one_loaded_flow(flow_path, cfg, selection, ctx, adapter, strict=strict)
+
+
+def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, adapter, strict: bool = False) -> int:
+    """Run one resolved XML selection through preflight, backend, and checker."""
+
+    # ── 5. Preflight ─────────────────────────────────────────────────────────
+    from arc.verify.preflight import run_preflight
+    pre = run_preflight(cfg, xml_input=selection.dataset_xml)
+    pre.print_summary()
+    if not pre.ok:
+        return 1
+
+    # ── Strict-mode layout check ──────────────────────────────────────────────
+    if strict:
+        from arc.verify.layout import validate_layout
+        _verify_root = flow_path.parent.parent
+        _layout_errors = validate_layout(_verify_root)
+        if _layout_errors:
+            print("[strict] Layout violations:", file=sys.stderr)
+            for le in _layout_errors:
+                print(f"  {le}", file=sys.stderr)
+            return 1
 
     # ── 7. Validate backend requirements ─────────────────────────────────────
     errors = adapter.validate_backend_requirements(cfg)
@@ -396,7 +418,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print()
     print(f"[run] flow:    {getattr(cfg, 'flow_name', flow_path.name)}")
     print(f"[run] backend: {adapter.backend_id}")
-    if selection.event_id is not None:
+    if selection.event_list:
+        print(f"[run] events:  {selection.event_list}")
+    elif selection.all_events:
+        print("[run] events:  all")
+    elif selection.event_id is not None:
         print(f"[run] event:   {selection.event_id}")
     print(f"[run] probe:   {getattr(ctx, 'probe_log', False)}")
     print()
@@ -411,6 +437,92 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if checker_ok is False:
         return 1
     return 0 if result.success else 1
+
+
+def _resolve_dataset_part_paths(cfg, selection: XmlRunSelection) -> list[Path]:
+    if selection.dataset_parts_glob:
+        pattern = Path(selection.dataset_parts_glob)
+        if pattern.is_absolute():
+            return sorted(path.resolve() for path in pattern.parent.glob(pattern.name))
+        root = Path(getattr(cfg, "consumer_root", Path.cwd()))
+        return sorted(path.resolve() for path in root.glob(str(pattern)))
+    return [Path(path).resolve() for path in (getattr(cfg, "dataset_parts", ()) or ())]
+
+
+def _run_dataset_parts(flow_path: Path, cfg, selection: XmlRunSelection, adapter, importlib_module, strict: bool = False) -> int:
+    part_paths = _resolve_dataset_part_paths(cfg, selection)
+    if not part_paths:
+        print(
+            "ERROR: no dataset parts resolved. Add dataset.parts_glob/parts to verify.flow.yml "
+            "or pass --dataset-parts-glob.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"[dataset-parts] Running {len(part_paths)} XML part file(s)")
+    results: list[tuple[Path, int]] = []
+    for index, xml_path in enumerate(part_paths):
+        print()
+        print("━" * 59)
+        print(f"[dataset-parts] [{index + 1}/{len(part_paths)}] {xml_path.name}")
+        print("━" * 59)
+        part_selection = XmlRunSelection(
+            event_id=selection.event_id,
+            event_list=selection.event_list,
+            all_events=(selection.event_list is None),
+            all_dataset_parts=False,
+            dataset_xml=xml_path,
+            dataset_parts_glob=None,
+            probe_log=selection.probe_log,
+        )
+        work_dir = flow_path.parent / "xsim_work" / "dataset_parts" / xml_path.stem
+        ctx = _build_runtime_context(flow_path, cfg, part_selection, importlib_module, work_dir=work_dir)
+        rc = _run_one_loaded_flow(flow_path, cfg, part_selection, ctx, adapter, strict=strict)
+        results.append((xml_path, rc))
+        print(f"[dataset-parts] {xml_path.name}: {'PASS' if rc == 0 else f'FAIL (exit {rc})'}")
+
+    print()
+    print("━" * 59)
+    print("[dataset-parts] SUMMARY")
+    print("━" * 59)
+    overall = 0
+    for xml_path, rc in results:
+        status = "PASS" if rc == 0 else f"FAIL (exit {rc})"
+        print(f"  {xml_path.name:<28} {status}")
+        if rc != 0:
+            overall = 1
+    return overall
+
+
+def _dataset_path_relative_to_consumer(design_path: Path, consumer_root: Path, raw_path: str | None) -> str | None:
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    abs_path = path if path.is_absolute() else (design_path.parent / path)
+    try:
+        return str(abs_path.resolve().relative_to(consumer_root.resolve()))
+    except ValueError:
+        return str(abs_path)
+
+
+def _resolve_dataset_parts_glob(design_path: Path, consumer_root: Path, dataset_decl) -> str | None:
+    return _dataset_path_relative_to_consumer(
+        design_path,
+        consumer_root,
+        getattr(dataset_decl, "parts_glob", None) if dataset_decl else None,
+    )
+
+
+def _resolve_dataset_parts(design_path: Path, consumer_root: Path, dataset_decl) -> tuple[str, ...]:
+    if dataset_decl is None:
+        return ()
+    return tuple(
+        part for part in (
+            _dataset_path_relative_to_consumer(design_path, consumer_root, raw_part)
+            for raw_part in (getattr(dataset_decl, "parts", ()) or ())
+        )
+        if part
+    )
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
@@ -550,6 +662,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                     dut_tb_bindings=dut_tb_bindings_rel,
                     dut_port_signature=dut_port_signature_rel,
                     dataset_xml=dataset_xml_raw,
+                    dataset_parts_glob=_resolve_dataset_parts_glob(design_path, consumer_root, ds),
+                    dataset_parts=_resolve_dataset_parts(design_path, consumer_root, ds),
                     extra_simulation_fields=getattr(defaults, "extra", ()),
                     source_path=str(design_path.name),
                 )
@@ -1523,6 +1637,25 @@ def main() -> None:
         help=(
             "Framework-standard dataset override: path to XML stimulus file "
             "(overrides XML_INPUT env var and flow dataset.xml)"
+        ),
+    )
+    p_run.add_argument(
+        "--all-dataset-parts",
+        dest="all_dataset_parts",
+        action="store_true",
+        default=False,
+        help=(
+            "Framework-standard XML dataset selector: run every XML part declared "
+            "by dataset.parts_glob/parts, aggregating pass/fail"
+        ),
+    )
+    p_run.add_argument(
+        "--dataset-parts-glob",
+        dest="dataset_parts_glob",
+        default=None,
+        help=(
+            "Override XML dataset part glob for --all-dataset-parts; relative paths "
+            "are resolved from consumer-root"
         ),
     )
     p_run.add_argument(

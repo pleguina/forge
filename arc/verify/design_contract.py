@@ -119,6 +119,8 @@ class DatasetDeclaration:
     """A named XML-backed dataset reference."""
     name:        str
     xml:         str          # relative path to the XML file
+    parts_glob:  str | None = None
+    parts:       tuple[str, ...] = ()
     description: str = ""
 
 
@@ -406,9 +408,17 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
                 f"verify.design.yml: dataset {ds_name!r} must have an 'xml' field ({path})",
                 action="Add an 'xml' entry for every declared dataset.",
             )
+        raw_parts = ds_body.get("parts") or ()
+        if raw_parts and not isinstance(raw_parts, list):
+            _raise_contract_error(
+                f"verify.design.yml: dataset {ds_name!r} field 'parts' must be a list ({path})",
+                action="Rewrite 'parts' as a YAML list or use 'parts_glob'.",
+            )
         datasets.append(DatasetDeclaration(
             name=str(ds_name),
             xml=str(ds_body["xml"]),
+            parts_glob=(str(ds_body["parts_glob"]) if ds_body.get("parts_glob") else None),
+            parts=tuple(str(v) for v in raw_parts),
             description=str(ds_body.get("description", "")),
         ))
 

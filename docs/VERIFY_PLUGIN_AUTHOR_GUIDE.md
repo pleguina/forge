@@ -165,6 +165,26 @@ If the generated TB plus `run_stimulus()` can self-check using assertions or `$f
 
 If not, the plugin may provide a checker binary or script that evaluates the framework-generated observation CSV.
 
+For large XML-backed datasets split across multiple files, declare the parts in
+the dataset block generated into `verify.flow.yml`:
+
+```yaml
+dataset:
+    xml: default_smoke.xml
+    parts_glob: data/TestEvents_part*.xml
+```
+
+Then run the complete sweep with:
+
+```bash
+arc verify run path/to/verify.flow.yml --all-dataset-parts
+```
+
+ARC executes each XML part through the normal backend and checker lifecycle,
+using an isolated `xsim_work/dataset_parts/<part-name>/` directory per part, and
+prints an aggregate PASS/FAIL table. Use `--dataset-parts-glob` to override the
+declared glob for a temporary subset.
+
 Checker arguments are declared in the authored `design.verification.yml` and
 rendered into generated `verify.flow.yml`. The framework formats standard
 placeholders at run time:
