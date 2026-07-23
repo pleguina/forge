@@ -10,7 +10,7 @@ Every backend adapter module must:
   2. Implement all abstract properties and methods declared below.
   3. Export a module-level ``ADAPTER`` singleton of that class.
 
-The registry (``fw_verify.backend_registry``) imports ``ADAPTER`` from each
+The registry (``forge.verify.backend_registry``) imports ``ADAPTER`` from each
 backend module and dispatches calls through this interface.  Framework code
 must rely only on this contract — never on backend-specific file names,
 command strings, or implementation details.
@@ -98,7 +98,7 @@ class BackendAdapter(ABC):
     Required interface
     ------------------
     Every concrete backend must implement all abstract members below.
-    The framework dispatcher (``fw_verify.backend_registry``) calls these
+    The framework dispatcher (``forge.verify.backend_registry``) calls these
     methods and must never need backend-specific conditionals beyond adapter
     lookup.
 
@@ -147,7 +147,7 @@ class BackendAdapter(ABC):
     def required_artifacts(self) -> tuple[ArtifactRequirement, ...]:
         """Artifacts the adapter requires before execution.
 
-        Used by ``fw_verify.backend_registry.validate_artifact_requirements()``
+        Used by ``forge.verify.backend_registry.validate_artifact_requirements()``
         for early failure detection.  Adapters may also check artifacts inside
         ``validate_backend_requirements()`` for custom logic.
         """
@@ -163,7 +163,7 @@ class BackendAdapter(ABC):
 
         This method must NOT launch any tool or simulator.  Artifact existence
         is checked separately via
-        ``fw_verify.backend_registry.validate_artifact_requirements()``.
+        ``forge.verify.backend_registry.validate_artifact_requirements()``.
         """
 
     @abstractmethod

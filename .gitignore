@@ -6,6 +6,8 @@
 
 # Python packaging artifacts
 **/*.egg-info/
+.coverage
+htmlcov/
 
 # Local editor/runtime noise
 .vscode/

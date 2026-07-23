@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import sys
 import textwrap
 from pathlib import Path
 
 import pytest
-
-
-_FW_PYTHON = Path(__file__).resolve().parents[1]
-if str(_FW_PYTHON) not in sys.path:
-    sys.path.insert(0, str(_FW_PYTHON))
 
 from forge.verify.design_contract import load_verify_design
 from forge.verify.exceptions import DesignContractError

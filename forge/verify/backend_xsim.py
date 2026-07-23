@@ -32,7 +32,7 @@ override is registered.
 
 Auto-registration
 -----------------
-This module is auto-registered by ``fw_verify`` at package import time.
+This module is auto-registered by ``forge verify`` at package import time.
 No plugin ``bootstrap.py`` needs to call ``register_backend("xsim", ...)``.
 Plugins that wish to override may re-register after import.
 
@@ -133,7 +133,7 @@ class XsimBackend(BackendAdapter):
         if not tb_sv.exists():
             errors.append(
                 f"SV testbench not found: {tb_sv}\n"
-                f"  → Regenerate with: fw_verify generate design.verification.yml"
+                f"  → Regenerate with: forge verify generate design.verification.yml"
                 f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
             )
 
@@ -145,7 +145,7 @@ class XsimBackend(BackendAdapter):
                 errors.append(
                     f"DUT RTL file not found: {dut_rtl_path}\n"
                     f"  → Run HLS synthesis first:\n"
-                    f"      fw_verify generate uses dut_rtl_source from design.verification.yml\n"
+                    f"      forge verify generate uses dut_rtl_source from design.verification.yml\n"
                     f"  RTL expected at: {dut_rtl_path}"
                 )
 
@@ -156,7 +156,7 @@ class XsimBackend(BackendAdapter):
             if not wave_tcl.exists():
                 errors.append(
                     f"wave.tcl not found: {wave_tcl}\n"
-                    f"  → Regenerate with: fw_verify generate design.verification.yml"
+                    f"  → Regenerate with: forge verify generate design.verification.yml"
                     f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}\n"
                     f"  (or set wave_mode: none in design.verification.yml to disable waveforms)"
                 )
@@ -289,7 +289,7 @@ class XsimBackend(BackendAdapter):
         ``None`` (default) to use the simple two-file compile.prj.
 
         When non-None, ``prepare_backend_inputs`` will call
-        :func:`fw_verify.manifest_compile.prepare_from_manifest` to build a
+        :func:`forge.verify.manifest_compile.prepare_from_manifest` to build a
         full compile.prj from the manifest instead of the generic two-file
         version.
         """
@@ -346,7 +346,7 @@ class XsimBackend(BackendAdapter):
         """Write compile.prj listing the DUT RTL and SV testbench sources.
 
         If :meth:`build_manifest_path` returns a path, delegates to
-        :mod:`fw_verify.manifest_compile` for manifest-based multi-source
+        :mod:`forge.verify.manifest_compile` for manifest-based multi-source
         compilation.  Otherwise writes a minimal two-file compile.prj.
         """
         work_dir = Path(ctx.work_dir).resolve()
@@ -610,7 +610,7 @@ def _locate_wave_tcl(cfg: Any, flow_dir: Path) -> Path | None:
 def _run_logged(cmd: list[str], log_file: Path, cwd: Path | None = None) -> int:
     """Run *cmd*, capture output to *log_file*, return exit code.
 
-    Delegates to :mod:`fw_verify.subprocess_wrapper` for structured capture
+    Delegates to :mod:`forge.verify.subprocess_wrapper` for structured capture
     (command, cwd, exit code, log path all recorded in SubprocessResult).
     Falls back to raw subprocess if wrapper import fails.
     """

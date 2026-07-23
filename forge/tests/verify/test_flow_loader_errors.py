@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import sys
 import textwrap
 from pathlib import Path
 
 import pytest
-
-
-_FW_PYTHON = Path(__file__).resolve().parents[1]
-if str(_FW_PYTHON) not in sys.path:
-    sys.path.insert(0, str(_FW_PYTHON))
 
 from forge.verify.exceptions import FlowConfigError, MissingArtifactError
 from forge.verify.flow_loader import load_generic_flow
@@ -22,7 +16,7 @@ def test_load_generic_flow_missing_file_raises_typed_error(tmp_path: Path) -> No
         load_generic_flow(missing, consumer_root=tmp_path)
 
     assert "verify.flow.yml not found" in str(exc_info.value)
-    assert "re-run fw_verify generate" in exc_info.value.action
+    assert "re-run forge verify generate" in exc_info.value.action
 
 
 def test_load_generic_flow_missing_required_field_raises_typed_error(tmp_path: Path) -> None:

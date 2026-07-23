@@ -222,7 +222,7 @@ def validate_stimulus(svh_path: Path) -> StimulusContractResult:
             f"No check/assert/fail pattern found in {svh_path.name}.\n"
             f"  Stimulus without any checks will always pass regardless of DUT output.\n"
             f"  Add: if (signal !== expected) $fatal(1, \"FAIL: ...\");\n"
-            f"  Or use: fw_verify.stimulus_helpers.StimulusEmitter.check()"
+            f"  Or use: forge.verify.stimulus_helpers.StimulusEmitter.check()"
         )
 
     # 9. At least one input-driving statement (warn only)

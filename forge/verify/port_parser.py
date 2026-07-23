@@ -2,7 +2,7 @@
 """HLS Verilog port-map parser — backward-compatibility shim.
 
 .. deprecated::
-    Use :mod:`fw_verify.rtl_introspection` directly.  This module now
+    Use :mod:`forge.verify.rtl_introspection` directly.  This module now
     delegates all parsing to ``rtl_introspection`` and exists only for
     callers that have not yet updated their imports.
 
@@ -23,7 +23,7 @@ It does NOT attempt to parse full Verilog module declarations, handle
 with non-HLS RTL sources should supply ``port_map.yaml`` directly rather
 than calling this parser.
 
-Public API (shim — delegates to fw_verify.rtl_introspection)
+Public API (shim — delegates to forge.verify.rtl_introspection)
 -----------------------------------------------------------
   parse_hls_verilog_ports(verilog_path) → list[dict]
       Each dict has keys: ``name`` (str), ``direction`` (str), ``width`` (int).
@@ -45,9 +45,9 @@ from forge.verify.rtl_introspection import (
 def parse_hls_verilog_ports(verilog_path: Path) -> list[dict[str, Any]]:
     """Parse port declarations from an HLS-generated Verilog file.
 
-    Delegates to :func:`fw_verify.rtl_introspection.extract_ports` using
+    Delegates to :func:`forge.verify.rtl_introspection.extract_ports` using
     ``mode="regex"`` (HLS-output fallback) for backward compatibility.
-    Prefer :func:`fw_verify.rtl_introspection.extract_ports` with
+    Prefer :func:`forge.verify.rtl_introspection.extract_ports` with
     ``mode="auto"`` in new code.
 
     Returns:
@@ -60,7 +60,7 @@ def parse_hls_verilog_ports(verilog_path: Path) -> list[dict[str, Any]]:
 def write_port_map_yaml(ports: list[dict[str, Any]], out_path: Path) -> None:
     """Write a ``port_map.yaml`` from a list of port dicts.
 
-    Delegates to :func:`fw_verify.rtl_introspection.write_port_map_yaml`.
+    Delegates to :func:`forge.verify.rtl_introspection.write_port_map_yaml`.
     Prefer calling that function directly in new code.
 
     Args:

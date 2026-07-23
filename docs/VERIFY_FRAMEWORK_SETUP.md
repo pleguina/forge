@@ -66,15 +66,6 @@ Expected output:
 110 passed
 ```
 
-> **Known issue:** `plugins/trigger_demo/forge/verify/tools/tests/conftest.py` and
-> `plugins/trigger_demo/forge/verify/tools/bootstrap.py` still add
-> `<repo>/framework/verify/python` to `sys.path` and `import` from a top-level
-> `fw_verify` package. That path was removed when the framework was flattened
-> into `forge/` and `fw_verify` was renamed to `forge.verify` — on a clean checkout
-> with no legacy `fw_verify` install on `sys.path`, this suite currently fails
-> with import errors instead of passing. See `forge/verify/__main__.py` for the
-> same stale `_FW_PYTHON` path pattern used elsewhere.
-
 These proof-consumer suites are framework-owned validation surfaces. They do not
 require Vivado or DUT build artifacts.
 

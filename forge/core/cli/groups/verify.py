@@ -13,22 +13,14 @@ import sys
 # Command implementations
 # ---------------------------------------------------------------------------
 
-def _dispatch_fw_verify(remaining: list) -> None:
-    """Delegate ``forge verify <subcommand> [args]`` to the active verify runtime.
-
-    Prefer the in-repo ``forge.verify`` implementation so workspace fixes take
-    effect immediately.  Fall back to the installed ``fw_verify`` package for
-    environments that still depend on the split runtime.
-    """
-    try:
-        from forge.verify.__main__ import main as _fw_verify_main  # type: ignore[import]
-    except ImportError:
-        from fw_verify.__main__ import main as _fw_verify_main  # type: ignore[import]
+def _dispatch_verify(remaining: list) -> None:
+    """Delegate ``forge verify <subcommand> [args]`` to :mod:`forge.verify.__main__`."""
+    from forge.verify.__main__ import main as _verify_main
 
     old_argv = sys.argv[:]
     sys.argv = ["forge verify"] + list(remaining)
     try:
-        _fw_verify_main()
+        _verify_main()
     except SystemExit:
         raise
     finally:
@@ -36,7 +28,7 @@ def _dispatch_fw_verify(remaining: list) -> None:
 
 
 def cmd_verify_dispatch(args):
-    _dispatch_fw_verify(args.verify_args or [])
+    _dispatch_verify(args.verify_args or [])
 
 
 # ---------------------------------------------------------------------------

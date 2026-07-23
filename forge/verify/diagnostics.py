@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structured diagnostics for fw_verify commands.
+"""Structured diagnostics for forge verify commands.
 
 Provides :class:`Diagnostic` (a single classified finding) and
 :class:`DiagnosticReport` (a collection of findings) as the uniform output
@@ -50,7 +50,7 @@ Usage
         code="FWV004",
         severity=Severity.ERROR,
         message=f"TB not found: {tb_sv}",
-        action=f"Run: fw_verify generate {design_yml} --flow {flow_name}",
+        action=f"Run: forge verify generate {design_yml} --flow {flow_name}",
         path=str(tb_sv),
         flow=flow_name,
     ))

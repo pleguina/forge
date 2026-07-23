@@ -62,7 +62,7 @@ from pathlib import Path
 
 
 def _debug_enabled() -> bool:
-    return "--debug" in sys.argv or os.environ.get("FW_VERIFY_DEBUG", "0") == "1"
+    return "--debug" in sys.argv or os.environ.get("FORGE_VERIFY_DEBUG", "0") == "1"
 
 
 def _print_guided_error(
@@ -92,14 +92,14 @@ def _cmd_preflight(args: argparse.Namespace) -> int:
 
     # ── Load the flow ──────────────────────────────────────────────────────
     from forge.verify.flow_loader import load_generic_flow
-    from forge.verify.exceptions import FwVerifyError
+    from forge.verify.exceptions import ForgeVerifyError
 
     try:
         cfg = load_generic_flow(
             Path(args.flow_file),
             Path(consumer_root_str).resolve() if consumer_root_str else None,
         )
-    except FwVerifyError as exc:
+    except ForgeVerifyError as exc:
         return _print_guided_error(
             "flow",
             exc,
@@ -311,10 +311,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         cfg = _flow_mod.load_flow(flow_path, consumer_root=consumer_root)
     except (ImportError, AttributeError):
         from forge.verify.flow_loader import load_generic_flow
-        from forge.verify.exceptions import FwVerifyError
+        from forge.verify.exceptions import ForgeVerifyError
         try:
             cfg = load_generic_flow(flow_path, consumer_root)
-        except FwVerifyError as exc:
+        except ForgeVerifyError as exc:
             return _print_guided_error(
                 "flow",
                 exc,
@@ -1893,8 +1893,8 @@ def main() -> None:
         raise
     except Exception as exc:  # noqa: BLE001
         # Top-level exception handler: concise by default, full trace in --debug
-        from forge.verify.exceptions import FwVerifyError
-        if isinstance(exc, FwVerifyError):
+        from forge.verify.exceptions import ForgeVerifyError
+        if isinstance(exc, ForgeVerifyError):
             print(exc.format_for_cli(debug=_debug_mode), file=sys.stderr)
         else:
             category = type(exc).__name__

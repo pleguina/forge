@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standardised subprocess wrapper for fw_verify backends — Workstream D7.
+"""Standardised subprocess wrapper for forge verify backends — Workstream D7.
 
 All simulator and binary invocations executed by framework backends must go
 through this module.  This provides:
@@ -91,7 +91,7 @@ class SubprocessError(Exception):
     Attributes:
         result:  The full :class:`SubprocessResult`.
         context: Machine-readable dict (suitable for passing to
-                 :class:`~fw_verify.exceptions.FwVerifyError`).
+                 :class:`~forge.verify.exceptions.ForgeVerifyError`).
     """
 
     def __init__(self, message: str, result: SubprocessResult) -> None:

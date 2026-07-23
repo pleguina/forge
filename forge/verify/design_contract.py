@@ -373,7 +373,7 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
     if not path.exists():
         raise DesignContractError(
             f"design.verification.yml not found: {path}",
-            action="Check the contract path or generate the plugin skeleton with fw_verify init-plugin.",
+            action="Check the contract path or generate the plugin skeleton with forge verify init-plugin.",
             context={"path": str(path)},
         )
 

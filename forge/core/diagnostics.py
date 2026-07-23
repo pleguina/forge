@@ -1,6 +1,6 @@
 """topgen.diagnostics — Structured diagnostics with stable ATGxxxx codes (B2).
 
-Mirrors the design of ``fw_verify.diagnostics`` so that both frameworks emit
+Mirrors the design of ``forge.verify.diagnostics`` so that both frameworks emit
 consistently structured findings that can be parsed by CI tools, IDEs, and
 automated support systems.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Framework utility — build a compile.prj from a ``build_manifest.json``.
 
-:func:`prepare_from_manifest` is called by :class:`fw_verify.backend_xsim.XsimBackend`
+:func:`prepare_from_manifest` is called by :class:`forge.verify.backend_xsim.XsimBackend`
 when a plugin's :meth:`build_manifest_path` hook returns a non-None path.
 
 It handles:

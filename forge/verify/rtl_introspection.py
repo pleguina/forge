@@ -67,7 +67,7 @@ class RTLFileNotFound(IntrospectionError):
         super().__init__(
             f"RTL file not found: {verilog_path}",
             action=(
-                "Run HLS synthesis first, then re-run fw_verify generate.\n"
+                "Run HLS synthesis first, then re-run forge verify generate.\n"
                 f"  Expected: {verilog_path}"
             ),
         )
@@ -327,7 +327,7 @@ def write_port_map_yaml(
 ) -> None:
     """Write a ``port_map.yaml`` from *ports*.
 
-    The output schema is consumed by ``fw_verify.gen_sim._read_port_map()``.
+    The output schema is consumed by ``forge.verify.gen_sim._read_port_map()``.
 
     .. code-block:: yaml
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Canonical filesystem layout resolver for fw_verify plugins.
+"""Canonical filesystem layout resolver for forge verify plugins.
 
 Responsibility boundary
 -----------------------
@@ -175,12 +175,12 @@ def validate_layout(verify_root: Path) -> list[str]:
     if not paths.design_yml.exists():
         errors.append(
             f"design.verification.yml not found: {paths.design_yml}\n"
-            f"  → Create it with: fw_verify init-plugin <plugin_id>"
+            f"  → Create it with: forge verify init-plugin <plugin_id>"
         )
     if not paths.bootstrap_py.exists():
         errors.append(
             f"bootstrap.py not found: {paths.bootstrap_py}\n"
-            f"  → Create it with: fw_verify init-plugin <plugin_id>"
+            f"  → Create it with: forge verify init-plugin <plugin_id>"
         )
 
     # Detect legacy conflicting kind-subdir layout
@@ -286,17 +286,17 @@ def missing_generated_files(
     if not files.flow_yml.exists():
         errors.append(
             f"verify.flow.yml missing: {files.flow_yml}\n"
-            f"  → fw_verify generate <design.verification.yml>"
+            f"  → forge verify generate <design.verification.yml>"
         )
     if files.tb_sv is not None and not files.tb_sv.exists():
         errors.append(
             f"TB not found: {files.tb_sv.name}\n"
-            f"  → fw_verify generate <design.verification.yml>"
+            f"  → forge verify generate <design.verification.yml>"
         )
     if files.tb_sv is not None and not files.port_map.exists():
         errors.append(
             f"port_map.yaml missing: {files.port_map}\n"
-            f"  → fw_verify generate <design.verification.yml>"
+            f"  → forge verify generate <design.verification.yml>"
         )
     if require_stimulus and not files.stimulus_svh.exists():
         errors.append(

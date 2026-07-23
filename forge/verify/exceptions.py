@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Unified typed exception hierarchy for fw_verify.
+"""Unified typed exception hierarchy for forge.verify.
 
-Every user-facing exception inherits from :class:`FwVerifyError`.
+Every user-facing exception inherits from :class:`ForgeVerifyError`.
 All concrete subclasses carry:
 
   * **message** — human-readable description (from the normal ``args[0]``)
@@ -12,7 +12,7 @@ Hierarchy
 ---------
 ::
 
-    FwVerifyError                          # base — always carries .action
+    ForgeVerifyError                          # base — always carries .action
     ├── DesignContractError                # A-series: contract parse / schema
     ├── FlowConfigError                    # A-series: verify.flow.yml parse / schema
     ├── SupportedMatrixViolation           # A-series: unsupported (kind, backend)
@@ -32,14 +32,14 @@ Hierarchy
 Design notes
 ------------
 * Every subclass must supply a non-empty ``action`` string — it is enforced
-  by :class:`FwVerifyError.__init_subclass__`.
+  by :class:`ForgeVerifyError.__init_subclass__`.
 * The ``context`` dict is for *machine-readable* key-value debugging details.
   Use it for paths, flow names, exit codes, and similar diagnostic data.
 * These exceptions are NOT used inside unit tests themselves — they wrap
   user-facing errors at subsystem boundaries.
 * The :mod:`rtl_introspection` module uses its own ``IntrospectionError``
   hierarchy for historical reasons; the parallel types here re-export those
-  concepts for callers that catch at the ``FwVerifyError`` level.
+  concepts for callers that catch at the ``ForgeVerifyError`` level.
 
 Usage
 -----
@@ -50,14 +50,14 @@ Usage
     if not tb_sv.exists():
         raise MissingArtifactError(
             f"Testbench not found: {tb_sv}",
-            action=f"Run: fw_verify generate {design_yml} --flow {flow_name}",
+            action=f"Run: forge verify generate {design_yml} --flow {flow_name}",
             context={"path": str(tb_sv), "flow": flow_name},
         )
 
     # Catching at any granularity:
     try:
         ...
-    except FwVerifyError as exc:
+    except ForgeVerifyError as exc:
         print(f"[{exc.__class__.__name__}] {exc}")
         print(f"  → {exc.action}")
 """
@@ -68,7 +68,7 @@ from typing import Any
 
 # ── Base exception ─────────────────────────────────────────────────────────
 
-class FwVerifyError(Exception):
+class ForgeVerifyError(Exception):
     """Base class for all framework-raised, user-facing exceptions.
 
     Args:
@@ -115,21 +115,21 @@ class FwVerifyError(Exception):
 
 # ── A-series: Contract and matrix ─────────────────────────────────────────
 
-class DesignContractError(FwVerifyError):
+class DesignContractError(ForgeVerifyError):
     """Raised when ``design.verification.yml`` fails to parse or validate.
 
     Corresponds to diagnostic code FWV001.
     """
 
 
-class FlowConfigError(FwVerifyError):
+class FlowConfigError(ForgeVerifyError):
     """Raised when ``verify.flow.yml`` fails to parse or validate.
 
     Corresponds to diagnostic code FWV001.
     """
 
 
-class SupportedMatrixViolation(FwVerifyError):
+class SupportedMatrixViolation(ForgeVerifyError):
     """Raised when a (kind, backend) combination is unsupported or experimental.
 
     Corresponds to diagnostic code FWV002.
@@ -138,7 +138,7 @@ class SupportedMatrixViolation(FwVerifyError):
 
 # ── C-series: Layout ──────────────────────────────────────────────────────
 
-class LayoutViolation(FwVerifyError):
+class LayoutViolation(ForgeVerifyError):
     """Raised when the plugin's verify directory violates canonical layout rules.
 
     Corresponds to diagnostic code FWV003.
@@ -147,7 +147,7 @@ class LayoutViolation(FwVerifyError):
 
 # ── C-series: Missing artifacts ───────────────────────────────────────────
 
-class MissingArtifactError(FwVerifyError):
+class MissingArtifactError(ForgeVerifyError):
     """Raised when a framework-generated artifact is absent before simulation.
 
     Corresponds to diagnostic code FWV004.
@@ -162,7 +162,7 @@ class MissingArtifactError(FwVerifyError):
 
 # ── C-series: RTL introspection ───────────────────────────────────────────
 
-class RTLIntrospectionError(FwVerifyError):
+class RTLIntrospectionError(ForgeVerifyError):
     """Base class for all port-extraction failures.
 
     Corresponds to diagnostic codes FWV005–FWV009.
@@ -199,7 +199,7 @@ class RegexFallbackUnsupported(RTLIntrospectionError):
 
 # ── C-series: Stimulus ────────────────────────────────────────────────────
 
-class StimulusContractError(FwVerifyError):
+class StimulusContractError(ForgeVerifyError):
     """Raised when ``stimulus_current.svh`` is absent or fails contract checks.
 
     Corresponds to diagnostic code FWV010.
@@ -208,7 +208,7 @@ class StimulusContractError(FwVerifyError):
 
 # ── C-series: Backend validation ─────────────────────────────────────────
 
-class BackendValidationError(FwVerifyError):
+class BackendValidationError(ForgeVerifyError):
     """Raised by a backend adapter when pre-execution requirements are not met.
 
     Corresponds to diagnostic code FWV011.
@@ -219,14 +219,14 @@ class BackendValidationError(FwVerifyError):
 
 # ── D-series: Tool availability ───────────────────────────────────────────
 
-class ToolNotFoundError(FwVerifyError):
+class ToolNotFoundError(ForgeVerifyError):
     """Raised when a required simulator tool is not on PATH.
 
     Corresponds to diagnostic code FWV012.
     """
 
 
-class SimulatorExecutionError(FwVerifyError):
+class SimulatorExecutionError(ForgeVerifyError):
     """Raised when a simulator subprocess exits with a non-zero code.
 
     Corresponds to diagnostic code FWV013.
@@ -241,7 +241,7 @@ class SimulatorExecutionError(FwVerifyError):
 
 # ── Plugin bootstrap ──────────────────────────────────────────────────────
 
-class PluginBootstrapError(FwVerifyError):
+class PluginBootstrapError(ForgeVerifyError):
     """Raised when the plugin bootstrap lifecycle fails.
 
     Corresponds to diagnostic code FWV014.

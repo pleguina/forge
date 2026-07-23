@@ -203,7 +203,7 @@ def run_preflight(cfg: "Any", xml_input: "Path | None" = None) -> PreflightResul
             if _tb_name and not _tb_file.exists():
                 result.errors.append(
                     f"Generated testbench not found: {_tb_file}\n"
-                    f"    → Re-run: fw_verify generate <design.verification.yml>"
+                    f"    → Re-run: forge verify generate <design.verification.yml>"
                     f" --flow {getattr(cfg, 'flow_name', '<flow>')}"
                 )
             _stim_file = _flow_dir / "stimulus_current.svh"

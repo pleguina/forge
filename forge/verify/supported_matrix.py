@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Central supported flow/backend matrix — the product scope of fw_verify.
+"""Central supported flow/backend matrix — the product scope of forge.verify.
 
 This module is the single authoritative source for:
   * Which (kind, backend) combinations are SUPPORTED for production use.

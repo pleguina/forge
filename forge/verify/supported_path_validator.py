@@ -1,8 +1,8 @@
-"""fw_verify.supported_path_validator — Unified supported-path gate.
+"""forge.verify.supported_path_validator — Unified supported-path gate.
 
 Aggregates all framework health checks into a single callable. This is the
 canonical way to determine whether a design contract is on the supported path
-(i.e., it works with standard ``fw_verify generate / prepare / run`` commands
+(i.e., it works with standard ``forge verify generate / prepare / run`` commands
 without unsupported workarounds).
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from forge.verify.exceptions import FwVerifyError
+from forge.verify.exceptions import ForgeVerifyError
 
 
 @dataclass
@@ -78,7 +78,7 @@ def validate_supported_path(
     try:
         contract = load_verify_design(design_path)
         add_note(f"contract loaded OK ({len(contract.flows)} flows, {len(contract.datasets)} datasets)")
-    except FwVerifyError as exc:
+    except ForgeVerifyError as exc:
         add_issue(f"contract parse error: {exc}  → {exc.action}")
         return result
     except Exception as exc:  # noqa: BLE001
@@ -98,7 +98,7 @@ def validate_supported_path(
     else:
         add_issue(
             f"[FWV019] tools/bootstrap.py not found: {bootstrap_py}  "
-            f"→ create with: fw_verify init-plugin <plugin_id>"
+            f"→ create with: forge verify init-plugin <plugin_id>"
         )
 
     from forge.verify.supported_matrix import validate_flow_matrix
@@ -136,7 +136,7 @@ def validate_supported_path(
         else:
             add_warning(
                 f"[FWV004] {prefix} verify.flow.yml missing  "
-                f"→ fw_verify generate {design_path} --flow {flow.name}"
+                f"→ forge verify generate {design_path} --flow {flow.name}"
             )
 
         if flow.kind in csim_kinds:
@@ -169,7 +169,7 @@ def validate_supported_path(
         else:
             add_issue(
                 f"[FWV004] {prefix} TB not found: {generated.tb_sv}  "
-                f"→ fw_verify generate {design_path} --flow {flow.name}"
+                f"→ forge verify generate {design_path} --flow {flow.name}"
             )
 
         if generated.port_map.exists():
@@ -177,7 +177,7 @@ def validate_supported_path(
         else:
             add_warning(
                 f"[FWV004] {prefix} port_map.yaml missing  "
-                f"→ fw_verify generate {design_path} --flow {flow.name}"
+                f"→ forge verify generate {design_path} --flow {flow.name}"
             )
 
         if not check_stimulus:

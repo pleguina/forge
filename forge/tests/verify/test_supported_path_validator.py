@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-
-_FW_PYTHON = Path(__file__).resolve().parents[1]
-if str(_FW_PYTHON) not in sys.path:
-    sys.path.insert(0, str(_FW_PYTHON))
 
 from forge.verify.supported_path_validator import validate_supported_path
 

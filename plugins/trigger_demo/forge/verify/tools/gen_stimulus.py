@@ -48,13 +48,13 @@ from typing import Any
 
 # ── Path bootstrap ─────────────────────────────────────────────────────────
 _HERE         = Path(__file__).resolve().parent
-_PLUGIN_ROOT  = _HERE.parent           # plugins/trigger_demo/verify/
+_PLUGIN_ROOT  = _HERE.parent           # plugins/trigger_demo/forge/verify/
 _PLUGIN_VERIFY = _PLUGIN_ROOT           # alias
-_REPO_ROOT    = _HERE.parents[3]       # arc-framework/
+_REPO_ROOT    = _HERE.parents[4]       # arc-framework/
 
 _DEFAULT_XML = (
     _REPO_ROOT
-    / "plugins/trigger_demo/verify/schemas/data/trigger_demo_golden.xml"
+    / "plugins/trigger_demo/forge/verify/schemas/data/trigger_demo_golden.xml"
 )
 
 # ── Golden data model ──────────────────────────────────────────────────────
@@ -425,7 +425,7 @@ def generate_all(
 
     Args:
         xml_path:      Path to trigger_demo_golden.xml.
-        verify_root:   plugins/trigger_demo/verify/ directory.
+        verify_root:   plugins/trigger_demo/forge/verify/ directory.
         module_filter: If set, only generate for the named module.
         dry_run:       Print plan without writing.
 
@@ -464,7 +464,7 @@ def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--verify-root",
                    default=str(_PLUGIN_VERIFY),
                    metavar="PATH",
-                   help="plugins/trigger_demo/verify/  [default: auto]")
+                   help="plugins/trigger_demo/forge/verify/  [default: auto]")
     args = p.parse_args(argv)
 
     xml_path    = Path(args.xml)

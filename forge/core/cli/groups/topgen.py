@@ -677,7 +677,7 @@ def cmd_clean(args):
         design_path = Path(args.design).expanduser().resolve()
         if not design_path.exists():
             print(f"❌ Design file not found: {design_path}", file=sys.stderr)
-            print("   → Check the design.yml path and re-run forge clean.", file=sys.stderr)
+            print("   → Check the design.yml path and re-run forge topgen clean.", file=sys.stderr)
             sys.exit(1)
 
         c_root = _consumer_root(design_path, getattr(args, "consumer_root", None))

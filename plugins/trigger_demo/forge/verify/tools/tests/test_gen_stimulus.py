@@ -31,9 +31,9 @@ from gen_stimulus import (  # noqa: E402
 # ── Paths ──────────────────────────────────────────────────────────────────
 
 _TOOLS         = Path(__file__).parent.parent.resolve()
-_REPO_ROOT     = _TOOLS.parents[3]
+_REPO_ROOT     = _TOOLS.parents[4]
 _PLUGIN_VERIFY = _TOOLS.parent
-_XML           = _REPO_ROOT / "plugins/trigger_demo/verify/schemas/data/trigger_demo_golden.xml"
+_XML           = _REPO_ROOT / "plugins/trigger_demo/forge/verify/schemas/data/trigger_demo_golden.xml"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -1,22 +1,16 @@
-"""pytest conftest for plugins/trigger_demo/verify/tools/tests.
+"""pytest conftest for plugins/trigger_demo/forge/verify/tools/tests.
 
-Adds the framework Python package (fw_verify) to sys.path, then loads all
-plugin-local modules (bootstrap, gen_stimulus) by file path so that
-sys.modules["bootstrap"] and sys.modules["gen_stimulus"] are always this
-plugin's versions — regardless of order or other plugin suites in the session.
+Loads all plugin-local modules (bootstrap, gen_stimulus) by file path so
+that sys.modules["bootstrap"] and sys.modules["gen_stimulus"] are always
+this plugin's versions — regardless of order or other plugin suites in
+the session. Assumes the ``forge`` package is installed (pip install -e
+forge/), so forge.verify is importable without any sys.path surgery.
 """
 import importlib.util as _ilu
 import sys
 from pathlib import Path
 
 _TOOLS = Path(__file__).parent.parent.resolve()
-_FW_PYTHON = _TOOLS.parents[3] / "framework" / "verify" / "python"
-
-# Only add fw_verify to sys.path; do NOT add _TOOLS so that bare-name imports
-# of gen_stimulus/bootstrap cannot accidentally resolve from the wrong plugin.
-_fw_str = str(_FW_PYTHON)
-if _fw_str not in sys.path:
-    sys.path.insert(0, _fw_str)
 
 
 def _load_by_path(module_name: str, file_path: Path) -> None:

@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-# conftest.py already bootstrapped trigger_demo and set up sys.path.
-from fw_verify.backend_base import BackendAdapter, BackendCapabilities
-from fw_verify.backend_registry import get_adapter, list_supported_backends
-from fw_verify.design_contract import load_verify_design
-from fw_verify.flow_loader import FlowConfig, load_generic_flow
-from fw_verify.plugin_registry import is_plugin_bootstrapped
+# conftest.py already bootstrapped trigger_demo.
+from forge.verify.backend_base import BackendAdapter, BackendCapabilities
+from forge.verify.backend_registry import get_adapter, list_supported_backends
+from forge.verify.design_contract import load_verify_design
+from forge.verify.flow_loader import FlowConfig, load_generic_flow
+from forge.verify.plugin_registry import is_plugin_bootstrapped
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 

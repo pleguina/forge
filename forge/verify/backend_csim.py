@@ -53,7 +53,7 @@ that takes precedence over the framework default.
 
 Auto-registration
 -----------------
-Auto-registered at ``fw_verify`` package import time.  No plugin
+Auto-registered at ``forge verify`` package import time.  No plugin
 ``bootstrap.py`` needs to call ``register_backend("csim", ...)``.
 
 ADAPTER singleton
@@ -335,7 +335,7 @@ def _run_logged(
 ) -> int:
     """Run *cmd*, capture output to *log_file*, return exit code.
 
-    Delegates to :mod:`fw_verify.subprocess_wrapper` for structured capture
+    Delegates to :mod:`forge.verify.subprocess_wrapper` for structured capture
     (command, cwd, exit code, log path all recorded in SubprocessResult).
     Falls back to raw subprocess if env overrides are needed or wrapper import fails.
 

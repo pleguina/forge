@@ -6,7 +6,7 @@ Responsibility boundary
 This module owns the **bootstrap lifecycle** of verification plugins.  It
 does NOT perform backend registration itself — that is owned by each plugin's
 ``bootstrap()`` function, which delegates to
-``fw_verify.backend_registry.register_backend()``.
+``forge.verify.backend_registry.register_backend()``.
 
 Lifecycle states
 -----------------

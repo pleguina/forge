@@ -18,8 +18,8 @@ schema:
 
 This module does NOT own:
   * Plugin-specific schema fields (e.g. event_id, bx_trace)    → plugin flow_config
-  * Artifact existence checks                                   → fw_verify.preflight
-  * Backend discovery or dispatch                               → fw_verify.backend_registry
+  * Artifact existence checks                                   → forge.verify.preflight
+  * Backend discovery or dispatch                               → forge.verify.backend_registry
 
 Public API (for plugin flow loaders)
 -------------------------------------
@@ -304,7 +304,7 @@ def parse_generic_flow_fields(
         except RuntimeError as exc:
             raise PluginBootstrapError(
                 str(exc),
-                action="Bootstrap the plugin before loading the flow, or pass --plugin to fw_verify commands.",
+                action="Bootstrap the plugin before loading the flow, or pass --plugin to forge verify commands.",
                 context={"plugin": _plugin_id, "flow_path": str(flow_path)},
             ) from exc
 
@@ -513,7 +513,7 @@ def load_generic_flow(
     if not flow_path.exists():
         raise MissingArtifactError(
             f"verify.flow.yml not found: {flow_path}",
-            action="Check the flow path or re-run fw_verify generate to create verify.flow.yml.",
+            action="Check the flow path or re-run forge verify generate to create verify.flow.yml.",
             context={"flow_path": str(flow_path)},
         )
 

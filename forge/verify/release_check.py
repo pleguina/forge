@@ -1,8 +1,8 @@
-"""fw_verify.release_check — Single-call release readiness gate (F2).
+"""forge.verify.release_check — Single-call release readiness gate (F2).
 
 This module aggregates every programmatic check from the framework into one
 function — ``run_release_check()`` — and exposes it as the
-``fw_verify release-check <design.yml>`` CLI command.
+``forge verify release-check <design.yml>`` CLI command.
 
 It is the canonical "all green before merge / tagging" gate.
 
@@ -38,9 +38,9 @@ Programmatic::
 
 CLI::
 
-    fw_verify release-check plugins/my_plugin/verify/design.verification.yml
-    fw_verify release-check design.verification.yml --json
-    fw_verify release-check design.verification.yml --strict
+    forge verify release-check plugins/my_plugin/verify/design.verification.yml
+    forge verify release-check design.verification.yml --json
+    forge verify release-check design.verification.yml --strict
 
 Exit codes
 ----------
@@ -67,7 +67,7 @@ class ReleaseCheckResult:
     """Return value from :func:`run_release_check`.
 
     Attributes:
-        report:        The :class:`~fw_verify.diagnostics.DiagnosticReport`
+        report:        The :class:`~forge.verify.diagnostics.DiagnosticReport`
                        containing all per-criterion diagnostics.
         design_path:   Resolved path of the design.verification.yml checked.
         consumer_root: Resolved consumer root used for path resolution.
@@ -172,7 +172,7 @@ def run_release_check(
         report.error(
             "FWV019",
             f"[RC-04] bootstrap.py not found: {bootstrap_py}",
-            action="Create with: fw_verify init-plugin <plugin_id>",
+            action="Create with: forge verify init-plugin <plugin_id>",
             path=str(bootstrap_py),
         )
 
@@ -250,7 +250,7 @@ def run_release_check(
                 report.warn(
                     "FWV004",
                     f"[RC-05] [{fn}] verify.flow.yml: MISSING",
-                    action=f"fw_verify generate {design_path} --flow {fn}",
+                    action=f"forge verify generate {design_path} --flow {fn}",
                     flow=fn,
                     path=str(flow_yml),
                 )
@@ -285,7 +285,7 @@ def run_release_check(
                 report.error(
                     "FWV004",
                     f"[RC-06] [{fn}] TB not found: {gen.tb_sv}",
-                    action=f"fw_verify generate {design_path} --flow {fn}",
+                    action=f"forge verify generate {design_path} --flow {fn}",
                     flow=fn,
                     path=str(gen.tb_sv) if gen.tb_sv else "",
                 )
@@ -328,7 +328,7 @@ def run_release_check(
                 report.warn(
                     "FWV004",
                     f"[RC-07] [{fn}] port_map.yaml: MISSING",
-                    action=f"fw_verify generate {design_path} --flow {fn}",
+                    action=f"forge verify generate {design_path} --flow {fn}",
                     flow=fn,
                     path=str(gen.port_map),
                 )
@@ -397,7 +397,7 @@ def run_release_check(
                         "FWV016",
                         f"[RC-10] [{flow_decl.name}] {s.message()}",
                         action=(
-                            f"Re-run: fw_verify generate {design_path} "
+                            f"Re-run: forge verify generate {design_path} "
                             f"--flow {flow_decl.name}"
                         ),
                         flow=flow_decl.name,

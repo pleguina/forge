@@ -5,14 +5,14 @@ framework can rely on without rebuilding it.
 
 Modules
 -------
-  fw_verify.backend_base      BackendAdapter ABC and shared contract types
-  fw_verify.backend_registry  backend discovery, dispatch, and introspection
-  fw_verify.backend_xsim      Generic Xilinx XSIM backend (framework-owned)
-  fw_verify.backend_csim      Generic HLS CSIM backend   (framework-owned)
-  fw_verify.flow_loader       generic flow schema definitions and building blocks
-  fw_verify.plugin_registry   plugin bootstrap lifecycle and capability tracking
-  fw_verify.preflight         artifact existence and consistency checks
-  fw_verify.runtime_context   generic runtime execution context model
+  forge.verify.backend_base      BackendAdapter ABC and shared contract types
+  forge.verify.backend_registry  backend discovery, dispatch, and introspection
+  forge.verify.backend_xsim      Generic Xilinx XSIM backend (framework-owned)
+  forge.verify.backend_csim      Generic HLS CSIM backend   (framework-owned)
+  forge.verify.flow_loader       generic flow schema definitions and building blocks
+  forge.verify.plugin_registry   plugin bootstrap lifecycle and capability tracking
+  forge.verify.preflight         artifact existence and consistency checks
+  forge.verify.runtime_context   generic runtime execution context model
 
 Plugin integration pattern
 --------------------------
@@ -39,8 +39,8 @@ All generic orchestration is owned by this package.
 
 Framework-owned backends (auto-registered)
 -------------------------------------------
-  xsim  →  fw_verify.backend_xsim.XsimBackend
-  csim  →  fw_verify.backend_csim.CsimBackend
+  xsim  →  forge.verify.backend_xsim.XsimBackend
+  csim  →  forge.verify.backend_csim.CsimBackend
 
 Plugins can override these by calling ``register_backend()`` after import.
 """
@@ -49,8 +49,8 @@ Plugins can override these by calling ``register_backend()`` after import.
 # Import is deferred to avoid circular imports at module level.
 def _register_framework_backends() -> None:
     from forge.verify.backend_registry import register_backend
-    register_backend("xsim", "fw_verify.backend_xsim")
-    register_backend("csim", "fw_verify.backend_csim")
+    register_backend("xsim", "forge.verify.backend_xsim")
+    register_backend("csim", "forge.verify.backend_csim")
 
 
 _register_framework_backends()
