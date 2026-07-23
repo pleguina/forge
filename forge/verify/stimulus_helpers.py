@@ -51,7 +51,7 @@ Example (in gen_stimulus.py)
     from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
     em = StimulusEmitter()
-    em.comment("Event 1: single muon track")
+    em.comment("Event 1: single input record")
     em.drive("data_in", 0xDEAD, width=16)
     em.drive("data_valid", 1, width=1)
     em.tick()                       # advance one clock

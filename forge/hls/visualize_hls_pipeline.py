@@ -134,7 +134,7 @@ class HLSPipelineVisualizer:
         """Determine module type for coloring."""
         name_lower = design_name.lower()
 
-        if 'interface' in name_lower or name_lower in ['dt', 'csc']:
+        if 'interface' in name_lower:
             return 'interface'
         elif 'nn' in name_lower or 'neural' in name_lower or 'regression' in name_lower:
             return 'neural_net'

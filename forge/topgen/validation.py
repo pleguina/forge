@@ -104,13 +104,14 @@ class DesignValidator:
         if not self.cfg.clock_period:
             return  # Already reported in basic validation
         
-        # Calculate batches
-        lhc_period = 25.0  # ns
-        batches = round(lhc_period / self.cfg.clock_period)
-        
-        if abs(batches * self.cfg.clock_period - lhc_period) > 0.5:
+        # Calculate batches against the design's reference period (defaults
+        # to the LHC 40 MHz / 25 ns BX period when not declared).
+        ref_period = self.cfg.reference_period_ns if self.cfg.reference_period_ns is not None else 25.0
+        batches = round(ref_period / self.cfg.clock_period)
+
+        if abs(batches * self.cfg.clock_period - ref_period) > 0.5:
             self.add_warning('timing',
-                           f"Clock period {self.cfg.clock_period}ns doesn't divide LHC period (25ns) evenly",
+                           f"Clock period {self.cfg.clock_period}ns doesn't divide reference period ({ref_period}ns) evenly",
                            suggestion=f"Batches = {batches}, actual period = {batches * self.cfg.clock_period}ns")
         
     def validate_modules(self):

@@ -340,12 +340,12 @@ def extract_design_parameters(
     # ===========================================================================
     control_signals = {
         'new_event': {
-            'description': 'Pulse at start of new LHC bunch crossing',
+            'description': 'Pulse at the start of each reference period',
             'period_ns': lhc_period_ns,
             'period_cycles': batches_per_event
         },
         'bx_count': {
-            'description': 'Bunch crossing counter output',
+            'description': 'Reference-period cycle counter output',
             'width': 4,  # 4-bit counter (0-15)
             'modulo': bx_counter_modulo
         }
@@ -584,7 +584,7 @@ def write_design_parameters(
     
     print(f"  ✓ Design parameters: {output_path}")
     print(f"    - {params['timing']['algo_freq_mhz']} MHz algorithm clock")
-    print(f"    - {params['timing']['batches_per_event']} batches per LHC BX")
+    print(f"    - {params['timing']['batches_per_event']} batches per reference period")
     total_inputs = params['interfaces']['total_input_channels']
     group_names = ", ".join(params['interfaces'].get('groups', {}).keys())
     print(f"    - {total_inputs} total input channels across groups: {group_names or '(none)'}")
@@ -610,7 +610,7 @@ def get_design_parameters(params_file: Path) -> Dict[str, Any]:
     if not params_file.exists():
         raise FileNotFoundError(
             f"Design parameters file not found: {params_file}\n"
-            f"Please generate it with: topgen gen-top <design.yml> --mode verilog"
+            f"Please generate it with: forge topgen gen-top <design.yml> --mode verilog"
         )
     
     with open(params_file, 'r') as f:
@@ -635,7 +635,7 @@ def print_design_parameters_summary(params: Dict[str, Any]) -> None:
     print(f"\n⏱️  Timing:")
     t = params['timing']
     print(f"   Algorithm Clock: {t['algo_freq_mhz']} MHz ({t['clock_period_ns']} ns)")
-    print(f"   LHC Clock:       {t['lhc_freq_mhz']} MHz ({t['lhc_period_ns']} ns)")
+    print(f"   Reference Clock: {t['lhc_freq_mhz']} MHz ({t['lhc_period_ns']} ns)")
     print(f"   Batches/Event:   {t['batches_per_event']}")
     print(f"   BX Modulo:       {t['bx_counter_modulo']}")
     

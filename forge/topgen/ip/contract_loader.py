@@ -20,7 +20,7 @@ Usage::
     contracts = load_contracts_for_design(modules_yml_path, repo_root)
 
     # Retrieve a contract by design-module name (= ip_info_key):
-    c = contracts.get("dt")
+    c = contracts.get("frontend")
     if c:
         clk_port = c.get_raw_port("clock_primary")   # "ap_clk"
         rst_port = c.get_raw_port("reset_primary")    # "ap_rst"
