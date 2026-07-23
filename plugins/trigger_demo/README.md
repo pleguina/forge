@@ -209,15 +209,15 @@ To re-run a single flow after changing algo source:
 
 ```bash
 # Re-synthesise one module
-topgen hls run \
-  --registry plugins/trigger_demo/modules.yml \
+arc hls run \
+  --registry plugins/trigger_demo/arc/modules.yml \
   --modules hit_decoder \
-  --build-root build_hls_trigger_demo \
+  --hls-build-root build_hls_trigger_demo \
   --stages synth
 
 # Re-run one xsim flow
-python3 plugins/trigger_demo/verify/tools/gen_stimulus.py --module hit_decoder
-fw_verify run \
-  plugins/trigger_demo/verify/hit_decoder_xsim/verify.flow.yml \
+python3 plugins/trigger_demo/arc/verify/tools/gen_stimulus.py --module hit_decoder
+arc verify run \
+  plugins/trigger_demo/arc/verify/hit_decoder_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```

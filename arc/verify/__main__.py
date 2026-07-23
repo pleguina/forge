@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Framework CLI entry point.
 
-Provides ``python -m fw_verify <command>`` for any consumer.
-When installed as a package, also available as ``fw_verify <command>``.
+Provides ``python -m arc.verify <command>`` for any consumer.
+When installed as a package, also available as ``arc verify <command>``.
 
 Commands
 --------
@@ -25,7 +25,7 @@ prepare <design.verification.yml>
     Intended as the normal "make everything ready to run" entrypoint.
 
 init-plugin <plugin_id>
-    Scaffold a new plugin skeleton under plugins/<plugin_id>/verify/.
+    Scaffold a new plugin skeleton under plugins/<plugin_id>/arc/verify/.
 
 doctor <design.verification.yml>
     Run a comprehensive health-check: bootstrap importability, tool
@@ -41,15 +41,15 @@ Usage
 -----
 ::
 
-    fw_verify preflight verify.flow.yml
-    fw_verify run       verify.flow.yml --plugin my_plugin
-    fw_verify generate  design.verification.yml
-    fw_verify generate  design.verification.yml --flow hit_decoder_xsim --strict
-    fw_verify prepare   design.verification.yml
-    fw_verify init-plugin my_new_plugin
-    fw_verify doctor    plugins/my_plugin/verify/design.verification.yml
-    fw_verify doctor    plugins/my_plugin/verify/design.verification.yml --json
-    fw_verify --debug   doctor  plugins/my_plugin/verify/design.verification.yml
+    arc verify preflight verify.flow.yml
+    arc verify run       verify.flow.yml --plugin my_plugin
+    arc verify generate  design.verification.yml
+    arc verify generate  design.verification.yml --flow hit_decoder_xsim --strict
+    arc verify prepare   design.verification.yml
+    arc verify init-plugin my_new_plugin
+    arc verify doctor    plugins/my_plugin/arc/verify/design.verification.yml
+    arc verify doctor    plugins/my_plugin/arc/verify/design.verification.yml --json
+    arc verify --debug   doctor  plugins/my_plugin/arc/verify/design.verification.yml
 """
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ def _cmd_preflight(args: argparse.Namespace) -> int:
         return _print_guided_error(
             "flow",
             exc,
-            action="Check the verify.flow.yml path and consumer root, then re-run fw_verify preflight.",
+            action="Check the verify.flow.yml path and consumer root, then re-run arc verify preflight.",
             extra=["Use --debug for traceback details if the message is still unclear."],
         )
 
@@ -318,7 +318,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             return _print_guided_error(
                 "flow",
                 exc,
-                action="Fix the flow YAML or consumer-root path, then re-run fw_verify run.",
+                action="Fix the flow YAML or consumer-root path, then re-run arc verify run.",
             )
 
     # ── 4. Build runtime context ─────────────────────────────────────────────
@@ -378,7 +378,7 @@ def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, 
         return _print_guided_error(
             "prepare",
             exc,
-            action="Re-run fw_verify generate and ensure required DUT, testbench, and stimulus artifacts exist.",
+            action="Re-run arc verify generate and ensure required DUT, testbench, and stimulus artifacts exist.",
         )
 
     # ── 9. Run backend ───────────────────────────────────────────────────────
@@ -388,7 +388,7 @@ def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, 
         return _print_guided_error(
             "run",
             exc,
-            action="Check simulator logs, tool setup, and generated artifacts, then re-run fw_verify run.",
+            action="Check simulator logs, tool setup, and generated artifacts, then re-run arc verify run.",
         )
 
     if not result.success:
@@ -544,7 +544,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         return _print_guided_error(
             "design",
             FileNotFoundError(f"design file not found: {design_path}"),
-            action="Check the design.verification.yml path and re-run fw_verify generate.",
+            action="Check the design.verification.yml path and re-run arc verify generate.",
         )
 
     try:
@@ -553,7 +553,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         return _print_guided_error(
             "design",
             exc,
-            action="Fix design.verification.yml syntax or schema errors, then re-run fw_verify generate.",
+            action="Fix design.verification.yml syntax or schema errors, then re-run arc verify generate.",
         )
 
     output_base = design_path.parent
@@ -565,7 +565,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             "WARNING: --use-kind-subdir is DEPRECATED (legacy/compatibility only).\n"
             "  This flag writes flows under <kind>/<flow_name>/ instead of the canonical\n"
             "  flat <flow_name>/ layout.  New plugins and new flows must use the flat layout.\n"
-            "  fw_verify doctor will report a layout violation for any kind-subdir trees.",
+            "  arc verify doctor will report a layout violation for any kind-subdir trees.",
             file=sys.stderr,
         )
 
@@ -763,13 +763,13 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                 errors.append(
                     f"{flow_decl.name}: [strict] RTL not available and --strict is set.\n"
                     f"  RTL path: {rtl_hint}\n"
-                    f"  → Run HLS synthesis first, then re-run fw_verify generate"
+                    f"  → Run HLS synthesis first, then re-run arc verify generate"
                 )
             else:
                 errors.append(
                     f"{flow_decl.name}: skipped TB/wave — port_map.yaml not found and"
                     f" RTL not available ({rtl_hint})\n"
-                    f"  → Run HLS synthesis first, then re-run fw_verify generate"
+                    f"  → Run HLS synthesis first, then re-run arc verify generate"
                 )
             continue
 
@@ -824,7 +824,7 @@ def _cmd_prepare(args: argparse.Namespace) -> int:
     """Implement the ``prepare`` sub-command.
 
     Combines:
-      1. fw_verify generate  — write verify.flow.yml + TB + wave.tcl
+      1. arc verify generate  — write verify.flow.yml + TB + wave.tcl
       2. stimulus contract validation — check stimulus_current.svh for all
          generated xsim flows that already have a stimulus file
       3. layout validation — verify canonical flat layout
@@ -836,7 +836,7 @@ def _cmd_prepare(args: argparse.Namespace) -> int:
         return _print_guided_error(
             "prepare",
             FileNotFoundError(f"design file not found: {design_path}"),
-            action="Check the design.verification.yml path and re-run fw_verify prepare.",
+            action="Check the design.verification.yml path and re-run arc verify prepare.",
         )
 
     # ── Step 1: Generate artifacts ─────────────────────────────────────────
@@ -870,7 +870,7 @@ def _cmd_prepare(args: argparse.Namespace) -> int:
         return _print_guided_error(
             "prepare/contract",
             exc,
-            action="Fix design.verification.yml before running fw_verify prepare again.",
+            action="Fix design.verification.yml before running arc verify prepare again.",
         )
 
     output_base = design_path.parent
@@ -926,10 +926,10 @@ def _cmd_prepare(args: argparse.Namespace) -> int:
 
 _BOOTSTRAP_TEMPLATE = '''\
 #!/usr/bin/env python3
-"""{plugin_id} plugin registration — connects {plugin_id} to fw_verify.
+"""{plugin_id} plugin registration — connects {plugin_id} to arc verify.
 
 After importing this module, {plugin_id} is known to the framework and
-fw_verify generate / run will work for declared flows.
+arc verify generate / run will work for declared flows.
 """
 from __future__ import annotations
 
@@ -1061,9 +1061,9 @@ _DESIGN_VERIFICATION_TEMPLATE = '''\
 # ═══════════════════════════════════════════════════════════════════════
 #
 # Edit this file, then run:
-#   fw_verify generate <path/to/this/file>    # generate TB + port_map
-#   fw_verify doctor   <path/to/this/file>    # health-check
-#   fw_verify run      <flow/verify.flow.yml> # simulate
+#   arc verify generate <path/to/this/file>    # generate TB + port_map
+#   arc verify doctor   <path/to/this/file>    # health-check
+#   arc verify run      <flow/verify.flow.yml> # simulate
 # ───────────────────────────────────────────────────────────────────────
 plugin: {plugin_id}
 
@@ -1182,8 +1182,8 @@ def _cmd_init_plugin(args: argparse.Namespace) -> int:
     print(f"\nNext steps:")
     print(f"  1. Edit {verify_root / 'design.verification.yml'}")
     print(f"  2. Implement {tools_dir / 'gen_stimulus.py'}")
-    print(f"  3. Run: fw_verify generate {verify_root / 'design.verification.yml'}")
-    print(f"  4. Run: fw_verify doctor   {verify_root / 'design.verification.yml'}")
+    print(f"  3. Run: arc verify generate {verify_root / 'design.verification.yml'}")
+    print(f"  4. Run: arc verify doctor   {verify_root / 'design.verification.yml'}")
     return 0
 
 
@@ -1258,7 +1258,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         report.error(
             "FWV019",
             f"bootstrap.py not found: {bootstrap_py}",
-            action="Create with: fw_verify init-plugin <plugin_id>",
+            action="Create with: arc verify init-plugin <plugin_id>",
             path=str(bootstrap_py),
         )
 
@@ -1270,7 +1270,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             f"gen_stimulus.py not found",
             action=(
                 "Required for xsim flows.  "
-                f"Create at {gen_stimulus_py} (see fw_verify init-plugin output)"
+                f"Create at {gen_stimulus_py} (see arc verify init-plugin output)"
             ),
             path=str(gen_stimulus_py),
         )
@@ -1343,7 +1343,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
                 report.warn(
                     "FWV004",
                     "verify.flow.yml: MISSING",
-                    action=f"fw_verify generate {design_path} --flow {fn}",
+                    action=f"arc verify generate {design_path} --flow {fn}",
                     flow=fn,
                     path=str(flow_yml),
                 )
@@ -1378,7 +1378,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
                 report.error(
                     "FWV004",
                     f"TB not found: {gen_files.tb_sv}",
-                    action=f"fw_verify generate {design_path} --flow {fn}",
+                    action=f"arc verify generate {design_path} --flow {fn}",
                     flow=fn,
                     path=str(gen_files.tb_sv) if gen_files.tb_sv else "",
                 )
@@ -1421,7 +1421,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
                 report.warn(
                     "FWV004",
                     "port_map.yaml: MISSING",
-                    action=f"fw_verify generate {design_path} --flow {fn}",
+                    action=f"arc verify generate {design_path} --flow {fn}",
                     flow=fn,
                     path=str(gen_files.port_map),
                 )
@@ -1495,7 +1495,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
                         "FWV016",
                         s.message(),
                         action=(
-                            f"Re-run: fw_verify generate {design_path} "
+                            f"Re-run: arc verify generate {design_path} "
                             f"--flow {flow_decl.name}"
                         ),
                         flow=flow_decl.name,
@@ -1755,7 +1755,7 @@ def main() -> None:
     # ── init-plugin ──────────────────────────────────────────────────────────
     p_init = sub.add_parser(
         "init-plugin",
-        help="Scaffold a new plugin skeleton under plugins/<plugin_id>/verify/.",
+        help="Scaffold a new plugin skeleton under plugins/<plugin_id>/arc/verify/.",
     )
     p_init.add_argument(
         "plugin_id",

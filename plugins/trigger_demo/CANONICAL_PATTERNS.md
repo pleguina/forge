@@ -6,6 +6,10 @@ and YAML keys that implement them.
 
 Use this as a copy-from reference when authoring a new plugin.
 
+All paths below are relative to the plugin's `arc/` capsule
+(`plugins/trigger_demo/arc/`), matching the path anchor rule in
+[`arc/README.md`](../../arc/README.md).
+
 ---
 
 ## Pattern 1 — Fan-in via `role_pairs` (gather topology)
@@ -221,7 +225,7 @@ ip_interface:
 | Module instances and wiring | `designs/design.yml` |
 | Port metadata and wiring roles | `interfaces/<module>.interface.yaml` |
 | Verification flows and datasets | `verify/design.verification.yml` |
-| Plugin registration with fw_verify | `verify/tools/bootstrap.py` |
+| Plugin registration with arc verify | `verify/tools/bootstrap.py` |
 | Golden test data | `verify/schemas/data/trigger_demo_golden.xml` |
 | Xsim stimulus logic | `verify/tools/gen_stimulus.py` |
 | HLS C-sim testbench | `verify/tests/tb_<module>.cpp` |

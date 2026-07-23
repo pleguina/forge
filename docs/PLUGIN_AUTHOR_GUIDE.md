@@ -91,7 +91,7 @@ to generate an exported IP package in `ips/<module_name>/`.
 Run the `ip-summary` extractor to update `ip_info.yaml` with your module's physical ports:
 
 ```bash
-arc topgen ip-summary plugins/<plugin>/designs/design.yml --ip-root ips --output ip_info.yaml
+arc topgen ip-summary plugins/<plugin>/arc/designs/design.yml --ip-root ips --output ip_info.yaml
 ```
 
 ### 3. Write the interface contract
@@ -435,8 +435,8 @@ Add `allowed_unconnected` patterns in `design.yml`.
 |----------|----------|---------|
 | Target Architecture | `docs/TOPOLOGY_A_TARGET_ARCHITECTURE.md` | Final Topology A spec |
 | Topology Groups Schema | `docs/TOPOLOGY_GROUPS_SCHEMA.md` | Schema for topology_groups |
-| IP Interface Policy | `framework/IP_INTERFACE_POLICY.md` | Contract rules |
-| Signal Families | `framework/normalized_signal_families.yaml` | Semantic family vocabulary |
+| IP Interface Policy | `docs/IP_INTERFACE_POLICY.md` | Contract rules |
+| Signal Families | `normalized_signal_families.yaml` | Semantic family vocabulary |
 | Interface contracts | `<plugin>/arc/interfaces/*.interface.yaml` | Per-module contracts |
 | Module registry | `<plugin>/arc/modules.yml` | Module identity + contract refs |
 | Design topology | `<plugin>/arc/designs/design.yml` | Instances, connections, topology_groups |

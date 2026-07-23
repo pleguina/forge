@@ -6,8 +6,8 @@ This file is the canonical onboarding entry point for the current public framewo
 
 Use this guide together with:
 
-- `framework/PLUGIN_AUTHOR_GUIDE.md` for topology-generation contract authoring
-- `framework/verify/PLUGIN_AUTHOR_GUIDE.md` for verification integration
+- `docs/PLUGIN_AUTHOR_GUIDE.md` for topology-generation contract authoring
+- `docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md` for verification integration
 - `docs/ANALYSIS_GUIDE.md` for latency measurement, HLS reports, plots, and the HTML dashboard
 
 Do not treat older repo notes in `docs/` or `docs/archive/` as primary onboarding material unless they are explicitly linked from the support-classified framework surface.
@@ -145,7 +145,7 @@ Recommended when possible.
 
 Keep the public framework contract XML-backed and add a plugin-local translation layer:
 
-- convert your native source format into the framework-standard XML dataset representation before `fw_verify run`, or
+- convert your native source format into the framework-standard XML dataset representation before `arc verify run`, or
 - generate XML once as a build/preparation artifact and reference that XML from `design.verification.yml`
 
 This preserves full compatibility with the current public framework surface.

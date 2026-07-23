@@ -4,8 +4,8 @@ This guide is a repo-local setup guide for the framework repository. Downstream 
 
 For the canonical new-plugin adoption path, start with:
 
-- `framework/MINIMAL_CONSUMER_QUICKSTART.md`
-- `framework/verify/PLUGIN_AUTHOR_GUIDE.md`
+- `docs/MINIMAL_CONSUMER_QUICKSTART.md`
+- `docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md`
 
 Get from zero to a working verification environment in under 30 minutes.
 
@@ -35,8 +35,8 @@ source .venv/bin/activate
 pip install -e arc/
 ```
 
-This installs `topgen`, `fw_verify`, and all orchestration tooling under the
-single `arc` entry point.  To verify:
+This installs the `arc topgen`, `arc verify`, `arc hls`, `arc analyze`, and
+`arc core` sub-command groups under the single `arc` entry point.  To verify:
 
 ```bash
 arc --version
@@ -66,6 +66,15 @@ Expected output:
 110 passed
 ```
 
+> **Known issue:** `plugins/trigger_demo/arc/verify/tools/tests/conftest.py` and
+> `plugins/trigger_demo/arc/verify/tools/bootstrap.py` still add
+> `<repo>/framework/verify/python` to `sys.path` and `import` from a top-level
+> `fw_verify` package. That path was removed when the framework was flattened
+> into `arc/` and `fw_verify` was renamed to `arc.verify` — on a clean checkout
+> with no legacy `fw_verify` install on `sys.path`, this suite currently fails
+> with import errors instead of passing. See `arc/verify/__main__.py` for the
+> same stale `_FW_PYTHON` path pattern used elsewhere.
+
 These proof-consumer suites are framework-owned validation surfaces. They do not
 require Vivado or DUT build artifacts.
 
@@ -75,11 +84,8 @@ Downstream plugin test suites are run from the plugin repository. ARC should not
 
 | Test file                      | Covers                                         |
 |-------------------------------|------------------------------------------------|
-| `test_flow_config.py`         | YAML parsing, field validation, shell-env output |
-| `test_verify_preflight.py`    | Artifact existence and fingerprint checking    |
-| `test_backend_contract.py`    | BackendAdapter interface enforcement           |
-| `test_bootstrap_lifecycle.py` | Plugin registration and bootstrap guard        |
-| `test_framework_promotion.py` | fw_verify integration (parse_generic + registry) |
+| `test_gen_stimulus.py` (48 tests) | XML dataset parsing, per-module stimulus generation, dry-run behavior, committed `stimulus_current.svh` fixtures |
+| `test_trigger_demo_verify.py` (62 tests) | Plugin bootstrap, csim/xsim backend registration, `verify.flow.yml` loading, `design.verification.yml` contract validation, full-chip synthetic-flow loading |
 
 ---
 

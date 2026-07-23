@@ -28,9 +28,8 @@ The supported Layer 2 tooling surface is:
 - `arc core resources`
 - `arc hls gen-tcl`
 - `arc hls run`
-- `framework/hls/parallel_hls.sh`
-- `framework/hls/generate_hls_tcl.py`
-- `framework/hls/extract_hls_metrics.py`
+- `arc/hls/generate_hls_tcl.py`
+- `arc/hls/extract_hls_metrics.py`
 - `arc analyze hls-report`
 - `arc analyze latency-check`
 - `arc analyze runtime-latency`
@@ -42,7 +41,7 @@ For HLS flows, the preferred public interface is the installed CLI:
 - `arc hls gen-tcl`
 - `arc hls run`
 
-The standalone script entry points remain supported as compatibility backends for existing automation. They are framework tooling, but they are not the primary first-class interface a new consumer should build around.
+`arc/hls/generate_hls_tcl.py` and `arc/hls/extract_hls_metrics.py` are the implementations behind those commands. They are framework tooling, but they are not the primary first-class interface a new consumer should build around.
 
 ## Topology-generation contract owned by Layer 2
 
@@ -70,7 +69,7 @@ Layer 2 standardizes a post-verification analysis surface via `arc analyze`.
 Plugin-authored inputs:
 
 - `modules.yml` entries annotated with `latency_hint` or `latency_cycles` per module
-- `plugins/<plugin>/verify/plot_config.yml` defining result figures
+- `plugins/<plugin>/arc/verify/plot_config.yml` defining result figures
 - a probe CSV in long format (`cycle,signal,value`) produced by the plugin
 
 Framework-provided outputs:
@@ -97,7 +96,7 @@ The following are public Layer 2 behavior for the current release line:
 
 The following are not public Layer 2 API:
 
-- internal Python package structure under `framework/topgen/topgen/`
+- internal Python package structure under `arc/topgen/`
 - private validation helpers and internal matcher implementation details
 - repo-local wrappers that are not support-classified
 

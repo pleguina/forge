@@ -28,7 +28,7 @@ design.verification.yml            ← verification contract (9 flows)
 schemas/data/trigger_demo_golden.xml ← XML dataset (4 golden events)
 src/xml_event_reader.h             ← shared testbench header
 tests/tb_*.cpp                     ← HLS C-sim testbench sources
-tools/bootstrap.py                 ← fw_verify plugin registration
+tools/bootstrap.py                 ← arc verify plugin registration
 tools/gen_stimulus.py              ← xsim stimulus generator
 tools/trigger_demo_verify_env.sh   ← shell PYTHONPATH helper
 tools/tests/                       ← unit tests for verify tooling
@@ -37,17 +37,17 @@ tools/tests/                       ← unit tests for verify tooling
 ## Framework-generated artifacts (committed as CI baseline)
 
 ```
-<flow>/verify.flow.yml      ← fw_verify generate design.verification.yml
-<flow>/tb_*.sv              ← fw_verify generate ...
-<flow>/wave.tcl             ← fw_verify generate ...
+<flow>/verify.flow.yml      ← arc verify generate design.verification.yml
+<flow>/tb_*.sv              ← arc verify generate ...
+<flow>/wave.tcl             ← arc verify generate ...
 <flow>/stimulus_current.svh ← gen_stimulus.py (plugin-owned generator)
 ```
 
 Regenerate all:
 
 ```bash
-fw_verify generate plugins/trigger_demo/verify/design.verification.yml
-python3 plugins/trigger_demo/verify/tools/gen_stimulus.py
+arc verify generate plugins/trigger_demo/arc/verify/design.verification.yml
+python3 plugins/trigger_demo/arc/verify/tools/gen_stimulus.py
 ```
 
 ## Current proof shape
@@ -61,22 +61,22 @@ python3 plugins/trigger_demo/verify/tools/gen_stimulus.py
 
 ```bash
 # Python unit tests (no Vivado or Vitis HLS required)
-python3 -m pytest plugins/trigger_demo/verify/tools/tests -q
+python3 -m pytest plugins/trigger_demo/arc/verify/tools/tests -q
 
 # Contract health check
-fw_verify doctor plugins/trigger_demo/verify/design.verification.yml
+arc verify doctor plugins/trigger_demo/arc/verify/design.verification.yml
 
 # Dry-run generate (validates contract without running simulation)
-fw_verify generate plugins/trigger_demo/verify/design.verification.yml --dry-run
+arc verify generate plugins/trigger_demo/arc/verify/design.verification.yml --dry-run
 
 # Run a specific csim flow (requires Vitis HLS)
-fw_verify run plugins/trigger_demo/verify/hit_decoder_csim/verify.flow.yml --plugin trigger_demo
+arc verify run plugins/trigger_demo/arc/verify/hit_decoder_csim/verify.flow.yml --plugin trigger_demo
 
 # Run a specific xsim flow (requires Vivado / xsim)
-fw_verify run plugins/trigger_demo/verify/hit_decoder_xsim/verify.flow.yml --plugin trigger_demo
+arc verify run plugins/trigger_demo/arc/verify/hit_decoder_xsim/verify.flow.yml --plugin trigger_demo
 
 # Full-chip integration (requires gen-top output — see main README Step 2)
-fw_verify run plugins/trigger_demo/verify/trigger_pipeline_xsim/verify.flow.yml --plugin trigger_demo
+arc verify run plugins/trigger_demo/arc/verify/trigger_pipeline_xsim/verify.flow.yml --plugin trigger_demo
 ```
 
 This consumer is part of the supported non-OMTF proof story and must remain

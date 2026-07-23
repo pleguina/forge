@@ -16,10 +16,9 @@ The current public Layer 1 surface is:
 
 - `arc verify` installed CLI sub-commands
 - `python -m arc.verify` module entrypoint
-- `framework/verify/include/` exported verification headers and interfaces
-- `framework/verify/src/` linked runtime implementation through the packaged verification core target
-- `framework/verify/PLUGIN_AUTHOR_GUIDE.md`
-- `framework/MINIMAL_CONSUMER_QUICKSTART.md`
+- `plugins/<plugin>/arc/verify/include/` and `.../src/` — plugin-owned verification headers and runtime implementation, built via the plugin's own CMake target
+- `docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md`
+- `docs/MINIMAL_CONSUMER_QUICKSTART.md`
 
 ## Verification contract owned by Layer 1
 
@@ -62,7 +61,7 @@ The following are considered public Layer 1 behavior for the current release lin
 
 The following are not Layer 1 API and may change without being treated as a public compatibility break:
 
-- internal Python module layout under `framework/verify/python/fw_verify/`
+- internal Python module layout under `arc/verify/`
 - internal helper functions and private module names
 - repo-local test fixtures and maintainer-only scripts
 
@@ -70,7 +69,7 @@ The following are not Layer 1 API and may change without being treated as a publ
 
 The current Layer 1 acceptance proof is based on:
 
-- `plugins/trigger_demo/verify/` as the maintained non-OMTF proof consumer
+- `plugins/trigger_demo/arc/verify/` as the maintained non-OMTF proof consumer
 - `tests/external_consumer_proof/`
 - `ci/verify_framework_release.sh`
 

@@ -6,8 +6,8 @@ It is the canonical verification-integration guide for new plugins.
 
 Use it together with:
 
-- `framework/MINIMAL_CONSUMER_QUICKSTART.md` for the shortest supported adoption path
-- `framework/PLUGIN_AUTHOR_GUIDE.md` for topology-generation and contract-driven wiring
+- `docs/MINIMAL_CONSUMER_QUICKSTART.md` for the shortest supported adoption path
+- `docs/PLUGIN_AUTHOR_GUIDE.md` for topology-generation and contract-driven wiring
 - `docs/ANALYSIS_GUIDE.md` for latency measurement and performance reporting
 
 Do not treat older repo notes or migration documents as normative unless they are linked from the support-classified framework surface.

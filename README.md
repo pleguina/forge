@@ -25,7 +25,7 @@ This index lists the minimum user-facing documentation required to adopt and use
 
 - `docs/PLUGIN_AUTHOR_GUIDE.md` - plugin contract authoring and topology wiring
 - `docs/IP_INTERFACE_POLICY.md` - interface contract policy and constraints
-- `framework/normalized_signal_families.yaml` - canonical signal family vocabulary
+- `normalized_signal_families.yaml` - canonical signal family vocabulary
 
 ### Runtime and Verification
 
