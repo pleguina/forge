@@ -33,11 +33,11 @@ If your plugin fits that contract, the framework path below is the supported rou
 4. Author `plugins/<plugin>/verify/tools/bootstrap.py`
 5. Author `plugins/<plugin>/verify/tools/gen_stimulus.py`
 6. Place XML datasets under `plugins/<plugin>/verify/schemas/data/`
-7. Run `arc topgen gen-top` to generate DUT artifacts
-8. Run `arc verify generate plugins/<plugin>/verify/design.verification.yml`
+7. Run `forge topgen gen-top` to generate DUT artifacts
+8. Run `forge verify generate plugins/<plugin>/verify/design.verification.yml`
 9. Run your plugin stimulus generator so each flow gets `stimulus_current.svh`
-10. Run `arc verify doctor` and then `arc verify run`
-11. (Optional) Run `arc analyze` to measure latency and generate performance reports — see `docs/ANALYSIS_GUIDE.md`
+10. Run `forge verify doctor` and then `forge verify run`
+11. (Optional) Run `forge analyze` to measure latency and generate performance reports — see `docs/ANALYSIS_GUIDE.md`
 
 ## What you author versus what the framework generates
 
@@ -51,7 +51,7 @@ User-authored:
 - `plugins/<plugin>/verify/tools/gen_stimulus.py`
 - `plugins/<plugin>/verify/schemas/data/*.xml`
 - optional plugin checker code
-- `plugins/<plugin>/verify/plot_config.yml` (if using `arc analyze plot-results`)
+- `plugins/<plugin>/verify/plot_config.yml` (if using `forge analyze plot-results`)
 
 Framework-generated:
 
@@ -76,10 +76,10 @@ Generated working artifacts:
 Topology generation:
 
 ```bash
-arc core verify-contract --ip-info ip_info.yaml \
+forge core verify-contract --ip-info ip_info.yaml \
     --contract plugins/<plugin>/interfaces/<module>.interface.yaml
 
-arc topgen gen-top plugins/<plugin>/designs/design.yml \
+forge topgen gen-top plugins/<plugin>/designs/design.yml \
     --mode verilog \
     --consumer-root . \
     --build-dir build \
@@ -92,47 +92,47 @@ arc topgen gen-top plugins/<plugin>/designs/design.yml \
 Verification generation and health checks:
 
 ```bash
-arc verify generate plugins/<plugin>/verify/design.verification.yml
-arc verify doctor   plugins/<plugin>/verify/design.verification.yml
+forge verify generate plugins/<plugin>/verify/design.verification.yml
+forge verify doctor   plugins/<plugin>/verify/design.verification.yml
 ```
 
 Verification run:
 
 ```bash
-arc verify run plugins/<plugin>/verify/<flow>/verify.flow.yml --plugin <plugin>
+forge verify run plugins/<plugin>/verify/<flow>/verify.flow.yml --plugin <plugin>
 ```
 
 ## Analysis (optional but recommended)
 
-After verification passes, `arc analyze` produces latency reports, plots, and an HTML dashboard.
+After verification passes, `forge analyze` produces latency reports, plots, and an HTML dashboard.
 See `docs/ANALYSIS_GUIDE.md` for the full guide.  Quick reference:
 
 ```bash
 # HLS synthesis metrics table
-arc analyze hls-report --hls-build-root build_hls_<plugin> --output out/reports
+forge analyze hls-report --hls-build-root build_hls_<plugin> --output out/reports
 
 # Static latency check (requires latency_hint or latency_cycles in modules.yml)
-arc analyze latency-check plugins/<plugin>/designs/design.yml \
+forge analyze latency-check plugins/<plugin>/designs/design.yml \
     --contracts-from plugins/<plugin>/modules.yml \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/latency_check.md
 
 # HLS-predicted vs simulation-observed latency
-arc analyze runtime-latency \
+forge analyze runtime-latency \
     --probe-csv out/reports/pipeline_probe.csv \
     --probe-pairs "<module>:<in_valid_signal>:<out_valid_signal>" \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/runtime_latency.md
 
 # Result comparison plots (requires plot_config.yml + observed/reference CSVs)
-arc analyze plot-results \
+forge analyze plot-results \
     --config plugins/<plugin>/verify/plot_config.yml \
     --observed out/reports/observed.csv \
     --reference out/reports/reference.csv \
     --output out/reports/plots
 
 # Self-contained HTML dashboard aggregating all of the above
-arc analyze dashboard --input out/reports --output out/dashboard
+forge analyze dashboard --input out/reports --output out/dashboard
 ```
 
 ## If you want a dataset standard other than XML
@@ -145,7 +145,7 @@ Recommended when possible.
 
 Keep the public framework contract XML-backed and add a plugin-local translation layer:
 
-- convert your native source format into the framework-standard XML dataset representation before `arc verify run`, or
+- convert your native source format into the framework-standard XML dataset representation before `forge verify run`, or
 - generate XML once as a build/preparation artifact and reference that XML from `design.verification.yml`
 
 This preserves full compatibility with the current public framework surface.

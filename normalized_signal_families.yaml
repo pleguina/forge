@@ -37,7 +37,7 @@ families:
 validation_rules:
   - Every wiring_kind value used by a plugin contract should be declared in that plugin's registry or in this framework example when it is truly generic.
   - A wiring_kind belongs to exactly one family within a registry.
-  - Plugin-specific detector, trigger, or algorithm names should not be added to ARC core.
+  - Plugin-specific detector, trigger, or algorithm names should not be added to FORGE core.
 
 topology_groups_example:
   - name: producer_to_consumer

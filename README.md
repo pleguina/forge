@@ -1,8 +1,8 @@
-# ARC
+# FORGE
 
-Algorithm Runtime & Contract framework.
+Framework for Orchestrated RTL Generation & Evaluation.
 
-ARC is a plugin-agnostic framework for contract-driven DUT generation,
+FORGE is a plugin-agnostic framework for contract-driven DUT generation,
 optional HLS orchestration, and reusable verification runtime flows.
 
 Repository target:
@@ -11,11 +11,11 @@ Repository target:
 
 ## Documentation Index
 
-This index lists the minimum user-facing documentation required to adopt and use ARC.
+This index lists the minimum user-facing documentation required to adopt and use FORGE.
 
 ### Introduction
 
-- `arc/README.md` - CLI command reference and generated output summary
+- `forge/README.md` - CLI command reference and generated output summary
 
 ### Quickstart
 
@@ -36,7 +36,7 @@ This index lists the minimum user-facing documentation required to adopt and use
 ### Tooling
 
 - `docs/FRAMEWORK_TOOLING_INTERFACE.md` - Layer 2 topology/HLS tooling interface
-- `arc/README.md` - arc CLI command usage and outputs
+- `forge/README.md` - forge CLI command usage and outputs
 
 ### Support Boundaries
 

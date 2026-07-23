@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forge"
+version = "1.1.0"
+description = "FORGE framework CLI — topology generation and verification orchestration"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "FORGE Framework Team"}
+]
+keywords = ["hdl", "vhdl", "fpga", "ip", "vivado", "top-level", "generator"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "jinja2>=3.0",
+]
+
+[project.optional-dependencies]
+# Note: VHDL linting uses GHDL (system package)
+# Install with: apt-get install ghdl (Ubuntu/Debian)
+#              dnf install ghdl (Fedora/RHEL)
+#              brew install ghdl (macOS)
+# Note: Verilog linting uses Verilator (system package only; RTL simulation is XSIM-first)
+# Install with: apt-get install verilator (Ubuntu/Debian)
+#              dnf install verilator (Fedora/RHEL)
+#              brew install verilator (macOS)
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "mypy>=1.0",
+]
+all = [
+    "forge[dev]",
+]
+
+[project.urls]
+Homepage = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
+Documentation = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework/-/blob/main/forge/README.md"
+Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
+Issues = "https://gitlab.cern.ch/pleguina/arc-framework/-/issues"
+
+[project.scripts]
+forge = "forge.core.cli.main:main"
+
+[tool.setuptools]
+package-dir = {"forge" = "."}
+packages = [
+    "forge",
+    "forge.core", "forge.core.cli", "forge.core.utils",
+    "forge.topgen", "forge.topgen.generators", "forge.topgen.ip",
+    "forge.hls",
+    "forge.verify",
+    "forge.analyze",
+    "forge.analyze.hls_reports",
+    "forge.analyze.latency_static",
+    "forge.analyze.latency_runtime",
+    "forge.analyze.result_plots",
+    "forge.analyze.dashboards",
+]
+
+[tool.setuptools.package-data]
+forge = ["py.typed", "topgen/ip/*.yaml", "hls/templates/*.tcl.j2"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=forge --cov-report=html --cov-report=term"
+markers = [
+    "integration: full-chain integration tests using real local repos (deselect with -m 'not integration')",
+]

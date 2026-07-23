@@ -1,14 +1,14 @@
-# `arc analyze` — Plugin Author Guide
+# `forge analyze` — Plugin Author Guide
 
-`arc analyze` provides five sub-commands for measuring, checking, visualising, and
+`forge analyze` provides five sub-commands for measuring, checking, visualising, and
 reporting on your plugin's performance after it has been built and simulated.
 
 ```
-arc analyze hls-report       # HLS synthesis metrics table (CSV / MD / HTML)
-arc analyze latency-check    # Static per-path latency mismatch detector
-arc analyze runtime-latency  # HLS-predicted vs simulation-observed latency
-arc analyze plot-results     # Render comparison PNG figures
-arc analyze dashboard        # Aggregate all artifacts into one HTML page
+forge analyze hls-report       # HLS synthesis metrics table (CSV / MD / HTML)
+forge analyze latency-check    # Static per-path latency mismatch detector
+forge analyze runtime-latency  # HLS-predicted vs simulation-observed latency
+forge analyze plot-results     # Render comparison PNG figures
+forge analyze dashboard        # Aggregate all artifacts into one HTML page
 ```
 
 ---
@@ -19,10 +19,10 @@ arc analyze dashboard        # Aggregate all artifacts into one HTML page
 
 | Input | Source |
 |-------|--------|
-| `build_hls/` tree with `csynth.xml` per module | Produced by `arc hls run --stages synth` |
+| `build_hls/` tree with `csynth.xml` per module | Produced by `forge hls run --stages synth` |
 
 ```bash
-arc analyze hls-report \
+forge analyze hls-report \
   --hls-build-root build_hls_<plugin> \
   --output out/reports
 ```
@@ -52,8 +52,8 @@ accumulated latency is equal on every incoming path.  A mismatch means data
 from two branches arrives at different cycles, which is almost always a bug.
 
 ```bash
-arc analyze latency-check plugins/<plugin>/arc/designs/design.yml \
-  --contracts-from plugins/<plugin>/arc/modules.yml \
+forge analyze latency-check plugins/<plugin>/forge/designs/design.yml \
+  --contracts-from plugins/<plugin>/forge/modules.yml \
   --hls-build-root build_hls_<plugin> \
   --output out/reports/latency_check.md
 ```
@@ -103,7 +103,7 @@ Compares the HLS-predicted latency for a named module against the
 **simulation-observed** end-to-end latency measured from a probe CSV.
 
 ```bash
-arc analyze runtime-latency \
+forge analyze runtime-latency \
   --probe-csv out/reports/pipeline_probe.csv \
   --probe-pairs "trigger_logic:dec_0_raw_valid:tout_out_valid" \
   --hls-build-root build_hls_<plugin> \
@@ -136,7 +136,7 @@ approaches work:
 *Option A — write it manually from simulation output:*
 
 ```python
-# post-process algo_top_outputs.csv after arc verify run
+# post-process algo_top_outputs.csv after forge verify run
 import csv
 
 input_events  = [0, 8, 16]   # cycles where dec_0_raw_valid was driven high
@@ -167,7 +167,7 @@ with open("out/reports/pipeline_probe.csv", "w") as f:
 `endif
 ```
 
-Enable with `arc verify run --probe-log` (passes `-d PROBE_LOG=1` to xvlog).
+Enable with `forge verify run --probe-log` (passes `-d PROBE_LOG=1` to xvlog).
 
 ---
 
@@ -177,8 +177,8 @@ Renders PNG comparison figures from an observed CSV and an optional reference
 CSV.  The plot definitions live in a **plugin-owned** `plot_config.yml`.
 
 ```bash
-arc analyze plot-results \
-  --config plugins/<plugin>/arc/verify/plot_config.yml \
+forge analyze plot-results \
+  --config plugins/<plugin>/forge/verify/plot_config.yml \
   --observed out/reports/observed.csv \
   --reference out/reports/reference.csv \
   --output out/reports/plots
@@ -187,7 +187,7 @@ arc analyze plot-results \
 **Plugin requirement — provide `plot_config.yml`:**
 
 ```yaml
-# plugins/<plugin>/arc/verify/plot_config.yml
+# plugins/<plugin>/forge/verify/plot_config.yml
 plots:
 
   - name: out_valid_timeline     # becomes out_valid_timeline.png
@@ -229,7 +229,7 @@ Aggregates the outputs of the four commands above into a single
 self-contained HTML file (plots embedded as base64).
 
 ```bash
-arc analyze dashboard \
+forge analyze dashboard \
   --input out/reports \
   --output out/dashboard
 ```
@@ -238,10 +238,10 @@ The aggregator looks for these files inside `--input`:
 
 | File | Produced by |
 |------|-------------|
-| `hls_summary.md` | `arc analyze hls-report` |
-| `latency_check.md` | `arc analyze latency-check` |
-| `runtime_latency.md` | `arc analyze runtime-latency` |
-| `plots/*.png` | `arc analyze plot-results` |
+| `hls_summary.md` | `forge analyze hls-report` |
+| `latency_check.md` | `forge analyze latency-check` |
+| `runtime_latency.md` | `forge analyze runtime-latency` |
+| `plots/*.png` | `forge analyze plot-results` |
 
 Any missing file is silently skipped and its section shows "not available".
 
@@ -251,8 +251,8 @@ Any missing file is silently skipped and its section shows "not available".
 
 ```bash
 # 1. Build HLS (synth stage required for latency numbers)
-arc hls run \
-  --registry plugins/trigger_demo/arc/modules.yml \
+forge hls run \
+  --registry plugins/trigger_demo/forge/modules.yml \
   --hls-build-root build_hls_trigger_demo \
   --stages synth
 
@@ -263,32 +263,32 @@ arc hls run \
 python3 scripts/build_analyze_inputs.py   # plugin-provided script
 
 # 4. HLS synthesis report
-arc analyze hls-report \
+forge analyze hls-report \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports
 
 # 5. Static latency check
-arc analyze latency-check plugins/trigger_demo/arc/designs/design.yml \
-  --contracts-from plugins/trigger_demo/arc/modules.yml \
+forge analyze latency-check plugins/trigger_demo/forge/designs/design.yml \
+  --contracts-from plugins/trigger_demo/forge/modules.yml \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports/latency_check.md
 
 # 6. Runtime latency (end-to-end pipeline measurement)
-arc analyze runtime-latency \
+forge analyze runtime-latency \
   --probe-csv out/reports/pipeline_probe.csv \
   --probe-pairs "trigger_logic:dec_0_raw_valid:tout_out_valid" \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports/runtime_latency.md
 
 # 7. Result plots
-arc analyze plot-results \
-  --config plugins/trigger_demo/arc/verify/plot_config.yml \
+forge analyze plot-results \
+  --config plugins/trigger_demo/forge/verify/plot_config.yml \
   --observed out/reports/observed_pipeline.csv \
   --reference out/reports/reference_pipeline.csv \
   --output out/reports/plots
 
 # 8. HTML dashboard
-arc analyze dashboard \
+forge analyze dashboard \
   --input out/reports \
   --output out/dashboard
 # → open out/dashboard/dashboard.html
@@ -302,7 +302,7 @@ arc analyze dashboard \
 |------|-------------------------------|----------------------|
 | Annotate all modules with known latency | `modules.yml`: `latency_hint: N` or `latency_cycles: N` | `latency-check` |
 | Mark variable-latency modules | `modules.yml`: `variable_latency: true` | `latency-check` |
-| Provide plot definitions | `plugins/<plugin>/arc/verify/plot_config.yml` | `plot-results` |
+| Provide plot definitions | `plugins/<plugin>/forge/verify/plot_config.yml` | `plot-results` |
 | Produce probe CSV (long-format) | script or testbench `PROBE_LOG` | `runtime-latency` |
 | Produce observed CSV (wide-format) | post-process xsim output CSV | `plot-results` |
 | Produce reference CSV (wide-format) | golden stimulus data | `plot-results` |

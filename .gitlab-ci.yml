@@ -21,7 +21,7 @@
 #
 # Included fragments:
 #   ci/framework-base.yml    — stages, default image, cache, setup anchor
-#   ci/framework-release.yml — arc:framework-release-gate (vivado runner)
+#   ci/framework-release.yml — forge:framework-release-gate (vivado runner)
 # ============================================================================
 
 include:
@@ -41,22 +41,22 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 # ---------------------------------------------------------------------------
-# arc:lint
+# forge:lint
 #
 # Python style (flake8) and YAML structure (yamllint) over the framework
 # source tree. Fails fast on obvious coding or schema mistakes.
 # ---------------------------------------------------------------------------
-arc:lint:
+forge:lint:
   stage: lint
   tags:
     - default-x86_64
   before_script:
-    - !reference [.arc_python_setup, before_script]
+    - !reference [.forge_python_setup, before_script]
   script:
     - mkdir -p ci-logs
     - |
       echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
-      flake8 arc/core arc/topgen arc/hls arc/verify \
+      flake8 forge/core forge/topgen forge/hls forge/verify \
         2>&1 | tee -a ci-logs/lint.log
     - |
       echo "--- YAML lint ---" | tee -a ci-logs/lint.log
@@ -65,63 +65,63 @@ arc:lint:
         plugins/trigger_demo/modules.yml \
         2>&1 | tee -a ci-logs/lint.log
   artifacts:
-    name: "arc-lint-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-lint-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 7 days
     paths:
       - ci-logs/lint.log
 
 # ---------------------------------------------------------------------------
-# arc:schema-validate
+# forge:schema-validate
 #
 # Validates the trigger_demo design topology and module registry without
-# generating any output. Uses arc topgen --strict so heuristic wiring is a
+# generating any output. Uses forge topgen --strict so heuristic wiring is a
 # hard error.
 # ---------------------------------------------------------------------------
-arc:schema-validate:
+forge:schema-validate:
   stage: validate
   tags:
     - default-x86_64
   before_script:
-    - !reference [.arc_python_setup, before_script]
+    - !reference [.forge_python_setup, before_script]
   script:
     - mkdir -p ci-logs
     - |
-      echo "--- arc topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
-      arc topgen validate \
+      echo "--- forge topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
+      forge topgen validate \
         plugins/trigger_demo/designs/design.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
-      echo "--- arc topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
-      arc topgen validate-registry \
+      echo "--- forge topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate-registry \
         plugins/trigger_demo/modules.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
   artifacts:
-    name: "arc-schema-validate-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-schema-validate-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 7 days
     paths:
       - ci-logs/schema-validate.log
 
 # ---------------------------------------------------------------------------
-# arc:python-unit-tests
+# forge:python-unit-tests
 #
-# Runs the arc unit tests plus the trigger_demo verification proof suite.
+# Runs the forge unit tests plus the trigger_demo verification proof suite.
 # These 110+ tests require only Python — no HLS build or Vivado needed.
 # ---------------------------------------------------------------------------
-arc:python-unit-tests:
+forge:python-unit-tests:
   stage: test
   tags:
     - default-x86_64
   before_script:
-    - !reference [.arc_python_setup, before_script]
+    - !reference [.forge_python_setup, before_script]
   script:
     - mkdir -p ci-logs
     - |
-      echo "--- arc unit tests ---" | tee ci-logs/unit-tests.log
-      python3 -m pytest arc/tests \
+      echo "--- forge unit tests ---" | tee ci-logs/unit-tests.log
+      python3 -m pytest forge/tests \
         --tb=short -q \
-        --junitxml=ci-logs/arc-junit.xml \
+        --junitxml=ci-logs/forge-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log
     - |
       echo "--- trigger_demo verify tests ---" | tee -a ci-logs/unit-tests.log
@@ -130,65 +130,65 @@ arc:python-unit-tests:
         --junitxml=ci-logs/trigger-demo-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log
   artifacts:
-    name: "arc-unit-tests-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-unit-tests-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 14 days
     reports:
       junit:
-        - ci-logs/arc-junit.xml
+        - ci-logs/forge-junit.xml
         - ci-logs/trigger-demo-junit.xml
     paths:
       - ci-logs/unit-tests.log
-      - ci-logs/arc-junit.xml
+      - ci-logs/forge-junit.xml
       - ci-logs/trigger-demo-junit.xml
 
 # ---------------------------------------------------------------------------
-# arc:fw-verify-smoke
+# forge:fw-verify-smoke
 #
-# Confirms the arc verify CLI is healthy using only Python/config operations:
+# Confirms the forge verify CLI is healthy using only Python/config operations:
 #   - generate --dry-run on two trigger_demo flows
 #   - doctor on trigger_demo design.verification.yml
 #
 # Confirmed pure Python/config path — no simulator or Vivado dependency.
 # ---------------------------------------------------------------------------
-arc:fw-verify-smoke:
+forge:fw-verify-smoke:
   stage: smoke
   tags:
     - default-x86_64
   before_script:
-    - !reference [.arc_python_setup, before_script]
+    - !reference [.forge_python_setup, before_script]
   script:
     - mkdir -p ci-logs
     - DESIGN_FILE="plugins/trigger_demo/verify/design.verification.yml"
     - |
-      echo "--- arc verify generate dry-run (hit_decoder_csim) ---" | tee ci-logs/fw-verify-smoke.log
-      arc verify generate "${DESIGN_FILE}" \
+      echo "--- forge verify generate dry-run (hit_decoder_csim) ---" | tee ci-logs/fw-verify-smoke.log
+      forge verify generate "${DESIGN_FILE}" \
         --flow hit_decoder_csim --dry-run \
         2>&1 | tee -a ci-logs/fw-verify-smoke.log
     - |
-      echo "--- arc verify generate dry-run (trigger_pipeline_xsim) ---" | tee -a ci-logs/fw-verify-smoke.log
-      arc verify generate "${DESIGN_FILE}" \
+      echo "--- forge verify generate dry-run (trigger_pipeline_xsim) ---" | tee -a ci-logs/fw-verify-smoke.log
+      forge verify generate "${DESIGN_FILE}" \
         --flow trigger_pipeline_xsim --dry-run \
         2>&1 | tee -a ci-logs/fw-verify-smoke.log
     - |
-      echo "--- arc verify doctor ---" | tee -a ci-logs/fw-verify-smoke.log
-      arc verify doctor "${DESIGN_FILE}" \
+      echo "--- forge verify doctor ---" | tee -a ci-logs/fw-verify-smoke.log
+      forge verify doctor "${DESIGN_FILE}" \
         2>&1 | tee -a ci-logs/fw-verify-smoke.log
   artifacts:
-    name: "arc-fw-verify-smoke-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-fw-verify-smoke-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 7 days
     paths:
       - ci-logs/fw-verify-smoke.log
 
 # ---------------------------------------------------------------------------
-# arc:fresh-user-check
+# forge:fresh-user-check
 #
 # Exercises the full framework onboarding path from package install through
-# arc verify init-plugin scaffold and doctor. Catches regressions that only
+# forge verify init-plugin scaffold and doctor. Catches regressions that only
 # surface on a clean install.
 # ---------------------------------------------------------------------------
-arc:fresh-user-check:
+forge:fresh-user-check:
   stage: smoke
   tags:
     - default-x86_64
@@ -196,7 +196,7 @@ arc:fresh-user-check:
     - mkdir -p ci-logs
     - bash ci/fresh_user_check.sh 2>&1 | tee ci-logs/fresh-user-check.log
   artifacts:
-    name: "arc-fresh-user-check-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-fresh-user-check-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 7 days
     paths:

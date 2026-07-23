@@ -4,13 +4,13 @@
 # Runs every stage in order:
 #   1. Clean stale build artifacts
 #   2. Validate design.yml + modules.yml
-#   3. arc topgen gen-top  → gen-top/design_trigger_demo_pipeline/
-#   4. arc verify generate → regenerate flow YAML / SV / TCL files
+#   3. forge topgen gen-top  → gen-top/design_trigger_demo_pipeline/
+#   4. forge verify generate → regenerate flow YAML / SV / TCL files
 #   5. gen_stimulus.py     → stimulus_current.svh for every xsim flow
-#   6. arc verify doctor   → readiness health-check
-#   7. arc hls run csim    → C-simulation for all 4 HLS modules
-#   8. arc hls run synth   → RTL synthesis for all 4 HLS modules (needed by xsim)
-#   9. arc verify run      → all 9 flows (csim × 4, xsim × 4, full-chip × 1)
+#   6. forge verify doctor   → readiness health-check
+#   7. forge hls run csim    → C-simulation for all 4 HLS modules
+#   8. forge hls run synth   → RTL synthesis for all 4 HLS modules (needed by xsim)
+#   9. forge verify run      → all 9 flows (csim × 4, xsim × 4, full-chip × 1)
 #
 # Usage (from arc-framework repo root):
 #   ./run_trigger_demo.sh              # full run
@@ -18,7 +18,7 @@
 #   ./run_trigger_demo.sh --no-clean  # skip artifact cleanup
 #
 # Prerequisites:
-#   - arc CLI installed:  pip install -e arc/
+#   - forge CLI installed:  pip install -e forge/
 #   - Vitis HLS on PATH  (for stages 7–8; skip with --skip-hls)
 #   - Vivado xsim on PATH (for stage 9 xsim flows)
 #
@@ -31,11 +31,11 @@ JOBS=4
 HLS_BUILD_ROOT="build_hls_trigger_demo"
 GEN_TOP_OUT="gen-top/design_trigger_demo_pipeline/algo_top.v"
 PLUGIN_ROOT="plugins/trigger_demo"
-ARC_ROOT="$PLUGIN_ROOT/arc"        # ARC integration capsule
-DESIGN_YML="$ARC_ROOT/designs/design.yml"
-MODULES_YML="$ARC_ROOT/modules.yml"
-VERIFY_YML="$ARC_ROOT/verify/design.verification.yml"
-GEN_STIMULUS="$ARC_ROOT/verify/tools/gen_stimulus.py"
+FORGE_ROOT="$PLUGIN_ROOT/forge"        # FORGE integration capsule
+DESIGN_YML="$FORGE_ROOT/designs/design.yml"
+MODULES_YML="$FORGE_ROOT/modules.yml"
+VERIFY_YML="$FORGE_ROOT/verify/design.verification.yml"
+GEN_STIMULUS="$FORGE_ROOT/verify/tools/gen_stimulus.py"
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
 for arg in "$@"; do
@@ -59,8 +59,8 @@ die()  { echo "${RED}✘  $*${RESET}" >&2; exit 1; }
 
 cd "$(dirname "$0")"          # always run from repo root
 
-# ── Guard: arc must be installed ─────────────────────────────────────────────
-command -v arc >/dev/null 2>&1 || die "arc not found — run: pip install -e arc/"
+# ── Guard: forge must be installed ─────────────────────────────────────────────
+command -v forge >/dev/null 2>&1 || die "forge not found — run: pip install -e forge/"
 
 # ════════════════════════════════════════════════════════════════════════════
 # 1. Clean stale artifacts
@@ -81,8 +81,8 @@ fi
 # 2. Validate topology
 # ════════════════════════════════════════════════════════════════════════════
 step "Validate design + registry"
-arc topgen validate          "$DESIGN_YML"
-arc topgen validate-registry "$MODULES_YML"
+forge topgen validate          "$DESIGN_YML"
+forge topgen validate-registry "$MODULES_YML"
 ok "Validation passed"
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -91,11 +91,11 @@ ok "Validation passed"
 step "Preflight: check required HLS include headers and sources"
 _MISSING=0
 for _HDR in \
-  "$ARC_ROOT/verify/include/dut_adapter.h" \
-  "$ARC_ROOT/verify/include/transaction_concepts.h" \
-  "$ARC_ROOT/verify/include/driver.h" \
+  "$FORGE_ROOT/verify/include/dut_adapter.h" \
+  "$FORGE_ROOT/verify/include/transaction_concepts.h" \
+  "$FORGE_ROOT/verify/include/driver.h" \
   "$PLUGIN_ROOT/algo/common/trigger_types.h" \
-  "$ARC_ROOT/verify/src/logging.cpp"
+  "$FORGE_ROOT/verify/src/logging.cpp"
 do
   if [[ ! -f "$_HDR" ]]; then
     echo "  MISSING: $_HDR" >&2
@@ -108,8 +108,8 @@ ok "All required headers present"
 # ════════════════════════════════════════════════════════════════════════════
 # 3. Generate algo_top
 # ════════════════════════════════════════════════════════════════════════════
-step "arc topgen gen-top → $GEN_TOP_OUT"
-arc topgen gen-top "$DESIGN_YML" \
+step "forge topgen gen-top → $GEN_TOP_OUT"
+forge topgen gen-top "$DESIGN_YML" \
   --mode verilog \
   --consumer-root . \
   --contracts-from "$MODULES_YML" \
@@ -120,8 +120,8 @@ ok "algo_top generated"
 # ════════════════════════════════════════════════════════════════════════════
 # 4. Regenerate verification flow files
 # ════════════════════════════════════════════════════════════════════════════
-step "arc verify generate"
-arc verify generate "$VERIFY_YML"
+step "forge verify generate"
+forge verify generate "$VERIFY_YML"
 ok "Verify flow files regenerated"
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -134,8 +134,8 @@ ok "Stimulus files generated"
 # ════════════════════════════════════════════════════════════════════════════
 # 6. Doctor check
 # ════════════════════════════════════════════════════════════════════════════
-step "arc verify doctor"
-arc verify doctor "$VERIFY_YML"
+step "forge verify doctor"
+forge verify doctor "$VERIFY_YML"
 ok "Doctor passed"
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -146,14 +146,14 @@ HLS_MODULES="hit_decoder hit_collector trigger_logic trigger_output"
 if [[ $SKIP_HLS -eq 1 ]]; then
   echo "(--skip-hls: skipping HLS TCL generation + csim + synth)"
 else
-  step "arc hls gen-tcl — generate Vitis HLS TCL scripts"
-  arc hls gen-tcl \
+  step "forge hls gen-tcl — generate Vitis HLS TCL scripts"
+  forge hls gen-tcl \
     --hls-config "$MODULES_YML" \
     --output-dir "$HLS_BUILD_ROOT"
   ok "HLS TCL scripts generated"
 
-  step "arc hls run — csim (${JOBS} parallel job(s))"
-  arc hls run \
+  step "forge hls run — csim (${JOBS} parallel job(s))"
+  forge hls run \
     --registry "$MODULES_YML" \
     --hls-build-root "$HLS_BUILD_ROOT" \
     --stages csim \
@@ -161,8 +161,8 @@ else
     --modules "$HLS_MODULES"
   ok "HLS csim done"
 
-  step "arc hls run — synth (${JOBS} parallel job(s))"
-  arc hls run \
+  step "forge hls run — synth (${JOBS} parallel job(s))"
+  forge hls run \
     --registry "$MODULES_YML" \
     --hls-build-root "$HLS_BUILD_ROOT" \
     --stages synth \
@@ -198,9 +198,9 @@ FLOWS=(
 
 FAIL_COUNT=0
 for flow in "${FLOWS[@]}"; do
-  step "arc verify run — $flow"
-  flow_yml="$ARC_ROOT/verify/${flow}/verify.flow.yml"
-  if arc verify run "$flow_yml" --plugin trigger_demo --consumer-root "$(pwd)"; then
+  step "forge verify run — $flow"
+  flow_yml="$FORGE_ROOT/verify/${flow}/verify.flow.yml"
+  if forge verify run "$flow_yml" --plugin trigger_demo --consumer-root "$(pwd)"; then
     ok "$flow PASSED"
   else
     echo "${RED}✘  $flow FAILED${RESET}" >&2

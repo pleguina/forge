@@ -16,7 +16,7 @@
 # Consumed by: arc-framework/.gitlab-ci.yml (via include)
 # ============================================================================
 
-arc:framework-release-gate:
+forge:framework-release-gate:
   stage: release
   tags:
     - vivado
@@ -36,7 +36,7 @@ arc:framework-release-gate:
   after_script:
     - echo "Release gate exit code $CI_JOB_STATUS"
   artifacts:
-    name: "arc-release-gate-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-release-gate-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 30 days
     paths:

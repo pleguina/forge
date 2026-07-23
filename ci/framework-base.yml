@@ -6,9 +6,9 @@
 #   - canonical stage order
 #   - default image and runner tag
 #   - pip cache policy
-#   - reusable before_script anchor (.arc_python_setup)
+#   - reusable before_script anchor (.forge_python_setup)
 #
-# Consumed by: arc-./.gitlab-ci.yml
+# Consumed by: forge-./.gitlab-ci.yml
 # Exposed to plugins via: ci/plugin-consumer.yml
 # ============================================================================
 
@@ -29,27 +29,27 @@ default:
 # Pip cache — keyed on the lockfile so cache is invalidated on dependency
 # changes without manual intervention.
 # ---------------------------------------------------------------------------
-.arc_cache: &arc_cache
+.forge_cache: &forge_cache
   cache:
     key:
       files:
-        - arc/pyproject.toml
+        - forge/pyproject.toml
     paths:
       - .pip-cache/
     policy: pull-push
 
 # ---------------------------------------------------------------------------
-# .arc_python_setup
+# .forge_python_setup
 #
 # Reference with:
 #   before_script:
-#     - !reference [.arc_python_setup, before_script]
+#     - !reference [.forge_python_setup, before_script]
 #
-# Installs the arc package (topgen + hls + verify subpackages) from source
+# Installs the forge package (topgen + hls + verify subpackages) from source
 # into the CI container.
 # ---------------------------------------------------------------------------
-.arc_python_setup:
+.forge_python_setup:
   before_script:
     - pip install --quiet --cache-dir .pip-cache
-        -e arc
+        -e forge
         pytest pytest-cov pyyaml yamllint flake8

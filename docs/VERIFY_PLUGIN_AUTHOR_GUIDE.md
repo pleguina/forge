@@ -19,7 +19,7 @@ The intended minimal plugin authoring surface is:
 ```text
 plugins/<plugin>/
     algo/                       ← implementation sources (C++, HDL)
-    arc/                        ← ARC integration capsule
+    forge/                        ← FORGE integration capsule
         modules.yml             ← module registry
         designs/
             design.yml
@@ -37,7 +37,7 @@ plugins/<plugin>/
 Everything else (per-flow `verify.flow.yml`, `tb_*.sv`, `wave.tcl`) is
 framework-owned, framework-generated, or plugin-generated from those authored inputs.
 
-See `docs/PLUGIN_AUTHOR_GUIDE.md` for the full `arc/` layout rules and path anchor conventions.
+See `docs/PLUGIN_AUTHOR_GUIDE.md` for the full `forge/` layout rules and path anchor conventions.
 
 ## 2. Current framework-standard verification contract
 
@@ -76,7 +76,7 @@ The framework owns the generic verification lifecycle:
 These are generated or framework-owned and should not be treated as plugin-authored surfaces for a new plugin:
 
 ```text
-plugins/<plugin>/arc/verify/<flow>/
+plugins/<plugin>/forge/verify/<flow>/
     verify.flow.yml
     tb_<module>.sv
     wave.tcl
@@ -111,7 +111,7 @@ plugin: myplugin
 
 datasets:
   my_dataset:
-    xml: schemas/data/events.xml   # relative to arc/verify/ (this file's directory)
+    xml: schemas/data/events.xml   # relative to forge/verify/ (this file's directory)
 
 defaults:
   clk_period_ns: 4.0
@@ -177,10 +177,10 @@ dataset:
 Then run the complete sweep with:
 
 ```bash
-arc verify run path/to/verify.flow.yml --all-dataset-parts
+forge verify run path/to/verify.flow.yml --all-dataset-parts
 ```
 
-ARC executes each XML part through the normal backend and checker lifecycle,
+FORGE executes each XML part through the normal backend and checker lifecycle,
 using an isolated `xsim_work/dataset_parts/<part-name>/` directory per part, and
 prints an aggregate PASS/FAIL table. Use `--dataset-parts-glob` to override the
 declared glob for a temporary subset.
@@ -293,46 +293,46 @@ And verify that it does not require authored copies of generated artifacts.
 
 ## 10. Post-verification analysis
 
-Once all flows pass, `arc analyze` provides latency measurement, static checks, plots,
+Once all flows pass, `forge analyze` provides latency measurement, static checks, plots,
 and an HTML dashboard.  It requires a small amount of plugin-authored content:
 
 | What | Where | Used by |
 |------|-------|---------|
-| `latency_hint: N` on each module | `modules.yml` | `arc analyze latency-check` |
-| `plot_config.yml` with figure specs | `plugins/<plugin>/arc/verify/plot_config.yml` | `arc analyze plot-results` |
-| Probe CSV (`cycle,signal,value`) | produced post-simulation | `arc analyze runtime-latency` |
-| Observed + reference CSVs | produced post-simulation | `arc analyze plot-results` |
+| `latency_hint: N` on each module | `modules.yml` | `forge analyze latency-check` |
+| `plot_config.yml` with figure specs | `plugins/<plugin>/forge/verify/plot_config.yml` | `forge analyze plot-results` |
+| Probe CSV (`cycle,signal,value`) | produced post-simulation | `forge analyze runtime-latency` |
+| Observed + reference CSVs | produced post-simulation | `forge analyze plot-results` |
 
-Quick run sequence (after `arc verify run` passes):
+Quick run sequence (after `forge verify run` passes):
 
 ```bash
-arc analyze hls-report \
+forge analyze hls-report \
     --hls-build-root build_hls_<plugin> --output out/reports
 
-arc analyze latency-check plugins/<plugin>/arc/designs/design.yml \
-    --contracts-from plugins/<plugin>/arc/modules.yml \
+forge analyze latency-check plugins/<plugin>/forge/designs/design.yml \
+    --contracts-from plugins/<plugin>/forge/modules.yml \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/latency_check.md
 
-arc analyze runtime-latency \
+forge analyze runtime-latency \
     --probe-csv out/reports/pipeline_probe.csv \
     --probe-pairs "<module>:<in_valid>:<out_valid>" \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/runtime_latency.md
 
-arc analyze plot-results \
-    --config plugins/<plugin>/arc/verify/plot_config.yml \
+forge analyze plot-results \
+    --config plugins/<plugin>/forge/verify/plot_config.yml \
     --observed out/reports/observed.csv \
     --reference out/reports/reference.csv \
     --output out/reports/plots
 
-arc analyze dashboard --input out/reports --output out/dashboard
+forge analyze dashboard --input out/reports --output out/dashboard
 ```
 
 See `docs/ANALYSIS_GUIDE.md` for the complete reference.
 
 ## 10. Notes on current examples
 
-`trigger_demo` is the maintained supported proof consumer for the current public framework path. Its ARC capsule is at `plugins/trigger_demo/arc/`. It demonstrates multiple framework-owned flows, contract-driven generation, and full-chip integration proof without relying on OMTF semantics.
+`trigger_demo` is the maintained supported proof consumer for the current public framework path. Its FORGE capsule is at `plugins/trigger_demo/forge/`. It demonstrates multiple framework-owned flows, contract-driven generation, and full-chip integration proof without relying on OMTF semantics.
 
-Real downstream plugins may live outside this repository. For active development and integration, the preferred layout is sibling repositories in one workspace, for example `arc-framework/` next to a plugin repository. The plugin owns its ARC capsule, build products, generated artifacts, and domain-specific scripts; ARC is installed into the environment and consumed through `arc ...` commands. Use an in-tree mount or submodule only when a downstream project deliberately needs a pinned, vendored plugin snapshot.
+Real downstream plugins may live outside this repository. For active development and integration, the preferred layout is sibling repositories in one workspace, for example `arc-framework/` next to a plugin repository. The plugin owns its FORGE capsule, build products, generated artifacts, and domain-specific scripts; FORGE is installed into the environment and consumed through `forge ...` commands. Use an in-tree mount or submodule only when a downstream project deliberately needs a pinned, vendored plugin snapshot.

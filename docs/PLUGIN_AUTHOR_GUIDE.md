@@ -6,11 +6,11 @@
 
 ---
 
-## Plugin Directory Layout — The `arc/` Capsule Convention
+## Plugin Directory Layout — The `forge/` Capsule Convention
 
 Every plugin must separate its **implementation sources** (algorithm code, HDL) from
-its **ARC integration contract** (module registry, interface descriptions, verification
-contract). The ARC contract files are grouped in a single subdirectory called `arc/`:
+its **FORGE integration contract** (module registry, interface descriptions, verification
+contract). The FORGE contract files are grouped in a single subdirectory called `forge/`:
 
 ```
 plugins/<your_plugin>/          ← submodule root (git submodule or plain directory)
@@ -20,8 +20,8 @@ plugins/<your_plugin>/          ← submodule root (git submodule or plain direc
 │   │   └── my_module.cpp
 │   └── rtl/
 │       └── my_rtl.v
-├── arc/                        ← ARC integration capsule (all arc-facing files)
-│   ├── modules.yml             ← module registry  (plugin_root = arc/)
+├── forge/                        ← FORGE integration capsule (all forge-facing files)
+│   ├── modules.yml             ← module registry  (plugin_root = forge/)
 │   ├── designs/
 │   │   └── design.yml         ← design topology   (registry: ../modules.yml)
 │   ├── interfaces/
@@ -41,40 +41,40 @@ plugins/<your_plugin>/          ← submodule root (git submodule or plain direc
 
 ### Path anchor rules
 
-All relative paths in `arc/` files are **relative to their own file's directory**:
+All relative paths in `forge/` files are **relative to their own file's directory**:
 
 | File | Anchor | Example |
 |------|--------|---------|
-| `arc/modules.yml` — `src:` / `includes:` / `tb_src:` | `arc/` (the file's own directory) | `src: [../algo/my_module/my_module.cpp]` |
-| `arc/modules.yml` — `interface_contract:` | `arc/` | `interface_contract: interfaces/my_module.interface.yaml` |
-| `arc/modules.yml` — `verify.tb_args:` | `arc/` | `tb_args: verify/schemas/data/events.xml` |
-| `arc/designs/design.yml` — `registry:` | `arc/designs/` | `registry: ../modules.yml` |
-| `arc/verify/design.verification.yml` — `datasets.xml:` | `arc/verify/` | `xml: schemas/data/events.xml` |
+| `forge/modules.yml` — `src:` / `includes:` / `tb_src:` | `forge/` (the file's own directory) | `src: [../algo/my_module/my_module.cpp]` |
+| `forge/modules.yml` — `interface_contract:` | `forge/` | `interface_contract: interfaces/my_module.interface.yaml` |
+| `forge/modules.yml` — `verify.tb_args:` | `forge/` | `tb_args: verify/schemas/data/events.xml` |
+| `forge/designs/design.yml` — `registry:` | `forge/designs/` | `registry: ../modules.yml` |
+| `forge/verify/design.verification.yml` — `datasets.xml:` | `forge/verify/` | `xml: schemas/data/events.xml` |
 
-Key point: **`algo/` sources live one level above `arc/`**, so all source paths use `../algo/...`.
-Interface contracts and verify artefacts live _inside_ `arc/`, so they do not need `../`.
+Key point: **`algo/` sources live one level above `forge/`**, so all source paths use `../algo/...`.
+Interface contracts and verify artefacts live _inside_ `forge/`, so they do not need `../`.
 
 ### Consumer-root paths (build artefacts only)
 
 `dut_rtl_source:` entries in generated `verify.flow.yml` are the only paths that are
 relative to the **consumer root** (the framework checkout root). These are build artefacts
-produced by `arc hls run synth` and placed under `build_hls_<plugin>/`. Plugins never
+produced by `forge hls run synth` and placed under `build_hls_<plugin>/`. Plugins never
 hand-author consumer-root-relative paths.
 
 ### Mounting the plugin
 
-The framework discovers a plugin by the path to its `arc/modules.yml`.
+The framework discovers a plugin by the path to its `forge/modules.yml`.
 Pass it explicitly on the command line:
 
 ```bash
 # From the framework root:
-arc topgen validate-registry plugins/<plugin>/arc/modules.yml
-arc topgen gen-top  plugins/<plugin>/arc/designs/design.yml --contracts-from plugins/<plugin>/arc/modules.yml
-arc verify generate plugins/<plugin>/arc/verify/design.verification.yml
-arc verify run      plugins/<plugin>/arc/verify/<flow>/verify.flow.yml --consumer-root .
+forge topgen validate-registry plugins/<plugin>/forge/modules.yml
+forge topgen gen-top  plugins/<plugin>/forge/designs/design.yml --contracts-from plugins/<plugin>/forge/modules.yml
+forge verify generate plugins/<plugin>/forge/verify/design.verification.yml
+forge verify run      plugins/<plugin>/forge/verify/<flow>/verify.flow.yml --consumer-root .
 ```
 
-The plugin does not need to know where it is mounted — all paths inside `arc/` resolve
+The plugin does not need to know where it is mounted — all paths inside `forge/` resolve
 correctly regardless of the consumer's directory structure.
 
 ---
@@ -91,12 +91,12 @@ to generate an exported IP package in `ips/<module_name>/`.
 Run the `ip-summary` extractor to update `ip_info.yaml` with your module's physical ports:
 
 ```bash
-arc topgen ip-summary plugins/<plugin>/arc/designs/design.yml --ip-root ips --output ip_info.yaml
+forge topgen ip-summary plugins/<plugin>/forge/designs/design.yml --ip-root ips --output ip_info.yaml
 ```
 
 ### 3. Write the interface contract
 
-Create `plugins/<plugin>/arc/interfaces/<module_name>.interface.yaml`:
+Create `plugins/<plugin>/forge/interfaces/<module_name>.interface.yaml`:
 
 ```yaml
 ip_interface:
@@ -124,19 +124,19 @@ ip_interface:
 
 ### 4. Register the module
 
-Add to `plugins/<plugin>/arc/modules.yml`:
+Add to `plugins/<plugin>/forge/modules.yml`:
 
 ```yaml
 - name: my_module
   kind: hls
   top: my_module
-  src: [../algo/my_module/my_module.cpp]       # relative to arc/ — uses ../algo/ to reach sources
-  interface_contract: interfaces/my_module.interface.yaml   # relative to arc/
+  src: [../algo/my_module/my_module.cpp]       # relative to forge/ — uses ../algo/ to reach sources
+  interface_contract: interfaces/my_module.interface.yaml   # relative to forge/
 ```
 
 ### 5. Add to design topology
 
-In `plugins/<plugin>/arc/designs/design.yml`:
+In `plugins/<plugin>/forge/designs/design.yml`:
 
 **Module instance:**
 ```yaml
@@ -168,18 +168,18 @@ connections:
 
 ```bash
 # Verify contract against ip_info
-arc core verify-contract --ip-info ip_info.yaml \
-    --contract plugins/<plugin>/arc/interfaces/my_module.interface.yaml
+forge core verify-contract --ip-info ip_info.yaml \
+    --contract plugins/<plugin>/forge/interfaces/my_module.interface.yaml
 
 # Generate structural Verilog
-arc topgen gen-top plugins/<plugin>/arc/designs/design.yml \
+forge topgen gen-top plugins/<plugin>/forge/designs/design.yml \
     --mode verilog --consumer-root . --build-dir build \
     --hls-build-root build_hls --ip-root ips \
-    --contracts-from plugins/<plugin>/arc/modules.yml \
+    --contracts-from plugins/<plugin>/forge/modules.yml \
     --output algo_top.v
 
 # Strict mode (CI grade — rejects port_map_ranges, auto-match, missing contracts)
-arc topgen gen-top ... --strict
+forge topgen gen-top ... --strict
 ```
 
 ---
@@ -410,8 +410,8 @@ Check: `grep "^ *my_module:" ip_info.yaml`.
 
 ### `--strict` fails: "modules have no interface contract"
 
-Pass `--contracts-from plugins/<plugin>/arc/modules.yml` and ensure your module's
-`arc/modules.yml` entry has `interface_contract:` pointing to the contract file.
+Pass `--contracts-from plugins/<plugin>/forge/modules.yml` and ensure your module's
+`forge/modules.yml` entry has `interface_contract:` pointing to the contract file.
 
 ### `--strict` fails: "connection(s) still use port_map_ranges"
 
@@ -437,15 +437,15 @@ Add `allowed_unconnected` patterns in `design.yml`.
 | Topology Groups Schema | `docs/TOPOLOGY_GROUPS_SCHEMA.md` | Schema for topology_groups |
 | IP Interface Policy | `docs/IP_INTERFACE_POLICY.md` | Contract rules |
 | Signal Families | `normalized_signal_families.yaml` | Semantic family vocabulary |
-| Interface contracts | `<plugin>/arc/interfaces/*.interface.yaml` | Per-module contracts |
-| Module registry | `<plugin>/arc/modules.yml` | Module identity + contract refs |
-| Design topology | `<plugin>/arc/designs/design.yml` | Instances, connections, topology_groups |
+| Interface contracts | `<plugin>/forge/interfaces/*.interface.yaml` | Per-module contracts |
+| Module registry | `<plugin>/forge/modules.yml` | Module identity + contract refs |
+| Design topology | `<plugin>/forge/designs/design.yml` | Instances, connections, topology_groups |
 
 ---
 
 ## Latency and Performance Analysis
 
-After topology generation and verification pass, use `arc analyze` to measure latency,
+After topology generation and verification pass, use `forge analyze` to measure latency,
 check pipeline balance, and produce plots and an HTML dashboard.
 
 **Plugin requirements for full analysis:**
@@ -496,7 +496,7 @@ to constrain, floorplan, report, or include as a named crossing source. The
 consumer build must compile the generated boundary helper RTL together with the
 top-level manifest.
 
-### `plugins/<plugin>/arc/verify/plot_config.yml` — define result plots
+### `plugins/<plugin>/forge/verify/plot_config.yml` — define result plots
 
 ```yaml
 plots:

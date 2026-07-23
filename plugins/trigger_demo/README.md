@@ -1,6 +1,6 @@
 # Trigger Demo Plugin
 
-The **canonical reference plugin** for the ARC framework. Demonstrates every
+The **canonical reference plugin** for the FORGE framework. Demonstrates every
 supported topology pattern and the full three-tier verification workflow
 (HLS C-sim → single-module XSIM → full-chip XSIM integration). New plugin
 authors should use this as their copy-from starting point.
@@ -55,7 +55,7 @@ it can serve as a complete reference for each:
 | 2 | 4 | yes | max occupancy |
 | 3 | 0 | no | empty event |
 
-Dataset: `arc/verify/schemas/data/trigger_demo_golden.xml`
+Dataset: `forge/verify/schemas/data/trigger_demo_golden.xml`
 
 ## Verification Flows
 
@@ -82,7 +82,7 @@ plugins/trigger_demo/
 │   ├── trigger_logic/                ← HLS source + header
 │   ├── trigger_output/               ← HLS source + header
 │   └── rtl/                          ← Verilog RTL helpers (3 modules)
-├── arc/                              ← ARC integration capsule
+├── forge/                              ← FORGE integration capsule
 │   ├── modules.yml                   ← authored: module registry (7 modules)
 │   ├── designs/
 │   │   └── design.yml                ← authored: topology (instances, connections, groups)
@@ -101,24 +101,24 @@ plugins/trigger_demo/
 │       ├── tests/                    ← authored: HLS C-sim testbench sources (tb_*.cpp)
 │       ├── include/                  ← authored: DUT adapter headers
 │       ├── tools/
-│       │   ├── bootstrap.py          ← authored: plugin registration with arc verify
+│       │   ├── bootstrap.py          ← authored: plugin registration with forge verify
 │       │   ├── gen_stimulus.py       ← authored: xsim stimulus generator
 │       │   └── tests/                ← authored: unit tests for verify tooling
-│       ├── <flow>/verify.flow.yml    ← generated: arc verify generate
-│       ├── <flow>/tb_*.sv            ← generated: arc verify generate
-│       ├── <flow>/wave.tcl           ← generated: arc verify generate
+│       ├── <flow>/verify.flow.yml    ← generated: forge verify generate
+│       ├── <flow>/tb_*.sv            ← generated: forge verify generate
+│       ├── <flow>/wave.tcl           ← generated: forge verify generate
 │       └── <flow>/stimulus_current.svh  ← plugin-generated: gen_stimulus.py
 ├── CANONICAL_PATTERNS.md
 └── README.md
 ```
 
-**Path anchor rule:** all paths in `arc/modules.yml` are relative to `arc/`.
+**Path anchor rule:** all paths in `forge/modules.yml` are relative to `forge/`.
 Sources in `algo/` are reached with `../algo/...`.
 See `docs/PLUGIN_AUTHOR_GUIDE.md` for the complete path model.
 
 > **What you author vs what the framework generates:**
-> Files under `arc/verify/<flow>/` are framework-generated or plugin-generated — do **not**
-> hand-edit them. Regenerate with `arc verify generate` and `gen_stimulus.py`.
+> Files under `forge/verify/<flow>/` are framework-generated or plugin-generated — do **not**
+> hand-edit them. Regenerate with `forge verify generate` and `gen_stimulus.py`.
 
 ## End-to-end Workflow
 
@@ -132,8 +132,8 @@ export CONSUMER_ROOT="$(pwd)"
 ### Step 1 — HLS synthesis (all modules)
 
 ```bash
-arc hls run \
-  --registry plugins/trigger_demo/arc/modules.yml \
+forge hls run \
+  --registry plugins/trigger_demo/forge/modules.yml \
   --modules all \
   --hls-build-root build_hls_trigger_demo \
   --stages csim,synth,cosim,export
@@ -142,10 +142,10 @@ arc hls run \
 ### Step 2 — Generate Verilog top
 
 ```bash
-arc topgen gen-top \
-  plugins/trigger_demo/arc/designs/design.yml \
+forge topgen gen-top \
+  plugins/trigger_demo/forge/designs/design.yml \
   --consumer-root "$CONSUMER_ROOT" \
-  --contracts-from plugins/trigger_demo/arc/modules.yml \
+  --contracts-from plugins/trigger_demo/forge/modules.yml \
   --build-dir build_hls_trigger_demo \
   --mode verilog \
   --strict \
@@ -155,7 +155,7 @@ arc topgen gen-top \
 ### Step 3 — Generate verification flow configs
 
 ```bash
-arc verify generate plugins/trigger_demo/arc/verify/design.verification.yml
+forge verify generate plugins/trigger_demo/forge/verify/design.verification.yml
 ```
 
 Writes `verify.flow.yml`, `tb_*.sv`, and `wave.tcl` into each of the 9 flow
@@ -164,7 +164,7 @@ directories. Idempotent — safe to re-run.
 ### Step 4 — Generate stimulus SVH files
 
 ```bash
-python3 plugins/trigger_demo/arc/verify/tools/gen_stimulus.py
+python3 plugins/trigger_demo/forge/verify/tools/gen_stimulus.py
 ```
 
 Writes `stimulus_current.svh` into every xsim flow directory.
@@ -173,7 +173,7 @@ Use `--module <name>` or `--dry-run` for selective runs.
 ### Step 5 — Contract health check
 
 ```bash
-arc verify doctor plugins/trigger_demo/arc/verify/design.verification.yml
+forge verify doctor plugins/trigger_demo/forge/verify/design.verification.yml
 ```
 
 ### Step 6 — Run verification flows
@@ -181,24 +181,24 @@ arc verify doctor plugins/trigger_demo/arc/verify/design.verification.yml
 ```bash
 # C-sim (HLS — requires Vitis HLS)
 for flow in hit_decoder_csim hit_collector_csim trigger_logic_csim trigger_output_csim; do
-  arc verify run plugins/trigger_demo/arc/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  forge verify run plugins/trigger_demo/forge/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Single-module RTL (requires Vivado/xsim)
 for flow in hit_decoder_xsim hit_collector_xsim trigger_logic_xsim trigger_output_xsim; do
-  arc verify run plugins/trigger_demo/arc/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  forge verify run plugins/trigger_demo/forge/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Full-chip RTL integration (requires gen-top output from Step 2)
-arc verify run \
-  plugins/trigger_demo/arc/verify/trigger_pipeline_xsim/verify.flow.yml \
+forge verify run \
+  plugins/trigger_demo/forge/verify/trigger_pipeline_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```
 
 ### Running the Python unit tests
 
 ```bash
-python3 -m pytest plugins/trigger_demo/arc/verify/tools/tests -q
+python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests -q
 ```
 
 No Vivado or Vitis HLS required — these tests validate the Python tooling only.
@@ -209,15 +209,15 @@ To re-run a single flow after changing algo source:
 
 ```bash
 # Re-synthesise one module
-arc hls run \
-  --registry plugins/trigger_demo/arc/modules.yml \
+forge hls run \
+  --registry plugins/trigger_demo/forge/modules.yml \
   --modules hit_decoder \
   --hls-build-root build_hls_trigger_demo \
   --stages synth
 
 # Re-run one xsim flow
-python3 plugins/trigger_demo/arc/verify/tools/gen_stimulus.py --module hit_decoder
-arc verify run \
-  plugins/trigger_demo/arc/verify/hit_decoder_xsim/verify.flow.yml \
+python3 plugins/trigger_demo/forge/verify/tools/gen_stimulus.py --module hit_decoder
+forge verify run \
+  plugins/trigger_demo/forge/verify/hit_decoder_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```

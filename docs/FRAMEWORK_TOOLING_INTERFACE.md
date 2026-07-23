@@ -19,29 +19,29 @@ These tools are supported, but a consumer should still treat them as tooling sur
 
 The supported Layer 2 tooling surface is:
 
-- `arc topgen validate`
-- `arc topgen gen-top`
-- `arc topgen ip-summary`
-- `arc topgen match-ports`
-- `arc topgen unpack-ips`
-- `arc core verify-contract`
-- `arc core resources`
-- `arc hls gen-tcl`
-- `arc hls run`
-- `arc/hls/generate_hls_tcl.py`
-- `arc/hls/extract_hls_metrics.py`
-- `arc analyze hls-report`
-- `arc analyze latency-check`
-- `arc analyze runtime-latency`
-- `arc analyze plot-results`
-- `arc analyze dashboard`
+- `forge topgen validate`
+- `forge topgen gen-top`
+- `forge topgen ip-summary`
+- `forge topgen match-ports`
+- `forge topgen unpack-ips`
+- `forge core verify-contract`
+- `forge core resources`
+- `forge hls gen-tcl`
+- `forge hls run`
+- `forge/hls/generate_hls_tcl.py`
+- `forge/hls/extract_hls_metrics.py`
+- `forge analyze hls-report`
+- `forge analyze latency-check`
+- `forge analyze runtime-latency`
+- `forge analyze plot-results`
+- `forge analyze dashboard`
 
 For HLS flows, the preferred public interface is the installed CLI:
 
-- `arc hls gen-tcl`
-- `arc hls run`
+- `forge hls gen-tcl`
+- `forge hls run`
 
-`arc/hls/generate_hls_tcl.py` and `arc/hls/extract_hls_metrics.py` are the implementations behind those commands. They are framework tooling, but they are not the primary first-class interface a new consumer should build around.
+`forge/hls/generate_hls_tcl.py` and `forge/hls/extract_hls_metrics.py` are the implementations behind those commands. They are framework tooling, but they are not the primary first-class interface a new consumer should build around.
 
 ## Topology-generation contract owned by Layer 2
 
@@ -64,12 +64,12 @@ Generated DUT artifacts include:
 
 ## Analysis contract owned by Layer 2
 
-Layer 2 standardizes a post-verification analysis surface via `arc analyze`.
+Layer 2 standardizes a post-verification analysis surface via `forge analyze`.
 
 Plugin-authored inputs:
 
 - `modules.yml` entries annotated with `latency_hint` or `latency_cycles` per module
-- `plugins/<plugin>/arc/verify/plot_config.yml` defining result figures
+- `plugins/<plugin>/forge/verify/plot_config.yml` defining result figures
 - a probe CSV in long format (`cycle,signal,value`) produced by the plugin
 
 Framework-provided outputs:
@@ -91,12 +91,12 @@ The following are public Layer 2 behavior for the current release line:
 - strict-mode enforcement semantics as described in the author guide
 - documented generated artifact set
 - documented default error-handling behavior and `--debug` traceback opt-in
-- `arc analyze` sub-commands and their plugin-owned input contracts
+- `forge analyze` sub-commands and their plugin-owned input contracts
 - dashboard HTML structure and report file naming conventions
 
 The following are not public Layer 2 API:
 
-- internal Python package structure under `arc/topgen/`
+- internal Python package structure under `forge/topgen/`
 - private validation helpers and internal matcher implementation details
 - repo-local wrappers that are not support-classified
 

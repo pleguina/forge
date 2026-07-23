@@ -1,6 +1,6 @@
 # Framework Setup Guide
 
-This guide is a repo-local setup guide for the framework repository. Downstream plugin flows should live in the plugin repository and call the installed `arc` package through explicit paths.
+This guide is a repo-local setup guide for the framework repository. Downstream plugin flows should live in the plugin repository and call the installed `forge` package through explicit paths.
 
 For the canonical new-plugin adoption path, start with:
 
@@ -25,21 +25,21 @@ when you need to execute a full simulation.
 
 ---
 
-## 2. Create the Python environment and install `arc`
+## 2. Create the Python environment and install `forge`
 
-From the repo root, create a virtualenv and install the `arc` package:
+From the repo root, create a virtualenv and install the `forge` package:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e arc/
+pip install -e forge/
 ```
 
-This installs the `arc topgen`, `arc verify`, `arc hls`, `arc analyze`, and
-`arc core` sub-command groups under the single `arc` entry point.  To verify:
+This installs the `forge topgen`, `forge verify`, `forge hls`, `forge analyze`, and
+`forge core` sub-command groups under the single `forge` entry point.  To verify:
 
 ```bash
-arc --version
+forge --version
 ```
 
 Then install `pytest` (not included in the default dependencies):
@@ -56,7 +56,7 @@ pip install pytest
 cd /path/to/repo
 source .venv/bin/activate
 python3 -m pytest \
-  plugins/trigger_demo/arc/verify/tools/tests \
+  plugins/trigger_demo/forge/verify/tools/tests \
   -q
 ```
 
@@ -66,19 +66,19 @@ Expected output:
 110 passed
 ```
 
-> **Known issue:** `plugins/trigger_demo/arc/verify/tools/tests/conftest.py` and
-> `plugins/trigger_demo/arc/verify/tools/bootstrap.py` still add
+> **Known issue:** `plugins/trigger_demo/forge/verify/tools/tests/conftest.py` and
+> `plugins/trigger_demo/forge/verify/tools/bootstrap.py` still add
 > `<repo>/framework/verify/python` to `sys.path` and `import` from a top-level
 > `fw_verify` package. That path was removed when the framework was flattened
-> into `arc/` and `fw_verify` was renamed to `arc.verify` — on a clean checkout
+> into `forge/` and `fw_verify` was renamed to `forge.verify` — on a clean checkout
 > with no legacy `fw_verify` install on `sys.path`, this suite currently fails
-> with import errors instead of passing. See `arc/verify/__main__.py` for the
+> with import errors instead of passing. See `forge/verify/__main__.py` for the
 > same stale `_FW_PYTHON` path pattern used elsewhere.
 
 These proof-consumer suites are framework-owned validation surfaces. They do not
 require Vivado or DUT build artifacts.
 
-Downstream plugin test suites are run from the plugin repository. ARC should not require any particular downstream plugin to be mounted inside this repo.
+Downstream plugin test suites are run from the plugin repository. FORGE should not require any particular downstream plugin to be mounted inside this repo.
 
 ### What the tests cover
 
@@ -98,26 +98,24 @@ Framework-owned smoke examples:
 
 ```bash
 source .venv/bin/activate
-pip install -e arc/
+pip install -e forge/
 
-arc verify doctor \
-  plugins/trigger_demo/arc/verify/design.verification.yml \
-  --flow trigger_pipeline_xsim \
-  --dry-run
+forge verify doctor \
+  plugins/trigger_demo/forge/verify/design.verification.yml
 ```
 
-Downstream plugins may add their own environment setup for plugin-local tools and data. That setup belongs in the plugin repository, while ARC remains the installed framework package.
+Downstream plugins may add their own environment setup for plugin-local tools and data. That setup belongs in the plugin repository, while FORGE remains the installed framework package.
 
 ## 5. Generate DUT artifacts (example consumer flow)
 
 The exact DUT-generation command depends on the consumer design you are using.
-For a plugin-owned design, use `arc topgen gen-top` with explicit plugin
+For a plugin-owned design, use `forge topgen gen-top` with explicit plugin
 paths:
 
 ```bash
 source .venv/bin/activate
 
-arc topgen gen-top \
+forge topgen gen-top \
   plugins/<plugin>/designs/design.yml \
   --mode verilog \
   --consumer-root . \
@@ -142,7 +140,7 @@ workspace/
   my-plugin/
 ```
 
-Install ARC from `arc-framework/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `arc/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
+Install FORGE from `arc-framework/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `forge/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
 
 ---
 
@@ -150,12 +148,12 @@ Install ARC from `arc-framework/`, then execute the plugin-owned verification co
 
 | Symptom                                                  | Fix                                                     |
 |----------------------------------------------------------|---------------------------------------------------------|
-| `ModuleNotFoundError: No module named 'arc'`        | `pip install -e arc/`                                   |
+| `ModuleNotFoundError: No module named 'forge'`        | `pip install -e forge/`                                   |
 | `ModuleNotFoundError: No module named 'yaml'`            | `pip install pyyaml`                                    |
 | `ModuleNotFoundError: No module named 'pytest'`          | `pip install pytest`                                    |
-| `LookupError: Plugin '<id>' has not been declared`       | Source or import the plugin bootstrap before calling `arc verify` |
+| `LookupError: Plugin '<id>' has not been declared`       | Source or import the plugin bootstrap before calling `forge verify` |
 | `RuntimeError: Plugin '<id>' has not been bootstrapped`  | Tests: check conftest imports bootstrap; scripts: source plugin setup first |
-| `[preflight] FAILED: Port signature not found`           | Run `arc topgen gen-top ...` to regenerate artifacts    |
+| `[preflight] FAILED: Port signature not found`           | Run `forge topgen gen-top ...` to regenerate artifacts    |
 | `verify.flow.yml missing required fields`                | Check YAML has: `flow.plugin`, `flow.kind`, `flow.backend`, `dut.*`, `simulation.*` |
 | `xvlog: command not found`                               | Source your Vivado settings: `source $XILINX_VIVADO/settings64.sh` |
 
@@ -164,12 +162,12 @@ Install ARC from `arc-framework/`, then execute the plugin-owned verification co
 ## 8. Repo layout reference
 
 ```
-arc/verify/                         <- framework verification Python package source
+forge/verify/                         <- framework verification Python package source
 plugins/trigger_demo/               <- supported proof consumer
-<plugin-repo>/arc/verify/tools/     <- plugin-owned Python files
-<plugin-repo>/arc/verify/*_xsim/    <- plugin-owned generated or maintained XSIM flows
-out/<design>/                       <- arc topgen gen-top generated DUT artifacts
+<plugin-repo>/forge/verify/tools/     <- plugin-owned Python files
+<plugin-repo>/forge/verify/*_xsim/    <- plugin-owned generated or maintained XSIM flows
+out/<design>/                       <- forge topgen gen-top generated DUT artifacts
 docs/MINIMAL_CONSUMER_QUICKSTART.md <- canonical new-plugin quickstart
 docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md  <- canonical verification integration guide
-<plugin-repo>/arc/verify/           <- plugin-local backend adapters and docs
+<plugin-repo>/forge/verify/           <- plugin-local backend adapters and docs
 ```
