@@ -83,7 +83,7 @@ class ParserDependencyMissing(IntrospectionError):
                 "Install the parser extra:\n"
                 "    pip install pyverilog\n"
                 "  or:\n"
-                "    pip install 'fw-verify[parser]'\n"
+                "    pip install 'forge[parser]'\n"
                 "  Alternatively, use mode='regex' for HLS-generated RTL, "
                 "or provide a hand-authored port_map.yaml."
             ),

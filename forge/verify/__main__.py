@@ -933,16 +933,6 @@ forge verify generate / run will work for declared flows.
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-# ── Ensure framework and tools/ are importable ──────────────────────────
-_HERE      = Path(__file__).resolve().parent
-_FW_PYTHON = _HERE.parents[3] / "framework" / "verify" / "python"
-for _p in [str(_FW_PYTHON), str(_HERE)]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 # ── Plugin identity ──────────────────────────────────────────────────────
 PLUGIN_ID = "{plugin_id}"
 
@@ -987,14 +977,7 @@ Adapt ``generate_for_flow()`` below to match your DUT's port semantics:
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-
-# ── Ensure framework is importable ────────────────────────────────────
-_HERE = Path(__file__).resolve().parent
-_FW_PYTHON = _HERE.parents[3] / "framework" / "verify" / "python"
-if str(_FW_PYTHON) not in sys.path:
-    sys.path.insert(0, str(_FW_PYTHON))
 
 from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
@@ -1118,11 +1101,12 @@ flows:
 def _cmd_init_plugin(args: argparse.Namespace) -> int:
     """Implement the ``init-plugin`` sub-command.
 
-    Scaffolds a new plugin skeleton under ``<plugins_root>/<plugin_id>/verify/``.
+    Scaffolds a new plugin skeleton under
+    ``<plugins_root>/<plugin_id>/forge/verify/``.
     """
     plugin_id   = args.plugin_id
     plugins_root = Path(args.plugins_root)
-    verify_root  = plugins_root / plugin_id / "verify"
+    verify_root  = plugins_root / plugin_id / "forge" / "verify"
     tools_dir    = verify_root / "tools"
     schemas_dir  = verify_root / "schemas" / "data"
     tests_dir    = verify_root / "tests"
@@ -1290,7 +1274,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             "pyverilog (parser extra): NOT installed  [mode=regex fallback]",
             action=(
                 "Regex fallback is heuristic and may miss ports on non-standard RTL.  "
-                "Install with: pip install -e \"framework/verify/python/[parser]\""
+                "Install with: pip install -e \"forge/[parser]\""
             ),
         )
 

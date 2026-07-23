@@ -58,7 +58,7 @@ Usage
         code="FWV006",
         severity=Severity.WARNING,
         message="pyverilog not installed — using regex fallback",
-        action="pip install -e 'framework/verify/python/[parser]'",
+        action="pip install -e 'forge/[parser]'",
     ))
 
     # Print to console
