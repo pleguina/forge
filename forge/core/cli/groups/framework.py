@@ -119,7 +119,6 @@ def cmd_emit_payload(args):
     """Generate a Blobfish-compatible payload.v from resolved I/O."""
     import json as _json
     from forge.framework.importer import load, FrameworkImportError
-    from forge.framework.io_resolver import DetectorIOResolved, ResolvedInput, ResolvedOutput
     from forge.framework.payload_generator import (
         generate_payload_verilog, ControlPolicies,
     )

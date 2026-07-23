@@ -3,15 +3,22 @@
 #
 # Defines the framework release gate job.
 #
-# This job runs ci/verify_framework_release.sh which exercises:
-#   Class A — cmake configure + build + ctest + minimal_consumer proof +
-#              install-tree proof + external consumer proof
+# This job runs run_trigger_demo.sh — the same end-to-end pipeline a human
+# runs manually to validate a change (see plugins/trigger_demo/README.md):
+#   validate → gen-top → verify generate → doctor → HLS csim/synth →
+#   all 9 verification flows (4 csim, 4 single-module xsim, 1 full-chip xsim)
+#
+# It is the framework's real hardware-toolchain-dependent proof, replacing a
+# previous cmake install-tree/C++ package proof that targeted a build target
+# (framework::verif_core) which no longer exists — C++ verify sources are now
+# owned per-plugin (plugins/<plugin>/forge/verify/), not by a shared
+# top-level package.
 #
 # The job:
 #   - runs automatically on the default branch (main) and version tags
 #   - is manually triggerable on merge requests (not blocking)
-#   - requires the vivado shell runner (cmake + toolchain on PATH)
-#   - produces structured log artifacts for post-run inspection
+#   - requires the vivado shell runner (Vitis HLS + Vivado xsim on PATH)
+#   - produces a structured log artifact for post-run inspection
 #
 # Consumed by: arc-framework/.gitlab-ci.yml (via include)
 # ============================================================================
@@ -31,8 +38,11 @@ forge:framework-release-gate:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
+  before_script:
+    - pip install --quiet -e "forge[parser]" pytest pytest-cov
   script:
-    - bash ci/verify_framework_release.sh 2>&1 | tee ci-logs/release-gate.log
+    - mkdir -p ci-logs
+    - bash run_trigger_demo.sh --jobs=4 2>&1 | tee ci-logs/release-gate.log
   after_script:
     - echo "Release gate exit code $CI_JOB_STATUS"
   artifacts:

@@ -3,28 +3,35 @@
 # CI Gate: Fresh-User Onboarding Check
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Validates the fw_verify package from the perspective of a fresh user:
+# Validates the forge package from the perspective of a fresh user, and
+# doubles as an agnosticism regression guard: everything through Stage 4
+# runs against a freshly `init-plugin`-scaffolded plugin with a generic,
+# non-CMS name — if FORGE core ever regresses to assuming OMTF-specific
+# names or structure, this is the first place that would break.
+#
 #   1. Package installs cleanly from source (no pre-existing state assumed)
-#   2. CLI entry point works after install  (fw_verify --help)
-#   3. fw_verify init-plugin scaffolds a valid plugin skeleton
-#   4. Scaffolded plugin passes doctor (READ-ONLY health check)
-#   5. trigger_demo reference plugin passes doctor
-#   6. trigger_demo tests pass (no HLS / Vivado required)
+#   2. CLI entry point works after install     (forge --help)
+#   3. forge verify init-plugin scaffolds a valid, generically-named plugin
+#   4. Scaffolded plugin passes doctor (READ-ONLY health check, incl. --json)
+#   5. forge topgen validate + forge verify prepare --dry-run on trigger_demo
+#   6. trigger_demo reference plugin passes doctor
+#   7. forge unit tests + trigger_demo plugin tests (no HLS / Vivado required)
 #
 # Prerequisites:
 #   - python3 + pip available on PATH
-#   - No existing fw_verify install required (stage 1 installs it)
+#   - No existing forge install required (stage 1 installs it)
 #
 # Usage:
 #   bash ci/fresh_user_check.sh
-#   bash ci/fresh_user_check.sh --skip-install   # re-use already-installed fw_verify
+#   bash ci/fresh_user_check.sh --skip-install   # re-use already-installed forge
 #
 # Returns: 0 if all stages pass, non-zero on first failure.
 # ═══════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FW_PYTHON="${REPO_ROOT}/verify/python"
+TRIGGER_PLUGIN="${REPO_ROOT}/plugins/trigger_demo"
+TRIGGER_FORGE_ROOT="${TRIGGER_PLUGIN}/forge"
 
 PASS_COLOR='\033[0;32m'
 FAIL_COLOR='\033[0;31m'
@@ -40,135 +47,151 @@ for arg in "$@"; do
     [[ "$arg" == "--skip-install" ]] && SKIP_INSTALL=true
 done
 
-# ── Helper: run fw_verify using installed CLI or fallback to module ───────
-fw_verify_cmd() {
-    if command -v fw_verify &>/dev/null; then
-        fw_verify "$@"
-    else
-        PYTHONPATH="${FW_PYTHON}:${PYTHONPATH:-}" python3 -m fw_verify "$@"
-    fi
-}
-
 # ─────────────────────────────────────────────────────────────────────────
 section "Stage 1: Package install from source"
 # ─────────────────────────────────────────────────────────────────────────
 if $SKIP_INSTALL; then
     echo "  [skipped] --skip-install flag provided"
 else
-    # Install with the optional pyverilog parser extra
-    pip install -q -e "${FW_PYTHON}[parser]" pytest pytest-cov
-    pass "pip install -e verify/python[parser]"
+    pip install -q -e "${REPO_ROOT}/forge[parser]" pytest pytest-cov
+    pass "pip install -e forge[parser]"
 fi
 
-# Verify import works
-python3 -c "import fw_verify; print(f'  fw_verify imported OK (location: {fw_verify.__file__}')"
-pass "fw_verify package importable"
+python3 -c "import forge; print(f'  forge imported OK (location: {forge.__file__})')"
+pass "forge package importable"
 
 # ─────────────────────────────────────────────────────────────────────────
 section "Stage 2: CLI entry point check"
 # ─────────────────────────────────────────────────────────────────────────
-fw_verify_cmd --help > /dev/null
-pass "fw_verify --help"
+forge --help > /dev/null
+pass "forge --help"
 
-fw_verify_cmd doctor --help > /dev/null
-pass "fw_verify doctor --help"
+forge verify doctor --help > /dev/null
+pass "forge verify doctor --help"
 
-fw_verify_cmd generate --help > /dev/null
-pass "fw_verify generate --help"
+forge verify generate --help > /dev/null
+pass "forge verify generate --help"
 
-fw_verify_cmd init-plugin --help > /dev/null
-pass "fw_verify init-plugin --help"
+forge verify init-plugin --help > /dev/null
+pass "forge verify init-plugin --help"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 3: init-plugin scaffold"
+section "Stage 3: init-plugin scaffold (generic, non-CMS name)"
 # ─────────────────────────────────────────────────────────────────────────
 SCRATCH_DIR="$(mktemp -d)"
 trap 'rm -rf "${SCRATCH_DIR}"' EXIT
 
-fw_verify_cmd init-plugin fresh_test_plugin \
+PLUGIN_ID="fresh_test_plugin"
+
+forge verify init-plugin "${PLUGIN_ID}" \
     --plugins-root "${SCRATCH_DIR}" \
     --dry-run | grep -q "Would create"
-pass "fw_verify init-plugin --dry-run"
+pass "forge verify init-plugin --dry-run"
 
-fw_verify_cmd init-plugin fresh_test_plugin \
+forge verify init-plugin "${PLUGIN_ID}" \
     --plugins-root "${SCRATCH_DIR}"
 
-SCAFFOLDED_VERIFY="${SCRATCH_DIR}/fresh_test_plugin/verify"
+SCAFFOLDED_VERIFY="${SCRATCH_DIR}/${PLUGIN_ID}/forge/verify"
 
-# Check expected files were created
 for f in \
     "design.verification.yml" \
     "tools/bootstrap.py" \
     "tools/gen_stimulus.py" \
-    "schemas/data/fresh_test_plugin_golden.xml"
+    "schemas/data/${PLUGIN_ID}_golden.xml"
 do
     [[ -f "${SCAFFOLDED_VERIFY}/${f}" ]] \
         || fail "init-plugin did not create: ${f}"
 done
-pass "init-plugin created all expected files"
+pass "init-plugin created all expected files under forge/verify/"
+
+# Scaffolded bootstrap.py must import and run standalone — no leftover
+# sys.path surgery, no dependency on anything but the installed forge
+# package (regression guard for the init-plugin sys.path-hack bug).
+python3 - "${SCAFFOLDED_VERIFY}/tools/bootstrap.py" <<'EOF'
+import importlib.util, sys
+path = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+mod.bootstrap()
+print(f"  bootstrap OK, PLUGIN_ID={mod.PLUGIN_ID}")
+EOF
+pass "Scaffolded bootstrap.py imports and runs standalone"
 
 # design.verification.yml must be loadable
-export SCAFFOLDED_VERIFY
-PYTHONPATH="${FW_PYTHON}:${PYTHONPATH:-}" python3 - <<'EOF'
+python3 - "${SCAFFOLDED_VERIFY}/design.verification.yml" "${PLUGIN_ID}" <<'EOF'
 import sys
 from pathlib import Path
-import os
+from forge.verify.design_contract import load_verify_design
 
-scaffolded = Path(os.environ.get("SCAFFOLDED_VERIFY", ""))
-if not scaffolded.exists():
-    print("SCAFFOLDED_VERIFY env var not set", file=sys.stderr)
-    sys.exit(1)
-
-from fw_verify.design_contract import load_verify_design
-yml = scaffolded / "design.verification.yml"
-contract = load_verify_design(yml)
-assert contract.plugin == "fresh_test_plugin", f"wrong plugin: {contract.plugin}"
+yml, expected_plugin = sys.argv[1], sys.argv[2]
+contract = load_verify_design(Path(yml))
+assert contract.plugin == expected_plugin, f"wrong plugin: {contract.plugin}"
 assert len(contract.flows) >= 1, "no flows declared"
 print(f"  loaded {len(contract.flows)} flow(s)")
 EOF
 pass "Scaffolded design.verification.yml is loadable"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 4: fw_verify doctor on scaffolded plugin"
+section "Stage 4: forge verify doctor on scaffolded plugin"
 # ─────────────────────────────────────────────────────────────────────────
-# doctor should run without crashing (exit 0 not guaranteed — TB not yet
-# generated — but it must produce parseable structured output)
+DOCTOR_JSON="${SCRATCH_DIR}/doctor_out.json"
 set +e
-fw_verify_cmd doctor "${SCAFFOLDED_VERIFY}/design.verification.yml" 2>&1 \
-    | grep -qE "(OK|WARN|ERR|doctor)" \
-    && DOCTOR_OUTPUT_OK=true || DOCTOR_OUTPUT_OK=false
+forge verify doctor "${SCAFFOLDED_VERIFY}/design.verification.yml" --json > "${DOCTOR_JSON}"
 set -e
 
-$DOCTOR_OUTPUT_OK && pass "doctor produces structured output for scaffolded plugin" \
-    || fail "doctor produced no recognizable output"
+python3 - "${DOCTOR_JSON}" <<'EOF'
+import json, sys
+data = json.load(open(sys.argv[1]))
+for key in ("status", "counts", "diagnostics"):
+    assert key in data, f"missing key: {key}"
+print(f"  status={data['status']} counts={data['counts']}")
+EOF
+pass "doctor --json produces valid structured output for scaffolded plugin"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 5: trigger_demo doctor"
+section "Stage 5: forge topgen validate + prepare --dry-run on trigger_demo"
 # ─────────────────────────────────────────────────────────────────────────
-TRIGGER_DESIGN="${REPO_ROOT}/plugins/trigger_demo/verify/design.verification.yml"
+[[ -f "${TRIGGER_FORGE_ROOT}/designs/design.yml" ]] \
+    || fail "trigger_demo design.yml not found: ${TRIGGER_FORGE_ROOT}/designs/design.yml"
 
-[[ -f "${TRIGGER_DESIGN}" ]] \
-    || fail "trigger_demo not found: ${TRIGGER_DESIGN}"
+forge topgen validate "${TRIGGER_FORGE_ROOT}/designs/design.yml" > /dev/null
+pass "forge topgen validate (trigger_demo)"
 
-# doctor on trigger_demo: may warn (no TB generated), must not crash
+forge verify prepare "${TRIGGER_FORGE_ROOT}/verify/design.verification.yml" --dry-run > /dev/null
+pass "forge verify prepare --dry-run (trigger_demo)"
+
+# ─────────────────────────────────────────────────────────────────────────
+section "Stage 6: forge verify doctor on trigger_demo (canonical reference)"
+# ─────────────────────────────────────────────────────────────────────────
+TRIGGER_DESIGN="${TRIGGER_FORGE_ROOT}/verify/design.verification.yml"
+TRIGGER_JSON="${SCRATCH_DIR}/trigger_doctor.json"
+
 set +e
-fw_verify_cmd doctor "${TRIGGER_DESIGN}" 2>&1 \
-    | grep -qE "(OK|WARN|ERR|doctor)" \
-    && TRIGGER_DOCTOR_OK=true || TRIGGER_DOCTOR_OK=false
+forge verify doctor "${TRIGGER_DESIGN}" --json > "${TRIGGER_JSON}"
 set -e
 
-$TRIGGER_DOCTOR_OK && pass "doctor produces structured output for trigger_demo" \
-    || fail "doctor crashed on trigger_demo"
+python3 - "${TRIGGER_JSON}" <<'EOF'
+import json, sys
+data = json.load(open(sys.argv[1]))
+# Zero-port and missing-tool findings are expected/acceptable without
+# Vivado in this job; anything else at error severity is a real problem.
+errors = [d for d in data["diagnostics"] if d["severity"] == "error"]
+hard_errors = [e for e in errors if e.get("code") not in ("FWV015", "FWV019")]
+if hard_errors:
+    print(f"Unexpected hard errors: {hard_errors}", file=sys.stderr)
+    sys.exit(1)
+print(f"  status={data['status']} counts={data['counts']}")
+EOF
+pass "trigger_demo doctor: no unexpected hard errors"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 6: trigger_demo plugin tests"
+section "Stage 7: forge unit tests + trigger_demo plugin tests"
 # ─────────────────────────────────────────────────────────────────────────
-TRIGGER_TESTS="${REPO_ROOT}/plugins/trigger_demo/verify/tools/tests"
-TRIGGER_TOOLS="${REPO_ROOT}/plugins/trigger_demo/verify/tools"
+python3 -m pytest "${REPO_ROOT}/forge/tests" -q --tb=short -o addopts=''
+pass "forge unit tests"
 
-PYTHONPATH="${FW_PYTHON}:${TRIGGER_TOOLS}:${PYTHONPATH:-}" \
-    python3 -m pytest "${TRIGGER_TESTS}" -v --tb=short \
-    --rootdir="${REPO_ROOT}" 2>&1
+python3 -m pytest "${TRIGGER_FORGE_ROOT}/verify/tools/tests" -q --tb=short
 pass "trigger_demo plugin tests"
 
 # ─────────────────────────────────────────────────────────────────────────

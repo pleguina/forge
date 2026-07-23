@@ -7,7 +7,7 @@
 #   This file provides ONLY:
 #     - shared stage declarations that a plugin can extend
 #     - a hidden Python setup template (.forge_plugin_setup)
-#     - a hidden fw_verify smoke template (.forge_fw_verify_smoke)
+#     - hidden contract-validate / verify-doctor smoke templates
 #   It must NOT:
 #     - define mandatory concrete jobs
 #     - reference plugins/trigger_demo/ or any arc-framework-internal path
@@ -25,7 +25,7 @@
 #     extends: .forge_plugin_setup
 #     stage: validate
 #     script:
-#       - topgen validate-registry modules.yml --strict
+#       - forge topgen validate-registry modules.yml --strict
 # ============================================================================
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ default:
 # ---------------------------------------------------------------------------
 # .forge_plugin_cache
 #
-# Pip cache key for a plugin that installs arc-framework packages.
+# Pip cache key for a plugin that installs the forge package.
 # Override FORGE_FRAMEWORK_REF to match the pinned include ref.
 # ---------------------------------------------------------------------------
 .forge_plugin_cache:
@@ -66,16 +66,16 @@ default:
 # ---------------------------------------------------------------------------
 # .forge_plugin_setup
 #
-# Installs topgen and fw_verify from the arc-framework project include path.
-# The plugin's .gitlab-ci.yml must set FORGE_FRAMEWORK_PACKAGE_URL or provide
-# the packages via another mechanism (e.g. pip index, local path mount).
+# Installs the forge package (unified topgen + hls + verify + analyze CLI).
+# There is no separately-published PyPI package — the framework is a single
+# package (forge/pyproject.toml, name="forge") installed by pip either
+# directly from the arc-framework git repo, or from an internal package
+# index if the consuming org has set one up.
 #
-# Default: install from PyPI-compatible index using the variable
-#   FORGE_TOPGEN_PIP_REF      — pip install target for topgen
-#   FORGE_FW_VERIFY_PIP_REF   — pip install target for fw_verify
-#
-# For the initial monorepo-adjacent setup where the framework is available
-# as a local sibling, the plugin .gitlab-ci.yml should override before_script.
+# Default: install directly from the arc-framework git repo at
+# FORGE_FRAMEWORK_REF (default "main"). Override FORGE_FORGE_PIP_REF to
+# point at an internal index/mirror instead, e.g.:
+#   FORGE_FORGE_PIP_REF: "--index-url https://pypi.mycompany.internal/simple/ forge"
 # ---------------------------------------------------------------------------
 .forge_plugin_setup:
   image: python:3.11-slim
@@ -83,8 +83,7 @@ default:
     - default-x86_64
   before_script:
     - pip install --quiet --cache-dir .pip-cache
-        ${FORGE_TOPGEN_PIP_REF:---index-url https://pypi.org/simple/ topgen}
-        ${FORGE_FW_VERIFY_PIP_REF:---index-url https://pypi.org/simple/ fw-verify}
+        ${FORGE_FORGE_PIP_REF:-"git+https://gitlab.cern.ch/p2u-omtf-ops/arc-framework.git@${FORGE_FRAMEWORK_REF:-main}#subdirectory=forge"}
         pytest pyyaml yamllint
 
 # ---------------------------------------------------------------------------
@@ -98,8 +97,8 @@ default:
   extends: .forge_plugin_setup
   stage: validate
   script:
-    - topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
-    - topgen verify-contract
+    - forge topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
+    - forge core verify-contract
         --ip-info "${PLUGIN_IP_INFO_YML:-ip_info.yaml}"
         --all-contracts "${PLUGIN_INTERFACES_DIR}"
   artifacts:
@@ -110,19 +109,19 @@ default:
       - ci-logs/contract-validate.log
 
 # ---------------------------------------------------------------------------
-# .forge_fw_verify_doctor
+# .forge_verify_doctor
 #
-# Hidden template: run fw_verify doctor against the plugin verification
+# Hidden template: run forge verify doctor against the plugin verification
 # contract. Extend this in a concrete job; set PLUGIN_VERIFY_CONTRACT_PATH.
 # ---------------------------------------------------------------------------
-.forge_fw_verify_doctor:
+.forge_verify_doctor:
   extends: .forge_plugin_setup
   stage: smoke
   script:
-    - fw_verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
+    - forge verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
   artifacts:
-    name: "forge-fw-verify-doctor-${CI_COMMIT_SHORT_SHA}"
+    name: "forge-verify-doctor-${CI_COMMIT_SHORT_SHA}"
     when: always
     expire_in: 14 days
     paths:
-      - ci-logs/fw-verify-doctor.log
+      - ci-logs/verify-doctor.log

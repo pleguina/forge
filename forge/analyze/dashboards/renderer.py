@@ -93,7 +93,7 @@ def _md_to_html_fragment(md_text: str) -> str:
                 html_lines.append("<table>"); in_table = True
             if all(re.fullmatch(r"[-: ]+", c) for c in cells):
                 continue  # separator row
-            tag = "th" if not any("<td>" in l for l in html_lines[-5:] if "<t" in l) else "td"
+            tag = "th" if not any("<td>" in ln for ln in html_lines[-5:] if "<t" in ln) else "td"
             row = "".join(f"<{tag}>{_inline(c)}</{tag}>" for c in cells)
             html_lines.append(f"<tr>{row}</tr>")
         else:

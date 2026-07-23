@@ -30,11 +30,9 @@ This inventory defines the support status for maintained surfaces referenced by 
 | `forge/hls/generate_hls_tcl.py` | Supported optional tooling | implementation behind `forge hls gen-tcl` |
 | `forge/hls/extract_hls_metrics.py` | Supported optional tooling | structured metrics extraction surface |
 | `docs/FRAMEWORK_TOOLING_INTERFACE.md` | Supported optional tooling | defines Layer 2 contract |
-| `validate_framework.sh` | Supported convenience only | repo-root standalone validation helper for export-readiness checks |
-| `tests/external_consumer_proof/` | Supported convenience only | maintained proof that an external consumer can use the installed framework interfaces |
-| `ci/verify_framework_release.sh` | Supported convenience only | framework-only release gate that excludes OMTF as a required dependency |
-| `ci/fresh_user_check.sh` | Supported convenience only | framework package-install and onboarding validation path |
-| `ci/fresh_user_path.sh` | Supported convenience only | framework fresh-user path validation from package install through consumer proof |
+| `run_trigger_demo.sh` | Supported proof consumer | the actual hardware-toolchain-dependent release gate (`ci/framework-release.yml`); validate → gen-top → verify generate → doctor → HLS csim/synth → all 9 verification flows |
+| `ci/fresh_user_check.sh` | Supported convenience only | framework package-install and onboarding validation path; also the agnosticism regression guard (scaffolds and doctors a generically-named plugin via `init-plugin`) |
+| `ci/agnosticism_check.sh` | Supported convenience only | source-level guard against hardcoded CMS/OMTF vocabulary creeping back into `forge/` core |
 | downstream compatibility gates | Downstream consumer only | plugin-specific compatibility gates belong in plugin repositories or external integration CI |
 | `forge/hls/visualize_hls_pipeline.py` | Supported convenience only | optional visualization helper |
 | `plugins/<plugin>/` local mounts | Downstream consumer only | optional local mounts for development; not committed FORGE core |

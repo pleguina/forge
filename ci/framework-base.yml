@@ -8,7 +8,7 @@
 #   - pip cache policy
 #   - reusable before_script anchor (.forge_python_setup)
 #
-# Consumed by: forge-./.gitlab-ci.yml
+# Consumed by: ./.gitlab-ci.yml
 # Exposed to plugins via: ci/plugin-consumer.yml
 # ============================================================================
 

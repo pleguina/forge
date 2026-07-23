@@ -70,7 +70,7 @@ The following are not Layer 1 API and may change without being treated as a publ
 The current Layer 1 acceptance proof is based on:
 
 - `plugins/trigger_demo/forge/verify/` as the maintained non-OMTF proof consumer
-- `tests/external_consumer_proof/`
-- `ci/verify_framework_release.sh`
+- `run_trigger_demo.sh` (the framework release gate — `ci/framework-release.yml`)
+- `ci/fresh_user_check.sh` and `ci/agnosticism_check.sh`
 
 If those surfaces stop passing, Layer 1 must be treated as regressed until fixed or reclassified.
