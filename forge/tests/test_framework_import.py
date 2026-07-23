@@ -165,9 +165,15 @@ class TestLoad:
 
 
 class TestLoadErrors:
-    def test_unknown_provider(self, abi_path, ep_path):
-        with pytest.raises(FrameworkImportError, match="Unknown provider"):
-            load("unknown_fw", abi_path, ep_path)
+    def test_arbitrary_provider_name_accepted(self, abi_path, ep_path):
+        # Any non-empty provider label is accepted — the manifest schema
+        # is not provider-specific.
+        fi = load("some_other_framework", abi_path, ep_path)
+        assert fi.provider == "some_other_framework"
+
+    def test_empty_provider_rejected(self, abi_path, ep_path):
+        with pytest.raises(FrameworkImportError, match="non-empty"):
+            load("", abi_path, ep_path)
 
     def test_missing_abi_file(self, ep_path, tmp_path):
         with pytest.raises(FileNotFoundError):

@@ -87,6 +87,7 @@ _DET_IO = textwrap.dedent("""\
           wiring_kind: dt_processed_stub
           target_instance: concentrator
           target_port: dt_inputs[0]
+          algo_port: dt_0_csp_in
     trigger_outputs:
       - name: gmt_output_0
         blobfish_endpoint: tx_slr2_gt0_lane0
@@ -188,10 +189,38 @@ class TestResolvedPayload:
                                            algo_module="arc_algo_top")
         assert "arc_algo_top u_algo_top" in content
 
-    def test_dt_input_uses_generated_csp_port(self, fw, resolved_io):
+    def test_input_uses_explicit_algo_port_override(self, fw, resolved_io):
         content = generate_payload_verilog(fw, resolved_io)
         assert ".dt_0_csp_in ({rx_slr2_gt0_lane0_tdata, rx_slr2_gt0_lane0_tlast, rx_slr2_gt0_lane0_tfirst, rx_slr2_gt0_lane0_tvalid})" in content
         assert ".dt_inputs[0]" not in content
+
+    def test_input_without_override_uses_generic_sanitization(self, fw, tmp_path):
+        # No `algo_port` override: "name[idx]" is sanitized to "name_idx"
+        # generically, with no detector-specific pattern matching.
+        det_io = textwrap.dedent("""\
+            detector_inputs:
+              - name: dt_input_00
+                detector: DT
+                blobfish_endpoint: rx_slr2_gt0_lane0
+                detector_object:
+                  source_type: BMT-L1
+                frontend:
+                  module: dt_interface
+                  instance: dt_if_00
+                  parameters:
+                    input_id: 0
+                output:
+                  wiring_kind: dt_processed_stub
+                  target_instance: concentrator
+                  target_port: dt_inputs[0]
+        """)
+        p = tmp_path / "detector_io.yml"
+        p.write_text(det_io)
+        resolved = resolve(p, fw)
+        content = generate_payload_verilog(fw, resolved)
+        # Still packed (csp protocol) since that's derived from the endpoint,
+        # but the port name is the generic sanitization, not a CMS-specific one.
+        assert ".dt_inputs_0 ({rx_slr2_gt0_lane0_tdata, rx_slr2_gt0_lane0_tlast, rx_slr2_gt0_lane0_tfirst, rx_slr2_gt0_lane0_tvalid})" in content
 
     def test_csp_output_uses_generated_port_and_unpack(self, fw, resolved_io):
         content = generate_payload_verilog(fw, resolved_io)
@@ -220,3 +249,9 @@ class TestControlPolicies:
         # Every port in ABI must appear in the port list section
         for port in fw.ports:
             assert port.name in content
+
+    def test_port_alias_overrides_output_derivation(self, fw, resolved_io):
+        policies = ControlPolicies(port_aliases={"out_csp_nn.csp_out": "renamed_output_port"})
+        content = generate_payload_verilog(fw, resolved_io, policies=policies)
+        assert ".renamed_output_port (tx_slr2_gt0_lane0_csp)" in content
+        assert ".out_csp_nn_csp_out" not in content

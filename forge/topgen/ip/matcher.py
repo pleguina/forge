@@ -792,18 +792,22 @@ def auto_match_ports(
             _collect_heuristic("reset")
             _collect_heuristic("rst_n")
 
-    # Collect new_event as a global signal ONLY if no module generates it internally
-    # (if a module like bx_timing outputs it, it shouldn't be a top-level input)
-    has_new_event_source = any(
-        "new_event" in {
-            p["name"]
-            for p in ip_info[_ip_key(m.name)]["ports"]
-            if str(p.get("direction", "")).upper() in ("OUT", "OUTPUT", "INOUT")
-        }
-        for m in cfg.modules
-    )
-    if not has_new_event_source:
-        _collect_heuristic("new_event")
+    # Collect each declared broadcast control signal (default: "new_event",
+    # for designs that don't declare `control_signals`) as a global signal
+    # ONLY if no module generates it internally — e.g. if a timing-generator
+    # module outputs it, it shouldn't be treated as a top-level input.
+    broadcast_signal_names = set(cfg.control_signals.keys()) if cfg.control_signals else {"new_event"}
+    for sig_name in broadcast_signal_names:
+        has_internal_source = any(
+            sig_name in {
+                p["name"]
+                for p in ip_info[_ip_key(m.name)]["ports"]
+                if str(p.get("direction", "")).upper() in ("OUT", "OUTPUT", "INOUT")
+            }
+            for m in cfg.modules
+        )
+        if not has_internal_source:
+            _collect_heuristic(sig_name)
 
     return conn_map, global_nets, report
 

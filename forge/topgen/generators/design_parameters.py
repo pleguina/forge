@@ -19,10 +19,18 @@ from typing import Dict, Any, List, Optional
 from ..config import DesignConfig
 
 
-def parse_algo_top_ports(algo_top_v_path: Path) -> Dict[str, List[Dict[str, Any]]]:
+_DEFAULT_SYSTEM_SIGNAL_NAMES = frozenset({
+    'ap_clk', 'ap_rst', 'ap_rst_n', 'new_event', 'bx_count_out',
+})
+
+
+def parse_algo_top_ports(
+    algo_top_v_path: Path,
+    system_signal_names: Optional[frozenset] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     """
     Parse algo_top.v to extract all port declarations with their metadata.
-    
+
     This creates a complete port map showing:
     - Port name on algo_top
     - Direction (input/output)
@@ -30,14 +38,22 @@ def parse_algo_top_ports(algo_top_v_path: Path) -> Dict[str, List[Dict[str, Any]
     - Source module name
     - Instance number
     - Original port name on the module
-    
+
     Args:
         algo_top_v_path: Path to generated algo_top.v file
-        
+        system_signal_names: Port names to classify as 'system' rather than
+            attempting module/instance parsing. Defaults to the clock/reset
+            pair plus the default control-signal names ('new_event',
+            'bx_count_out') for backward compatibility; pass a design's own
+            `cfg.control_signals` keys (plus clock/reset) to recognize a
+            design that names its broadcast control signals differently.
+
     Returns:
         Dictionary with 'inputs' and 'outputs' lists, each containing port info dicts
     """
-    
+    if system_signal_names is None:
+        system_signal_names = _DEFAULT_SYSTEM_SIGNAL_NAMES
+
     if not algo_top_v_path.exists():
         return {'inputs': [], 'outputs': []}
     
@@ -103,7 +119,7 @@ def parse_algo_top_ports(algo_top_v_path: Path) -> Dict[str, List[Dict[str, Any]
         }
         
         # System signals
-        if port_name in ('ap_clk', 'ap_rst', 'ap_rst_n', 'new_event', 'bx_count_out'):
+        if port_name in system_signal_names:
             port_info['category'] = 'system'
             port_info['module'] = 'system'
         # Debug ports: debug_<module>_<signal>_<instance> or debug_<module>_<signal>
@@ -265,12 +281,14 @@ def extract_design_parameters(
     clock_period_ns = float(cfg.clock_period)  # e.g., 2.77 ns
     algo_freq_mhz = round(1000.0 / clock_period_ns, 2)  # e.g., 360.8 MHz
     
-    # LHC frequency is always 40 MHz (25 ns period)
-    lhc_freq_mhz = 40.0
-    lhc_period_ns = 25.0
-    
-    # Calculate batches per event (LHC BX period in algo clocks)
-    # batches_per_event = ceil(LHC_period / algo_period)
+    # Reference synchronous period (e.g. an accelerator bunch-crossing clock)
+    # that stimulus/counter timing is derived against. Defaults to the LHC
+    # 40 MHz / 25 ns BX period when a design doesn't declare its own.
+    lhc_period_ns = cfg.reference_period_ns if cfg.reference_period_ns is not None else 25.0
+    lhc_freq_mhz = round(1000.0 / lhc_period_ns, 2)
+
+    # Calculate batches per event (reference period in algo clocks)
+    # batches_per_event = ceil(reference_period / algo_period)
     # For 25ns / 2.77ns ≈ 9.03 → 9 batches
     batches_per_event = int(round(lhc_period_ns / clock_period_ns))
     
@@ -455,7 +473,10 @@ def extract_design_parameters(
     # ===========================================================================
     port_map = {'inputs': [], 'outputs': []}
     if algo_top_v_path and algo_top_v_path.exists():
-        port_map = parse_algo_top_ports(algo_top_v_path)
+        system_signal_names = frozenset(
+            {'ap_clk', 'ap_rst', 'ap_rst_n'} | set(cfg.control_signals.keys())
+        ) if cfg.control_signals else None
+        port_map = parse_algo_top_ports(algo_top_v_path, system_signal_names)
 
     # ===========================================================================
     # Associate debug ports with modules

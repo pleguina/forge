@@ -35,25 +35,28 @@ from forge.framework.importer import Endpoint, FrameworkImport
 
 
 # ---------------------------------------------------------------------------
-# Compatibility maps
+# Role compatibility
 # ---------------------------------------------------------------------------
+#
+# FORGE places no restriction on detector type names or trigger output role
+# names — those are entirely plugin- and provider-defined vocabulary. The
+# only convention FORGE enforces by default is that an endpoint role for a
+# detector input follows "detector_input_<type>" (lower-cased detector type),
+# which is how the upstream endpoint manifest already names them. A plugin
+# whose provider uses a different convention (or wants stricter trigger
+# output role validation) can pass its own `detector_input_roles` /
+# `trigger_output_roles` overrides into resolve().
 
-# Maps detector type (upper-case) to the set of endpoint roles that are
-# compatible for *input* connections.
-_DETECTOR_INPUT_ROLES: Dict[str, set] = {
-    "DT":  {"detector_input_dt"},
-    "CSC": {"detector_input_csc"},
-    "RPC": {"detector_input_rpc"},
-    # Accept any input role for UNKNOWN to allow placeholder entries
-    "UNKNOWN": {
-        "detector_input_dt", "detector_input_csc", "detector_input_rpc",
-    },
-}
 
-_TRIGGER_OUTPUT_ROLES: set = {
-    "trigger_output_gmt",
-    "trigger_output_spare",
-}
+def _default_input_roles(detector_type: str) -> set:
+    """Default compatible endpoint roles for a detector type.
+
+    Follows the "detector_input_<type>" naming convention. The 'UNKNOWN'
+    placeholder type is treated as a wildcard (any detector_input_* role).
+    """
+    if detector_type.upper() == "UNKNOWN":
+        return {"__any_detector_input__"}
+    return {f"detector_input_{detector_type.lower()}"}
 
 
 # ---------------------------------------------------------------------------
@@ -98,9 +101,11 @@ class DetectorIOError(ValueError):
 
 
 def resolve(
-    detector_io_path: Path,
-    framework:        FrameworkImport,
-    registry_modules: Optional[set] = None,
+    detector_io_path:     Path,
+    framework:            FrameworkImport,
+    registry_modules:     Optional[set] = None,
+    detector_input_roles: Optional[Dict[str, set]] = None,
+    trigger_output_roles: Optional[set] = None,
 ) -> DetectorIOResolved:
     """Resolve detector_io.yml against a FrameworkImport.
 
@@ -113,6 +118,15 @@ def resolve(
     registry_modules:
         Optional set of known module names (from modules.yml).
         When provided, frontend modules are validated against it.
+    detector_input_roles:
+        Optional override of the default "detector_input_<type>" role
+        convention, keyed by upper-cased detector type. Only needed if a
+        provider's endpoint roles don't follow that convention.
+    trigger_output_roles:
+        Optional explicit set of allowed trigger-output endpoint roles.
+        FORGE has no built-in notion of what a trigger output role should
+        be named, so when omitted (the default) any tx-direction role is
+        accepted and no role-name check is performed.
 
     Returns
     -------
@@ -159,8 +173,12 @@ def resolve(
             )
 
         # Rule 4: role compatibility
-        allowed_roles = _DETECTOR_INPUT_ROLES.get(det_typ, set())
-        if allowed_roles and ep.endpoint_role not in allowed_roles:
+        if detector_input_roles is not None:
+            allowed_roles = detector_input_roles.get(det_typ, set())
+        else:
+            allowed_roles = _default_input_roles(det_typ)
+        wildcard = "__any_detector_input__" in allowed_roles
+        if allowed_roles and not wildcard and ep.endpoint_role not in allowed_roles:
             errors.append(
                 f"Detector input '{name}': endpoint '{ep_id}' has role "
                 f"'{ep.endpoint_role}' which is incompatible with detector type '{det_typ}'"
@@ -215,8 +233,12 @@ def resolve(
                 f"'{ep.direction}' (expected 'tx')"
             )
 
-        # Role check
-        if ep.endpoint_role not in _TRIGGER_OUTPUT_ROLES and ep.endpoint_role != "unused":
+        # Role check: only enforced when the caller supplies an explicit
+        # allow-list, since FORGE has no built-in notion of trigger output
+        # role names.
+        if (trigger_output_roles is not None
+                and ep.endpoint_role not in trigger_output_roles
+                and ep.endpoint_role != "unused"):
             errors.append(
                 f"Trigger output '{name}': endpoint '{ep_id}' has role "
                 f"'{ep.endpoint_role}' which is not a recognised trigger output role"

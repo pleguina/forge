@@ -227,6 +227,13 @@ class DesignConfig:
     clock_period:      float
     max_parallel_jobs: int = 1
 
+    # External synchronous reference period in ns that testbench timing
+    # parameters (e.g. batches-per-event, counter modulo) are derived
+    # against — for example an accelerator's bunch-crossing clock. Defaults
+    # to 25.0 ns (the LHC 40 MHz BX period) when unset, for designs that
+    # don't declare one.
+    reference_period_ns: Optional[float] = None
+
     modules:          List[Module]         = field(default_factory=list)
     connections:      List[Connection]     = field(default_factory=list)
     topology_groups:  List[TopologyGroup]  = field(default_factory=list)

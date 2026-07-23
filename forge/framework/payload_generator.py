@@ -39,6 +39,12 @@ class ControlPolicies:
     # algo_clk: clock signal name to assign to every active site
     algo_clk: str = "logic_clk"
 
+    # port_aliases: explicit "source_instance.source_port" -> algo top-level
+    # port name overrides, for cases where the algo module's port name
+    # doesn't match the generic "<source_instance>_<source_port>" derivation
+    # (e.g. an internal instance was renamed relative to its external port).
+    port_aliases: Dict[str, str] = field(default_factory=dict)
+
     # buffer_alignment: "disabled_zero" | "link_aligner"
     buffer_alignment: str = "disabled_zero"
 
@@ -66,6 +72,8 @@ class ControlPolicies:
             p.play_data_gate   = pd.get("gate")
         if "readback" in d:
             p.readback = d["readback"].get("default", "zero")
+        if "port_aliases" in d:
+            p.port_aliases = dict(d["port_aliases"])
         return p
 
 
@@ -116,35 +124,49 @@ class PayloadWrapperGenerator:
             return port_name
         return f"{port_name}[{lane}]"
 
-    def _algo_input_port(self, logical_port: str, index: int) -> str:
-        patterns = [
-            (r"(?:dt_inputs\[(\d+)\]|bmt_l1_input_(\d+)|dt_input_(\d+)|dt_bmt_input_(\d+))$", "dt"),
-            (r"(?:csc_inputs\[(\d+)\]|csc_input_(\d+))$", "csc"),
-        ]
-        for pattern, prefix in patterns:
-            match = re.match(pattern, logical_port)
-            if match:
-                channel = next(group for group in match.groups() if group is not None)
-                return f"{prefix}_{int(channel)}_csp_in"
-        return logical_port or f"det_in_{index}"
+    def _algo_input_port(self, output_wiring: Dict[str, Any], index: int) -> str:
+        """Derive the algo top-level input port name for a resolved detector input.
 
-    def _algo_input_expr(self, algo_port: str, endpoint_id: str) -> str:
-        if re.match(r"(?:dt|csc)_\d+_csp_in$", algo_port):
-            return f"{{{endpoint_id}_tdata, {endpoint_id}_tlast, {endpoint_id}_tfirst, {endpoint_id}_tvalid}}"
-        return f"{endpoint_id}_tdata"
+        A plugin can declare an explicit ``algo_port`` in detector_io.yml's
+        ``output:`` block when its algo module's port name doesn't follow the
+        generic derivation below. Without an override, "name[idx]" style
+        logical target ports (e.g. "dt_inputs[0]") are sanitized to
+        "name_idx"; anything else is passed through unchanged.
+        """
+        override = output_wiring.get("algo_port")
+        if override:
+            return override
+        target = output_wiring.get("target_port", "")
+        match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\[(\d+)\]$", target)
+        if match:
+            return f"{match.group(1)}_{match.group(2)}"
+        return target or f"det_in_{index}"
+
+    def _algo_input_expr(self, ep: Endpoint) -> str:
+        if ep.protocol and ep.protocol.startswith("csp"):
+            return f"{{{ep.endpoint_id}_tdata, {ep.endpoint_id}_tlast, {ep.endpoint_id}_tfirst, {ep.endpoint_id}_tvalid}}"
+        return f"{ep.endpoint_id}_tdata"
 
     def _algo_output_port(self, source_instance: str, source_port: str) -> str:
-        if source_port == "csp_out" and source_instance == "out_csp_gmt_2":
-            source_instance = "out_csp_nn"
+        """Derive the algo top-level output port name for a resolved trigger output.
+
+        A plugin can declare an explicit alias in the policies YAML's
+        ``port_aliases`` map (keyed "source_instance.source_port") when its
+        algo module's port name doesn't follow the generic
+        "<source_instance>_<source_port>" derivation below.
+        """
+        alias = self.policies.port_aliases.get(f"{source_instance}.{source_port}")
+        if alias:
+            return alias
         if source_instance and source_port:
             prefix = f"{source_instance}_"
             return source_port if source_port.startswith(prefix) else f"{source_instance}_{source_port}"
         return source_port
 
-    def _algo_output_expr(self, algo_port: str, endpoint_id: str) -> str:
-        if algo_port.endswith("_csp_out"):
-            return f"{endpoint_id}_csp"
-        return f"{endpoint_id}_tdata"
+    def _algo_output_expr(self, ep: Endpoint) -> str:
+        if ep.protocol and ep.protocol.startswith("csp"):
+            return f"{ep.endpoint_id}_csp"
+        return f"{ep.endpoint_id}_tdata"
 
     # ------------------------------------------------------------------ #
     # Public entry point
@@ -360,15 +382,15 @@ class PayloadWrapperGenerator:
             lines.append("    .ap_rst  (1'b0),")
             for i, ri in enumerate(self.resolved_io.inputs):
                 ep   = ri.endpoint
-                port = self._algo_input_port(ri.output_wiring.get("target_port", ""), i)
-                expr = self._algo_input_expr(port, ep.endpoint_id)
+                port = self._algo_input_port(ri.output_wiring, i)
+                expr = self._algo_input_expr(ep)
                 sep  = "," if (i < len(self.resolved_io.inputs) - 1
                                or self.resolved_io.outputs) else ""
                 lines.append(f"    .{port} ({expr}){sep}")
             for j, ro in enumerate(self.resolved_io.outputs):
                 ep   = ro.endpoint
                 port = self._algo_output_port(ro.source_instance, ro.source_port)
-                expr = self._algo_output_expr(port, ep.endpoint_id)
+                expr = self._algo_output_expr(ep)
                 sep  = "," if j < len(self.resolved_io.outputs) - 1 else ""
                 lines.append(f"    .{port} ({expr}){sep}")
             lines.append(");")

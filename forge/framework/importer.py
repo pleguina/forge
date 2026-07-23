@@ -6,7 +6,9 @@ them internally, and produces a normalised FrameworkImport object that the
 rest of FORGE (topgen, io-resolve, payload generation) can consume without
 knowing which framework provider generated the artifacts.
 
-Currently supported providers: blobfish
+Provider-agnostic: any external framework can supply the payload_abi.json /
+payload_endpoints.json pair, identified by an arbitrary provider name
+(e.g. "blobfish"). The manifest schema is not provider-specific.
 """
 
 from __future__ import annotations
@@ -121,7 +123,11 @@ def load(
 
     Parameters
     ----------
-    provider:  Provider name (currently only "blobfish").
+    provider:  Provider name (e.g. "blobfish"). Purely a label carried
+               through to the loaded FrameworkImport and generated output
+               headers — the ABI/endpoint manifest schema parsed below is
+               the same regardless of which external framework produced
+               it, so any non-empty provider name is accepted.
     abi_path:  Path to the payload_abi.json produced by the framework.
     ep_path:   Path to the payload_endpoints.json produced by the framework.
 
@@ -134,11 +140,8 @@ def load(
     FrameworkImportError  on any validation failure.
     FileNotFoundError     if either input file is missing.
     """
-    supported = ("blobfish",)
-    if provider not in supported:
-        raise FrameworkImportError(
-            f"Unknown provider '{provider}'. Supported: {supported}"
-        )
+    if not provider or not provider.strip():
+        raise FrameworkImportError("provider name must be a non-empty string")
 
     for p, label in ((abi_path, "ABI"), (ep_path, "Endpoints")):
         if not Path(p).exists():
