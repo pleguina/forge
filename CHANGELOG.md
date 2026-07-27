@@ -7,12 +7,52 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Added
+- `ci/stale_reference_check.sh` (`forge:stale-reference-check` in CI): a
+  standing guard against the exact class of bug this branch kept
+  rediscovering by hand — a CLI hint, docstring, or generated-artifact
+  default quietly referencing `fw_verify`, bare `topgen`, or
+  `framework/verify/python` after they stopped existing.
+- Real test coverage for three previously-0%-covered, actually-used
+  modules: `forge/core/stale_detection.py`, `forge/verify/stimulus_contract.py`,
+  `forge/verify/manifest_compile.py`. Raised the coverage floor from 22%
+  to 26% to match (measured: 27.09%).
+- (Confirmed dead code, not covered: `forge/topgen/validators.py` and
+  `forge/hls/parse_hls_logs.py` are never imported anywhere in the
+  codebase. Left alone rather than either testing unreachable code or
+  deleting it outside the scope of this pass — worth a follow-up.)
+
 ### Changed
 - Closed the open PyPI-vs-git-install question from the `2.0.0` release
   notes: confirmed `forge` is already taken on public PyPI by an unrelated
   package, so git install (already the default in `ci/plugin-consumer.yml`)
   is the permanent distribution story, not a placeholder. Documented in
   `CONTRIBUTING.md`.
+- Reduced the `mypy` baseline from 115 to 100 errors: safe mechanical
+  fixes (implicit-`Optional` defaults, a stray `any`/`Any` typo, missing
+  container annotations) plus two genuinely real latent bugs found along
+  the way — see Fixed.
+
+### Fixed
+- `forge/verify/rtl_introspection.py`'s `write_port_signature()` was
+  annotated `-> None` while its docstring documented (and its
+  implementation actually did) return the computed hash string, masked
+  with a `# type: ignore[return-value]` rather than fixed. Its only
+  caller, `extract_and_write()`, was already relying on the real return
+  value despite the type saying it couldn't exist. Corrected the
+  annotation and removed the now-unneeded ignore.
+- `forge/core/cli/__init__.py`'s unused `main()` wrapper (the real entry
+  point is `forge.core.cli.main:main`, used by neither this wrapper nor
+  imported anywhere) claimed `-> int` while delegating to a function that
+  always returns `None`. Corrected to `-> None`.
+- Several dead-command reference bugs the same class as this branch's
+  earlier `fw_verify`/`topgen` fixes, found by the new
+  `stale_reference_check.sh`: stale `topgen ...` hints (missing the
+  `forge` prefix) in `forge/core/stale_detection.py`,
+  `forge/core/utils/port_signature.py` (including the default
+  `"generated_by"` provenance string written into every generated
+  `port_signature.json`), `forge/topgen/generators/sv_testbench_generator.py`,
+  and `forge/verify/preflight.py`.
 
 ## [2.0.0] - 2026-07-27
 

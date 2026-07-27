@@ -365,7 +365,7 @@ def write_port_map_yaml(
 def write_port_signature(
     ports: list[PortInfo] | list[dict[str, Any]],
     out_path: Path,
-) -> None:
+) -> str:
     """Write a ``port_signature.json`` interface fingerprint from *ports*.
 
     The JSON contains an ordered list of ports and a SHA-256 hash of the
@@ -404,7 +404,7 @@ def write_port_signature(
 
     sig = {"hash": sha, "ports": normalized}
     Path(out_path).write_text(json.dumps(sig, indent=2) + "\n")
-    return sha  # type: ignore[return-value]
+    return sha
 
 
 def extract_and_write(

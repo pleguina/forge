@@ -97,7 +97,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=forge --cov-report=html --cov-report=term --cov-fail-under=22"
+addopts = "-v --cov=forge --cov-report=html --cov-report=term --cov-fail-under=26"
 markers = [
     "integration: full-chain integration tests using real local repos (deselect with -m 'not integration')",
 ]

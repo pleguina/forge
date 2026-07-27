@@ -418,7 +418,7 @@ def write_structural_verilog(
     top_name: str = "algo_top",
     system_yml: Path | None = None,          # framework awareness
     contracts: Dict | None = None,           # loaded interface contracts (for clock_free)
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Generate a structural Verilog top that wires algorithm modules together.
 

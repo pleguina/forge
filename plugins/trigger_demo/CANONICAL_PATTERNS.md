@@ -142,7 +142,7 @@ modules:
     external_out_ports: [trigger_word, out_valid]
 ```
 
-**Effect:** `topgen gen-top` promotes these to `input`/`output` ports of
+**Effect:** `forge topgen gen-top` promotes these to `input`/`output` ports of
 `algo_top` (with `dec_<i>_raw_hit`, `dec_<i>_raw_valid`, `tout_trigger_word`,
 `tout_out_valid` naming). The full-chip TB (`tb_algo_top.sv`) drives them via
 `run_stimulus()`.

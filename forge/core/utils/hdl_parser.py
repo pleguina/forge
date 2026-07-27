@@ -6,16 +6,16 @@ import ast
 import operator
 import re
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple, Type
 
 
-_ARITH_BINOPS = {
+_ARITH_BINOPS: Dict[Type[ast.AST], Callable[[float, float], float]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
     ast.Div: operator.truediv,  # matches the old int(eval(...)) truncation-toward-zero
 }
-_ARITH_UNARYOPS = {
+_ARITH_UNARYOPS: Dict[Type[ast.AST], Callable[[float], float]] = {
     ast.UAdd: operator.pos,
     ast.USub: operator.neg,
 }
@@ -200,7 +200,7 @@ def _eval_verilog_expr(expr: str, params: Dict[str, int]) -> int:
     return 64
 
 
-def _width_from_slice(slice_txt: str | None, params: Dict[str, int] = None) -> int:
+def _width_from_slice(slice_txt: str | None, params: Optional[Dict[str, int]] = None) -> int:
     """Calculate width from Verilog range like [7:0] or [IN_W-1:0]."""
     if not slice_txt:
         return 1

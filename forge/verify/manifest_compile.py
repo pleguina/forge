@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Sequence, Tuple
 
 # ── Source filtering ───────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ def prepare_from_manifest(
     *,
     manifest_path:  Path,
     tb_file:        Path,
-    extra_sources:  "list[tuple[Path, str]]" = (),
+    extra_sources:  Sequence[Tuple[Path, str]] = (),
     stim_dir:       Path,
     bindings_dir:   Path,
     work_dir:       Path,

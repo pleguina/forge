@@ -18,7 +18,7 @@ for the Layer 1 verification contract.
   flows in a single authored verification contract
 - Framework-owned `csim` and `xsim` backends are reusable beyond the minimal
   demo
-- The `full_chip_rtl` kind integrates with `topgen gen-top` output for
+- The `full_chip_rtl` kind integrates with `forge topgen gen-top` output for
   end-to-end integration verification
 
 ## Maintained proof surfaces (plugin-authored)

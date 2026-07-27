@@ -64,7 +64,7 @@ Example:
 
 ```text
 ❌ Design file not found: /path/to/design.yml
-  → Check the design.yml path and re-run topgen clean.
+  → Check the design.yml path and re-run forge topgen clean.
 ```
 
 Use `--debug` if you want traceback details for unexpected failures:

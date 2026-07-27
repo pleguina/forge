@@ -44,15 +44,15 @@ class DesignValidator:
         self.warnings: List[ValidationError] = []
         self.infos: List[ValidationError] = []
     
-    def add_error(self, category: str, message: str, location: str = None, suggestion: str = None):
+    def add_error(self, category: str, message: str, location: Optional[str] = None, suggestion: Optional[str] = None):
         """Add a validation error."""
         self.errors.append(ValidationError('error', category, message, location, suggestion))
     
-    def add_warning(self, category: str, message: str, location: str = None, suggestion: str = None):
+    def add_warning(self, category: str, message: str, location: Optional[str] = None, suggestion: Optional[str] = None):
         """Add a validation warning."""
         self.warnings.append(ValidationError('warning', category, message, location, suggestion))
     
-    def add_info(self, category: str, message: str, location: str = None, suggestion: str = None):
+    def add_info(self, category: str, message: str, location: Optional[str] = None, suggestion: Optional[str] = None):
         """Add a validation info message."""
         self.infos.append(ValidationError('info', category, message, location, suggestion))
     

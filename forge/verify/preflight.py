@@ -89,7 +89,7 @@ def _check_exists(path: Path, label: str, result: PreflightResult) -> bool:
     if not path.exists():
         result.errors.append(
             f"{label} not found: {path}\n"
-            f"    → Re-run: topgen gen-top ..."
+            f"    → Re-run: forge topgen gen-top ..."
         )
         return False
     return True
@@ -135,7 +135,7 @@ def _check_port_signature(
             f"Interface fingerprint mismatch — DUT artifacts are out of sync:\n"
             f"    port_map       port_signature_hash: {pm_hash!r}\n"
             f"    port_signature hash:                {sig_hash!r}\n"
-            f"    → Re-run: topgen gen-top ..."
+            f"    → Re-run: forge topgen gen-top ..."
         )
     else:
         result.notes.append(f"Interface fingerprint OK: {sig_hash}")

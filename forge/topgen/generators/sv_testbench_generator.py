@@ -38,7 +38,7 @@ class SVTestbenchGenerator:
         if not params_path.exists():
             raise FileNotFoundError(
                 f"design_parameters.json not found at {params_path}\n"
-                f"Please generate it with: topgen gen-top <design.yml> --mode verilog"
+                f"Please generate it with: forge topgen gen-top <design.yml> --mode verilog"
             )
 
         with open(params_path, 'r') as f:
@@ -49,7 +49,7 @@ class SVTestbenchGenerator:
         if not port_map_path.exists():
             raise FileNotFoundError(
                 f"port_map.yaml not found at {port_map_path}\n"
-                f"Please regenerate with: topgen gen-top <design.yml> --mode verilog"
+                f"Please regenerate with: forge topgen gen-top <design.yml> --mode verilog"
             )
 
         import yaml
