@@ -2,9 +2,41 @@
 
 from __future__ import annotations
 
+import ast
+import operator
 import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+
+
+_ARITH_BINOPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,  # matches the old int(eval(...)) truncation-toward-zero
+}
+_ARITH_UNARYOPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+
+def _eval_arith_node(node: ast.AST):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _ARITH_BINOPS:
+        return _ARITH_BINOPS[type(node.op)](
+            _eval_arith_node(node.left), _eval_arith_node(node.right)
+        )
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _ARITH_UNARYOPS:
+        return _ARITH_UNARYOPS[type(node.op)](_eval_arith_node(node.operand))
+    raise ValueError(f"Unsupported arithmetic expression node: {ast.dump(node)}")
+
+
+def _safe_eval_arith(expr: str) -> int:
+    """Evaluate a simple integer arithmetic expression (+, -, *, /, parens) without eval()."""
+    tree = ast.parse(expr, mode="eval")
+    return int(_eval_arith_node(tree.body))
 
 
 # ==================== VHDL Parsing ====================
@@ -34,12 +66,12 @@ def _eval_vhdl_expr(expr: str, generics: Dict[str, int]) -> int:
     for name, val in generics.items():
         expr = re.sub(r'\b' + name + r'\b', str(val), expr)
 
-    # Try to evaluate as a simple Python expression (safe for arithmetic)
+    # Try to evaluate as a simple arithmetic expression
     try:
         # Only allow safe characters: digits, +, -, *, /, (, ), spaces
         if re.match(r'^[\d\s\+\-\*/\(\)]+$', expr):
-            return int(eval(expr))
-    except:
+            return _safe_eval_arith(expr)
+    except (SyntaxError, ValueError, ZeroDivisionError):
         pass
 
     # If it's just a number, return it
@@ -105,7 +137,7 @@ def _scan_ports(vhdl_path: Path) -> Dict[str, Tuple[str, int]]:
                     hi_val = _eval_vhdl_expr(hi_expr, generics)
                     lo_val = _eval_vhdl_expr(lo_expr, generics)
                     width = abs(hi_val - lo_val) + 1
-                except:
+                except ValueError:
                     # Can't determine width, use a safe default
                     # Check if it might be from a package constant
                     if any(const in m["type"].upper() for const in ['CSP_BUS_W', 'BUS_W', 'DATA_W']):
@@ -152,12 +184,12 @@ def _eval_verilog_expr(expr: str, params: Dict[str, int]) -> int:
     for name, val in params.items():
         expr = re.sub(r'\b' + name + r'\b', str(val), expr)
 
-    # Try to evaluate as a simple Python expression (safe for arithmetic)
+    # Try to evaluate as a simple arithmetic expression
     try:
         # Only allow safe characters: digits, +, -, *, /, (, ), spaces
         if re.match(r'^[\d\s\+\-\*/\(\)]+$', expr):
-            return int(eval(expr))
-    except:
+            return _safe_eval_arith(expr)
+    except (SyntaxError, ValueError, ZeroDivisionError):
         pass
 
     # If it's just a number, return it
@@ -188,7 +220,7 @@ def _width_from_slice(slice_txt: str | None, params: Dict[str, int] = None) -> i
         msb = _eval_verilog_expr(msb_expr, params)
         lsb = _eval_verilog_expr(lsb_expr, params)
         return abs(msb - lsb) + 1
-    except:
+    except ValueError:
         # Fallback to old behavior for simple numeric ranges
         nums = list(map(int, re.findall(r'\d+', slice_txt)))
         if len(nums) != 2:

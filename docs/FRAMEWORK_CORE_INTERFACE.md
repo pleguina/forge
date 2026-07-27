@@ -22,7 +22,7 @@ The current public Layer 1 surface is:
 
 ## Verification contract owned by Layer 1
 
-For the current public `v0.0` framework surface, Layer 1 standardizes the following verification model:
+For the current public `v1.0` framework surface, Layer 1 standardizes the following verification model:
 
 - datasets are XML-backed
 - plugin-authored verification root contains `design.verification.yml`

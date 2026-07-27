@@ -9,6 +9,21 @@ Repository target:
 
 - https://gitlab.cern.ch/pleguina/arc-framework
 
+## Versioning
+
+Two independent version numbers appear in this repo — they track different
+things and are not expected to match:
+
+- **Package version** (`forge/pyproject.toml`, currently `1.1.0`) — the
+  installed `forge` Python package/CLI release.
+- **Verification contract version** (currently `v1.0`, referenced throughout
+  `docs/`) — the version of the Layer 1 verification model itself
+  (`design.verification.yml` schema, generated artifact set, CLI contract
+  behavior). It changes far less often than the package version.
+
+If you were recently on this repo and remember `ARC` instead of `FORGE`,
+see `MIGRATION.md`.
+
 ## Documentation Index
 
 This index lists the minimum user-facing documentation required to adopt and use FORGE.
@@ -44,4 +59,13 @@ This index lists the minimum user-facing documentation required to adopt and use
 
 ### Validation Gate
 
-- `ci/verify_framework_release.sh` - standalone framework release gate
+- `run_trigger_demo.sh` - end-to-end release gate (`ci/framework-release.yml`)
+- `ci/agnosticism_check.sh` - guard against hardcoded algorithm assumptions
+
+### Project
+
+- `CHANGELOG.md` - notable changes by release
+- `CONTRIBUTING.md` - development setup and contribution workflow
+- `MIGRATION.md` - breaking-change notes (start here if upgrading from ARC)
+- `SECURITY.md` - how to report a security issue
+- `LICENSE` - MIT
