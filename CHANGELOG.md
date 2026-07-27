@@ -2,12 +2,16 @@
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 This file starts from the `rename/forge` branch — history before that point
-is available via `git log` but isn't backfilled here.
+is available via `git log` but isn't backfilled here. See `CONTRIBUTING.md`
+for the versioning policy.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-27
+
 ### Added
-- `CODEOWNERS`.
+- `MIGRATION.md`, `CONTRIBUTING.md`, `SECURITY.md`, root `LICENSE`,
+  `CODEOWNERS`, this changelog.
 - `forge/tests/test_hdl_parser.py` — real coverage for the HDL parameter
   evaluator (previously 0%).
 - A `--cov-fail-under` coverage floor (22%, matching the measured baseline)
@@ -87,7 +91,3 @@ is available via `git log` but isn't backfilled here.
 - Fixed a real `F811` duplicate import and an `E741` ambiguous variable
   name, both surfaced once lint coverage was extended to the packages
   that contained them.
-
-### Added
-- `MIGRATION.md`, `CONTRIBUTING.md`, `SECURITY.md`, root `LICENSE`,
-  this changelog.

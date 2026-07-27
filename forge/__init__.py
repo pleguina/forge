@@ -1,22 +1,23 @@
 """
-Topgen - Top-Level Generator
-============================
+FORGE - Framework for Orchestrated RTL Generation & Evaluation
+================================================================
 
-A standalone library for generating top-level HDL wrappers from IP metadata.
+Contract-driven DUT generation, optional HLS orchestration, and reusable
+verification runtime flows.
 
-Main functionality:
+Main functionality (forge.topgen):
 - Parse IP metadata from component.xml, VHDL, Verilog
 - Auto-match ports between connected modules
 - Generate structural VHDL or Block Design TCL
 - Extract IP archives
 
 Usage:
-    from topgen import DesignConfig
+    from forge import DesignConfig
 
     cfg = DesignConfig.load("design.yaml")
 """
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 from .topgen.config import DesignConfig, Module, Connection
 from .topgen.generators.structural_vhdl import write_structural_vhdl

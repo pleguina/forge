@@ -56,6 +56,34 @@ parameter or `forge/topgen/config.py`'s `reference_period_ns` field for the
 pattern). `ci/agnosticism_check.sh` enforces a best-effort version of this
 in CI; read its header comment before adding an allowlist entry to it.
 
+## Versioning
+
+The package version (`forge/pyproject.toml`, currently `2.0.0`) follows
+[semver](https://semver.org/): `MAJOR.MINOR.PATCH`.
+
+- **MAJOR** — anything that breaks an existing consumer without a
+  compatibility shim: renaming the CLI command, moving `forge/` core module
+  paths, changing a generated-artifact path or filename a downstream
+  script might hardcode, removing a documented public API. The
+  ARC → FORGE rename (`2.0.0`, no shim — see `MIGRATION.md`) is the
+  reference example of a MAJOR bump.
+- **MINOR** — new CLI subcommands/flags, new plugin-facing capability, new
+  supported flow kind, anything additive that doesn't break an existing
+  caller.
+- **PATCH** — bug fixes, doc fixes, CI-only changes, anything with no
+  effect on the public CLI/package/generated-artifact contract.
+
+The **verification contract version** (currently `v1.0`, referenced
+throughout `docs/`) is separate and versions the `design.verification.yml`
+schema and generated-artifact set specifically — it does not move in step
+with the package version. See the "Versioning" section of `README.md`.
+
+Tag releases as `vMAJOR.MINOR.PATCH` (e.g. `v2.0.0`) on the commit that
+bumps `forge/pyproject.toml`'s `version`. Update `CHANGELOG.md`: move the
+`[Unreleased]` section's contents under a new `## [MAJOR.MINOR.PATCH] -
+YYYY-MM-DD` heading, and leave `[Unreleased]` empty at the top for the
+next round of changes.
+
 ## Commit and PR conventions
 
 - Keep commits scoped to one logical change; the commit message should

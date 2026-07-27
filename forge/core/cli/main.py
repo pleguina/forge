@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from forge import __version__
 from forge.core.cli.groups import core, topgen, hls, verify, analyze, framework
 from forge.core.cli import _shared
 
@@ -46,7 +47,7 @@ Examples:
         """,
     )
 
-    parser.add_argument("--version", action="version", version="forge 1.1.0")
+    parser.add_argument("--version", action="version", version=f"forge {__version__}")
     parser.add_argument(
         "--debug",
         action="store_true",
