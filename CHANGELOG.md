@@ -7,6 +7,13 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Changed
+- Closed the open PyPI-vs-git-install question from the `2.0.0` release
+  notes: confirmed `forge` is already taken on public PyPI by an unrelated
+  package, so git install (already the default in `ci/plugin-consumer.yml`)
+  is the permanent distribution story, not a placeholder. Documented in
+  `CONTRIBUTING.md`.
+
 ## [2.0.0] - 2026-07-27
 
 ### Added

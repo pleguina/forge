@@ -67,14 +67,18 @@ default:
 # .forge_plugin_setup
 #
 # Installs the forge package (unified topgen + hls + verify + analyze CLI).
-# There is no separately-published PyPI package — the framework is a single
-# package (forge/pyproject.toml, name="forge") installed by pip either
-# directly from the arc-framework git repo, or from an internal package
-# index if the consuming org has set one up.
+#
+# DECIDED: git install, not public PyPI. "forge" is already taken on
+# public PyPI by an unrelated, actively-maintained package (0.22.0 as of
+# this writing) — publishing under this name isn't available, and
+# publishing CMS/OMTF-internal trigger-firmware tooling under a different
+# public name isn't warranted for what is private GitLab-hosted tooling.
+# This is the permanent installation story, not a placeholder.
 #
 # Default: install directly from the arc-framework git repo at
-# FORGE_FRAMEWORK_REF (default "main"). Override FORGE_FORGE_PIP_REF to
-# point at an internal index/mirror instead, e.g.:
+# FORGE_FRAMEWORK_REF (default "main"). Override FORGE_FORGE_PIP_REF only
+# if your org later stands up its own internal package index and wants to
+# mirror releases there, e.g.:
 #   FORGE_FORGE_PIP_REF: "--index-url https://pypi.mycompany.internal/simple/ forge"
 # ---------------------------------------------------------------------------
 .forge_plugin_setup:

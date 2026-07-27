@@ -12,6 +12,18 @@ pip install -e "forge[dev,parser]"
 `pyverilog` for structured RTL port parsing (optional — a regex fallback is
 used if it's absent).
 
+### Distribution: git install, not PyPI
+
+There is no separately-published PyPI package, and there won't be one under
+the name `forge` — that name is already taken on public PyPI by an
+unrelated, actively-maintained package. Downstream repos (`ci/plugin-consumer.yml`)
+install directly from this git repo (`pip install git+https://.../arc-framework.git@<ref>#subdirectory=forge`).
+This is the permanent installation story for this project, which is
+private CMS/OMTF-internal tooling, not a general-purpose public release —
+not a placeholder waiting for a PyPI slot. If your org later stands up an
+internal package index and wants to mirror releases there, override
+`FORGE_FORGE_PIP_REF` per the comment in `ci/plugin-consumer.yml`.
+
 ## Running things locally before you push
 
 ```bash
