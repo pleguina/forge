@@ -9,16 +9,19 @@
 
 TD_VERIFY_ENV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TD_PLUGIN_VERIFY_DIR="$(cd "$TD_VERIFY_ENV_DIR/.." && pwd)"
-TD_PLUGIN_ROOT="$(cd "$TD_PLUGIN_VERIFY_DIR/.." && pwd)"
+# TD_PLUGIN_VERIFY_DIR is plugins/trigger_demo/forge/verify; the plugin root
+# (containing algo/ and forge/) is two levels up, through the forge/ capsule.
+TD_PLUGIN_ROOT="$(cd "$TD_PLUGIN_VERIFY_DIR/../.." && pwd)"
 TRIGGER_DEMO_CONSUMER_ROOT="${TRIGGER_DEMO_CONSUMER_ROOT:-$(cd "$TD_PLUGIN_ROOT/../.." && pwd)}"
 TRIGGER_DEMO_CONSUMER_ROOT="$(cd "$TRIGGER_DEMO_CONSUMER_ROOT" && pwd)"
 
 TRIGGER_DEMO_HLS_BUILD_ROOT="${TRIGGER_DEMO_HLS_BUILD_ROOT:-$TRIGGER_DEMO_CONSUMER_ROOT/build_hls_trigger_demo}"
 
-# ── Put framework Python on path ────────────────────────────────────────────
-FW_PYTHON="$TRIGGER_DEMO_CONSUMER_ROOT/framework/verify/python"
+# ── Put plugin-local tools on path ──────────────────────────────────────────
+# forge itself is expected to already be installed (pip install -e forge/);
+# no PYTHONPATH injection needed for it.
 TD_TOOLS="$TD_VERIFY_ENV_DIR"
-export PYTHONPATH="$FW_PYTHON:$TD_TOOLS:${PYTHONPATH:-}"
+export PYTHONPATH="$TD_TOOLS:${PYTHONPATH:-}"
 
 export TD_PLUGIN_ROOT
 export TD_PLUGIN_VERIFY_DIR

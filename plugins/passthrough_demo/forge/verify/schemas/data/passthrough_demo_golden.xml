@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  passthrough_demo — Golden stimulus and expected results
+
+  The DUT registers data_in/data_in_valid onto data_out/data_out_valid
+  one clock cycle later, unchanged. Two events, both straightforward.
+-->
+<passthrough_events>
+
+  <event id="0">
+    <in data_in="0x3A" data_in_valid="1"/>
+    <golden data_out="0x3A" data_out_valid="1"/>
+  </event>
+
+  <event id="1">
+    <in data_in="0x00" data_in_valid="0"/>
+    <golden data_out="0x00" data_out_valid="0"/>
+  </event>
+
+</passthrough_events>

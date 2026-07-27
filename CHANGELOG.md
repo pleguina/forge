@@ -6,6 +6,22 @@ is available via `git log` but isn't backfilled here.
 
 ## [Unreleased]
 
+### Added
+- `CODEOWNERS`.
+- `forge/tests/test_hdl_parser.py` — real coverage for the HDL parameter
+  evaluator (previously 0%).
+- A `--cov-fail-under` coverage floor (22%, matching the measured baseline)
+  so overall test coverage can't silently regress.
+- `mypy` now actually runs in CI (`forge:type-check`), report-only —
+  the codebase has a pre-existing baseline of ~115 type errors (mostly in
+  `forge/topgen/generators/structural_verilog.py` and
+  `forge/verify/__main__.py`) that hasn't been paid down yet. The job makes
+  that baseline visible without blocking merges on unscoped work.
+- `plugins/passthrough_demo/` — a second, minimal, deliberately generic
+  reference plugin (one RTL module, no HLS, no CMS-flavored naming
+  anywhere) alongside `plugins/trigger_demo/`. Verified end to end
+  including a real Vivado xsim run, not just static checks.
+
 ### Changed
 - **Breaking:** renamed the framework from ARC to FORGE — CLI command
   (`arc` → `forge`), Python package (`arc.*` → `forge.*`), top-level and
@@ -43,6 +59,22 @@ is available via `git log` but isn't backfilled here.
 - `gen_stimulus.py` (trigger_demo) computed its repo-root path one
   directory level short after the plugin capsule gained its `forge/`
   layer, silently resolving to a doubled `plugins/plugins/...` path.
+- `plugins/trigger_demo/forge/verify/tools/trigger_demo_verify_env.sh` had
+  the same one-level-short path bug, resolving `TRIGGER_DEMO_CONSUMER_ROOT`
+  to `plugins/` instead of the repo root. The four per-flow `run.sh`
+  convenience scripts it's sourced from also invoked the dead
+  `python3 -m fw_verify run` and had their own `source ../../tools/...`
+  path miscalculation (should have been `../tools/...`) and were missing
+  `--plugin`/`--consumer-root`. All four committed `verify.flow.yml` xsim
+  flow files also had the pre-`forge/`-capsule dataset XML path baked in.
+  Found and fixed by actually running the scripts, not just reading them —
+  confirmed working end to end afterward with a real `run_trigger_demo.sh`
+  execution (HLS csim + synth for all 4 modules, all 9 verification flows,
+  including real Vivado xsim simulation) — all 9 flows passed.
+- `forge/verify/__main__.py`'s `_doctor_emit()` type-annotated its
+  `report` parameter as `"DiagnosticReport"` without the name being
+  resolvable anywhere in the module (mypy: `name-defined`) — added a
+  `TYPE_CHECKING`-guarded import.
 - Root `CMakeLists.txt` unconditionally `add_subdirectory(verify)`'d a
   directory with no `CMakeLists.txt` of its own — `cmake -S . -B build`
   failed outright. Now guarded on the subdirectory actually existing.

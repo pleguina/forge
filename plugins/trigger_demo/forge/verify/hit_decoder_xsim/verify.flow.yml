@@ -20,7 +20,7 @@ dut:
   port_signature: ~
 
 dataset:
-  xml:              plugins/trigger_demo/verify/schemas/data/trigger_demo_golden.xml
+  xml:              plugins/trigger_demo/forge/verify/schemas/data/trigger_demo_golden.xml
   default_event_id: 1
 
 simulation:

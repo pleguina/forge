@@ -73,6 +73,35 @@ forge:lint:
       - ci-logs/lint.log
 
 # ---------------------------------------------------------------------------
+# forge:type-check
+#
+# mypy over forge/ core. Report-only (allow_failure: true) — the codebase
+# currently has a real, non-trivial baseline of pre-existing type errors
+# (see CHANGELOG.md) that hasn't been paid down yet. This job exists so that
+# baseline is visible and doesn't silently grow, without blocking merges on
+# work nobody has scoped yet. Tighten to blocking once the baseline is at
+# or near zero.
+# ---------------------------------------------------------------------------
+forge:type-check:
+  stage: lint
+  tags:
+    - default-x86_64
+  allow_failure: true
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache -e "forge[dev]"
+  script:
+    - mkdir -p ci-logs
+    - |
+      mypy forge/core forge/topgen forge/hls forge/verify forge/framework forge/analyze \
+        2>&1 | tee ci-logs/type-check.log
+  artifacts:
+    name: "forge-type-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/type-check.log
+
+# ---------------------------------------------------------------------------
 # forge:schema-validate
 #
 # Validates the trigger_demo design topology and module registry without
@@ -96,6 +125,16 @@ forge:schema-validate:
       echo "--- forge topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
       forge topgen validate-registry \
         plugins/trigger_demo/forge/modules.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate passthrough_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate \
+        plugins/passthrough_demo/forge/designs/design.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate-registry passthrough_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate-registry \
+        plugins/passthrough_demo/forge/modules.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
   artifacts:
     name: "forge-schema-validate-${CI_COMMIT_SHORT_SHA}"
@@ -151,6 +190,12 @@ forge:python-unit-tests:
         --tb=short -q \
         --junitxml=ci-logs/trigger-demo-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log
+    - |
+      echo "--- passthrough_demo verify tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/passthrough_demo/forge/verify/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/passthrough-demo-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
   artifacts:
     name: "forge-unit-tests-${CI_COMMIT_SHORT_SHA}"
     when: always
@@ -159,10 +204,12 @@ forge:python-unit-tests:
       junit:
         - ci-logs/forge-junit.xml
         - ci-logs/trigger-demo-junit.xml
+        - ci-logs/passthrough-demo-junit.xml
     paths:
       - ci-logs/unit-tests.log
       - ci-logs/forge-junit.xml
       - ci-logs/trigger-demo-junit.xml
+      - ci-logs/passthrough-demo-junit.xml
 
 # ---------------------------------------------------------------------------
 # forge:verify-smoke

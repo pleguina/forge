@@ -15,12 +15,12 @@ flow:
 dut:
   rtl:            gen-top/design_trigger_demo_pipeline/algo_top.v
   manifest:       gen-top/design_trigger_demo_pipeline/build_manifest.json
-  port_map:       ~
-  tb_bindings:    ~
-  port_signature: ~
+  port_map:       gen-top/design_trigger_demo_pipeline/port_map.yaml
+  tb_bindings:    gen-top/design_trigger_demo_pipeline/tb_bindings.svh
+  port_signature: gen-top/design_trigger_demo_pipeline/port_signature.json
 
 dataset:
-  xml:              plugins/trigger_demo/verify/schemas/data/trigger_demo_golden.xml
+  xml:              plugins/trigger_demo/forge/verify/schemas/data/trigger_demo_golden.xml
   default_event_id: 1
 
 simulation:

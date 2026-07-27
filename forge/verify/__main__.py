@@ -59,6 +59,10 @@ import os
 import sys
 import traceback
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from forge.verify.diagnostics import DiagnosticReport
 
 
 def _debug_enabled() -> bool:

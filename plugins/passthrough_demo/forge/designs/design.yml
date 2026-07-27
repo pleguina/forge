@@ -1,0 +1,24 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# passthrough_demo — Design Topology
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Single module, both its data ports exposed at the top level. No
+# connections, no topology groups — this is the minimal case.
+# ═══════════════════════════════════════════════════════════════════════════
+
+part: xcvu9p-flga2104-2L-e
+clock_period: 4.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+modules:
+
+- name: pt
+  ref: passthrough
+  instances: 1
+  external_in_ports: [data_in, data_in_valid]
+  external_out_ports: [data_out, data_out_valid]

@@ -1,0 +1,46 @@
+# ═══════════════════════════════════════════════════════════════════════
+# passthrough_demo — Verification Design Contract
+# ═══════════════════════════════════════════════════════════════════════
+#
+#   forge topgen gen-top   plugins/passthrough_demo/forge/designs/design.yml --mode verilog ...
+#   forge verify generate  plugins/passthrough_demo/forge/verify/design.verification.yml
+#   forge verify doctor    plugins/passthrough_demo/forge/verify/design.verification.yml
+#   forge verify run       plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml --plugin passthrough_demo
+# ───────────────────────────────────────────────────────────────────────
+plugin: passthrough_demo
+
+# ─── Datasets ─────────────────────────────────────────────────────────
+datasets:
+  passthrough_demo_golden:
+    xml: schemas/data/passthrough_demo_golden.xml
+    description: Golden reference dataset for the passthrough module
+
+# ─── Simulation Defaults ──────────────────────────────────────────────
+defaults:
+  clk_period_ns:              4.0
+  reset_cycles:               4
+  idle_cycles_after_reset:    0
+  post_stimulus_drain_cycles: 4
+
+# ─── Flows ────────────────────────────────────────────────────────────
+# One module (passthrough) that IS the whole design, so it's verified as
+# a full_chip_rtl flow against the topgen-generated algo_top.v — no HLS
+# synthesis step needed at all, since the module is hand-written RTL.
+flows:
+
+  - name:             passthrough_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_passthrough_demo
+    dataset:          passthrough_demo_golden
+    default_event_id: 1
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 4
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  functional
