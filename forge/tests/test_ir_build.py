@@ -112,6 +112,51 @@ def test_build_is_deterministic():
     assert content_hash(a) == content_hash(b)
 
 
+def test_content_hash_is_independent_of_yaml_top_level_key_order(tmp_path):
+    """Release-plan Phase 5 slice 5.4 determinism test: two design.yml
+    fixtures that are byte-different only in top-level key order must
+    still produce an identical content_hash(). Architecturally guaranteed
+    already (every loader parses YAML into a plain dict, and
+    ``_canonical_design_json``/``content_hash`` always re-serializes via
+    ``json.dumps(..., sort_keys=True)`` — see forge/ir/serialize.py — so
+    key order in the original dict, YAML or otherwise, never survives
+    into the hash) but previously never proven with a real, reordered-keys
+    YAML fixture rather than left an implicit, unverified assumption.
+    """
+    module_block = (
+        "  - name: pt\n"
+        "    top: passthrough\n"
+        "    src: [passthrough.v]\n"
+    )
+    # Both files declare the exact same 3 top-level keys with the exact
+    # same values — only their order in the file differs.
+    ordered = (
+        f"part: xcvu13p\n"
+        f"clock_period: 4.0\n"
+        f"modules:\n{module_block}"
+    )
+    reordered = (
+        f"modules:\n{module_block}"
+        f"clock_period: 4.0\n"
+        f"part: xcvu13p\n"
+    )
+    assert ordered != reordered  # sanity: genuinely different bytes
+
+    design_a = tmp_path / "a" / "design.yml"
+    design_b = tmp_path / "b" / "design.yml"
+    design_a.parent.mkdir()
+    design_b.parent.mkdir()
+    design_a.write_text(ordered)
+    design_b.write_text(reordered)
+
+    (tmp_path / "a" / "passthrough.v").write_text("module passthrough; endmodule")
+    (tmp_path / "b" / "passthrough.v").write_text("module passthrough; endmodule")
+
+    project_a = build_project_ir(design_a)
+    project_b = build_project_ir(design_b)
+    assert content_hash(project_a) == content_hash(project_b)
+
+
 def test_connections_carry_wiring_method_evidence():
     """Real designs exercise multiple wiring methods (contract_wiring,
     topology_group, port_map) — trigger_demo's should all be populated
@@ -184,13 +229,18 @@ def test_modules_carry_latency_metadata_from_the_registry():
     """Migration step 7: ResolvedModuleDefinition.latency_cycles/latency_hint/
     is_variable_latency are populated from Module.timing (the shared
     DesignConfig loader), not re-derived — trigger_demo's modules.yml
-    declares latency_hint throughout."""
+    declares latency_hint throughout (Phase 4 slice 2: 'trig' itself was
+    migrated to the newer structured latency: {kind: fixed, cycles: 3}
+    spelling, real-design-proving the new syntax — see
+    ResolvedModuleDefinition.latency below)."""
     project = build_project_ir(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
     trig = next(m for m in project.design.modules if m.name == "trig")
-    assert trig.latency_hint == 3
+    assert trig.latency_hint is None
     assert trig.latency_cycles is None
     assert trig.is_variable_latency is False
     assert trig.ip_info_key == "trigger_logic"
+    assert trig.latency.kind == "fixed"
+    assert trig.latency.cycles == 3
 
 
 def test_module_matching_is_unaffected_by_latency_metadata():

@@ -28,6 +28,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+# LatencyDeclaration is the schema/config-layer type (no CLI/generator
+# dependency itself), same layering ir/build.py already relies on for
+# DesignConfig/Module — reused directly here (release-plan §4.2) rather
+# than mirrored, matching how ResolvedModuleDefinition already reuses
+# Module.timing's flat fields verbatim.
+from ..topgen.config import LatencyDeclaration
+
 IR_SCHEMA_VERSION = "0.2.0"
 
 
@@ -115,6 +122,14 @@ class ResolvedModuleDefinition:
     (``forge.analyze.latency_static``'s external HLS-synthesis-report
     overlay) — that's runtime data supplied only when analyzing actual
     build artifacts, not a pre-generation design/registry fact.
+
+    ``latency`` (release-plan §4.2, Phase 4 slice 2) is the structured
+    ``kind: fixed|bounded|elastic`` declaration, when the module used the
+    new ``latency:`` YAML syntax — a
+    ``forge.topgen.config.LatencyDeclaration``, additive alongside the
+    flat fields above (which stay populated exactly as before; the two
+    syntaxes are mutually exclusive per module, enforced at load time in
+    ``topgen.config._pop_timing``, not here).
     """
     name: str
     kind: str  # 'hls' | 'rtl'
@@ -127,6 +142,7 @@ class ResolvedModuleDefinition:
     latency_cycles: Optional[int] = None
     latency_hint: Optional[int] = None
     is_variable_latency: bool = False
+    latency: Optional["LatencyDeclaration"] = None
     # The canonical registry name this module resolves to (set when a
     # design.yml entry uses `ref: <canonical>`; None for inline modules
     # that never declared one) — mirrors forge.topgen.config.Module.ip_info_key.

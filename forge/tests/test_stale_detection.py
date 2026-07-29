@@ -173,6 +173,73 @@ class TestCheckIpInfoStaleness:
         assert report.stale[0].source.suffix == ".xci"
 
 
+class TestContentHashAwareStaleness:
+    """Release-plan Phase 5 slice 5.2: mtime stays the fast pre-check, but
+    a sibling provenance.json (gen-top writes one into output_dir as of
+    slice 5.1) can now confirm a source's content hasn't actually
+    changed, overriding a misleading mtime bump."""
+
+    def test_touched_but_unchanged_source_reports_fresh_with_provenance(self, tmp_path: Path):
+        from forge.core.utils.content_hash import hash_file
+        from forge.ir.provenance import ProvenanceManifest, write_provenance
+
+        now = time.time()
+        design = _touch(tmp_path / "design.yml", mtime=now - 100, content="unchanged")
+        _touch(tmp_path / "build_manifest.json", mtime=now - 200)
+
+        # A manifest recorded when design.yml had this exact content...
+        write_provenance(
+            tmp_path / "provenance.json",
+            ProvenanceManifest(source_hashes={"design.yml": hash_file(design)}),
+        )
+        # ...then design.yml gets touched (mtime bumped) without its
+        # content actually changing — e.g. a checkout, a `touch`.
+        os.utime(design, (now, now))
+
+        report = check_top_gen_staleness(tmp_path)
+
+        assert report.checked == 1
+        assert not report.has_stale, "content-hash confirmation should override the mtime bump"
+        assert report.stale_count == 0
+
+    def test_genuinely_changed_source_still_reports_stale_with_provenance(self, tmp_path: Path):
+        """Regression guard: content-hash confirmation must never become
+        falsely permissive — a real content change still reports stale
+        even with a provenance.json present."""
+        from forge.ir.provenance import ProvenanceManifest, write_provenance
+
+        now = time.time()
+        design = _touch(tmp_path / "design.yml", mtime=now - 100, content="v1")
+        _touch(tmp_path / "build_manifest.json", mtime=now - 200)
+
+        # Manifest recorded a hash for v1's content...
+        write_provenance(
+            tmp_path / "provenance.json",
+            ProvenanceManifest(source_hashes={"design.yml": "hash-of-v1-content"}),
+        )
+        # ...then design.yml is genuinely edited (real content change).
+        _touch(design, mtime=now, content="v2 - a real edit")
+
+        report = check_top_gen_staleness(tmp_path)
+
+        assert report.has_stale
+        assert report.stale_count == 1
+        assert report.stale[0].content_confirmed_fresh is False
+
+    def test_no_provenance_json_falls_back_to_mtime_only(self, tmp_path: Path):
+        """Backward compatible: a project that hasn't regenerated since
+        this feature landed (no provenance.json at all) behaves exactly
+        as it did before slice 5.2."""
+        now = time.time()
+        _touch(tmp_path / "build_manifest.json", mtime=now - 100)
+        _touch(tmp_path / "design.yml", mtime=now)
+
+        report = check_top_gen_staleness(tmp_path)
+
+        assert report.has_stale
+        assert report.stale[0].content_confirmed_fresh is None
+
+
 class TestFormatStaleReport:
     def test_empty_report_produces_no_lines(self, tmp_path: Path):
         report = check_top_gen_staleness(tmp_path)

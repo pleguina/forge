@@ -42,6 +42,9 @@ _CSV_FIELDS = [
     "timing_met", "slack_ns",
     "latency_best", "latency_avg", "latency_worst",
     "pipeline_ii", "pipeline_depth", "pipeline_type",
+    # release-plan §4.4 (Phase 4 slice 4): recovered, previously-dropped
+    # throughput range data.
+    "interval_min", "interval_max",
     "lut", "ff", "dsp", "bram_18k", "uram",
     "lut_pct", "ff_pct", "dsp_pct", "bram_pct", "uram_pct",
 ]
@@ -65,6 +68,8 @@ def _csv_row(r: HLSModuleReport) -> dict:
         "pipeline_ii":       r.pipeline_ii       if ok else "",
         "pipeline_depth":    r.pipeline_depth    if ok else "",
         "pipeline_type":     r.pipeline_type     if ok else "",
+        "interval_min":      r.interval_min      if ok else "",
+        "interval_max":      r.interval_max      if ok else "",
         "lut":  int(u.LUT)      if ok else "",
         "ff":   int(u.FF)       if ok else "",
         "dsp":  int(u.DSP)      if ok else "",
@@ -98,9 +103,9 @@ def to_markdown(reports: List[HLSModuleReport], out_path: Path) -> None:
 
     lines = [
         "# HLS Synthesis Report", "",
-        "| Module | Status | Fmax (MHz) | Slack (ns) | II | Lat (W) |"
+        "| Module | Status | Fmax (MHz) | Slack (ns) | II | II Range | Lat (W) |"
         " LUT | FF | DSP | BRAM |",
-        "|--------|--------|-----------|-----------|-----|---------|"
+        "|--------|--------|-----------|-----------|-----|----------|---------|"
         "-----|-----|-----|------|",
     ]
     for r in reports:
@@ -109,14 +114,19 @@ def to_markdown(reports: List[HLSModuleReport], out_path: Path) -> None:
             fmax = f"{r.estimated_fmax_mhz:.1f}{warn}"
             slack = f"{r.slack_ns:.3f}{warn}"
             u = r.resources.used
+            # release-plan §4.4: interval_min/interval_max express
+            # throughput as a range — omitted (not "0-0") when the XML
+            # never carried the data at all, to avoid implying a
+            # fabricated 0-cycle interval.
+            ii_range = f"{r.interval_min}–{r.interval_max}" if (r.interval_min or r.interval_max) else "—"
             lines.append(
-                f"| {r.module_name} | ✅ ok | {fmax} | {slack} | {r.pipeline_ii} |"
+                f"| {r.module_name} | ✅ ok | {fmax} | {slack} | {r.pipeline_ii} | {ii_range} |"
                 f" {r.latency_worst} | {int(u.LUT)} | {int(u.FF)} |"
                 f" {int(u.DSP)} | {int(u.BRAM_18K)} |"
             )
         else:
             lines.append(
-                f"| {r.module_name} | {r.status} | — | — | — | — | — | — | — | — |"
+                f"| {r.module_name} | {r.status} | — | — | — | — | — | — | — | — | — |"
             )
 
     lines += [
@@ -137,6 +147,7 @@ def to_html(reports: List[HLSModuleReport], out_path: Path) -> None:
             tc = "ok" if r.timing_met else "warn"
             u = r.resources.used
             p = r.resources.utilization_pct
+            ii_range = f"{r.interval_min}–{r.interval_max}" if (r.interval_min or r.interval_max) else "—"
             row_html.append(
                 f'<tr>'
                 f'<td class="name">{r.module_name}</td>'
@@ -146,6 +157,7 @@ def to_html(reports: List[HLSModuleReport], out_path: Path) -> None:
                 f'<td class="{tc}">{r.estimated_fmax_mhz:.1f}</td>'
                 f'<td class="{tc}">{r.slack_ns:.3f}</td>'
                 f'<td>{r.pipeline_ii}</td>'
+                f'<td>{ii_range}</td>'
                 f'<td>{r.latency_best}</td>'
                 f'<td>{r.latency_avg}</td>'
                 f'<td>{r.latency_worst}</td>'
@@ -161,7 +173,7 @@ def to_html(reports: List[HLSModuleReport], out_path: Path) -> None:
                 f'<tr>'
                 f'<td class="name">{r.module_name}</td>'
                 f'<td class="miss">{r.status}</td>'
-                + "<td>—</td>" * 13
+                + "<td>—</td>" * 14
                 + "</tr>"
             )
 
@@ -176,7 +188,7 @@ def to_html(reports: List[HLSModuleReport], out_path: Path) -> None:
         "<th>Module</th><th>Status</th>"
         "<th>Target (ns)</th><th>Est. (ns)</th>"
         "<th>Fmax (MHz)</th><th>Slack (ns)</th>"
-        "<th>II</th><th>Lat Best</th><th>Lat Avg</th><th>Lat Worst</th>"
+        "<th>II</th><th>II Range</th><th>Lat Best</th><th>Lat Avg</th><th>Lat Worst</th>"
         "<th>LUT</th><th>FF</th><th>DSP</th><th>BRAM</th><th>URAM</th>"
         "</tr>\n"
         + "\n".join(row_html)

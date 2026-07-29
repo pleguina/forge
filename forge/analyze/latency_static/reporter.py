@@ -57,14 +57,16 @@ def render_markdown(
                 heading = f"### ✅ Balanced at `{r.merge_node}`"
 
             lines += [heading, ""]
+            lines += [f"Alignment: `{r.alignment}`", ""]
             lines += [
-                "| Input path | Accumulated latency |",
-                "|-----------|---------------------|",
+                "| Input path | Accumulated latency | Source |",
+                "|-----------|---------------------|--------|",
             ]
             for p in r.paths:
                 lat_str = str(p.total_cycles) if p.total_cycles is not None else "unknown"
                 path_str = " → ".join(p.path)
-                lines.append(f"| `{path_str}` | {lat_str} |")
+                src_str = p.provenance.source if p.provenance else "unknown"
+                lines.append(f"| `{path_str}` | {lat_str} | {src_str} |")
             lines.append("")
 
             if r.is_mismatch:

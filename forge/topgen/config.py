@@ -54,6 +54,10 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
         # identity/equality semantics; converted into a typed ModuleTiming
         # by _pop_timing() at Module-construction time, not stored flat.
         "latency_cycles", "latency_hint", "variable_latency",
+        # Structured latency: {kind: fixed|bounded|elastic, ...} declaration
+        # (release-plan §4.2, Phase 4 slice 2) — same pass-through
+        # treatment as the three flat fields above.
+        "latency",
     }
     result: dict[str, dict] = {}
     for raw_mod in raw.get("modules", []):
@@ -103,6 +107,64 @@ class TestBenchConfig:
     event_id: int = 1  # Which event to extract from XML
     generate: bool = True  # Whether to generate testbench by default
 
+# The three timing kinds release-plan §4.2 requires. Duplicated (not
+# imported) from forge.analyze.latency_model.LATENCY_KINDS deliberately —
+# forge/topgen is the schema/config layer and forge/analyze is a
+# downstream consumer of it; importing analyze from here would be a
+# wrong-direction dependency. Three fixed, closed values, unlikely to
+# drift; if it ever needs to grow, both copies grow together.
+_LATENCY_KINDS = ("fixed", "bounded", "elastic")
+
+
+@dataclass
+class LatencyDeclaration:
+    """A structured ``latency: {kind: fixed|bounded|elastic, ...}``
+    declaration (release-plan §4.2, Phase 4 slice 2) — coexists with,
+    does not replace, :class:`ModuleTiming`'s existing flat
+    ``latency_cycles``/``latency_hint``/``variable_latency`` fields (real,
+    currently-used YAML — ``latency_hint`` appears throughout both
+    reference plugins). ``latency: {kind: elastic}`` is the new,
+    equivalent, going-forward-preferred spelling for
+    ``variable_latency: true`` — see :func:`_pop_timing`'s normalization,
+    which sets ``variable_latency=True`` under the hood so every existing
+    ``variable_latency`` consumer keeps working unchanged.
+    """
+    kind: str
+    cycles: Optional[int] = None
+    min_cycles: Optional[int] = None
+    max_cycles: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in _LATENCY_KINDS:
+            raise ValueError(
+                f"LatencyDeclaration: 'kind' must be one of {_LATENCY_KINDS}, "
+                f"got {self.kind!r}. (User-facing YAML input should be caught "
+                "earlier by RegistryValidator; this is a defense-in-depth "
+                "check for direct construction.)"
+            )
+        if self.kind == "fixed" and self.cycles is None:
+            raise ValueError("LatencyDeclaration: kind='fixed' requires 'cycles'")
+        if self.kind == "bounded":
+            if self.min_cycles is None or self.max_cycles is None:
+                raise ValueError(
+                    "LatencyDeclaration: kind='bounded' requires both "
+                    "'min_cycles' and 'max_cycles'"
+                )
+            if self.min_cycles > self.max_cycles:
+                raise ValueError(
+                    f"LatencyDeclaration: min_cycles ({self.min_cycles}) must "
+                    f"be <= max_cycles ({self.max_cycles})"
+                )
+        if self.kind == "elastic" and (
+            self.cycles is not None or self.min_cycles is not None or self.max_cycles is not None
+        ):
+            raise ValueError(
+                "LatencyDeclaration: kind='elastic' must not declare "
+                "cycles/min_cycles/max_cycles — elastic timing has no fixed "
+                "cycle count by definition"
+            )
+
+
 @dataclass
 class ModuleTiming:
     """Optional per-module latency/timing metadata from the module
@@ -112,14 +174,17 @@ class ModuleTiming:
     identically to every existing consumer that predates this field.
 
     Resolution order used by consumers (forge.analyze.latency_static,
-    the canonical IR): ``latency_cycles`` (explicit, authoritative) >
-    an externally-supplied HLS synthesis report (not modeled here — a
-    runtime overlay, not registry/design data) > ``latency_hint`` (a
-    rough manual estimate) > unknown.
+    the canonical IR): a structured ``latency:`` declaration (explicit,
+    authoritative — release-plan §4.2) > ``latency_cycles`` (explicit,
+    authoritative, the older flat spelling) > an externally-supplied HLS
+    synthesis report (not modeled here — a runtime overlay, not
+    registry/design data) > ``latency_hint`` (a rough manual estimate) >
+    unknown.
     """
     latency_cycles: Optional[int] = None
     latency_hint: Optional[int] = None
     variable_latency: bool = False
+    latency: Optional[LatencyDeclaration] = None
 
     def __post_init__(self) -> None:
         if self.latency_cycles is not None and self.variable_latency:
@@ -130,22 +195,58 @@ class ModuleTiming:
                 "by RegistryValidator; this is a defense-in-depth check for "
                 "direct construction.)"
             )
+        # Deliberately no flat-vs-latency: contradiction check here: a
+        # `latency: {kind: elastic}` declaration legitimately normalizes to
+        # variable_latency=True (see _pop_timing) so every existing
+        # variable_latency consumer keeps working — that's the intended
+        # coexistent representation, not a contradiction. The real
+        # both-syntaxes-used-at-once check happens in _pop_timing, against
+        # the *original* raw YAML keys, before that normalization runs.
 
 
 def _pop_timing(raw: dict) -> Optional["ModuleTiming"]:
-    """Pop latency_cycles/latency_hint/variable_latency out of a merged
-    module dict and return a ModuleTiming, or None if none were present —
-    so modules that don't declare timing are completely unaffected."""
-    has_any = any(k in raw for k in ("latency_cycles", "latency_hint", "variable_latency"))
+    """Pop latency_cycles/latency_hint/variable_latency/latency out of a
+    merged module dict and return a ModuleTiming, or None if none were
+    present — so modules that don't declare timing are completely
+    unaffected."""
+    has_flat = any(k in raw for k in ("latency_cycles", "latency_hint", "variable_latency"))
+    has_latency_block = "latency" in raw
     lat_cycles = raw.pop("latency_cycles", None)
     lat_hint = raw.pop("latency_hint", None)
     variable = raw.pop("variable_latency", False)
-    if not has_any:
+    latency_block = raw.pop("latency", None)
+    if not has_flat and not has_latency_block:
         return None
+
+    if has_flat and has_latency_block:
+        raise ValueError(
+            "ModuleTiming: the structured 'latency:' block and one of the "
+            "flat 'latency_cycles'/'latency_hint'/'variable_latency' fields "
+            "are two ways of declaring the same thing — declare only one. "
+            "(User-facing YAML input should be caught earlier by "
+            "RegistryValidator; this is a defense-in-depth check for direct "
+            "construction.)"
+        )
+
+    declaration: Optional[LatencyDeclaration] = None
+    if latency_block is not None:
+        declaration = LatencyDeclaration(
+            kind=latency_block.get("kind"),
+            cycles=latency_block.get("cycles"),
+            min_cycles=latency_block.get("min_cycles"),
+            max_cycles=latency_block.get("max_cycles"),
+        )
+        if declaration.kind == "elastic":
+            # Soft-migration alias (see LatencyDeclaration's docstring):
+            # every existing variable_latency consumer keeps working with
+            # zero changes, while richer .latency data is also available.
+            variable = True
+
     return ModuleTiming(
         latency_cycles=int(lat_cycles) if lat_cycles is not None else None,
         latency_hint=int(lat_hint) if lat_hint is not None else None,
         variable_latency=bool(variable),
+        latency=declaration,
     )
 
 

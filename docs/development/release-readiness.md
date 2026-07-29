@@ -748,7 +748,7 @@ recorded above.
 | Tests | **DONE** | `test_ir_plan.py` (new — 8 tests, synthetic fixtures, no CLI): inferred/explicit classification, transformation/latency-change filtering, matching-evidence + rejected-matches folding, diagnostics-to-issues folding, hash determinism/sensitivity/portability. `test_build_cli_group.py` (new — 10 tests): registration, zero-file-write invariant for `--plan` (tree-snapshot technique), human output section presence, JSON output shape cross-checked against real `trigger_demo` connection counts, hash determinism across two CLI invocations, `--accept-plan-hash` matching/mismatching, missing-design guidance, `--apply` byte-identical-to-`gen-top` proof, `--accept-plan-hash` blocking `--apply` before any write. |
 | Full suite | **DONE** | `667 passed, 8 skipped` (+19 over Phase 3 slice 5's 648: 8 in `test_ir_plan.py`, 10 in `test_build_cli_group.py`, +1 net from the extraction exercising slightly more of `cardinality.py`/`cdc.py`/`contract_verifier.py` even outside `--strict`), coverage `62.32%` (up from `61.83%`), **0 regressions**. |
 
-### What's left after slice 6
+### What's left after slice 6 (Phase 3)
 
 - `forge build --plan`'s `unresolved_issues` cannot predict `_strict_port_gate`'s
   open-output/tied-input violations — those need a real generator report,
@@ -768,19 +768,405 @@ all 6 slices done.**
 
 ---
 
-## Next recommended session (not started here)
+## Phase 4 (slice 1) — 4.1 Separate latency sources + provenance
 
-Phase 3 is complete. Remaining, unrelated to Phase 3:
+Started per the release plan's own Phase 4 ordering (§4.1 first — §4.2's
+`kind: fixed/bounded/elastic` vocabulary and §4.3's alignment inference
+both need §4.1's provenance-tagged wrapper to build on; §4.5's
+static/runtime unification needs it to honestly name "source of each
+prediction"). Investigated first: read `forge/analyze/latency_static/graph.py`,
+`checker.py`, `reporter.py` in full before writing code, confirming two
+real gaps — `LatencyEdge` carried zero latency of its own (the checker was
+provably blind to `register_stages`/`delay_cycles`), and provenance was a
+narrow 4-value free-text string (`"explicit"|"hls_report"|"hint"|"unknown"`)
+computed only for module nodes, never edges.
 
-- `generate_build_manifest`'s resolved-build-path gap (unchanged from
-  before Phase 3).
-- mtime-based staleness migration onto content-hash provenance for
-  `gen-top`/`verify` (Phase 1 slice 2's provenance manifest remains a
-  parallel capability, not yet the migration target).
-- Design explorer (Phase 8) — now meaningfully unblocked by slice 5's
-  matching evidence and slice 6's generation plan, but still a
-  substantial, separate multi-session effort (static SVG + interactive
-  HTML + explorer functionality, per the release plan's own phase
-  breakdown).
-- MkDocs site, unrelated-domain reference project, property-based tests,
-  plugin terminology rename — all previously deferred, still open.
+| Item | Status | Evidence |
+|---|---|---|
+| Shared `LatencyValue`/`LatencyProvenance` wrapper | **DONE** | New `forge/analyze/latency_model.py` — `LATENCY_SOURCES` (the 6 release-plan §4.1 values: `explicit_contract`/`hls_report`/`generated_transformation`/`inferred`/`user_hint`/`runtime_observation`), `LATENCY_KINDS` (the 3 §4.2 values — defined now so slice 2 doesn't need to touch this module), `LatencyProvenance`/`LatencyValue` dataclasses, both validated at construction (`LatencyModelError`). Deliberately its own module (not nested in `latency_static/`) so `latency_runtime` (slice 5) can depend on it without a wrong-direction package dependency between sibling analysis packages. |
+| `LatencyNode`/`LatencyEdge` refactor | **DONE, zero touch to RTL-facing code** | `forge/analyze/latency_static/graph.py`: `LatencyNode.latency_cycles`/`.latency_source` replaced by `latency: Optional[LatencyValue]`, with back-compat `@property` accessors reading through it (safe — this dataclass is never serialized; `latency-check` has no `--json`/`--format` flag). `LatencyEdge` gains `latency: Optional[LatencyValue] = None`. Nothing in `forge/topgen/config.py::Connection` or `forge/ir/model.py::ResolvedTransformation` was touched — this is an analysis-side-only refactor. |
+| Connection latency folded into edges (the actual gap fix) | **DONE** | New `_edge_latency_from_connection(conn)` (`graph.py`): sums `register_stages` + `delay_cycles` (+2 for a declared `cdc: {kind: 2ff_sync}`, the real fixed depth of `cdc_sync2ff.v`) into one `LatencyValue`, provenance `generated_transformation`, populated in `_build_graph_from_ir`'s connection loop. `async_fifo`/topology-group-derived edges honestly stay `latency=None` (no RTL exists for `async_fifo`, `TopologyGroup` has no cycle-count field at all) — not a fabricated 0. `_resolve_latency()` extended to also build a `LatencyProvenance` (`explicit`→`explicit_contract`, `hls_report`→`hls_report`, `hint`→`user_hint`), shared unchanged by both the IR-driven and legacy raw-YAML paths (same function, same precedence, richer return type — `Optional[LatencyValue]` instead of a `(cycles, source_str)` tuple). |
+| Checker path-sum fix | **DONE** | `checker.py::check_merge_points`: `PathLatency.total_cycles` previously read only the predecessor *node's* latency; now adds the connecting *edge's* `.latency.cycles` (0/None-safe) into the total, tagging the result `PathLatency.provenance = LatencyProvenance("inferred", detail=...)` — a real, justified use of `inferred` (the sum of ≥2 sourced values, not itself sourced from one place). This directly closes the confirmed "checker blind to register/delay cycles" gap. |
+| Reporter visibility | **DONE, deliberate output change** | `reporter.py::render_markdown`: merge-point path table gains a "Source" column so the fold-in is visible in rendered output, not just internal state. `test_trigger_demo_report_is_byte_identical` (new-vs-legacy-path comparison, not a fixed golden file) needed no fixture update — both paths render through the same updated function and currently hit zero merge points on trigger_demo, so the new column is inert on that specific comparison; two other pre-existing hardcoded `latency_source == "hint"` assertions (`test_build_graph_dispatches_to_ir_path_by_default`, `test_build_graph_falls_back_to_legacy_for_a_genuinely_different_override`) were updated to `"user_hint"` — a deliberate, documented vocabulary change, not an accidental regression. |
+| Real-design validation | **DONE** | `trigger_demo`'s real `col→trig` connection (`design.yml:65-67`, `register_stages: 2`) and `trig→tfan` (`:73-75`, `delay_cycles: 3`) now show up as real `LatencyEdge.latency` values with `generated_transformation` provenance — verified both by a new automated test and by manually running `forge analyze latency-check` end-to-end (rendered Markdown confirmed). Zero merge points exist in either reference design today (module-group node granularity collapses trigger_demo's real `dec×4→col` gather — confirmed unchanged before/after this slice; per-instance granularity that would surface it lands in Phase 4 slice 3, not this one) — a new regression-guard test asserts this explicitly rather than leaving it implicit. |
+| Tests | **DONE** | `test_latency_model.py` (new, 7 tests): source/kind vocabulary completeness, provenance/value construction and rejection. `test_latency_checker.py` (new, 4 tests): the provable regression-closer (equal node latencies + unequal edge latencies → now flagged, where the pre-slice checker would have missed it), a balanced-via-different-node/edge-split case (proves the fold-in isn't over-eager), an unknown-edge-defaults-to-zero-not-unknown case, and the zero-real-merge-points regression guard on both reference designs. `test_latency_graph_ir_equivalence.py` (+1 new, 2 updated): real `col→trig`/`trig→tfan` edge-latency assertions against actual `design.yml` values, plus the two vocabulary-rename fixes above. |
+| Full suite | **DONE** | `679 passed, 8 skipped` (+12 over Phase 3 slice 6's 667: 7 in `test_latency_model.py`, 4 in `test_latency_checker.py`, 1 in `test_latency_graph_ir_equivalence.py`), coverage `63.26%` (up from `62.32%`), **0 regressions**. `test_generation_ir_equivalence.py`'s byte-identical RTL proofs re-ran unchanged — confirms nothing RTL-facing was touched, as designed. |
+
+### What's left after Phase 4 slice 1
+
+- Slice 2 (§4.2 — `kind: fixed/bounded/elastic` schema), slice 3 (§4.3 —
+  alignment-aware merge-point checking + the per-instance edge granularity
+  needed to make trigger_demo's real gather a genuine merge point), slice
+  4 (§4.4 — throughput info), slice 5 (§4.5 — static/runtime unification)
+  — not yet started, in that dependency order (see
+  `docs/plan/FORGE_release_plan.md` §4 and this session's planning notes).
+- Honest deferral list carried forward from planning (not yet reached):
+  `buffering_capacity`/`occupancy`/`backpressure`/`frame_rate` (zero data
+  source anywhere), `ControlSignalTarget.delay_cycles` (a third,
+  structurally distinct connection-latency mechanism incompatible with
+  the module-pair edge model), `design_parameters.py`'s naive DAG-blind
+  cumulative-latency walker (to be cross-referenced, not replaced),
+  `async_fifo` CDC latency (no RTL, stays unknown).
+
+---
+
+## Phase 4 (slice 2) — 4.2 Fixed, bounded, and elastic timing
+
+`latency: {kind: fixed|bounded|elastic, ...}` — a structured, richer
+alternative to the flat `latency_cycles`/`latency_hint`/`variable_latency`
+keys, coexisting with them (not replacing). Real bug found and fixed
+during real-design validation, not just synthetic testing: `_load_registry`
+in `forge/topgen/config.py` (used by the primary, non-legacy `DesignConfig`
+load path) filters every registry entry down to a hardcoded
+`IDENTITY_FIELDS` allowlist — the new `latency:` key wasn't in it, so it
+was silently stripped before ever reaching `_pop_timing`, and the real
+`trigger_demo` migration below (module `trig`) initially lost its timing
+entirely (`Module.timing is None`) until this was caught by the full
+suite and fixed. A second, related gap fixed in the same pass: the
+legacy raw-YAML fallback path (`forge/analyze/latency_static/graph.py`'s
+`_build_latency_map`) didn't know about `latency:` blocks at all, which
+would have made `trigger_demo`'s own `test_trigger_demo_nodes_and_edges_equivalent`
+regression test (new IR path vs. legacy path) correctly catch a real
+precedence divergence — fixed by sharing one `_latency_value_from_declared_kind`
+helper between both paths, same "define the rule once" discipline
+`_resolve_latency` already established in slice 1.
+
+| Item | Status | Evidence |
+|---|---|---|
+| `LatencyDeclaration` schema | **DONE** | New dataclass in `forge/topgen/config.py`: `kind: fixed\|bounded\|elastic`, `cycles`/`min_cycles`/`max_cycles`. `__post_init__` defense-in-depth validation (unknown kind; `fixed` without `cycles`; `bounded` missing bounds or `min>max`; `elastic` with stray cycle fields) — same "raw exception as first-layer defense, structured `RegistryValidator` error as the nicer user-facing layer" precedent already established for `ModuleTiming`'s own contradiction check. |
+| Coexistence with flat fields | **DONE** | `ModuleTiming.latency: Optional[LatencyDeclaration] = None`, additive. `_pop_timing()` raises when a module declares **both** a `latency:` block and any of the three flat keys — checked against the *original* raw YAML keys before any normalization runs (not against the constructed `ModuleTiming`'s fields), specifically so the elastic→`variable_latency` soft-migration below doesn't spuriously self-trigger the contradiction check it was almost written to include. |
+| `latency: {kind: elastic}` ↔ `variable_latency: true` | **DONE (soft-migration alias)** | `_pop_timing()` sets `variable_latency=True` under the hood when `kind: elastic` is given — every existing `variable_latency` consumer (the checker's `is_variable` unknown-folding) keeps working with zero changes, while the richer `.latency` data is also available for future consumers. Not a rename — `variable_latency: true` stays fully legal forever. |
+| `_validate_latency_block` | **DONE** | `forge/topgen/validation.py`, parallel to the existing `_validate_timing_fields`, called alongside it. `"latency"` added to `_KNOWN_MODULE_KEYS`. Validates: known `kind`; unknown keys inside the block; `fixed` requires `cycles` (and rejects stray `min_cycles`/`max_cycles`); `bounded` requires both bounds, integer-typed, `min<=max` (and rejects stray `cycles`); `elastic` rejects any cycle-count field. |
+| IR field | **DONE** | `ResolvedModuleDefinition.latency: Optional[LatencyDeclaration]` (`forge/ir/model.py`) — additive alongside the existing flat fields, reusing `topgen.config.LatencyDeclaration` directly (not mirrored) per the same layering `ir/build.py` already established for `DesignConfig`/`Module`; confirmed compatible with `ci/import_direction_check.sh` (schema-layer import, not a generator/CLI one). Populated in `forge/ir/build.py::assemble_project_ir`. `forge/core/cli/groups/inspect.py::_project_from_json` round-trip updated (the same "new field needs round-trip reconstruction or `--diff` silently drops it" lesson from every prior slice that's added an IR field). |
+| `graph.py` precedence | **DONE** | A structured `latency:` declaration is explicit/authoritative, taking precedence over the flat `latency_cycles`/`hls_report`/`latency_hint` chain — same "explicit wins" rule `_resolve_latency` already applies to `latency_cycles`. Implemented identically in both `_build_graph_from_ir` (via `Module.timing.latency`) and `_build_graph_legacy`/`_build_latency_map` (via a raw `entry.get("latency")` dict) through one shared `_latency_value_from_declared_kind` helper. |
+| Real-design migration | **DONE** | `plugins/trigger_demo/forge/modules.yml`'s `trigger_logic` entry: `latency_hint: 3  # HLS LATENCY min=3 max=3 (confirmed by HLS report HLS_SYN_LAT=3)` → `latency: {kind: fixed, cycles: 3}` — the comment literally documented a fixed value the old schema couldn't express natively; now first-class. Verified identical resolved value (3 cycles) before/after, provenance correctly now `explicit_contract` instead of `user_hint` (confirmed via `forge analyze latency-check`'s rendered Markdown output, and via updated test assertions in `test_module_timing.py`/`test_ir_build.py`/`test_latency_graph_ir_equivalence.py`). |
+| Tests | **DONE** | `test_module_timing.py` (+19): `LatencyDeclaration` per-kind construction/rejection (6), `_pop_timing` parsing per kind + elastic normalization + both-syntaxes rejection (5), `RegistryValidator` structural acceptance/rejection for all 3 kinds and their error paths (9, via a new `_registry_with_latency_block` fixture helper), one real-design IR-population integration test. 3 pre-existing tests updated for the real `trigger_logic` migration (`test_trigger_demo_modules_have_timing_from_registry`, `test_modules_carry_latency_metadata_from_the_registry`, `test_build_graph_dispatches_to_ir_path_by_default`) — deliberate, documented value/provenance changes, not regressions. |
+| Full suite | **DONE** | `698 passed, 8 skipped` (+19 over Phase 4 slice 1's 679), coverage `63.43%` (up from `63.26%`), **0 regressions**. `test_generation_ir_equivalence.py`'s byte-identical RTL proofs re-ran unchanged (module-level timing has never fed generation, confirmed again). |
+
+### What's left after Phase 4 slice 2
+
+- `bounded`/`elastic` declarations are schema-complete and IR-populated
+  but not yet *acted on* by the checker (a `bounded` node's `.latency_cycles`
+  back-compat property is `None`, so it's folded into "unknown" by the
+  still-Phase-3-era checker, same as before this slice — correct,
+  conservative default until slice 3's alignment-kind inference lands).
+- No real-design usage of `bounded`/`elastic` exists yet (only `fixed`,
+  via the `trigger_logic` migration) — `variable_latency`/`elastic`
+  real-design validation remains open per the honest deferral list.
+
+---
+
+## Phase 4 (slice 3) — 4.3 Alignment requirements
+
+Per-instance `LatencyGraph` node/edge granularity (the confirmed
+prerequisite — module-group granularity meant zero real merge points
+existed in either reference design), then alignment-kind inference so
+the checker "must not assume every reconvergence requires identical
+scalar latency" (§4.3's own wording, now literally true).
+
+| Item | Status | Evidence |
+|---|---|---|
+| Per-instance node granularity | **DONE** | `forge/analyze/latency_static/graph.py`: new `_instance_node_names(mod)`/`_instance_names_raw(name, instances)` helpers — a single-instance module keeps its bare name (`"col"`, zero graph change for the common case); a multi-instance module splits into `"name[0]"`, `"name[1]"`, ... Applied identically to **both** `_build_graph_from_ir` and the legacy raw-YAML fallback (`_build_graph_legacy`/new `_instance_endpoints` helper) — same "define the rule once, don't let the two paths diverge" discipline as every prior slice's shared-precedence functions. `LatencyNode.instances` is now always `1` for a per-instance node (it represents exactly itself); latency/kind/ref stay identical across every instance of the same module (a module/HLS-level fact, not a per-instance one). |
+| Per-instance edge expansion | **DONE, conservative for the ambiguous case** | New `_add_instance_edges` (IR path) / `_instance_endpoints` (legacy path): a producer with N instances feeding a 1-instance consumer (or vice versa) expands into N real edges — structurally certain, since there's only one possible instance on the singular side to connect to; no port-matching/contract data needed. When *both* sides have >1 instance (not present in either reference design today), conservatively expands to the full Cartesian product rather than guessing a single pairing — documented in the module's own docstring as a deliberate over-approximation for a case that doesn't arise in practice yet, not silently wrong data. |
+| Real merge points surfaced | **DONE — the actual point of this slice** | Verified on real `trigger_demo`: `col` and `partmon` (both fed by all 4 real `dec` instances via `decoder_to_collector`'s `role_pairs` gather and `decoder_hits_to_partition_sink`/`decoder_valids_to_partition_sink`'s `instance_assign` groups) now register as genuine 4-predecessor merge points — the first real (not synthetic) merge points this project has ever had, confirmed both by a new automated test and by manually running `forge analyze latency-check` end-to-end (rendered Markdown shows 4 real `dec[i] → col`/`dec[i] → partmon` input paths). Both correctly report **balanced** (`exact_cycle` alignment, delta 0) — all four `dec` instances share the same module-level `latency_hint: 0` and neither topology group declares `register_stages`/`delay_cycles`. |
+| `MismatchReport.alignment` | **DONE** | New field, one of `exact_cycle`/`bounded_skew`/`transaction_order`/`elastic_buffer` — `forge/analyze/latency_static/checker.py`. Inference: any predecessor `kind=="elastic"` → `elastic_buffer` (never a mismatch, tolerant by definition); any predecessor `kind=="bounded"` → `bounded_skew` (mismatch iff the paths' `[min,max]` cycle ranges — a degenerate `[v,v]` point range for fixed/hint/hls_report predecessors — fail to overlap, a real range-overlap computation, not just a label change); consuming node's protocol `== "ready-valid"` (via a new optional `consumer_protocols` param, best-effort — checker stays usable from a bare `LatencyGraph` alone, same "usable before synthesis" property the graph builder itself preserves) → `transaction_order` (never a scalar-latency mismatch); otherwise → `exact_cycle`, byte-identical to pre-slice behavior (same delta computation, same suggestion logic). |
+| Reporter visibility | **DONE** | `reporter.py`'s merge-point section now prints `Alignment: `<kind>`` per merge point — deliberate output change, consistent with every prior slice's "make new evidence visible in rendered output" precedent. |
+| Tests | **DONE** | `test_latency_checker.py` (+7): a synthetic multi-instance fan-in becoming a real merge point; elastic-suppresses-mismatch-despite-unequal-cycles (the direct §4.3 proof); bounded-overlapping-ranges (not a mismatch) and bounded-non-overlapping-ranges (still a mismatch — proves the tolerance mechanism isn't blanket-permissive); a mixed bounded+fixed merge point (proves the fixed predecessor's exact value is checked against the bounded range, not skipped); `ready-valid` → `transaction_order` inference; `consumer_protocols` omitted defaults to unchanged `exact_cycle` behavior. `test_latency_graph_ir_equivalence.py` (2 updated): real per-instance node-set assertions for trigger_demo, `dec[0]` representative-instance assertion for the legacy-fallback test — deliberate, documented naming changes. `test_real_reference_designs_report_zero_false_mismatches` (updated from slice 1): now asserts the 2 real merge points by name and their balanced/`exact_cycle` status, instead of asserting zero merge points (which was itself only true because of the module-group-granularity limitation this slice fixes). |
+| Full suite | **DONE** | `705 passed, 8 skipped` (+7 over Phase 4 slice 2's 698), coverage `63.35%`, **0 regressions**. |
+
+### What's left after Phase 4 slice 3
+
+- Both-sides-multi-instance edge expansion is conservative (Cartesian
+  product), not exact — not present in either reference design, so not a
+  real gap yet, but documented as a known approximation.
+- No real design declares `kind: bounded`/`kind: elastic` — the
+  overlap/tolerance logic is proven correct only synthetically (honest
+  deferral, unchanged from slice 2's note on the same topic).
+- `transaction_order` inference is wired but never invoked with real
+  `consumer_protocols` data yet — no caller (e.g. `forge analyze
+  latency-check`'s CLI command) currently builds and passes that mapping
+  from the IR's `ResolvedLogicalInterface.protocol` data. Wiring that up
+  is a small, low-risk follow-up, not attempted this slice to keep the
+  diff focused on the checker's own logic.
+
+---
+
+## Phase 4 (slice 4) — 4.4 Throughput information
+
+Recovers `interval_min`/`interval_max` — real data `forge.hls.extract_hls_metrics.HLSMetricsExtractor`
+already parsed from `csynth.xml` but that `forge/analyze/hls_reports/extractor.py`
+silently dropped before it reached `HLSModuleReport`. The rest of §4.4's
+vocabulary (`buffering_capacity`/`occupancy`/`backpressure`/`frame_rate`)
+has zero data source anywhere in this codebase — reserved honestly, not
+fabricated.
+
+| Item | Status | Evidence |
+|---|---|---|
+| `interval_min`/`interval_max` recovery | **DONE, mechanical** | `HLSModuleReport` (`forge/analyze/hls_reports/extractor.py`) gains `interval_min: int = 0`/`interval_max: int = 0` (same 0-default convention as every other latency field — `HLSMetricsExtractor.get_int` already defaults to 0 when the XML element is absent, confirmed by reading it). `_parse_xml` wires `lat["interval_min"]`/`lat["interval_max"]` (already present in the raw dict `extract_latency()` returns) straight through — zero new parsing logic, purely recovering already-extracted-but-discarded data. |
+| Reserved fields | **DONE — documented, not fabricated** | `buffering_capacity: Optional[int]`, `occupancy: Optional[float]`, `backpressure: Optional[bool]`, `frame_rate: Optional[float]` added to `HLSModuleReport`, all `None`-default with an explicit docstring stating `csynth.xml` (a synthesis-time report) structurally cannot carry this data (it's runtime/simulation or RTL-generation-time information) and no other producer exists anywhere in the codebase — same "reserved, no effect yet" precedent as Phase 3's `width_adapter`/`protocol_adapter`/`constant_source`. `initiation_interval`/throughput itself is **not** reserved — it already had a real source (`pipeline_ii`, plus the newly-recovered `interval_min`/`interval_max` range), reusing the exact field name already established at `design_parameters.py:443`. |
+| Reporting | **DONE** | `forge/analyze/hls_reports/formatter.py`: CSV gains `interval_min`/`interval_max` columns; Markdown/HTML gain an "II Range" column rendering `"{min}–{max}"`, or an honest `"—"` (not a fabricated `"0–0"`) when the XML never carried the data at all — verified both ways with the new synthetic fixture. HTML's hardcoded missing-row `<td>—</td>` repeat count updated (`13`→`14`) to match the new column — a real, easy-to-miss regression class (a magic count divorced from the actual column list) caught by a dedicated new test. |
+| Fixture decision | **DONE, explicitly synthetic-only** | Neither reference plugin has a checked-in `csynth.xml` (confirmed by search, matches the planning research), and no prior test in this codebase built one either. New `forge/tests/test_hls_reports_extractor.py` embeds a minimal, schema-accurate synthetic `csynth.xml` (matching `HLSMetricsExtractor`'s exact XPath expectations — `UserAssignments`, `PerformanceEstimates/SummaryOfOverallLatency`, `AreaEstimates/Resources`, etc. — not guessed) as a `tmp_path`-written fixture. **No real-design proof of the parsing path itself is possible** — documented here rather than silently claimed; the *absence*-handling path (no `hls_build_root` / no `csynth.xml`) remains real-design-testable and unchanged (pre-existing `test_analyze_cli_group.py::TestHlsReport` tests still pass unmodified). |
+| Tests | **DONE** | `test_hls_reports_extractor.py` (new — 8 tests): `interval_min`/`interval_max` recovery; 0-default when absent from the XML; the 4 reserved fields stay `None`; CSV/Markdown/HTML each render the new data correctly; the honest "—" (not "0–0") rendering when absent; the HTML missing-row cell-count regression guard. Manually verified end-to-end via the real `forge analyze hls-report` CLI command against the synthetic fixture (rendered Markdown table showing `II Range: 1–2`). |
+| Full suite | **DONE** | `713 passed, 8 skipped` (+8 over Phase 4 slice 3's 705), **0 regressions**. |
+
+### What's left after Phase 4 slice 4
+
+- `buffering_capacity`/`occupancy`/`backpressure`/`frame_rate` remain
+  permanently reserved unless a future data source appears (e.g. a
+  runtime/simulation-derived metric, or a different report format) —
+  not planned as a near-term follow-up.
+- No real `csynth.xml` exists in either reference plugin to validate the
+  parsing path against a real HLS build — an honest, environment-driven
+  constraint (no HLS toolchain/build artifacts available in this repo
+  checkout), not a shortcut.
+
+---
+
+## Phase 4 (slice 5) — 4.5 Static/runtime unification
+
+Three concrete sub-decisions from the plan, all implemented: (a) fix the
+confirmed broken wide-CSV/long-CSV pipe between `gen_sim.py`'s real
+Tier-2 probe emission and `latency_runtime/probe.py`'s consumer, (b)
+unify `LatencyComparison` with slice 1's `LatencyValue`/`LatencyProvenance`
+wrapper, (c) explicitly reconcile (not fix) `design_parameters.py`'s
+third, independent latency-summing codepath.
+
+| Item | Status | Evidence |
+|---|---|---|
+| Wide/long CSV pipe fix | **DONE — real bug fix** | New `forge/analyze/latency_runtime/probe.py::load_wide_probe_csv(path)` melts `gen_sim.py`'s actual emitted wide format (`cycle,<probe1>,<probe2>,...` — confirmed by reading `_render_probe_open`/`_render_probe_fwrite` directly, not guessed) into the same `ProbeEvent` list `load_probe_csv` (long format) already produces. Probe names are read straight from the wide CSV's own header row (the same names `_render_probe_open` writes there) — no separate probe-name list needs to be supplied. `load_probe_csv` itself is completely untouched — purely additive. |
+| CLI wiring | **DONE, exact backward compatibility** | `forge analyze runtime-latency --probe-format {long,wide}` (`forge/core/cli/groups/analyze.py`), default `long` — the one pre-existing test exercising this command needed zero changes, confirmed by re-running it unmodified. |
+| `LatencyComparison` unification | **DONE** | `forge/analyze/latency_runtime/comparator.py`: new `predicted: Optional[LatencyValue]` (provenance configurable via `compare()`'s new `predicted_source` kwarg, default `hls_report`) and `observed_value: Optional[LatencyValue]` (provenance always `runtime_observation`) fields, additive alongside the existing `hls_predicted`/`observed` ints (kept verbatim — `reporter.py` reads them directly, needed zero changes). New `path: Optional[List[str]]` field (the fifth required report item, "affected path or interface" — previously unrepresentable at all), populated only when the caller supplies one (honest partial coverage, not a mandatory fabricated field). This closes all 5 release-plan §4.5 report requirements: predicted latency, observed latency, discrepancy (`delta`, unchanged), source of each prediction (new), affected path (new). |
+| `design_parameters.py` reconciliation | **DONE — cross-referenced, deliberately not replaced** | A new, detailed code comment at the naive cumulative-latency walker's construction site names the exact gap (file-order summing with zero DAG/parallelism awareness — it doesn't know `dec`'s 4 instances feed `col`/`partmon` in parallel, not sequentially) and points at `forge.analyze.latency_static` as the DAG-aware alternative. The live `design_parameters.json` output itself is **not** changed this phase (a higher-risk, out-of-scope change for an otherwise read-only-analysis-focused phase) — an explicit, documented deferral, not a silent gap. |
+| Real-design agreement proof | **DONE, honestly scoped** | New `test_design_parameters_latency_agreement.py`: seeds a synthetic `hls_metrics.json` with each real trigger_demo module's *own* `ModuleTiming`-resolved cycle count (so both codepaths start from identical per-module facts — a genuine, not tautological, comparison), then proves the naive walker's per-module `cumulative_latency` agrees step-by-step with an independently-computed `LatencyGraph`-based running total along trigger_demo's real linear tail (`col→trig→tfan→tsink→tout`, confirmed to be a genuine 1-in-1-out chain by reading `design.yml`'s `connections:`). Does **not** claim agreement on the whole design (the real `dec×4→col`/`partmon` fan-out region is exactly where the two would diverge) — documented as the honest, narrower claim matching the code comment above. |
+| Real-design `tier2_probes` | **DONE — declared, format-verified; execution not run** | `plugins/trigger_demo/forge/verify/trigger_pipeline_xsim/port_map.yaml`'s previously-empty `tier2_probes: []` now declares 2 real probes (`dec_0_raw_valid`, `tout_out_valid` — real top-level port names already present in the same file's port list, not invented) — a genuine, tracked repo change (confirmed via `git ls-files`, not an ephemeral/gitignored artifact). Manually verified `gen_sim.py`'s `_tier2_probes`/`_render_probe_open`/`_render_probe_fwrite` render these into valid SystemVerilog emitting exactly the wide-CSV shape `load_wide_probe_csv` expects (`cycle,dec_0_raw_valid,tout_out_valid` header, `%0d,%0b,%0b` row format) — format-compatibility proven end-to-end from declaration through generated code to the new loader. **Honest gap**: no Xilinx/XSIM toolchain is available in this environment, so an actual simulation run producing a real `algo_top_probe.csv` was not executed — documented explicitly rather than claiming full coverage. |
+| Tests | **DONE** | `test_latency_runtime.py` (new — 8 tests): wide-CSV loading matches `gen_sim.py`'s real format; missing-file handling; `measure_latency` works on wide-loaded events; long-format loader unaffected; `compare()`'s new wrapper fields (populated, configurable source, optional path, correctly partial on the "unknown" verdict case). `test_analyze_cli_group.py` (+2): `--probe-format wide` end-to-end through the real CLI; `--probe-format` omitted still defaults to `long` unchanged. `test_design_parameters_latency_agreement.py` (new — 2 tests, described above). |
+| Full suite | **DONE** | `725 passed, 8 skipped` (+12 over Phase 4 slice 4's 713), coverage `61.66%`, **0 regressions**. |
+
+### What's left after Phase 4 slice 5
+
+- No real XSIM-executed probe CSV exists — `tier2_probes` are declared
+  and proven format-compatible, not simulation-verified end-to-end
+  (environment constraint, documented above).
+- `design_parameters.py`'s naive walker itself is unchanged — cross-
+  referenced and agreement-tested on the linear segment only, still
+  genuinely wrong at real fan-in regions if ever asked to reason about
+  them (unchanged, pre-existing behavior, now at least documented).
+
+**Phase 4 ("Latency and throughput model") is now complete — all 5
+slices (§4.1-§4.5) done.**
+
+---
+
+## Phase 4 closing summary (slice 6 — readiness-doc closure)
+
+Full honest-deferral list carried across all 5 slices, consolidated:
+
+1. `buffering_capacity`/`occupancy`/`backpressure`/`frame_rate` (§4.4) — zero data source anywhere in this codebase; permanently reserved, `None`-valued, never fabricated.
+2. `ControlSignalTarget.delay_cycles` (§4.1) — a third, structurally distinct connection-latency mechanism (broadcast control signals) incompatible with `LatencyGraph`'s module-pair edge model without a redesign; not folded into the edge model.
+3. `design_parameters.py`'s naive DAG-blind cumulative-latency walker (§4.5) — cross-referenced and linear-segment-agreement-tested, not replaced; its live `design.ir.json`-adjacent JSON output was out of scope to change this phase.
+4. `transaction_order` alignment (§4.3) — false-positive suppression only; no new check for transaction-order-specific violations (FIFO overflow, reorder detection). Also wired but never invoked with real `consumer_protocols` data by any CLI caller yet.
+5. Real end-to-end XSIM-executed runtime-latency validation (§4.5) — `tier2_probes` declared and format-verified on real `trigger_demo`, but no Xilinx/XSIM toolchain available in this environment to actually run the simulation.
+6. `async_fifo` CDC latency (§4.1, inherited from Phase 3) — no RTL exists, stays `None`, unchanged.
+7. `variable_latency`/`bounded`/`elastic` real-design validation (§4.2/§4.3) — zero real usage of these kinds in either plugin today (only `kind: fixed`, via slice 2's real `trigger_logic` migration); the node-declaration side is necessarily synthetic-only, though the merge-point *graph structure* it's tested against (slice 3, `col`/`partmon`) is real.
+8. Both-sides-multi-instance edge expansion (§4.3) is a conservative Cartesian-product approximation, not exact — not present in either reference design today.
+9. No real `csynth.xml` exists in either reference plugin (§4.4) — the interval-recovery *parsing* path is synthetic-fixture-tested only; the *absence*-handling path remains real-design-tested.
+
+Phase 4 exit state: `725 passed, 8 skipped`, coverage `61.66%`, **0
+regressions** across all 5 slices combined (starting baseline: Phase 3's
+final `667 passed, 8 skipped`, coverage `62.32%` — net +58 tests added
+across Phase 4).
+
+## Phase 5 (slice 0) — Fix the portable-hash bug
+
+Investigated first (per this phase's own planning session, before writing
+any code): confirmed a real, previously-undetected bug in
+`forge/ir/serialize.py::_canonical_design_json` — its own docstring
+already claimed the IR content hash is portable ("a content hash should
+answer 'did the resolved design change', not... the caller's filesystem
+layout"), but it hashed `asdict(project.design)` in full, which includes
+`ResolvedDesign.source` — a `SourceLocation` populated with the
+**resolved absolute path** to `design.yml`. Empirically confirmed by
+building the same real design from two different absolute checkout
+roots and diffing `content_hash()`'s output. The same class of leak
+existed in `ProvenanceManifest.source_hashes`, whose keys were
+`str(absolute_path)`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| `design.source` excluded from the hash | **DONE** | `_canonical_design_json` now pops `design_dict["source"]` before hashing — same exclusion pattern already used for `generated_from`/`forge_version`. |
+| `source_hashes` keys made portable | **DONE** | `forge/ir/provenance.py`: keys are now relative to the design file's own directory (`_relative_key`/`_design_dir`), not absolute paths — recommended option (a) from the planning session (unambiguous, no collision handling needed, matches the project's existing `resolve_declared_path`-style conventions). |
+| `PROVENANCE_SCHEMA_VERSION` bumped | **DONE** | `"0.1.0"` → `"0.2.0"` — a real, documented schema change (the key format changed), mirroring the exact precedent Phase 3 slice 4 set for `IR_SCHEMA_VERSION`'s 0.1.0→0.2.0 kind-vocabulary rename. |
+| **Two further leaks of the same class, found by this slice's own regression tests, not anticipated by the original investigation** | **DONE** | (1) Each module's `contract_path` (resolved absolute path to its interface-contract YAML) and `source_files` (resolved to absolute paths by `topgen/config.py`'s registry loader for any module using `ref:` — the common case for both reference plugins) — found by the same "build from two different absolute checkout roots" technique. (2) Each `design.diagnostics[]` entry's `location.file` (every validation diagnostic is stamped with the resolved absolute `design.yml` path) — found later, by slice 5.4's YAML-key-ordering determinism test, which used a *different* two-different-tmp-directories technique that happened to trigger a diagnostic this slice's own tests hadn't exercised. Both fixed the same way: rewritten relative to the design file's own directory (`_portable_path`) rather than dropped, so a real rename/change is still visible as *a* change, just not tied to *where*. |
+| Regression tests | **DONE** | `test_ir_provenance.py` (+3): `content_hash()` identical across two absolute checkout roots for the real `passthrough_demo` design; `source_hashes` keys identical across the same two checkouts; `content_hash()` identical across two checkouts of a synthetic design that produces a located diagnostic (the slice-5.4-discovered leak). `test_ir_build.py`/`test_inspect_cli_group.py`/`test_topgen_cli_commands.py` (existing tests updated, not regressed): 3 pre-existing assertions that hard-coded the old absolute-path key format (`str(DESIGN_YML) in manifest.source_hashes`, and a hand-rolled hash-comparison helper in `test_gen_top_design_ir_matches_fresh_inspect`) updated to the new relative-key/portable-path convention — deliberate, documented changes, not regressions. |
+| Full suite | **DONE** | `726 passed, 9 skipped` (+2 over this session's own fresh-venv baseline of `724 passed, 9 skipped`), coverage `61.43%` (up from `61.37%`), **0 regressions**. |
+
+### What's left after slice 0
+
+Nothing scoped to this slice — the bug is fixed and both leak sites (plus
+the two additional ones this slice's own tests surfaced) are closed.
+Later slices build on this fixed foundation.
+
+---
+
+## Phase 5 (slice 1) — Provenance manifest completion + `gen-top` wiring
+
+`ProvenanceManifest` gains 4 additive fields, and `gen-top` — which had
+never written a provenance manifest at all before this phase (only
+`forge inspect --provenance`, a read-only path, did) — now writes
+`provenance.json` as a sibling of `design.ir.json` at all 3 of its
+existing call sites (VHDL/Verilog/BD modes).
+
+| Item | Status | Evidence |
+|---|---|---|
+| `plan_hash` | **DONE** | Populated by `gen-top` from the exact same `build_generation_plan`/`plan_hash()` call `forge build` already uses (reusing `ctx.project`, the *pre-generation* IR, so a hash pinned via `forge build --accept-plan-hash` can be compared directly against what a later `gen-top` run records). `None` for `forge inspect`'s read-only path — honest absence, no plan exists there. |
+| `toolchain_versions` | **DONE — and exercised against real installed tools** | New `forge/core/toolchain_versions.py` (a standalone module, not importing from `doctor.py`, per the import-direction rules `forge/ir` is bound by): reuses `doctor.py`'s exact 5-tool list (`xvlog`/`xelab`/`xsim`/`ghdl`/`verilator`), `shutil.which` presence check, then `-version` (Xilinx tools) or `--version` (ghdl/verilator), 5s timeout, `"unknown"` on any failure — never raises. Auto-populated by `build_provenance` for every manifest (an environment fact, not generation-specific). **Correction to this phase's own planning assumption**: the plan's honest-deferral list expected "no Xilinx/GHDL/Verilator toolchain confirmed present" in this environment (per Phase 4's notes) — manually running `gen-top` on both reference designs during this slice's verification found real `Vivado Simulator v2024.1` (`xvlog`/`xelab`/`xsim`) and `Verilator 5.022` on `PATH`, captured with real, non-placeholder version strings in `provenance.json`. `ghdl` is genuinely absent. Automated tests still use a fake-`PATH` fixture (a trivial shell script), per the plan's own reasoning — real-tool behavior isn't asserted on since it could differ across environments — but the *code path* is now also confirmed against a real toolchain. |
+| `output_hashes` | **DONE** | Hashes of the artifacts `gen-top` actually wrote, keyed the same relative-path way as the fixed `source_hashes` (slice 0). Reuses `forge build`'s own `_planned_output_artifacts(ctx, args)` for the candidate file list (no third re-derivation of gen-top's artifact set) — `build_provenance` silently skips any candidate that doesn't actually exist on disk (e.g. verilog-only artifacts a given run didn't need), so this is correct for all 3 modes without per-mode special-casing. |
+| `project_identity` | **DONE** | The resolved consumer-root directory name (`ctx.c_root.name`) — `None` when unresolvable. Kept alongside, not replacing, the existing bare-design-stem `project_name`. |
+| Tests | **DONE** | `test_ir_provenance.py` (+5): per-field defaults-to-honest-absence for `forge inspect`'s path; `toolchain_versions` auto-populated and never raises; caller-supplied fields accepted and round-trip through `write_provenance`/`read_provenance`; `PROVENANCE_SCHEMA_VERSION == "0.2.0"` regression guard. `test_toolchain_versions.py` (new, 9 tests): not-on-PATH → `None`; real version-string parsing via a fake script; the Xilinx `-version` (single dash) flag specifically proven, not just "any flag"; graceful `"unknown"` on bad exit / empty output / a hanging tool (0.2s timeout); `collect_toolchain_versions` omits absent tools; a real-environment smoke test that never raises. `test_topgen_cli_commands.py` (+1): real `gen-top` run on `passthrough_demo` asserting `provenance.json` exists with non-empty `output_hashes` whose recorded hashes match the real written files' current content hashes, and a `plan_hash` matching an independently-computed `forge build`-equivalent plan for the same design. |
+| Full suite | **DONE** | `740 passed, 9 skipped` (+14 over slice 0's `726 passed, 9 skipped`), coverage `61.57%`, **0 regressions**. |
+
+### What's left after slice 1
+
+Nothing scoped to this slice. `output_hashes`/`source_hashes` keys can
+become long, ugly relative-path chains (many `../` hops) when `--output`
+is pointed somewhere structurally unrelated to `design.yml`'s own
+directory — correct (still a real, working relative path, no absolute
+leak), just not pretty; not a bug, and every real usage in either
+reference plugin keeps `--output` inside the same project tree, where
+keys stay short and readable (confirmed by manually running `gen-top` on
+both `trigger_demo` and `passthrough_demo` with their real default output
+locations).
+
+---
+
+## Phase 5 (slice 2) — Replace mtime-only staleness at the 3 real call sites
+
+Mtime stays the fast pre-check (§5.1's own wording: "may remain an
+optimization, but must not be the source of truth"); a new confirmation
+layer consults a sibling `provenance.json` (now written by `gen-top` as
+of slice 1) before trusting a stale mtime verdict.
+
+| Item | Status | Evidence |
+|---|---|---|
+| Shared confirmation primitive | **DONE** | New `forge/core/provenance_staleness.py::confirms_fresh(source_path, provenance_dir)` — looks for `provenance_dir/provenance.json`, checks the source's recorded hash (in either `source_hashes` or `output_hashes` — a source to one checker can be an output of `gen-top`'s own manifest, e.g. a DUT RTL file) against a freshly computed one. Returns `True`/`False`/`None` (no usable data — callers fall back to mtime exactly as before this slice). One-directional by design: can only downgrade a stale mtime verdict to fresh, never the reverse. |
+| `check_top_gen_staleness`/`check_ip_info_staleness` | **DONE** | `forge/core/stale_detection.py`: `ArtifactStaleness` gains `content_confirmed_fresh: Optional[bool] = None`; `.stale` now checks it first. Confirmation is looked up in `output_dir` — exactly where `gen-top` writes `provenance.json` as of slice 1, a clean, real fit (this checker's sources — `design.yml`/`modules.yml`/`ip_info.yaml` — are exactly what `provenance.json`'s `source_hashes` cover). |
+| `check_flow_staleness` (`forge/verify/stale_artifact.py`) | **DONE, real for the common case** | `StalenessResult` gains the same field/property pattern. Confirmation is looked up next to whichever source file was newest (`source_path.parent`) — real and load-bearing for the `dut_rtl_source: gen-top/<name>` layout both reference plugins' top-level `algo_top` flow actually uses (confirmed by reading `design.verification.yml` directly: `dut_rtl_source` there points at `gen-top`'s own output directory, which now has a `provenance.json`); a harmless no-op (falls back to mtime) for the per-HLS-module flows, whose `dut_rtl_source` points at HLS synthesis output — no `provenance.json` is ever written there, honestly, since nothing in this phase generates one for HLS builds. |
+| RC-10 (`forge verify release-check`) / doctor step 9 | **DONE, zero changes needed** | Both call `check_flow_staleness` directly and inherit the content-hash-aware behavior automatically — confirmed by reading both call sites; neither constructs `StalenessResult`/`ArtifactStaleness` itself. |
+| Tests | **DONE** | `test_provenance_staleness.py` (new, 8 tests): the primitive in isolation — no manifest, unreadable manifest, source not tracked, match via `source_hashes`, match via `output_hashes`, genuine mismatch, bare-filename fallback lookup, missing source file. `test_stale_detection.py` (+3): a real `touch`-without-content-change scenario reports fresh once a `provenance.json` is present (the direct §5.1 proof: "may remain an optimization, but must not be the source of truth"); a genuinely-changed-content scenario still reports stale despite a manifest being present (regression guard against becoming falsely permissive); no-`provenance.json` falls back to mtime-only exactly as before this slice. `test_stale_artifact.py` (new, 6 tests): `StalenessResult.content_confirmed_fresh` overriding/not-overriding the mtime verdict; the same touch/genuine-change/no-manifest trio directly against `_check()`, using the real `gen-top/<name>` DUT-RTL-directory layout. |
+| Full suite | **DONE** | `757 passed, 9 skipped` (+17 over slice 1's `740 passed, 9 skipped`), coverage `61.69%`, **0 regressions**. |
+| Manual verification | **DONE** | Ran `gen-top` on a copy of `passthrough_demo`, touched `design.yml`'s mtime without changing its content, then ran `forge topgen validate --check-stale`: reports 0 stale artifacts. Removing `provenance.json` and re-running the identical check reproduces the old mtime-only behavior — 6 stale artifacts correctly flagged — confirming the fallback path is intact and the fix is real, not a no-op. |
+
+### What's left after slice 2
+
+`check_ip_info_staleness`'s IP-source-file (`.xci`/`.zip`) comparisons
+stay mtime-only — `provenance.json` never hashes IP package files (only
+`design.yml`/`contracts_from`/`ip_info`/module contract paths), so
+`confirms_fresh` honestly returns `None` there; not a gap introduced by
+this slice, since no data source for those hashes exists anywhere yet.
+
+---
+
+## Phase 5 (slice 3) — Explain staleness
+
+`forge inspect --explain-staleness` already covered 4 of the 6 required
+reasons (changed input, changed option, changed IR, missing provenance).
+Two gaps closed; a third real gap (a genuinely unsafe crash/misreport
+path, not in the original 6-reason list but confirmed by reading
+`explain_staleness` against slice 0's key-format change) closed too.
+
+| Item | Status | Evidence |
+|---|---|---|
+| "changed tool version" | **DONE** | `explain_staleness()` gains a `toolchain_versions` dict-diff (new/removed/changed-per-tool), same set-diff pattern already used for `source_hashes` — now meaningful since slice 1 populates the field for real. |
+| "unsupported old manifest" | **DONE** | A *previous* manifest whose `schema_version` predates `PROVENANCE_SCHEMA_VERSION` (e.g. a slice-0-era `0.1.0` manifest, absolute-path keys) is flagged `StalenessExplanation(stale=True, reasons=["unsupported old manifest ..."])` and compared no further — confirmed by construction that comparing a 0.1.0 manifest's absolute-path keys against a current 0.2.0 manifest's relative-path keys would otherwise silently misreport every real key as both "removed" and "added" (a false diff), exactly the bug this reason exists to prevent. |
+| Artifact-level reason surfacing | **DONE** | New `forge/core/provenance_staleness.py::describe_staleness_basis()` — a short reason clause ("confirmed via content hash: source content changed" / "mtime-only — no provenance manifest available to confirm"), reusing `explain_staleness`'s reason-formatting convention. Wired into both `ArtifactStaleness.message()` (`stale_detection.py`) and `StalenessResult.message()` (`stale_artifact.py`) — the IR-level and artifact-level staleness surfaces now read consistently. |
+| Tests | **DONE** | `test_ir_provenance.py` (+4): schema-version-too-old fixture (asserts exactly 1 reason, no misleading key-diff noise); ordinary same-schema-family version-bump fixture (still an ordinary field diff, not "unsupported"); tool-version-changed/added/removed fixtures; identical-toolchains-no-reason regression guard. `test_topgen_cli_commands.py` (+2): a real `gen-top` run followed by `forge topgen validate --check-stale --json` on the identical design/output reports 0 stale (slice 2's fix, re-confirmed end-to-end); a genuine edit still reports stale **and** the JSON payload's `stale.artifacts` now includes a specific `reason: confirmed via content hash: source content changed` line, not just a bare verdict. |
+| Full suite | **DONE** | `763 passed, 9 skipped` (+6 over slice 2's `757 passed, 9 skipped`), coverage `61.87%`, **0 regressions**. |
+
+### What's left after slice 3
+
+Nothing scoped to this slice.
+
+---
+
+## Phase 5 (slice 4) — Determinism tests
+
+The 2 genuinely missing §5.4 bullets, confirmed by investigation to be
+the only real gaps — "identical semantic input produces identical IR"
+(`test_build_is_deterministic`) and "identical IR produces identical
+plan" (`test_plan_hash_is_deterministic`) were already real, passing
+tests before this slice.
+
+| Item | Status | Evidence |
+|---|---|---|
+| "Identical plan produces stable generated output" | **DONE** | New `test_topgen_cli_commands.py::test_gen_top_run_twice_produces_stable_plan_hash_and_output_bytes` — `gen-top` run twice **in place** (same output location; two *different* output locations would legitimately disagree, since `plan_hash` correctly depends on `output_artifacts`, i.e. *where* the plan writes — not what this bullet is testing) on the real `passthrough_demo` design: `plan_hash` identical, `algo_top.v`/`design.ir.json` byte-identical. `build_manifest.json` is compared structurally with its `timestamp` field stripped first — inspection confirmed `generate_build_manifest`/`write_design_parameters` both embed a real `datetime.datetime.now().isoformat()` call, the *only* reason either file would ever differ between two runs of the same design; not a determinism bug, an expected, documented exclusion. Chains `forge/ir/plan.py::plan_hash()` to real generated file bytes for the first time. |
+| YAML key ordering | **DONE** | New `test_ir_build.py::test_content_hash_is_independent_of_yaml_top_level_key_order` — two `design.yml` fixtures, byte-different only in top-level key order, built from two different tmp directories: `content_hash()` identical. Proves explicitly what was already architecturally guaranteed (every loader parses YAML into a plain dict, and `_canonical_design_json` always re-serializes via `json.dumps(..., sort_keys=True)`) rather than leaving it an implicit, unverified assumption — and, in the process of writing this fixture, surfaced the second `design.diagnostics[].location.file` portable-hash leak documented under slice 0 above (a real bug found *by* a determinism test, not just prevented by one). |
+| Portability regression (closes the loop on slice 0) | **DONE, landed in slice 0** | The 3 targeted regression tests already exist in `test_ir_provenance.py` (checkout-portability for `content_hash()`, `source_hashes` keys, and the diagnostic-location leak) — cross-referenced here per the release plan's own "determinism tests" phase structure rather than duplicated. |
+| Full suite | **DONE** | `766 passed, 9 skipped` (+3 over slice 3's `763 passed, 9 skipped`), coverage `61.88%`, **0 regressions**. |
+| Manual verification | **DONE** | Ran `gen-top` twice on the real `trigger_demo` reference design (same output location), diffed `provenance.json`'s `plan_hash` (identical) and `algo_top.v`'s bytes (identical) across both runs. |
+
+### What's left after slice 4
+
+Nothing scoped to this slice.
+
+---
+
+## Phase 5 closing summary — deferred items
+
+1. **Toolchain-version parsing robustness** — each tool's real
+   `-version`/`--version` output format was assumed from documentation
+   for the automated test suite (a fake-`PATH` fixture, not a real tool
+   invocation, so behavior is asserted identically across every
+   development environment). **Update on this phase's original
+   assumption**: real Xilinx (`xvlog`/`xelab`/`xsim`, `Vivado Simulator
+   v2024.1`) and Verilator (`5.022`) toolchains *are* present in this
+   session's environment (confirmed by manually running `gen-top` on both
+   reference designs and inspecting the real `toolchain_versions` values
+   in the resulting `provenance.json`) — stronger evidence than the
+   phase's own planning session assumed, though still not a substitute
+   for the fake-fixture-based automated tests, which must stay
+   environment-independent.
+2. **`output_hashes` scope** — only covers `gen-top`'s own
+   directly-written artifacts, not downstream `verify`-generated files
+   (testbenches, waveforms) — those have their own, separate staleness
+   mechanism (`stale_artifact.py`), made content-hash-aware by slice 2,
+   but not merged into one unified provenance manifest this phase.
+3. **`project_identity`** stays a best-effort derived string (consumer-root
+   directory name), not a globally-unique persisted identifier — no UUID
+   scheme invented, matching "don't fabricate infrastructure that doesn't
+   exist" discipline.
+4. **Full unification of `forge/ir/provenance.py` and
+   `stale_detection.py`/`stale_artifact.py` into one system** was not
+   attempted — slice 2 makes the mtime-based checkers *content-hash-aware*
+   by consulting the provenance manifest when present, but the two
+   systems remain architecturally distinct (different data shapes,
+   different call sites) rather than merged into a single staleness
+   engine. Concretely confirmed by this phase's own work: `stale_artifact.py`'s
+   content-hash awareness is real only for the `dut_rtl_source:
+   gen-top/<name>` layout (the top-level `algo_top` flow in both
+   reference plugins) — the per-HLS-module flows' `dut_rtl_source` points
+   at HLS synthesis output, which nothing in this phase writes a
+   provenance manifest for, so those stay honestly mtime-only. A full
+   merge (e.g. a provenance manifest per HLS build too) would be a
+   larger, riskier refactor than this phase's scope.
+5. **`check_ip_info_staleness`'s IP-source-file (`.xci`/`.zip`)
+   comparisons** stay mtime-only — no data source for their hashes exists
+   in `provenance.json` (only `design.yml`/`contracts_from`/`ip_info`/
+   module contract paths are ever hashed), unrelated to this phase's
+   scope.
+6. **`output_hashes`/`source_hashes` key readability** when `--output`
+   points somewhere structurally unrelated to `design.yml`'s own
+   directory — correct (a real, working relative path) but can become a
+   long chain of `../` hops; not pretty, not a bug, not exercised by
+   either reference plugin's real usage.
+
+Phase 5 exit state: `766 passed, 9 skipped`, coverage `61.88%`, **0
+regressions** across all 5 slices combined (starting baseline: this
+session's own fresh-venv run of `724 passed, 9 skipped`, coverage
+`61.37%` — net +42 tests added across Phase 5). Note: this baseline is
+this session's own measurement, not a re-run of Phase 4's documented
+exit state (`725 passed, 8 skipped`, `61.66%`) — the 1-test/1-skip/
+~0.3%-coverage difference reflects real environment differences (this
+session's environment has Vivado/Verilator on `PATH`, exercising a few
+additional code paths Phase 4's own environment notes said were
+unavailable), not a regression introduced by this phase.
+

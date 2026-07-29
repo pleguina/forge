@@ -461,7 +461,12 @@ _KNOWN_MODULE_KEYS: Set[str] = {
     # Latency annotation fields (used by forge analyze / the canonical IR
     # via Module.timing — see topgen/config.py::ModuleTiming)
     'latency_hint', 'latency_cycles', 'variable_latency',
+    # Structured latency: {kind: fixed|bounded|elastic, ...} declaration
+    # (release-plan §4.2, Phase 4 slice 2) — coexists with, does not
+    # replace, the three flat fields above.
+    'latency',
 }
+_KNOWN_LATENCY_KINDS: Set[str] = {'fixed', 'bounded', 'elastic'}
 _KNOWN_BUILD_KEYS: Set[str] = {
     'stages', 'csim_opts', 'synth_opts', 'cosim_opts', 'export_opts',
     'aliases', 'clock_period', 'part',
@@ -512,6 +517,7 @@ class RegistryValidator:
                 kind = mod.get('kind')
                 self._validate_kind_requirements(mod, name, kind, loc)
                 self._validate_timing_fields(mod, name, loc)
+                self._validate_latency_block(mod, name, loc)
                 if 'build' in mod:
                     self._validate_build_section(mod['build'], name, kind, f"{loc}.build")
                 if 'verify' in mod:
@@ -641,6 +647,98 @@ class RegistryValidator:
                 suggestion="Declare only one: latency_cycles for a known fixed "
                            "latency, or variable_latency: true for a data-dependent one.",
             )
+
+    def _validate_latency_block(self, mod: dict, name: str, loc: str):
+        """Structural validation of a ``latency: {kind: fixed|bounded|elastic,
+        ...}`` declaration (release-plan §4.2). Reported as a structured
+        error here (the user-facing surface for YAML mistakes);
+        ``LatencyDeclaration.__post_init__`` raising ``ValueError`` is a
+        defense-in-depth backstop for direct programmatic construction, not
+        the primary path. Coexistence with the flat latency_cycles/
+        latency_hint/variable_latency fields is enforced separately (at
+        construction time in ``topgen.config._pop_timing``) — this method
+        only validates the structural shape of the ``latency:`` block
+        itself.
+        """
+        block = mod.get('latency')
+        if block is None:
+            return
+        if not isinstance(block, dict):
+            self.add_error('module', f"module '{name}' has 'latency:' that is not a mapping",
+                            location=f"{loc}.latency")
+            return
+
+        kind = block.get('kind')
+        if kind not in _KNOWN_LATENCY_KINDS:
+            self.add_error(
+                'module',
+                f"module '{name}' has latency.kind {kind!r} — must be one of "
+                f"{sorted(_KNOWN_LATENCY_KINDS)}",
+                location=f"{loc}.latency.kind",
+            )
+            return
+
+        unknown_keys = set(block) - {'kind', 'cycles', 'min_cycles', 'max_cycles'}
+        if unknown_keys:
+            self.add_error(
+                'module',
+                f"module '{name}' has unknown key(s) in 'latency:': {sorted(unknown_keys)}",
+                location=f"{loc}.latency",
+            )
+
+        if kind == 'fixed':
+            if block.get('cycles') is None:
+                self.add_error(
+                    'module', f"module '{name}' has latency.kind='fixed' but no 'cycles'",
+                    location=f"{loc}.latency.cycles",
+                    suggestion="Add 'cycles: <N>' or change kind to 'bounded'/'elastic'.",
+                )
+            if 'min_cycles' in block or 'max_cycles' in block:
+                self.add_error(
+                    'module',
+                    f"module '{name}' has latency.kind='fixed' but also declares "
+                    "min_cycles/max_cycles (only valid for kind='bounded')",
+                    location=f"{loc}.latency",
+                )
+        elif kind == 'bounded':
+            min_c, max_c = block.get('min_cycles'), block.get('max_cycles')
+            if min_c is None or max_c is None:
+                self.add_error(
+                    'module',
+                    f"module '{name}' has latency.kind='bounded' but is missing "
+                    "'min_cycles'/'max_cycles'",
+                    location=f"{loc}.latency",
+                )
+            elif (
+                not isinstance(min_c, int) or not isinstance(max_c, int)
+                or isinstance(min_c, bool) or isinstance(max_c, bool)
+            ):
+                self.add_error(
+                    'module', f"module '{name}' has non-integer latency.min_cycles/max_cycles",
+                    location=f"{loc}.latency",
+                )
+            elif min_c > max_c:
+                self.add_error(
+                    'module',
+                    f"module '{name}' has latency.min_cycles ({min_c}) > max_cycles ({max_c})",
+                    location=f"{loc}.latency",
+                )
+            if 'cycles' in block:
+                self.add_error(
+                    'module',
+                    f"module '{name}' has latency.kind='bounded' but also declares "
+                    "'cycles' (only valid for kind='fixed')",
+                    location=f"{loc}.latency",
+                )
+        elif kind == 'elastic':
+            stray = {'cycles', 'min_cycles', 'max_cycles'} & set(block)
+            if stray:
+                self.add_error(
+                    'module',
+                    f"module '{name}' has latency.kind='elastic' but also declares "
+                    f"{sorted(stray)} — elastic timing has no fixed cycle count",
+                    location=f"{loc}.latency",
+                )
 
     def _validate_kind_requirements(self, mod: dict, name: str, kind: Optional[str], loc: str):
         """Enforce what each kind needs to be buildable / elaboratable."""

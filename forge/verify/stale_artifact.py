@@ -44,7 +44,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+
+from forge.core.provenance_staleness import confirms_fresh, describe_staleness_basis
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -74,14 +76,26 @@ class StalenessResult:
         source_path:   The most-recently-modified source file.
         artifact_mtime: mtime of the artifact.
         source_mtime:  mtime of the source.
+        content_confirmed_fresh: Phase 5 slice 5.2 — ``True`` when a
+            provenance manifest (``provenance.json``, next to
+            *source_path*) confirms the source's content hasn't actually
+            changed despite a newer mtime, overriding the mtime-only
+            verdict below to "not stale". ``None`` (the default — no
+            usable provenance manifest was found, e.g. because
+            *source_path* isn't something `gen-top` ever wrote a manifest
+            next to) means mtime alone decides, exactly as before this
+            slice.
     """
     artifact_path:  Path
     source_path:    Path
     artifact_mtime: float
     source_mtime:   float
+    content_confirmed_fresh: Optional[bool] = None
 
     @property
     def stale(self) -> bool:
+        if self.content_confirmed_fresh:
+            return False
         return self.source_mtime > self.artifact_mtime
 
     def message(self) -> str:
@@ -91,7 +105,8 @@ class StalenessResult:
         return (
             f"{self.artifact_path.name} is stale\n"
             f"    artifact: {self.artifact_path}  [{a_age}]\n"
-            f"    newer source: {self.source_path.name}  [{s_age}]"
+            f"    newer source: {self.source_path.name}  [{s_age}]\n"
+            f"    reason: {describe_staleness_basis(self.content_confirmed_fresh)}"
         )
 
 
@@ -253,6 +268,14 @@ def _check(
         artifact_mtime=a_mtime,
         source_mtime=source_mtime,
     )
+    if result.stale:
+        # Phase 5 slice 5.2: confirm against a provenance.json next to
+        # *source_path*, when one exists — real for the common case where
+        # source_path is the DUT RTL `gen-top` itself wrote (design.verification.yml's
+        # `dut_rtl_source: gen-top/<name>` layout); a harmless no-op
+        # (falls back to mtime) for every other source this checker
+        # compares against, which `gen-top` never writes a manifest for.
+        result.content_confirmed_fresh = confirms_fresh(source_path, source_path.parent)
     if result.stale:
         report.stale_items.append(result)
 

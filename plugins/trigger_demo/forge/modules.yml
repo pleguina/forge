@@ -66,7 +66,13 @@ modules:
 - name: trigger_logic
   kind: hls
   top: trigger_logic
-  latency_hint: 3           # HLS LATENCY min=3 max=3 (confirmed by HLS report HLS_SYN_LAT=3)
+  # HLS LATENCY min=3 max=3 (confirmed by HLS report HLS_SYN_LAT=3) — a
+  # real fixed latency, not a rough estimate, so this is now the
+  # structured, first-class latency: {kind: fixed, ...} declaration
+  # (release-plan §4.2) rather than the older latency_hint: 3 spelling.
+  latency:
+    kind: fixed
+    cycles: 3
   interface_contract: interfaces/trigger_logic_ip.interface.yaml
   src: [../algo/trigger_logic/trigger_logic.cpp]
   includes: [../algo/common, ../algo/hit_decoder, ../algo/hit_collector, ../algo/trigger_logic, verify/include, verify/src]

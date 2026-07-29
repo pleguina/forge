@@ -3,17 +3,37 @@
 Detect latency mismatches at merge points in the pipeline DAG.
 
 A *merge point* is any node that has more than one distinct predecessor.
-All inputs arriving at a merge point must have accumulated the same total
-latency; otherwise the pipeline will sample stale data on one or more paths.
+By default, all inputs arriving at a merge point are expected to have
+accumulated the same total latency; otherwise the pipeline will sample
+stale data on one or more paths. As of Phase 4 slice 3 (release-plan
+§4.3), this is no longer an unconditional assumption: a merge point's
+*alignment requirement* is inferred from its predecessors' declared
+timing kinds (fixed/bounded/elastic — Phase 4 slice 2) and, best-effort,
+the consuming interface's protocol — see :func:`check_merge_points`'s
+``alignment`` field on :class:`MismatchReport`.
 
-For each mismatch the checker emits a suggested ``signal_delay`` insertion
-with the required depth.
+For an ``exact_cycle`` mismatch the checker emits a suggested
+``signal_delay`` insertion with the required depth.
+
+As of Phase 4 slice 1 (release-plan §4.1), each path's accumulated latency
+includes the connecting edge's own latency (``register_stages``/
+``delay_cycles``/a known-depth CDC synchronizer) in addition to the
+predecessor node's latency — previously the edge contributed nothing at
+all, so the checker was blind to any latency FORGE itself inserts on a
+connection.
+
+As of Phase 4 slice 3, ``LatencyGraph`` nodes are per-instance (not
+per-module-group) — a real multi-instance fan-in (e.g. trigger_demo's
+``dec`` x4 -> ``col``) now produces a genuine multi-predecessor merge
+point here, where before it collapsed to a single edge and could never
+be checked at all.
 """
 from __future__ import annotations
 
 import dataclasses
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
+from forge.analyze.latency_model import LatencyProvenance
 from forge.analyze.latency_static.graph import LatencyGraph
 
 
@@ -27,6 +47,19 @@ class PathLatency:
     path: List[str]               # node names from immediate predecessor to merge
     total_cycles: Optional[int]   # None when any node on the path is unknown
     has_unknown: bool = False
+    # The sum of a node's latency and its connecting edge's latency is
+    # itself a computed value, not sourced from any single place —
+    # "inferred" is the correct provenance vocabulary entry for it
+    # (forge.analyze.latency_model.LATENCY_SOURCES).
+    provenance: Optional[LatencyProvenance] = None
+    # release-plan §4.3 (Phase 4 slice 3): the [lo, hi] cycle range this
+    # path contributes, populated whenever total_cycles is known — a
+    # degenerate [v, v] point range for a fixed/hint/hls_report
+    # predecessor, or the predecessor's real [min, max] (+ edge cycles)
+    # for a declared `bounded` one. Used by bounded_skew alignment's
+    # overlap check; None/None when total_cycles is None (unknown).
+    range_lo: Optional[int] = None
+    range_hi: Optional[int] = None
 
 
 @dataclasses.dataclass
@@ -35,11 +68,38 @@ class MismatchReport:
     paths: List[PathLatency]
     max_latency: Optional[int]
     min_latency: Optional[int]
-    delta: Optional[int]          # max − min  (0 = balanced)
+    delta: Optional[int]          # max − min  (0 = balanced) — exact_cycle alignment only
     suggestion: Optional[str]     # e.g. "Insert signal_delay DEPTH=4 on …"
+    # release-plan §4.3: the alignment requirement this merge point was
+    # inferred to have — "the checker must not assume every reconvergence
+    # requires identical scalar latency" (§4.3's own wording). One of:
+    #   exact_cycle       — every predecessor is fixed/hint/hls_report;
+    #                        default, byte-identical to pre-slice-3 behavior.
+    #   bounded_skew      — at least one predecessor declares `kind: bounded`;
+    #                        mismatch iff the paths' cycle ranges don't overlap.
+    #   elastic_buffer    — at least one predecessor declares `kind: elastic`;
+    #                        never a mismatch — tolerant by definition.
+    #   transaction_order — best-effort: the merge node's consuming interface
+    #                        is `protocol: ready-valid` (only when the caller
+    #                        supplies `consumer_protocols`); never a scalar
+    #                        latency mismatch — ready/valid handshaking
+    #                        doesn't require cycle-exact producer alignment.
+    alignment: str = "exact_cycle"
 
     @property
     def is_mismatch(self) -> bool:
+        if self.alignment in ("elastic_buffer", "transaction_order"):
+            return False
+        if self.alignment == "bounded_skew":
+            ranges = [
+                (p.range_lo, p.range_hi) for p in self.paths
+                if p.range_lo is not None and p.range_hi is not None
+            ]
+            if len(ranges) < 2:
+                return False
+            lo_max = max(r[0] for r in ranges)
+            hi_min = min(r[1] for r in ranges)
+            return lo_max > hi_min
         return self.delta is not None and self.delta > 0
 
     @property
@@ -51,13 +111,27 @@ class MismatchReport:
 # Public API
 # ---------------------------------------------------------------------------
 
-def check_merge_points(graph: LatencyGraph) -> List[MismatchReport]:
+def check_merge_points(
+    graph: LatencyGraph,
+    *,
+    consumer_protocols: Optional[Dict[str, str]] = None,
+) -> List[MismatchReport]:
     """Return one :class:`MismatchReport` per merge node in *graph*.
 
     Only nodes with ≥ 2 predecessors are analysed.  Nodes with exactly one
     predecessor (or none) are skipped — they cannot produce mismatches.
+
+    ``consumer_protocols``: an optional ``{node_name: protocol}`` mapping
+    (e.g. sourced from ``ResolvedLogicalInterface.protocol``) enabling
+    best-effort ``transaction_order`` alignment inference for a merge
+    node whose consuming interface is ``ready-valid``. Omitted by
+    default — this function keeps working from a bare ``LatencyGraph``
+    alone, the same "usable before synthesis" property
+    ``forge.analyze.latency_static.graph`` itself preserves.
     """
+    consumer_protocols = consumer_protocols or {}
     reports: List[MismatchReport] = []
+    edge_by_pair = {(e.src, e.dst): e for e in graph.edges}
 
     for node_name in graph.nodes:
         preds = graph.predecessors(node_name)
@@ -65,15 +139,54 @@ def check_merge_points(graph: LatencyGraph) -> List[MismatchReport]:
             continue
 
         path_lats: List[PathLatency] = []
+        kinds: Set[str] = set()
         for src in sorted(preds):
             src_node = graph.nodes[src]
-            lat = src_node.latency_cycles
-            unknown = (lat is None) or src_node.is_variable
+            node_cycles = src_node.latency_cycles
+            unknown = (node_cycles is None) or src_node.is_variable
+
+            edge = edge_by_pair.get((src, node_name))
+            edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
+
+            kind = src_node.latency.kind if src_node.latency else None
+            if kind:
+                kinds.add(kind)
+
+            total = (node_cycles + edge_cycles) if not unknown else None
+
+            range_lo: Optional[int] = None
+            range_hi: Optional[int] = None
+            if kind == "bounded" and src_node.latency and src_node.latency.min_cycles is not None \
+                    and src_node.latency.max_cycles is not None:
+                range_lo = src_node.latency.min_cycles + edge_cycles
+                range_hi = src_node.latency.max_cycles + edge_cycles
+            elif total is not None:
+                range_lo = range_hi = total
+
+            provenance = (
+                LatencyProvenance(
+                    "inferred",
+                    detail=f"{src_node.latency_source}:{node_cycles} + edge:{edge_cycles}",
+                )
+                if total is not None else None
+            )
             path_lats.append(PathLatency(
                 path=[src, node_name],
-                total_cycles=lat if not unknown else None,
+                total_cycles=total,
                 has_unknown=unknown,
+                provenance=provenance,
+                range_lo=range_lo,
+                range_hi=range_hi,
             ))
+
+        if "elastic" in kinds:
+            alignment = "elastic_buffer"
+        elif "bounded" in kinds:
+            alignment = "bounded_skew"
+        elif consumer_protocols.get(node_name) == "ready-valid":
+            alignment = "transaction_order"
+        else:
+            alignment = "exact_cycle"
 
         known = [p.total_cycles for p in path_lats if p.total_cycles is not None]
         if not known:
@@ -84,7 +197,7 @@ def check_merge_points(graph: LatencyGraph) -> List[MismatchReport]:
             delta = max_lat - min_lat
 
         suggestion: Optional[str] = None
-        if delta and delta > 0:
+        if alignment == "exact_cycle" and delta and delta > 0:
             for p in path_lats:
                 if p.total_cycles == min_lat and p.total_cycles is not None:
                     short_src = p.path[0]
@@ -101,6 +214,7 @@ def check_merge_points(graph: LatencyGraph) -> List[MismatchReport]:
             min_latency=min_lat,
             delta=delta,
             suggestion=suggestion,
+            alignment=alignment,
         ))
 
     return reports
