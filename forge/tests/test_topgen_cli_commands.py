@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import NamedTuple
 
@@ -69,14 +70,20 @@ def test_validate_strict_fails_on_warnings(capsys: pytest.CaptureFixture[str]) -
 
 
 def test_validate_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
+    """Release-plan Phase 6 §6.7: the bespoke `{"passed","registry","design",
+    "stale"}` shape is now a CommandEnvelope — passthrough_demo's real
+    design genuinely has 2 warning-severity diagnostics (a non-evenly-
+    dividing clock period, no `connections:` section) and 0 errors, so
+    `status` is genuinely `"warn"`."""
     result = _run_topgen(capsys, "validate", str(DESIGN_YML), "--json")
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert payload["passed"] is True
-    assert payload["registry"]["passed"] is True
-    assert len(payload["design"]["warnings"]) == 2
-    assert payload["design"]["errors"] == []
+    assert payload["status"] == "warn"
+    assert payload["schema_version"]
+    assert not any(d["severity"] == "error" for d in payload["diagnostics"])
+    assert sum(1 for d in payload["diagnostics"] if d["severity"] == "warning") == 2
+    assert any(d["category"].startswith("design:") for d in payload["diagnostics"])
 
 
 def test_validate_json_output_on_missing_design(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -86,8 +93,8 @@ def test_validate_json_output_on_missing_design(capsys: pytest.CaptureFixture[st
 
     assert result.returncode == 1
     payload = json.loads(result.stdout)
-    assert payload["passed"] is False
-    assert "Design file not found" in payload["error"]
+    assert payload["status"] == "fail"
+    assert "Design file not found" in payload["diagnostics"][0]["message"]
 
 
 def test_validate_registry_passes_on_real_registry(capsys: pytest.CaptureFixture[str]) -> None:
@@ -102,7 +109,8 @@ def test_validate_registry_json_output_is_well_formed(capsys: pytest.CaptureFixt
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert payload == {"passed": True, "errors": [], "warnings": [], "infos": []}
+    assert payload["status"] == "pass"
+    assert payload["diagnostics"] == []
 
 
 def test_ip_summary_writes_ip_info_yaml(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -295,6 +303,30 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
     assert ir_payload["design"]["top_ports"]  # gen-top populated it
     gentop_design = dict(ir_payload["design"])
     gentop_design["top_ports"] = []  # strip before comparing (see docstring)
+    # Slice 5.0 (docs/development/release-readiness.md, Phase 5): mirror
+    # forge.ir.serialize._canonical_design_json's portable-hash rewriting
+    # here too — `source` and any absolute module contract_path/
+    # source_files must be excluded/relativized the same way content_hash()
+    # does, or this hand-rolled comparison hash would drift from it for a
+    # reason unrelated to what this test actually checks (IR-build-path
+    # equivalence).
+    gentop_design.pop("source", None)
+    base_dir = DESIGN_YML.parent
+
+    def _portable(path_str: str) -> str:
+        p = Path(path_str)
+        if not p.is_absolute():
+            return path_str
+        try:
+            return os.path.relpath(p, base_dir)
+        except ValueError:
+            return path_str
+
+    for mod in gentop_design.get("modules", []):
+        if mod.get("contract_path"):
+            mod["contract_path"] = _portable(mod["contract_path"])
+        if mod.get("source_files"):
+            mod["source_files"] = [_portable(s) for s in mod["source_files"]]
     gentop_hash = hashlib.sha256(
         json.dumps(
             {"schema_version": ir_payload["schema_version"], "design": gentop_design},
@@ -305,6 +337,212 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
     fresh = build_project_ir(str(DESIGN_YML), contracts_from=modules_yml_abs)
     assert fresh.design.top_ports == []  # fresh (generation-free) build never has it
     assert gentop_hash == content_hash(fresh)
+
+
+def test_gen_top_run_twice_produces_stable_plan_hash_and_output_bytes(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Release-plan Phase 5 slice 5.4 determinism test: "identical plan
+    produces stable generated output" — chains
+    forge.ir.plan.plan_hash() to real generated file bytes for the first
+    time (previously proven only in isolation with synthetic fixtures,
+    test_ir_plan.py::test_plan_hash_is_deterministic). Two `gen-top` runs
+    on the same real design must agree on plan_hash and produce
+    byte-identical algo_top.v/design.ir.json.
+
+    Both runs write to the exact same output location (run twice in
+    place, matching how a developer would actually regenerate) —
+    `plan_hash` legitimately depends on `output_artifacts` (i.e. *where*
+    the plan writes), so two runs at *different* output paths are
+    expected to disagree; that's a real property of the plan, not
+    something this test is exercising.
+
+    build_manifest.json/design_parameters.json are deliberately excluded
+    from the byte-identity check — both embed a real
+    `datetime.datetime.now().isoformat()` generation timestamp
+    (`forge/core/cli/groups/topgen.py::generate_build_manifest`,
+    `forge/topgen/generators/design_parameters.py`), confirmed by
+    inspection to be the *only* reason they'd ever differ between two
+    runs of the same design — build_manifest.json's structural content
+    (everything except that one field) is checked separately below.
+    """
+    run_dir = tmp_path / "run"
+
+    def _run_once() -> None:
+        result = _run_topgen(
+            capsys, "gen-top", str(DESIGN_YML),
+            "--mode", "verilog",
+            "--output", str(run_dir / "algo_top.v"),
+            "--build-dir", str(run_dir / "build"),
+            "--contracts-from", str(MODULES_YML),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    from forge.ir.provenance import read_provenance
+
+    _run_once()
+    plan_hash_1 = read_provenance(run_dir / "provenance.json").plan_hash
+    algo_top_1 = (run_dir / "algo_top.v").read_bytes()
+    design_ir_1 = (run_dir / "design.ir.json").read_bytes()
+    build_manifest_1 = json.loads((run_dir / "build_manifest.json").read_text())
+    build_manifest_1.pop("timestamp", None)
+
+    _run_once()
+    plan_hash_2 = read_provenance(run_dir / "provenance.json").plan_hash
+    algo_top_2 = (run_dir / "algo_top.v").read_bytes()
+    design_ir_2 = (run_dir / "design.ir.json").read_bytes()
+    build_manifest_2 = json.loads((run_dir / "build_manifest.json").read_text())
+    build_manifest_2.pop("timestamp", None)
+
+    assert plan_hash_1 is not None
+    assert plan_hash_1 == plan_hash_2
+    assert algo_top_1 == algo_top_2
+    assert design_ir_1 == design_ir_2
+    assert build_manifest_1 == build_manifest_2
+
+
+def test_gen_top_writes_provenance_manifest_alongside_design_ir(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Release-plan Phase 5 slice 5.1: `gen-top` writes `provenance.json`
+    as a sibling of `design.ir.json`, with real (not placeholder)
+    `output_hashes` matching the actual bytes it just wrote and a real
+    `plan_hash` matching what `forge build` would compute for the same
+    design."""
+    output = tmp_path / "algo_top.v"
+
+    result = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "verilog",
+        "--output", str(output),
+        "--build-dir", str(tmp_path / "build"),
+        "--contracts-from", str(MODULES_YML),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "✓ Provenance manifest:" in result.stdout
+
+    from forge.ir.provenance import read_provenance
+
+    prov_path = tmp_path / "provenance.json"
+    assert prov_path.exists()
+    manifest = read_provenance(prov_path)
+
+    assert manifest.ir_content_hash
+    assert manifest.plan_hash
+    # project_identity is the resolved consumer root's directory name —
+    # here, no --consumer-root was given, so it defaults to DESIGN_YML's
+    # own parent directory (not tmp_path, which only holds --output).
+    assert manifest.project_identity == DESIGN_YML.parent.name
+    assert manifest.output_hashes  # non-empty: real artifacts were hashed
+
+    from forge.core.utils.content_hash import hash_file
+
+    # output_hashes keys are relative to design.yml's own directory (same
+    # convention as source_hashes, slice 5.0) — not relative to tmp_path,
+    # since the design and --output can live in entirely different trees.
+    for rel_key, digest in manifest.output_hashes.items():
+        candidate = (DESIGN_YML.parent / rel_key).resolve()
+        assert candidate.exists(), rel_key
+        assert hash_file(candidate) == digest
+
+    # design.ir.json itself is one of the hashed outputs.
+    assert any(k.endswith("design.ir.json") for k in manifest.output_hashes)
+
+    # plan_hash matches forge build's own (pre-generation) plan for the
+    # identical design/contracts — same content, computed via the same
+    # build_generation_plan/plan_hash machinery.
+    from forge.core.cli.groups import topgen as topgen_mod
+    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
+    from forge.core.cli.groups.build import _planned_output_artifacts
+    import argparse
+
+    from forge.topgen.config import DesignConfig
+    cfg = DesignConfig.load_relaxed(DESIGN_YML)
+    build_args = argparse.Namespace(
+        design=str(DESIGN_YML), mode="verilog", output=str(output),
+        top_name="algo_top", build_dir=str(tmp_path / "build"),
+        ip_root=None, hls_build_root=None, src_root=None,
+        xml_stimulus_tool=None, ip_info=None, system=None, consumer_root=None,
+        contracts_from=str(MODULES_YML),
+    )
+    ctx = topgen_mod.compute_gen_top_plan(cfg, DESIGN_YML, build_args, read_only=True)
+    plan = build_generation_plan(
+        ctx.project, ctx.match_report,
+        topology_group_issues=ctx.topology_group_issues,
+        cardinality_issues=ctx.cardinality_issues,
+        cdc_issues=ctx.cdc_issues,
+        compat_mode_modules=ctx.match_report.compat_mode_modules,
+        output_artifacts=_planned_output_artifacts(ctx, build_args),
+    )
+    assert manifest.plan_hash == _plan_hash_of(plan)
+
+
+def _copy_passthrough_demo_forge_tree(dest_root: Path) -> Path:
+    """Copy the real passthrough_demo plugin's forge/ tree (design.yml,
+    modules.yml, interface contracts, preserving the real relative layout
+    design.yml's own `registry: ../modules.yml` reference depends on)
+    into *dest_root*. Returns the copied design.yml's path."""
+    import shutil
+    shutil.copytree(REPO_ROOT / "plugins/passthrough_demo/forge", dest_root / "forge")
+    return dest_root / "forge" / "designs" / "design.yml"
+
+
+def test_check_stale_reports_fresh_after_real_gen_top_run(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Real-design end-to-end proof for release-plan Phase 5 slices 5.2/5.3:
+    a real `gen-top` run followed immediately by `forge topgen validate
+    --check-stale` on the same design/output directory reports fresh —
+    the content-hash-aware path confirms freshness via the provenance.json
+    `gen-top` just wrote, not just a lucky mtime ordering."""
+    design_copy = _copy_passthrough_demo_forge_tree(tmp_path)
+
+    result = _run_topgen(
+        capsys, "gen-top", str(design_copy),
+        "--mode", "verilog",
+        "--build-dir", str(design_copy.parent / "build"),
+        "--contracts-from", str(design_copy.parents[1] / "modules.yml"),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (design_copy.parent / "provenance.json").exists()
+
+    result = _run_topgen(
+        capsys, "validate", str(design_copy), "--check-stale", "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["metrics"]["stale"]["count"] == 0
+
+
+def test_check_stale_surfaces_a_specific_reason_not_just_a_verdict(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Release-plan Phase 5 slice 5.3: a genuinely stale artifact's report
+    must carry a specific "reason:" line (content-hash-confirmed change,
+    or an honest "mtime-only" disclaimer), not just stale: yes/no."""
+    design_copy = _copy_passthrough_demo_forge_tree(tmp_path)
+
+    result = _run_topgen(
+        capsys, "gen-top", str(design_copy),
+        "--mode", "verilog",
+        "--build-dir", str(design_copy.parent / "build"),
+        "--contracts-from", str(design_copy.parents[1] / "modules.yml"),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    # A genuine edit — not just a touch — so this must still report stale
+    # even with a provenance.json present (slice 5.2's regression guard).
+    design_copy.write_text(design_copy.read_text() + "\n# a real edit\n")
+
+    result = _run_topgen(
+        capsys, "validate", str(design_copy), "--check-stale", "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "warn"
+    assert payload["metrics"]["stale"]["count"] > 0
+    assert any("reason: confirmed via content hash: source content changed" in line
+               for line in payload["metrics"]["stale"]["artifacts"])
 
 
 def test_gen_top_dry_run_lists_without_writing(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

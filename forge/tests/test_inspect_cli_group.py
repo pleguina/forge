@@ -56,13 +56,28 @@ def test_inspect_human_output(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
+    """Release-plan Phase 6 §6.1: plain `--json` now emits one
+    CommandEnvelope summary (status/diagnostics/metrics/next_actions), not
+    a full IR dump — the full canonical IR is still obtainable via
+    `--emit-ir` (see test_inspect_emit_ir_writes_exactly_the_requested_file
+    below), which is unchanged."""
     result = _run_inspect(capsys, str(DESIGN_YML), "--contracts-from", str(MODULES_YML), "--json")
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "0.2.0"  # release-plan §3.3 kind-vocabulary expansion
-    assert "content_hash" in payload
-    assert len(payload["design"]["modules"]) == 1
+    # passthrough_demo's real design genuinely has 2 IR warning diagnostics
+    # (a non-evenly-dividing clock period, no connections: section) and no
+    # errors — exit code stays 0 (warn only fails a build under --strict,
+    # which forge inspect does not have), but the status is genuinely warn.
+    assert payload["status"] == "warn"
+    assert payload["schema_version"]
+    assert payload["metrics"]["content_hash"]
+    assert payload["metrics"]["counts"]["modules"] == 1
+    assert payload["metrics"]["maturity"]["modules"]["total"] == 1
+    # forge inspect never runs the generator — the port-accounting fields
+    # stay honestly absent rather than fabricated.
+    assert payload["metrics"]["maturity"]["ports"] is None
+    assert payload["metrics"]["maturity"]["strict_pass"] is None
 
 
 def test_inspect_never_writes_without_emit_ir(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -116,8 +131,11 @@ def test_inspect_diff_against_itself_reports_no_changes(
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
-    assert payload["hash_equal"] is True
-    assert payload["instances"] == {"added": [], "removed": [], "changed": []}
+    # Phase 6 §6.1: --diff's result is a query result, not a diagnostic, so
+    # it moves into metrics["diff"] rather than being top-level keys.
+    diff = payload["metrics"]["diff"]
+    assert diff["hash_equal"] is True
+    assert diff["instances"] == {"added": [], "removed": [], "changed": []}
 
 
 def test_inspect_diff_round_trips_matching_evidence(
@@ -146,8 +164,9 @@ def test_inspect_diff_round_trips_matching_evidence(
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
-    assert payload["hash_equal"] is True
-    assert payload["connections"] == {"added": [], "removed": [], "changed": []}
+    diff = payload["metrics"]["diff"]
+    assert diff["hash_equal"] is True
+    assert diff["connections"] == {"added": [], "removed": [], "changed": []}
 
 
 def test_inspect_provenance_writes_manifest(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -162,7 +181,10 @@ def test_inspect_provenance_writes_manifest(capsys: pytest.CaptureFixture[str], 
     assert prov_path.exists()
     payload = json.loads(prov_path.read_text())
     assert payload["ir_content_hash"]
-    assert str(DESIGN_YML) in payload["source_hashes"]
+    # Slice 5.0: source_hashes keys are relative to design.yml's own
+    # directory, not absolute paths — the design file itself keys as
+    # its own bare name.
+    assert "design.yml" in payload["source_hashes"]
 
 
 def test_inspect_explain_staleness_fresh_then_stale(
@@ -180,8 +202,11 @@ def test_inspect_explain_staleness_fresh_then_stale(
     )
     assert fresh.returncode == 0
     fresh_payload = json.loads(fresh.stdout)
-    assert fresh_payload["stale"] is False
-    assert fresh_payload["reasons"] == []
+    # Phase 6 §6.1: --explain-staleness's result is a query result, not a
+    # diagnostic, so it moves into metrics["explain_staleness"].
+    fresh_staleness = fresh_payload["metrics"]["explain_staleness"]
+    assert fresh_staleness["stale"] is False
+    assert fresh_staleness["reasons"] == []
 
     # Different --build-dir counts as a changed command option, even though
     # it has no effect here (contracts_from already resolves everything) —
@@ -193,8 +218,9 @@ def test_inspect_explain_staleness_fresh_then_stale(
     )
     assert stale.returncode == 1
     stale_payload = json.loads(stale.stdout)
-    assert stale_payload["stale"] is True
-    assert any("command options changed" in r for r in stale_payload["reasons"])
+    stale_staleness = stale_payload["metrics"]["explain_staleness"]
+    assert stale_staleness["stale"] is True
+    assert any("command options changed" in r for r in stale_staleness["reasons"])
 
 
 def test_inspect_explain_staleness_missing_file_is_guided(
@@ -226,3 +252,159 @@ def test_inspect_missing_diff_file_is_guided(capsys: pytest.CaptureFixture[str],
 
     assert result.returncode == 1
     assert "not found" in result.stdout
+
+
+def _write_one_contract_one_compat_design(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A synthetic 2-module design where `src` has a real interface
+    contract (contract-driven) and `dst` has none (falls back to
+    heuristic clk/rst matching — compat mode) — release-plan Phase 6
+    §6.1's compat-mode-module case, needed for
+    `test_inspect_next_actions_flags_compat_mode_modules` below since
+    neither real reference plugin (passthrough_demo, trigger_demo) has a
+    compat-mode module today (confirmed: both report
+    `maturity["modules"]["compat_mode"] == 0`).
+
+    A pre-built `--ip-info` is required alongside `--contracts-from`: when
+    contracts are given but don't cover every module, both
+    `forge.ir.build._resolve_ip_info` and `compute_gen_top_plan`'s own
+    ip_info resolution only synthesize ip_info for the *contract-covered*
+    subset (no build artifacts exist here to fall back to for `dst`) — so
+    without an explicit `--ip-info`, `dst`'s ports never resolve at all
+    and the whole design fails to build, never reaching compat mode.
+    """
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n"
+        "  ip_info_key: src\n"
+        "  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: rst, direction: input, width: 1}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    modules_yml = tmp_path / "modules.yml"
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n"
+        "    kind: rtl\n"
+        "    top: src_top\n"
+        "    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        "  - name: dst\n"
+        "    kind: rtl\n"
+        "    top: dst_top\n"
+        "    src: [dst.v]\n"
+    )
+    ip_info_yml = tmp_path / "ip_info.yaml"
+    ip_info_yml.write_text(
+        "src:\n"
+        "  vendor: test\n"
+        "  library: test\n"
+        "  name: src\n"
+        "  entity: src_top\n"
+        "  version: '1.0'\n"
+        "  kind: rtl\n"
+        "  ports:\n"
+        "    - {name: clk, direction: INPUT, width: 1, type: std_logic}\n"
+        "    - {name: rst, direction: INPUT, width: 1, type: std_logic}\n"
+        "    - {name: dout, direction: OUTPUT, width: 8, type: std_logic_vector}\n"
+        "dst:\n"
+        "  vendor: test\n"
+        "  library: test\n"
+        "  name: dst\n"
+        "  entity: dst_top\n"
+        "  version: '1.0'\n"
+        "  kind: rtl\n"
+        "  ports:\n"
+        "    - {name: clk, direction: INPUT, width: 1, type: std_logic}\n"
+        "    - {name: rst, direction: INPUT, width: 1, type: std_logic}\n"
+        "    - {name: din, direction: INPUT, width: 8, type: std_logic_vector}\n"
+    )
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu13p\n"
+        "clock_period: 4.0\n"
+        "modules:\n"
+        "  - name: src\n"
+        "    top: src_top\n"
+        "    src: [src.v]\n"
+        "  - name: dst\n"
+        "    top: dst_top\n"
+        "    src: [dst.v]\n"
+        "connections:\n"
+        "  - from: src\n"
+        "    to: dst\n"
+        "    port_map: [[dout, din]]\n"
+    )
+    return design_yml, modules_yml, ip_info_yml
+
+
+def test_inspect_maturity_summary_present_on_real_designs(capsys: pytest.CaptureFixture[str]) -> None:
+    """Real-design (not synthetic) coverage for the maturity summary's
+    presence and honest port-accounting absence on both reference
+    plugins."""
+    for design, modules in (
+        (DESIGN_YML, MODULES_YML),
+        (TRIGGER_DESIGN_YML, TRIGGER_MODULES_YML),
+    ):
+        result = _run_inspect(capsys, str(design), "--contracts-from", str(modules), "--json")
+        assert result.returncode == 0, result.stdout + result.stderr
+        maturity = json.loads(result.stdout)["metrics"]["maturity"]
+        assert maturity["modules"]["total"] > 0
+        assert maturity["ports"] is None
+        assert maturity["strict_pass"] is None
+
+
+def test_inspect_next_actions_flags_compat_mode_modules(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    design_yml, modules_yml, ip_info_yml = _write_one_contract_one_compat_design(tmp_path)
+
+    result = _run_inspect(
+        capsys, str(design_yml),
+        "--contracts-from", str(modules_yml),
+        "--ip-info", str(ip_info_yml),
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["metrics"]["maturity"]["modules"]["compat_mode"] == 1
+    assert (
+        "Add interface contracts or pass --strict at generation time"
+        in payload["next_actions"]
+    )
+
+
+def test_inspect_next_actions_flags_errors(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    """A design.yml with two modules sharing the same name — a genuine
+    validate_design ERROR diagnostic ("Duplicate module name") that
+    survives all the way into the IR's own diagnostics list (unlike a
+    missing `part`, which crashes `DesignConfig` construction itself
+    before any diagnostic is ever produced) — surfaces "Fix the errors
+    above" in next_actions, and the envelope status is "fail"."""
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu13p\n"
+        "clock_period: 4.0\n"
+        "modules:\n"
+        "  - name: src\n"
+        "    top: src_top\n"
+        "    src: [src.v]\n"
+        "  - name: src\n"
+        "    top: src_top2\n"
+        "    src: [src2.v]\n"
+    )
+
+    result = _run_inspect(capsys, str(design_yml), "--json")
+
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "fail"
+    assert result.returncode == 1
+    assert any(
+        "Duplicate module name" in d["message"] and d["severity"] == "error"
+        for d in payload["diagnostics"]
+    )
+    assert "Fix the errors above before generating" in payload["next_actions"]

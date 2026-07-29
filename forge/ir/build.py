@@ -317,7 +317,7 @@ def _build_interfaces(contract: LoadedContract, vocab: Dict[str, Any], module_na
     return interfaces
 
 
-def build_project_ir(
+def _build_project_ir_full(
     design_path: Path | str,
     *,
     contracts_from: Optional[Path | str] = None,
@@ -325,18 +325,13 @@ def build_project_ir(
     build_dir: Optional[Path | str] = None,
     ip_root: Optional[Path | str] = None,
     src_root: Optional[Path | str] = None,
-) -> ResolvedProject:
-    """Build a ``ResolvedProject`` for the design at *design_path*, loading
-    everything (config, contracts, ip_info) from scratch.
-
-    Never writes any file — safe to call from a read-only command. Used by
-    ``forge inspect``, which has no other reason to have these objects
-    already in hand. A caller that *already* has ``cfg``/``contracts``/
-    ``ip_info``/matcher output from its own pipeline (e.g. ``topgen
-    gen-top`` — migration step 4 of the canonical-IR plan, see
-    ``docs/development/release-readiness.md``) should call
-    ``assemble_project_ir`` directly instead of redundantly reloading
-    everything here.
+) -> Tuple[ResolvedProject, DesignConfig, Any]:
+    """Shared body of :func:`build_project_ir` and
+    :func:`build_project_ir_with_match_report` — loads everything from
+    scratch and returns ``(project, cfg, match_report)`` so callers needing
+    only *project* (the common case) and callers also needing the matcher's
+    own ``cfg``/``match_report`` (e.g. a contract-maturity summary, without
+    re-running the matcher a second time) can share one implementation.
     """
     design_path = Path(design_path).expanduser().resolve()
     contracts_from_p = _as_path(contracts_from)
@@ -364,7 +359,7 @@ def build_project_ir(
         cfg, ip_info_data, contracts=contracts or None,
     )
 
-    return assemble_project_ir(
+    project = assemble_project_ir(
         cfg,
         design_path,
         contracts=contracts,
@@ -378,6 +373,64 @@ def build_project_ir(
             "ip_info": str(ip_info_p) if ip_info_p else None,
             "build_dir": str(build_dir_p) if build_dir_p else None,
         },
+    )
+    return project, cfg, match_report
+
+
+def build_project_ir(
+    design_path: Path | str,
+    *,
+    contracts_from: Optional[Path | str] = None,
+    ip_info: Optional[Path | str] = None,
+    build_dir: Optional[Path | str] = None,
+    ip_root: Optional[Path | str] = None,
+    src_root: Optional[Path | str] = None,
+) -> ResolvedProject:
+    """Build a ``ResolvedProject`` for the design at *design_path*, loading
+    everything (config, contracts, ip_info) from scratch.
+
+    Never writes any file — safe to call from a read-only command. Used by
+    ``forge inspect``, which has no other reason to have these objects
+    already in hand. A caller that *already* has ``cfg``/``contracts``/
+    ``ip_info``/matcher output from its own pipeline (e.g. ``topgen
+    gen-top`` — migration step 4 of the canonical-IR plan, see
+    ``docs/development/release-readiness.md``) should call
+    ``assemble_project_ir`` directly instead of redundantly reloading
+    everything here.
+    """
+    project, _cfg, _match_report = _build_project_ir_full(
+        design_path,
+        contracts_from=contracts_from,
+        ip_info=ip_info,
+        build_dir=build_dir,
+        ip_root=ip_root,
+        src_root=src_root,
+    )
+    return project
+
+
+def build_project_ir_with_match_report(
+    design_path: Path | str,
+    *,
+    contracts_from: Optional[Path | str] = None,
+    ip_info: Optional[Path | str] = None,
+    build_dir: Optional[Path | str] = None,
+    ip_root: Optional[Path | str] = None,
+    src_root: Optional[Path | str] = None,
+) -> Tuple[ResolvedProject, DesignConfig, Any]:
+    """Same as :func:`build_project_ir`, but also returns the ``cfg``/
+    ``match_report`` the matcher produced along the way — for callers that
+    need pre-generation topology data (e.g. ``forge inspect``'s contract-
+    maturity summary, release-plan Phase 6 §6.1) without loading the
+    design and re-running the matcher a second time.
+    """
+    return _build_project_ir_full(
+        design_path,
+        contracts_from=contracts_from,
+        ip_info=ip_info,
+        build_dir=build_dir,
+        ip_root=ip_root,
+        src_root=src_root,
     )
 
 
@@ -483,6 +536,7 @@ def assemble_project_ir(
             latency_cycles=timing.latency_cycles if timing else None,
             latency_hint=timing.latency_hint if timing else None,
             is_variable_latency=timing.variable_latency if timing else False,
+            latency=timing.latency if timing else None,
             ip_info_key=mod.ip_info_key,
         ))
     modules.sort(key=lambda m: m.name)

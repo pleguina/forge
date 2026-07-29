@@ -54,8 +54,31 @@ def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, ca
 
     assert code == 0
     report = json.loads(out)
-    assert report["status"] in ("pass", "warn")
-    assert report["counts"]["errors"] == 0
+    # passthrough_demo's fixture genuinely has 2 warnings (stale port_map.yaml)
+    # and 0 errors — this now actually exercises the "warn" branch, closing a
+    # latent bug where DiagnosticReport.to_dict() only ever emitted
+    # "pass"/"fail", never "warn", even with real warnings present.
+    assert report["status"] == "warn"
+    assert report["schema_version"]
+    assert report["metrics"]["counts"]["errors"] == 0
+    assert report["metrics"]["counts"]["warnings"] > 0
+    assert report["next_actions"], "warnings should surface at least one next_action"
+
+
+def test_doctor_json_strict_promotes_warn_to_fail_exit_code(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    code, out, _err = _run_verify(
+        monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML), "--json", "--strict",
+    )
+
+    # --strict promotes a warning-only report's exit code to 1, without
+    # changing the reported status string.
+    assert code == 1
+    report = json.loads(out)
+    assert report["status"] == "warn"
 
 
 def test_doctor_missing_design_is_guided(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

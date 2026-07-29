@@ -11,7 +11,7 @@ import argparse
 import sys
 
 from forge import __version__
-from forge.core.cli.groups import core, topgen, hls, verify, analyze, framework, doctor, inspect, build
+from forge.core.cli.groups import core, topgen, hls, verify, analyze, framework, doctor, inspect, build, test, report, init
 from forge.core.cli import _shared
 
 
@@ -38,6 +38,16 @@ def build_parser() -> argparse.ArgumentParser:
   doctor    Check the local forge install/environment (not a group — a single command)
   inspect   Resolve a design into the canonical IR and inspect it (not a group — a single command)
   build     Compute (and optionally apply) a deterministic generation plan (not a group — a single command)
+  test      Wrap verification preparation and execution (check-only | prepare | run)
+  report    Generate a self-contained report bundle (not a group — a single command)
+  init      Scaffold a new plugin and chain validate -> build -> test -> report (not a group)
+
+Exit codes and --json output shape are documented once, for the whole
+CLI, in docs/development/cli_exit_codes.md: 0 = pass (or warn without
+--strict), 1 = fail (or warn with --strict), 2 = a usage error or
+unexpected internal exception (never a real finding). Every --json-
+supporting command emits the same {schema_version, status, diagnostics,
+artifacts, metrics, next_actions} envelope shape.
 
 Examples:
   forge doctor
@@ -60,6 +70,9 @@ Examples:
   forge analyze latency-check design.yml --contracts-from modules.yml
   forge analyze dashboard --input out/reports --output out/dashboard
   forge framework import --provider blobfish --abi payload_abi.json --endpoints payload_endpoints.json --out out/
+  forge init my_plugin
+  forge test run design.verification.yml --flow my_flow_xsim --event-id 0
+  forge report design.yml --contracts-from modules.yml --output out/report
         """,
     )
 
@@ -75,7 +88,7 @@ Examples:
         dest="group",
         required=True,
         metavar="GROUP",
-        help="Command group (core | topgen | hls | verify | analyze | framework | doctor | inspect | build)",
+        help="Command group (core | topgen | hls | verify | analyze | framework | doctor | inspect | build | test | report | init)",
     )
 
     core.register(sub)
@@ -87,6 +100,9 @@ Examples:
     doctor.register(sub)
     inspect.register(sub)
     build.register(sub)
+    test.register(sub)
+    report.register(sub)
+    init.register(sub)
 
     return parser
 

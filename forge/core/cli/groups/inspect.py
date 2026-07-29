@@ -20,22 +20,43 @@ from pathlib import Path
 from typing import Optional
 
 
+def _guided_failure(msg: str, *, json_mode: bool) -> "int":
+    """Print a one-line guided error the same way every early-exit path in
+    this command always has (plain stdout message, `--json` gets a small
+    envelope) and return the exit code to use. Kept distinct from
+    ``forge.core.cli.envelope.emit``'s stderr-routing convention
+    deliberately — this command's guided errors have always gone to
+    stdout, and there is no existing reason to move them (unlike
+    ``verify doctor``'s diagnostics, which already had a stdout/stderr
+    split to preserve)."""
+    from forge.core.cli.envelope import CommandEnvelope
+
+    envelope = CommandEnvelope(
+        status="fail",
+        diagnostics=[{"severity": "error", "message": msg}],
+    )
+    if json_mode:
+        print(json.dumps(envelope.to_dict(), indent=2))
+    else:
+        print(f"❌ {msg}")
+    return envelope.exit_code()
+
+
 def cmd_inspect(args):
-    from forge.ir import build_project_ir, content_hash, diff_projects, to_json_dict
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.core.cli.groups.topgen import _compute_maturity_summary
+    from forge.ir import (
+        build_project_ir_with_match_report, content_hash, diff_projects, to_json_dict,
+    )
 
     design_path = Path(args.design).expanduser().resolve()
     json_mode = getattr(args, "json", False)
 
     if not design_path.exists():
-        msg = f"Design file not found: {design_path}"
-        if json_mode:
-            print(json.dumps({"passed": False, "error": msg}, indent=2))
-        else:
-            print(f"❌ {msg}")
-        sys.exit(1)
+        sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
 
     try:
-        project = build_project_ir(
+        project, cfg, match_report = build_project_ir_with_match_report(
             design_path,
             contracts_from=getattr(args, "contracts_from", None),
             ip_info=getattr(args, "ip_info", None),
@@ -44,63 +65,68 @@ def cmd_inspect(args):
             src_root=getattr(args, "src_root", None),
         )
     except Exception as e:  # noqa: BLE001 - surfaced as a clean CLI error
-        msg = f"Failed to resolve design: {e}"
-        if json_mode:
-            print(json.dumps({"passed": False, "error": msg}, indent=2))
-        else:
-            print(f"❌ {msg}")
         if getattr(args, "debug", False):
             raise
-        sys.exit(1)
+        sys.exit(_guided_failure(f"Failed to resolve design: {e}", json_mode=json_mode))
 
-    errors = [d for d in project.design.diagnostics if d.severity == "error"]
+    # forge inspect never runs the generator, so the maturity summary's
+    # port-accounting fields (open_outputs/tied_inputs/strict_pass) stay
+    # honestly absent (None) rather than fabricated — release-plan Phase 6,
+    # §6.1. Module/connection/wiring-method counts are knowable pre-
+    # generation and always populate.
+    maturity = _compute_maturity_summary(cfg, match_report)
+
+    diagnostics = [_ir_diagnostic_to_dict(d) for d in project.design.diagnostics]
+    errors = [d for d in diagnostics if d["severity"] == "error"]
+    warnings = [d for d in diagnostics if d["severity"] == "warning"]
+    next_actions = _compute_next_actions(diagnostics, maturity)
 
     if getattr(args, "diff", None):
         diff_path = Path(args.diff).expanduser().resolve()
         if not diff_path.exists():
-            msg = f"--diff file not found: {diff_path}"
-            if json_mode:
-                print(json.dumps({"passed": False, "error": msg}, indent=2))
-            else:
-                print(f"❌ {msg}")
-            sys.exit(1)
+            sys.exit(_guided_failure(f"--diff file not found: {diff_path}", json_mode=json_mode))
         previous = _project_from_json(json.loads(diff_path.read_text()))
         result = diff_projects(previous, project)
+        status = "fail" if (not result["hash_equal"] and errors) else "pass"
+        envelope = CommandEnvelope(status=status, metrics={"diff": result})
         if json_mode:
-            print(json.dumps(result, indent=2))
-        else:
-            _print_diff(result)
-        sys.exit(0 if result["hash_equal"] else 1 if errors else 0)
+            sys.exit(emit(envelope, json_mode=True))
+        _print_diff(result)
+        sys.exit(envelope.exit_code())
 
     if getattr(args, "explain_staleness", None):
         from forge.ir.provenance import build_provenance, explain_staleness, read_provenance
 
         prov_path = Path(args.explain_staleness).expanduser().resolve()
         if not prov_path.exists():
-            msg = f"--explain-staleness file not found: {prov_path}"
-            if json_mode:
-                print(json.dumps({"passed": False, "error": msg}, indent=2))
-            else:
-                print(f"❌ {msg}")
-            sys.exit(1)
+            sys.exit(_guided_failure(
+                f"--explain-staleness file not found: {prov_path}", json_mode=json_mode,
+            ))
         previous = read_provenance(prov_path)
         current = build_provenance(project, command_options=_command_options(args))
         result = explain_staleness(previous, current)
+        status = "fail" if result.stale else "pass"
+        envelope = CommandEnvelope(
+            status=status,
+            metrics={"explain_staleness": {"stale": result.stale, "reasons": result.reasons}},
+        )
         if json_mode:
-            print(json.dumps({"stale": result.stale, "reasons": result.reasons}, indent=2))
+            sys.exit(emit(envelope, json_mode=True))
+        if result.stale:
+            print(f"⚠️  stale — {len(result.reasons)} reason(s):")
+            for r in result.reasons:
+                print(f"    - {r}")
         else:
-            if result.stale:
-                print(f"⚠️  stale — {len(result.reasons)} reason(s):")
-                for r in result.reasons:
-                    print(f"    - {r}")
-            else:
-                print("✅ fresh — no reason to regenerate")
-        sys.exit(1 if result.stale else 0)
+            print("✅ fresh — no reason to regenerate")
+        sys.exit(envelope.exit_code())
+
+    artifacts: list[str] = []
 
     if getattr(args, "emit_ir", None):
         out_path = Path(args.emit_ir).expanduser().resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
+        artifacts.append(str(out_path))
         if not json_mode:
             print(f"✅ IR written to {out_path}")
 
@@ -109,17 +135,34 @@ def cmd_inspect(args):
 
         prov_path = Path(args.provenance).expanduser().resolve()
         write_provenance(prov_path, build_provenance(project, command_options=_command_options(args)))
+        artifacts.append(str(prov_path))
         if not json_mode:
             print(f"✅ provenance manifest written to {prov_path}")
 
-    if json_mode:
-        payload = to_json_dict(project)
-        payload["content_hash"] = content_hash(project)
-        print(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        _print_human(project, content_hash(project))
+    status = "fail" if errors else ("warn" if warnings else "pass")
+    ir_hash = content_hash(project)
+    envelope = CommandEnvelope(
+        status=status,
+        diagnostics=diagnostics,
+        artifacts=artifacts,
+        metrics={
+            "content_hash": ir_hash,
+            "counts": {
+                "modules": len(project.design.modules),
+                "instances": len(project.design.instances),
+                "connections": len(project.design.connections),
+                "clock_domains": len(project.design.clock_domains),
+                "reset_domains": len(project.design.reset_domains),
+            },
+            "maturity": maturity,
+        },
+        next_actions=next_actions,
+    )
 
-    sys.exit(1 if errors else 0)
+    if json_mode:
+        sys.exit(emit(envelope, json_mode=True))
+    _print_human(project, ir_hash, envelope)
+    sys.exit(envelope.exit_code())
 
 
 def _command_options(args) -> dict:
@@ -135,7 +178,38 @@ def _command_options(args) -> dict:
     }
 
 
-def _print_human(project, ir_hash: str) -> None:
+def _ir_diagnostic_to_dict(diag) -> dict:
+    """Reshape one IR ``DiagnosticReference`` into the envelope's
+    diagnostic-dict shape (release-plan Phase 6, §6.1). ``code`` stays
+    ``None`` where the IR has none — an honest absence, matching
+    ``Diagnostic.to_dict()``'s "omit/None falsy fields" convention rather
+    than fabricating a code the IR never assigned."""
+    d = {"severity": diag.severity, "message": diag.message, "code": diag.code}
+    if diag.object_id:
+        d["object_id"] = diag.object_id
+    if diag.location and diag.location.file:
+        d["path"] = diag.location.file
+    return d
+
+
+def _compute_next_actions(diagnostics: list, maturity: dict) -> list:
+    """A small, explicit, testable heuristic mapping from diagnostic
+    severity / maturity state to a suggested next step — not a new IR
+    field (release-plan Phase 6, §6.1 explicitly scopes this out of
+    ``forge/ir/build.py``, since threading an ``action`` hint through every
+    ``DiagnosticReference`` construction site would touch many call sites
+    for a phase about the CLI, not the IR)."""
+    actions: list = []
+    if any(d["severity"] == "error" for d in diagnostics):
+        actions.append("Fix the errors above before generating")
+    if maturity["modules"]["compat_mode"] > 0:
+        actions.append(
+            "Add interface contracts or pass --strict at generation time"
+        )
+    return actions
+
+
+def _print_human(project, ir_hash: str, envelope) -> None:
     d = project.design
     print(f"forge inspect — {d.name}")
     print(f"  IR schema version : {project.schema_version}")
@@ -155,6 +229,13 @@ def _print_human(project, ir_hash: str) -> None:
             print(f"    {icon} {diag.message}")
     else:
         print("  diagnostics        : (none)")
+
+    maturity = envelope.metrics.get("maturity", {})
+    print(f"  contract maturity  : {maturity.get('modules', {})}")
+    if envelope.next_actions:
+        print("  next actions:")
+        for action in envelope.next_actions:
+            print(f"    - {action}")
 
 
 def _print_diff(result: dict) -> None:
@@ -184,6 +265,7 @@ def _project_from_json(payload: dict):
         ResolvedResetDomain, ResolvedTopLevelPort, ResolvedTransformation,
         ResolvedVerificationPlan, SourceLocation, DiagnosticReference,
     )
+    from forge.topgen.config import LatencyDeclaration
 
     def _matching_evidence(me: Optional[dict]):
         if not me:
@@ -242,6 +324,7 @@ def _project_from_json(payload: dict):
             latency_cycles=m.get("latency_cycles"),
             latency_hint=m.get("latency_hint"),
             is_variable_latency=m.get("is_variable_latency", False),
+            latency=LatencyDeclaration(**m["latency"]) if m.get("latency") else None,
             ip_info_key=m.get("ip_info_key"),
         ) for m in d.get("modules", [])
     ]

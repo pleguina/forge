@@ -15,7 +15,12 @@
 # guard, not a proof):
 #
 #   1. Nothing outside forge/core/cli/ may import forge.core.cli (the CLI
-#      layer is a leaf — nothing else should depend on it).
+#      layer is a leaf — nothing else should depend on it), with one
+#      deliberate exception: forge.core.cli.envelope (the shared
+#      CommandEnvelope output shape, release-plan Phase 6 §6.0) is itself
+#      CLI-layer shared code, importable from forge/verify/__main__.py — a
+#      separate CLI entry point that predates and does not import
+#      forge/core/cli/_shared.py — without that being a layering violation.
 #   2. forge/topgen/ and forge/verify/ must not cross-import each other
 #      (they're independent subsystems composed by the CLI layer, not by
 #      each other).
@@ -71,7 +76,21 @@ _check() {
 echo "--- Rule 1: nothing outside forge/core/cli/ imports forge.core.cli ---"
 _check "no cross-import of forge.core.cli outside forge/core/cli/" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
-    forge/topgen forge/hls forge/verify forge/analyze forge/framework forge/ir
+    forge/topgen forge/hls forge/analyze forge/framework forge/ir
+
+# forge/verify is checked separately: forge.core.cli.envelope is a
+# deliberate, documented exception (see comment above) — every other
+# forge.core.cli import from forge/verify/ is still a violation.
+verify_hits="$(grep -rnE '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
+    --include='*.py' forge/verify 2>/dev/null \
+    | grep -v '/tests/' | grep -v 'core\.cli\.envelope\b' || true)"
+if [[ -n "$verify_hits" ]]; then
+    echo "❌ no cross-import of forge.core.cli outside forge/core/cli/ (forge/verify)"
+    echo "$verify_hits" | sed 's/^/    /'
+    violations=$((violations + 1))
+else
+    echo "✅ no cross-import of forge.core.cli outside forge/core/cli/ (forge/verify, envelope exempted)"
+fi
 
 echo "--- Rule 2: forge/topgen and forge/verify do not cross-import ---"
 _check "forge/topgen must not import forge.verify" \

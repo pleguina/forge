@@ -196,44 +196,69 @@ class XmlRunSelection:
     probe_log: bool
 
 
+def _resolve_xml_run_selection_from_values(
+    cfg,
+    *,
+    event_id: "int | str | None" = None,
+    event_list: "str | None" = None,
+    all_events: bool = False,
+    all_dataset_parts: bool = False,
+    dataset_parts_glob: "str | None" = None,
+    xml_input: "str | None" = None,
+    probe_log: bool = False,
+) -> XmlRunSelection:
+    """Resolve framework-standard XML dataset run selectors from plain
+    values (precedence: value given > environment variables > flow
+    defaults).
+
+    Extracted from `_resolve_xml_run_selection` (release-plan Phase 6,
+    §6.4) so `forge test` can call the same precedence logic directly
+    with plain values instead of needing a full `argparse.Namespace` —
+    `_resolve_xml_run_selection` itself is now a thin wrapper below.
+    """
+    event_id_raw = (
+        event_id
+        or os.environ.get("EVENT_ID")
+        or getattr(cfg, "dataset_default_event_id", None)
+    )
+    event_list_raw = event_list or os.environ.get("EVENT_LIST")
+    _all_events = bool(all_events or (os.environ.get("ALL_EVENTS", "0") == "1"))
+    _all_dataset_parts = bool(
+        all_dataset_parts or (os.environ.get("ALL_DATASET_PARTS", "0") == "1")
+    )
+    _dataset_parts_glob = dataset_parts_glob or os.environ.get("DATASET_PARTS_GLOB")
+    xml_input_raw = (
+        xml_input
+        or os.environ.get("XML_INPUT")
+        or getattr(cfg, "dataset_xml", None)
+    )
+    _probe_log = probe_log or (os.environ.get("PROBE_LOG", "0") == "1")
+    return XmlRunSelection(
+        event_id=int(event_id_raw) if event_id_raw is not None else None,
+        event_list=str(event_list_raw).strip() if event_list_raw else None,
+        all_events=_all_events,
+        all_dataset_parts=_all_dataset_parts,
+        dataset_xml=Path(xml_input_raw) if xml_input_raw else None,
+        dataset_parts_glob=str(_dataset_parts_glob).strip() if _dataset_parts_glob else None,
+        probe_log=_probe_log,
+    )
+
+
 def _resolve_xml_run_selection(args: argparse.Namespace, cfg) -> XmlRunSelection:
-    """Resolve framework-standard XML dataset run selectors.
+    """Resolve framework-standard XML dataset run selectors from CLI args.
 
     Precedence:
       CLI args > environment variables > flow defaults.
     """
-    event_id_raw = (
-        args.event_id
-        or os.environ.get("EVENT_ID")
-        or getattr(cfg, "dataset_default_event_id", None)
-    )
-    event_list_raw = getattr(args, "event_list", None) or os.environ.get("EVENT_LIST")
-    all_events = bool(
-        getattr(args, "all_events", False)
-        or (os.environ.get("ALL_EVENTS", "0") == "1")
-    )
-    all_dataset_parts = bool(
-        getattr(args, "all_dataset_parts", False)
-        or (os.environ.get("ALL_DATASET_PARTS", "0") == "1")
-    )
-    dataset_parts_glob = (
-        getattr(args, "dataset_parts_glob", None)
-        or os.environ.get("DATASET_PARTS_GLOB")
-    )
-    xml_input_raw = (
-        args.xml_input
-        or os.environ.get("XML_INPUT")
-        or getattr(cfg, "dataset_xml", None)
-    )
-    probe_log = args.probe_log or (os.environ.get("PROBE_LOG", "0") == "1")
-    return XmlRunSelection(
-        event_id=int(event_id_raw) if event_id_raw is not None else None,
-        event_list=str(event_list_raw).strip() if event_list_raw else None,
-        all_events=all_events,
-        all_dataset_parts=all_dataset_parts,
-        dataset_xml=Path(xml_input_raw) if xml_input_raw else None,
-        dataset_parts_glob=str(dataset_parts_glob).strip() if dataset_parts_glob else None,
-        probe_log=probe_log,
+    return _resolve_xml_run_selection_from_values(
+        cfg,
+        event_id=args.event_id,
+        event_list=getattr(args, "event_list", None),
+        all_events=getattr(args, "all_events", False),
+        all_dataset_parts=getattr(args, "all_dataset_parts", False),
+        dataset_parts_glob=getattr(args, "dataset_parts_glob", None),
+        xml_input=args.xml_input,
+        probe_log=args.probe_log,
     )
 
 
@@ -941,8 +966,7 @@ from __future__ import annotations
 PLUGIN_ID = "{plugin_id}"
 
 _FLOW_KINDS: list[str] = [
-    "hls_csim",
-    "single_module_rtl",
+    "full_chip_rtl",
 ]
 
 # ── Self-declare with the framework ────────────────────────────────────
@@ -966,17 +990,18 @@ _GEN_STIMULUS_TEMPLATE = '''\
 #!/usr/bin/env python3
 """{plugin_id} stimulus generator.
 
-Generates ``stimulus_current.svh`` for each declared xsim flow.
+Generates ``stimulus_current.svh`` for the {plugin_id}_xsim flow: drives
+{plugin_id}_data_in/{plugin_id}_data_in_valid for one cycle, then checks
+that {plugin_id}_data_out/{plugin_id}_data_out_valid carry the same value
+one cycle later — the scaffolded RTL stub's entire behavior (see
+algo/rtl/{plugin_id}.v). Matches plugins/passthrough_demo's real, working
+gen_stimulus.py byte-for-byte in structure (only identifiers differ) —
+confirmed runnable with zero manual edits, since the scaffolded RTL is
+itself byte-for-byte identical to passthrough_demo's real RTL.
 
 Usage::
 
-    python3 gen_stimulus.py --flow <flow_name> [--event-id <n>]
-
-Adapt ``generate_for_flow()`` below to match your DUT's port semantics:
-  1. Replace signal names (``data_in``, ``result_out``) with your top-function ports.
-  2. Adjust widths to match the HLS-generated RTL.
-  3. Use ``em.drive_valid()`` for valid/ready-style interfaces.
-  4. Use ``with em.event_block(label)`` to group logically-related stimulus.
+    python3 gen_stimulus.py --flow {plugin_id}_xsim [--event-id <n>]
 """
 from __future__ import annotations
 
@@ -984,6 +1009,12 @@ import argparse
 from pathlib import Path
 
 from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
+
+# Golden events, matching schemas/data/{plugin_id}_golden.xml.
+_EVENTS = {{
+    0: {{"data_in": 0x3A, "data_in_valid": 1, "data_out": 0x3A, "data_out_valid": 1}},
+    1: {{"data_in": 0x00, "data_in_valid": 0, "data_out": 0x00, "data_out_valid": 0}},
+}}
 
 
 def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
@@ -995,30 +1026,31 @@ def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
 
     Everything else is driven/checked here.
     """
+    if event_id not in _EVENTS:
+        raise ValueError(f"Unknown event id: {{event_id}} (known: {{sorted(_EVENTS)}})")
+    ev = _EVENTS[event_id]
+
     em = StimulusEmitter()
 
-    # ── Reset phase ──────────────────────────────────────────────────
     with em.event_block("reset"):
         em.drive("ap_rst", 1, width=1)
         em.tick(cycles=4)
         em.drive("ap_rst", 0, width=1)
         em.tick()
 
-    # ── Stimulus event ───────────────────────────────────────────────
     with em.event_block(f"event_{{event_id}}"):
-        # TODO: replace signal names + values with your DUT ports:
-        em.drive("data_in",    0xABCD, width=32)   # <-- change me
-        em.drive("data_valid", 1,      width=1)
-        # Or, for valid/ready-style interfaces:
-        # em.drive_valid("data_in", 0xABCD, width=32, valid_signal="data_valid")
-        em.tick(cycles=4)  # wait enough cycles for DUT pipeline to complete
-        em.deassert_valid("data_valid")
-        em.tick(cycles=2)
+        em.drive("{plugin_id}_data_in", ev["data_in"], width=8)
+        em.drive("{plugin_id}_data_in_valid", ev["data_in_valid"], width=1)
+        em.tick()  # posedge: DUT samples input, schedules registered output (NBA)
+        em.tick()  # one more posedge: lets that NBA update settle before we read it
 
-    # ── Output checks ────────────────────────────────────────────────
     with em.event_block("checks"):
-        # TODO: replace with your expected output values:
-        em.check("result_out", 0x1234, width=16, label="result_check")  # <-- change me
+        em.check("{plugin_id}_data_out", ev["data_out"], width=8, label="data_out_check")
+        em.check("{plugin_id}_data_out_valid", ev["data_out_valid"], width=1, label="data_out_valid_check")
+
+    with em.event_block("drain"):
+        em.drive("{plugin_id}_data_in_valid", 0, width=1)
+        em.tick(cycles=2)
 
     write_run_stimulus_svh(em, out_path, header_comment=f"flow={{flow_name}} event={{event_id}}")
     print(f"  wrote {{out_path}}")
@@ -1027,7 +1059,7 @@ def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="{plugin_id} stimulus generator")
     ap.add_argument("--flow",     required=True, help="Flow name from design.verification.yml")
-    ap.add_argument("--event-id", dest="event_id", type=int, default=1)
+    ap.add_argument("--event-id", dest="event_id", type=int, default=0)
     args = ap.parse_args()
 
     verify_root = Path(__file__).resolve().parents[1]
@@ -1042,63 +1074,86 @@ if __name__ == "__main__":
     main()
 '''
 
+_GOLDEN_XML_TEMPLATE = '''\
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  {plugin_id} — Golden stimulus and expected results
+
+  The scaffolded RTL stub (algo/rtl/{plugin_id}.v) registers
+  data_in/data_in_valid onto data_out/data_out_valid one clock cycle
+  later, unchanged — matching plugins/passthrough_demo's real RTL
+  byte-for-byte. Two events, both straightforward. Replace with your
+  real algorithm's golden data once you replace the RTL stub.
+-->
+<{plugin_id}_events>
+
+  <event id="0">
+    <in data_in="0x3A" data_in_valid="1"/>
+    <golden data_out="0x3A" data_out_valid="1"/>
+  </event>
+
+  <event id="1">
+    <in data_in="0x00" data_in_valid="0"/>
+    <golden data_out="0x00" data_out_valid="0"/>
+  </event>
+
+</{plugin_id}_events>
+'''
+
 _DESIGN_VERIFICATION_TEMPLATE = '''\
 # ═══════════════════════════════════════════════════════════════════════
 # {plugin_id} — Verification Design Contract
 # ═══════════════════════════════════════════════════════════════════════
 #
-# Edit this file, then run:
-#   forge verify generate <path/to/this/file>    # generate TB + port_map
-#   forge verify doctor   <path/to/this/file>    # health-check
-#   forge verify run      <flow/verify.flow.yml> # simulate
+#   forge topgen gen-top   plugins/{plugin_id}/forge/designs/design.yml --mode verilog ...
+#   forge verify generate  plugins/{plugin_id}/forge/verify/design.verification.yml
+#   forge verify doctor    plugins/{plugin_id}/forge/verify/design.verification.yml
+#   forge verify run       plugins/{plugin_id}/forge/verify/{plugin_id}_xsim/verify.flow.yml --plugin {plugin_id}
+#
+# Immediately runnable with zero manual edits — the scaffolded RTL stub
+# (algo/rtl/{plugin_id}.v) is byte-for-byte identical to
+# plugins/passthrough_demo's real, working reference RTL, and this file
+# (plus tools/gen_stimulus.py and schemas/data/{plugin_id}_golden.xml) is
+# the matching real, working verify-side counterpart — not a stub
+# requiring manual editing before first use.
 # ───────────────────────────────────────────────────────────────────────
 plugin: {plugin_id}
 
 # ─── Datasets ─────────────────────────────────────────────────────────
 datasets:
   {plugin_id}_golden:
-    xml: plugins/{plugin_id}/verify/schemas/data/{plugin_id}_golden.xml
+    xml: schemas/data/{plugin_id}_golden.xml
     description: Golden reference dataset for {plugin_id}
 
 # ─── Simulation Defaults ──────────────────────────────────────────────
 defaults:
-  clk_period_ns:              4.0      # Clock period in ns
-  reset_cycles:               4        # How many cycles ap_rst is asserted
-  idle_cycles_after_reset:    0        # Idle cycles between reset and first event
-  post_stimulus_drain_cycles: 4        # Drain cycles after last event
+  clk_period_ns:              4.0
+  reset_cycles:               4
+  idle_cycles_after_reset:    0
+  post_stimulus_drain_cycles: 4
 
 # ─── Flows ────────────────────────────────────────────────────────────
-# Supported (kind, backend) pairs:
-#   hls_csim       → csim   (HLS C-simulation — fastest, no RTL needed)
-#   single_module_rtl → xsim (RTL simulation of one HLS-generated module)
+# One module ({plugin_id}) that IS the whole design, so it's verified as
+# a full_chip_rtl flow against the topgen-generated algo_top.v — no HLS
+# synthesis step needed at all, since the module is hand-written RTL.
 flows:
 
-  # ── HLS C-simulation (always works after HLS synthesis) ─────────────
-  - name:             {plugin_id}_csim
-    kind:             hls_csim
-    backend:          csim
-    top_module:       {plugin_id}          # TODO: your HLS top function name
-    tb_module:        tb_{plugin_id}       # HLS-generated testbench binary name
-    dut_rtl_source:   build_hls/{plugin_id}/solution1  # TODO: verify HLS output path
+  - name:             {plugin_id}_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_{plugin_id}
     dataset:          {plugin_id}_golden
-    default_event_id: 1
+    default_event_id: 0
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 4
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
     coverage_intent:  functional
-
-  # ── RTL simulation via Vivado XSIM ──────────────────────────────────
-  # Uncomment once you have run HLS synthesis (produces the RTL files).
-  # - name:             {plugin_id}_xsim
-  #   kind:             single_module_rtl
-  #   backend:          xsim
-  #   top_module:       {plugin_id}          # TODO: your HLS top function name
-  #   tb_module:        tb_{plugin_id}_xsim  # Framework-generated testbench name
-  #   dut_rtl_source:   build_hls/{plugin_id}/solution1/syn/verilog  # TODO: verify
-  #   dataset:          {plugin_id}_golden
-  #   default_event_id: 1
-  #   stimulus_mode:    svh_include        # Framework default — do not change
-  #   wave_mode:        tcl               # Waveform dump via wave.tcl
-  #   rtl_source_type:  hls               # Port extraction style (hls or generic)
-  #   checker_mode:     log_scan          # How PASS/FAIL is detected
-  #   coverage_intent:  functional
 '''
 
 
@@ -1146,20 +1201,16 @@ def _cmd_init_plugin(args: argparse.Namespace) -> int:
         dest_path.write_text(content)
         created.append(dest_path)
 
-    # Create stub XML dataset file so the contract loader doesn't fail immediately
-    stub_xml = schemas_dir / f"{plugin_id}_golden.xml"
-    if not stub_xml.exists():
+    # Real golden dataset (2 real events, matching gen_stimulus.py's
+    # _EVENTS) — not a stub requiring manual editing (release-plan Phase
+    # 6, §6.6: the RTL stub is byte-for-byte identical to
+    # passthrough_demo's real RTL, so passthrough_demo's real golden data
+    # is directly reusable here, parametrized by plugin_id).
+    golden_xml = schemas_dir / f"{plugin_id}_golden.xml"
+    if not golden_xml.exists():
         schemas_dir.mkdir(parents=True, exist_ok=True)
-        stub_xml.write_text(
-            f'<?xml version="1.0" encoding="UTF-8"?>\n'
-            f'<!-- {plugin_id} golden dataset — replace with real data -->\n'
-            f'<dataset plugin="{plugin_id}">\n'
-            f'  <event id="1">\n'
-            f'    <!-- TODO: add event data here -->\n'
-            f'  </event>\n'
-            f'</dataset>\n'
-        )
-        created.append(stub_xml)
+        golden_xml.write_text(_GOLDEN_XML_TEMPLATE.format(plugin_id=plugin_id))
+        created.append(golden_xml)
 
     print(f"[init-plugin] Plugin {plugin_id!r} scaffolded:")
     for p in created:
@@ -1167,11 +1218,10 @@ def _cmd_init_plugin(args: argparse.Namespace) -> int:
     for p in skipped:
         print(f"  skipped  {p}  (already exists)")
 
-    print(f"\nNext steps:")
-    print(f"  1. Edit {verify_root / 'design.verification.yml'}")
-    print(f"  2. Implement {tools_dir / 'gen_stimulus.py'}")
-    print(f"  3. Run: forge verify generate {verify_root / 'design.verification.yml'}")
-    print(f"  4. Run: forge verify doctor   {verify_root / 'design.verification.yml'}")
+    print(f"\nNext steps (no manual editing required):")
+    print(f"  1. Run: forge verify generate {verify_root / 'design.verification.yml'}")
+    print(f"  2. Run: forge verify doctor   {verify_root / 'design.verification.yml'}")
+    print(f"  3. Run: forge verify run      {verify_root / (plugin_id + '_xsim') / 'verify.flow.yml'} --plugin {plugin_id}")
     return 0
 
 
@@ -1195,7 +1245,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     Pass ``--json`` to receive machine-readable output (DiagnosticReport).
     Pass ``--strict`` to fail on warnings as well as errors.
     """
-    import shutil as _shutil
+    from forge.core.toolchain_versions import tool_present
     from forge.verify.diagnostics import DiagnosticReport, Severity
 
     design_path   = Path(args.design_file).resolve()
@@ -1283,8 +1333,12 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         )
 
     # ── 5. Simulator tool availability ─────────────────────────────────────
+    # Reuses forge.core.toolchain_versions.tool_present — the same shared
+    # presence check `forge doctor` (core/cli/groups/doctor.py) uses, so
+    # both doctor commands agree on tool availability for the same
+    # environment (release-plan Phase 6, §6.3).
     for tool in ("xvlog", "xelab", "xsim"):
-        if _shutil.which(tool):
+        if tool_present(tool):
             report.note("FWV000", f"Tool on PATH: {tool}")
         else:
             report.warn(
@@ -1502,25 +1556,18 @@ def _doctor_emit(
     strict: bool,
     json_mode: bool,
 ) -> int:
-    """Emit the doctor report and return an exit code."""
-    if json_mode:
-        print(report.to_json(strict=strict))
-        return 0 if (report.ok_strict if strict else report.ok) else 1
+    """Build a `CommandEnvelope` from *report* and emit it.
 
-    # Text mode — notes go to stdout, warnings/errors go to stderr
-    report.print_console()
-    print()
-    print(report.summary_line(strict=strict))
+    Fixes a latent bug: `DiagnosticReport.to_dict()` only ever emitted
+    `"pass"`/`"fail"`, even when warnings (no errors) were present —
+    `from_diagnostic_report` derives the real 3-way status instead. This
+    wraps `DiagnosticReport`, it does not replace it — `FWVxxxx` codes and
+    the class itself are unchanged (release-plan Phase 6, §6.0).
+    """
+    from forge.core.cli.envelope import emit, from_diagnostic_report
 
-    if strict and not report.ok_strict:
-        print(
-            f"\n[doctor --strict] {len(report.warnings)} warning(s) treated as "
-            "errors because --strict is set.",
-            file=sys.stderr,
-        )
-        return 1
-
-    return 0 if report.ok else 1
+    envelope = from_diagnostic_report(report, strict=strict)
+    return emit(envelope, json_mode=json_mode, strict=strict)
 
 
 # ── release-check command ──────────────────────────────────────────────────

@@ -19,7 +19,7 @@ from .model import (
     ResolvedVerificationPlan,
     SourceLocation,
 )
-from .build import assemble_project_ir, build_project_ir
+from .build import assemble_project_ir, build_project_ir, build_project_ir_with_match_report
 from .project import project_to_conn_map
 from .serialize import content_hash, diff_projects, to_json_dict, to_json_str
 from .provenance import (
@@ -29,6 +29,7 @@ from .provenance import (
     build_provenance,
     explain_staleness,
     read_provenance,
+    render_markdown as render_provenance_markdown,
     write_provenance,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "build_provenance",
     "explain_staleness",
     "read_provenance",
+    "render_provenance_markdown",
     "write_provenance",
     "assemble_project_ir",
     "project_to_conn_map",
@@ -60,6 +62,7 @@ __all__ = [
     "ResolvedVerificationPlan",
     "SourceLocation",
     "build_project_ir",
+    "build_project_ir_with_match_report",
     "content_hash",
     "diff_projects",
     "to_json_dict",

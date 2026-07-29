@@ -14,7 +14,6 @@ them.
 from __future__ import annotations
 
 import importlib.util
-import shutil
 import sys
 
 
@@ -27,6 +26,7 @@ def _check_status(ok: bool, *, required: bool = False) -> str:
 def _run_checks() -> dict:
     from forge import __version__ as forge_version
     from forge.core.cli.groups.core import resolve_framework_resources
+    from forge.core.toolchain_versions import tool_present
     from forge.verify.rtl_introspection import _pyverilog_available
 
     checks: dict[str, dict[str, object]] = {}
@@ -37,11 +37,15 @@ def _run_checks() -> dict:
         "detail": ".".join(str(v) for v in sys.version_info[:3]),
     }
 
+    # tool_present is the same shared presence check `forge verify doctor`
+    # (verify/__main__.py) uses for xvlog/xelab/xsim — so both doctor
+    # commands agree on tool availability for the same environment
+    # (release-plan Phase 6, §6.3).
     for tool in ("xvlog", "xelab", "xsim", "ghdl", "verilator"):
-        found = shutil.which(tool)
+        found = tool_present(tool)
         checks[f"tool:{tool}"] = {
-            "status": _check_status(found is not None),
-            "detail": found or "not on PATH",
+            "status": _check_status(found),
+            "detail": "on PATH" if found else "not on PATH",
         }
 
     checks["python:pyverilog"] = {
@@ -64,34 +68,67 @@ def _run_checks() -> dict:
     return checks
 
 
+def _checks_to_envelope(checks: dict):
+    """Reshape `_run_checks()`'s `{name: {status, detail}}` dict into a
+    `CommandEnvelope` via the same `from_diagnostic_report` bridge every
+    other envelope-adopting command uses (release-plan Phase 6, §6.3) —
+    not a third bespoke JSON shape. Every check here is currently an
+    optional extra (never `required=True`, see this module's docstring),
+    so a missing one is a WARNING, not an ERROR; the `status`/`required`
+    split stays in `_check_status` for forward compatibility if a future
+    check ever needs to be mandatory."""
+    from forge.core.cli.envelope import from_diagnostic_report
+    from forge.verify.diagnostics import DiagnosticReport
+
+    report = DiagnosticReport(label="forge doctor")
+    for name, c in checks.items():
+        message = f"{name}: {c['detail']}"
+        if c["status"] == "ok":
+            report.note("", message)
+        elif c["status"] == "missing (required)":
+            report.error("", message, action=f"Install/configure {name} (required)")
+        else:
+            report.warn("", message, action=f"Install/configure {name} if you need this feature")
+    return from_diagnostic_report(report, metrics={"checks": checks})
+
+
 def cmd_doctor(args):
     """Report the health of the local `forge` installation/environment."""
+    from forge.core.cli.envelope import emit
+
+    json_mode = getattr(args, "json", False)
+    strict = getattr(args, "strict", False)
     checks = _run_checks()
-    any_required_missing = any(c["status"] == "missing (required)" for c in checks.values())
+    envelope = _checks_to_envelope(checks)
 
-    if getattr(args, "json", False):
-        import json as _json
-        print(_json.dumps(
-            {"checks": checks, "ok": not any_required_missing}, indent=2,
-        ))
+    if json_mode:
+        sys.exit(emit(envelope, json_mode=True, strict=strict))
+
+    print("forge doctor — environment/toolchain health check\n")
+    icon = {"ok": "✅", "missing (optional)": "⚠️ ", "missing (required)": "❌"}
+    for name, c in checks.items():
+        print(f"  {icon[c['status']]} {name:28s} {c['status']:20s} {c['detail']}")
+    print()
+    if envelope.status == "fail":
+        print("❌ One or more required checks failed.")
     else:
-        print("forge doctor — environment/toolchain health check\n")
-        icon = {"ok": "✅", "missing (optional)": "⚠️ ", "missing (required)": "❌"}
-        for name, c in checks.items():
-            print(f"  {icon[c['status']]} {name:28s} {c['status']:20s} {c['detail']}")
-        print()
-        if any_required_missing:
-            print("❌ One or more required checks failed.")
-        else:
-            print("✅ No required checks failed. (Warnings above are optional extras.)")
+        print("✅ No required checks failed. (Warnings above are optional extras.)")
 
-    if getattr(args, "strict", False) and any_required_missing:
-        sys.exit(1)
-    sys.exit(0)
+    sys.exit(envelope.exit_code(strict=strict))
 
 
 def register(sub) -> None:
-    """Register the top-level ``forge doctor`` command."""
+    """Register the top-level ``forge doctor`` command.
+
+    Containment note (release-plan Phase 6, §6.6): this checks the
+    *installation* (toolchains on PATH, optional Python extras, framework
+    resource files) — plugin-agnostic. ``forge verify doctor`` checks one
+    plugin's flow artifacts against a specific ``design.verification.yml``
+    and is authoritative for that. ``forge verify preflight`` is a real
+    subset of ``forge verify doctor``'s checks kept as a separate command
+    (not merged) — see ``docs/development/release-readiness.md``'s Phase 6
+    closure notes for the full containment table.
+    """
     p_doctor = sub.add_parser(
         "doctor",
         help="Check the local forge install/environment (toolchains, optional deps)",
@@ -102,6 +139,7 @@ def register(sub) -> None:
     )
     p_doctor.add_argument(
         "--strict", action="store_true", default=False,
-        help="Exit 1 if any required check fails (currently all checks are optional extras).",
+        help="Exit 1 if any check is missing, including optional extras "
+             "(see docs/development/cli_exit_codes.md).",
     )
     p_doctor.set_defaults(func=cmd_doctor)

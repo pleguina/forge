@@ -88,6 +88,29 @@ class TestHlsReport:
         assert result.returncode == 1
         assert "No HLS modules found" in result.stderr
 
+    def test_json_mode_reports_envelope_with_warn_status(
+        self, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        """Release-plan Phase 6 §6.7: `--json` wraps the result in the
+        shared CommandEnvelope — a module with no csynth.xml is a real,
+        non-fatal finding, so `status` is `"warn"`, not `"pass"`."""
+        import json
+
+        (tmp_path / "build_hls/hit_decoder").mkdir(parents=True)
+
+        result = _run_analyze(
+            capsys, "hls-report",
+            "--hls-build-root", str(tmp_path / "build_hls"),
+            "--output", str(tmp_path / "reports"), "--json",
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["schema_version"]
+        assert payload["status"] == "warn"
+        assert payload["metrics"] == {"modules_total": 1, "modules_ok": 0, "modules_error": 1}
+        assert len(payload["artifacts"]) == 3
+
 
 class TestLatencyCheck:
     def test_no_mismatches_on_real_design(
@@ -113,6 +136,23 @@ class TestLatencyCheck:
         assert result.returncode == 1
         assert "ERROR building latency graph" in result.stderr
 
+    def test_json_mode_reports_pass_status_with_zero_mismatches(
+        self, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        import json
+
+        result = _run_analyze(
+            capsys, "latency-check", str(PASSTHROUGH_DESIGN_YML),
+            "--output", str(tmp_path / "latency_check.md"), "--json",
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "pass"
+        assert payload["diagnostics"] == []
+        assert payload["artifacts"] == [str(tmp_path / "latency_check.md")]
+        assert payload["metrics"]["mismatches"] == 0
+
 
 class TestRuntimeLatency:
     def test_reports_observed_latency_from_probe_csv(
@@ -133,6 +173,51 @@ class TestRuntimeLatency:
         assert result.returncode == 0
         assert "obs=   5" in result.stdout
         assert (tmp_path / "runtime_latency.md").exists()
+
+    def test_reports_observed_latency_from_wide_probe_csv(
+        self, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        """--probe-format wide (release-plan §4.5, Phase 4 slice 5) —
+        the format forge.verify.gen_sim's real Tier-2 probe emission
+        actually produces (previously unusable by this CLI command at
+        all — the broken producer/consumer pipe this slice fixes)."""
+        probe_csv = tmp_path / "algo_top_probe.csv"
+        probe_csv.write_text(
+            "cycle,data_in_valid,data_out_valid\n"
+            "10,1,0\n"
+            "15,1,1\n"
+        )
+
+        result = _run_analyze(
+            capsys, "runtime-latency",
+            "--probe-csv", str(probe_csv),
+            "--probe-format", "wide",
+            "--probe-pairs", "pt:data_in_valid:data_out_valid",
+            "--output", str(tmp_path / "runtime_latency.md"),
+        )
+
+        assert result.returncode == 0
+        assert "obs=   5" in result.stdout
+
+    def test_default_probe_format_is_long(
+        self, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        """Omitting --probe-format must behave identically to before this
+        slice — exact backward compatibility."""
+        probe_csv = tmp_path / "probe.csv"
+        probe_csv.write_text(
+            "cycle,signal,value\n10,data_in_valid,1\n15,data_out_valid,1\n"
+        )
+
+        result = _run_analyze(
+            capsys, "runtime-latency",
+            "--probe-csv", str(probe_csv),
+            "--probe-pairs", "pt:data_in_valid:data_out_valid",
+            "--output", str(tmp_path / "runtime_latency.md"),
+        )
+
+        assert result.returncode == 0
+        assert "obs=   5" in result.stdout
 
     def test_missing_probe_csv_is_guided(
         self, capsys: pytest.CaptureFixture[str], tmp_path: Path
@@ -180,6 +265,28 @@ class TestDashboard:
         assert result.returncode == 0
         assert (tmp_path / "dashboard/dashboard.html").exists()
         assert (tmp_path / "dashboard/summary.md").exists()
+
+    def test_json_mode_reports_envelope(
+        self, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        import json
+
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+
+        result = _run_analyze(
+            capsys, "dashboard",
+            "--input", str(reports_dir),
+            "--output", str(tmp_path / "dashboard"), "--json",
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "pass"
+        assert payload["artifacts"] == [
+            str(tmp_path / "dashboard/dashboard.html"),
+            str(tmp_path / "dashboard/summary.md"),
+        ]
 
 
 @skip_without_matplotlib

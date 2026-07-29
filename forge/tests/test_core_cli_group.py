@@ -98,17 +98,22 @@ def test_resources_default_text_format(capsys: pytest.CaptureFixture[str]) -> No
 
 
 def test_resources_json_format(capsys: pytest.CaptureFixture[str]) -> None:
+    """Release-plan Phase 6 §6.7: `--format json` (a pre-existing flag,
+    kept as a deprecated alias) and the new `--json` both now produce the
+    shared CommandEnvelope shape."""
     result = _run_core(capsys, "resources", "--format", "json")
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert set(payload) == {
+    assert payload["schema_version"]
+    resources = payload["metrics"]["resources"]
+    assert set(resources) == {
         "hls_templates", "canonical_roles", "normalized_signal_families", "docs_root",
     }
     # hls_templates and canonical_roles are real installed package resources,
     # always present regardless of cwd.
-    assert payload["hls_templates"]["exists"] is True
-    assert payload["canonical_roles"]["exists"] is True
+    assert resources["hls_templates"]["exists"] is True
+    assert resources["canonical_roles"]["exists"] is True
 
 
 def test_resources_key_prints_a_real_path(capsys: pytest.CaptureFixture[str]) -> None:
@@ -119,9 +124,13 @@ def test_resources_key_prints_a_real_path(capsys: pytest.CaptureFixture[str]) ->
 
 
 def test_resources_unknown_key_errors(capsys: pytest.CaptureFixture[str]) -> None:
+    """Release-plan Phase 6 §6.7: an unknown `--key` is a usage error, so
+    it now maps to exit code 2 (the sole remaining meaning of 2 under the
+    reconciled exit-code policy) — previously 1, conflated with a real
+    validation failure."""
     result = _run_core(capsys, "resources", "--key", "does-not-exist")
 
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert "unknown resource key" in result.stderr
 
 
@@ -216,7 +225,11 @@ def test_verify_contract_reports_ip_info_key_mismatch(
         "--ip-info", str(ip_info), "--contract", str(PASSTHROUGH_CONTRACT),
     )
 
-    assert result.returncode == 2
+    # Release-plan Phase 6 §6.7: a real contract-verification failure is
+    # status "fail" -> exit 1, not 2 — exit code 2 is now reserved solely
+    # for usage errors/unexpected exceptions (previously conflated: this
+    # case used VerifyResult.exit_code()'s own errors-> 2 convention).
+    assert result.returncode == 1
     assert "ip_info_key 'pt' not found" in result.stdout
 
 

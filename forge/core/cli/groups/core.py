@@ -67,94 +67,158 @@ def resolve_framework_resources() -> "dict[str, dict[str, object]]":
 
 def cmd_resources(args):
     """Print installed framework resource paths."""
-    import json as _json
+    from forge.core.cli.envelope import CommandEnvelope, emit
 
+    json_mode = getattr(args, "json", False) or getattr(args, "format", None) == "json"
     resources = resolve_framework_resources()
 
     if getattr(args, "key", None):
         value = resources.get(args.key)
         if value is None:
+            envelope = CommandEnvelope(
+                status="error",
+                diagnostics=[{
+                    "severity": "error",
+                    "message": f"unknown resource key '{args.key}'. Available keys: {', '.join(resources)}",
+                }],
+            )
+            if json_mode:
+                sys.exit(emit(envelope, json_mode=True))
             print(
                 f"ERROR: unknown resource key '{args.key}'. "
                 f"Available keys: {', '.join(resources)}",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            sys.exit(envelope.exit_code())
+        if json_mode:
+            envelope = CommandEnvelope(status="pass", metrics={"resources": {args.key: value}})
+            sys.exit(emit(envelope, json_mode=True))
         print(value["path"])
         return
 
-    if getattr(args, "format", None) == "json":
-        print(_json.dumps(resources, indent=2))
-    else:
-        for k, v in resources.items():
-            marker = "" if v["exists"] else "  (missing)"
-            print(f"{k}={v['path']}{marker}")
+    missing = [k for k, v in resources.items() if not v["exists"]]
+    status = "warn" if missing else "pass"
+    envelope = CommandEnvelope(
+        status=status,
+        diagnostics=[
+            {"severity": "warning", "message": f"resource {k!r} not found"} for k in missing
+        ],
+        metrics={"resources": resources},
+    )
+
+    if json_mode:
+        # --format json is this command's original (pre-envelope) JSON
+        # flag; --json (added alongside the sweep, release-plan Phase 6
+        # §6.7) is the standard envelope flag. Both now produce the same
+        # envelope shape.
+        sys.exit(emit(envelope, json_mode=True))
+    for k, v in resources.items():
+        marker = "" if v["exists"] else "  (missing)"
+        print(f"{k}={v['path']}{marker}")
+    sys.exit(envelope.exit_code())
 
 
 def cmd_verify_contract(args):
     """Verify one or more ip_interface.yaml contracts against ip_info.yaml."""
+    from forge.core.cli.envelope import CommandEnvelope, emit
+
+    json_mode = getattr(args, "json", False)
+
+    def _usage_error(msg: str) -> None:
+        envelope = CommandEnvelope(status="error", diagnostics=[{"severity": "error", "message": msg}])
+        if json_mode:
+            sys.exit(emit(envelope, json_mode=True))
+        print(f"❌ {msg}", file=sys.stderr)
+        sys.exit(envelope.exit_code())
+
     try:
-        from forge.topgen.ip.contract_verifier import (
-            ContractVerifier,
-            verify_all,
-        )
+        from forge.topgen.ip.contract_verifier import ContractVerifier, verify_all
     except ImportError as exc:
-        print(f"❌ Cannot import contract verifier: {exc}", file=sys.stderr)
-        sys.exit(2)
+        _usage_error(f"Cannot import contract verifier: {exc}")
+        return
 
     ip_info_path = Path(args.ip_info)
     if not ip_info_path.exists():
-        print(f"❌ ip_info file not found: {ip_info_path}", file=sys.stderr)
-        sys.exit(2)
+        _usage_error(f"ip_info file not found: {ip_info_path}")
 
     verbose = getattr(args, "verbose", False)
+
+    def _issue_to_diagnostic(issue, *, contract_path: Path, module_name: str) -> dict:
+        return {
+            "severity": issue.severity, "message": issue.message, "code": None,
+            "category": issue.role, "path": str(contract_path), "module": module_name,
+        }
 
     try:
         # ── Single-contract mode ──────────────────────────────────────────
         if args.contract:
             contract_path = Path(args.contract)
             if not contract_path.exists():
-                print(f"❌ Contract file not found: {contract_path}", file=sys.stderr)
-                sys.exit(2)
+                _usage_error(f"Contract file not found: {contract_path}")
             verifier = ContractVerifier(ip_info_path, contract_path)
             result = verifier.verify()
-            result.print_report(verbose=verbose)
-            sys.exit(result.exit_code())
+            if not json_mode:
+                result.print_report(verbose=verbose)
+
+            diagnostics = [
+                _issue_to_diagnostic(i, contract_path=result.contract_path, module_name=result.module_name)
+                for i in result.issues
+            ]
+            status = "fail" if result.errors else ("warn" if result.warnings else "pass")
+            envelope = CommandEnvelope(status=status, diagnostics=diagnostics)
+            sys.exit(emit(envelope, json_mode=json_mode))
 
         # ── All-contracts mode ────────────────────────────────────────────
         search_dirs = [Path(d) for d in (args.all_contracts or [])]
         if not search_dirs:
-            print(
-                "❌ Provide --contract <file> or --all-contracts <dir> [<dir> …]",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+            _usage_error("Provide --contract <file> or --all-contracts <dir> [<dir> ...]")
 
-        results = verify_all(ip_info_path, search_dirs, verbose=verbose)
+        if json_mode:
+            import contextlib
+            import io
+            with contextlib.redirect_stdout(io.StringIO()):
+                results = verify_all(ip_info_path, search_dirs, verbose=verbose)
+        else:
+            results = verify_all(ip_info_path, search_dirs, verbose=verbose)
+
         if not results:
-            print("❌ No contracts found in the specified directories.", file=sys.stderr)
-            sys.exit(1)
+            envelope = CommandEnvelope(
+                status="fail",
+                diagnostics=[{
+                    "severity": "error",
+                    "message": f"No contracts found under: {[str(d) for d in search_dirs]}",
+                }],
+            )
+            sys.exit(emit(envelope, json_mode=json_mode))
 
+        diagnostics = [
+            _issue_to_diagnostic(i, contract_path=r.contract_path, module_name=r.module_name)
+            for r in results for i in r.issues
+        ]
         n_pass = sum(1 for r in results if r.passed)
         n_warn = sum(1 for r in results if r.passed and r.warnings)
         n_fail = sum(1 for r in results if not r.passed)
+        status = "fail" if n_fail else ("warn" if n_warn else "pass")
 
-        print()
-        print(
-            f"Summary: {len(results)} contracts checked — "
-            f"{n_pass} pass ({n_warn} with warnings), {n_fail} fail"
+        if not json_mode:
+            print()
+            print(
+                f"Summary: {len(results)} contracts checked — "
+                f"{n_pass} pass ({n_warn} with warnings), {n_fail} fail"
+            )
+
+        envelope = CommandEnvelope(
+            status=status, diagnostics=diagnostics,
+            metrics={"contracts_checked": len(results), "pass": n_pass, "warn": n_warn, "fail": n_fail},
         )
-
-        if n_fail:
-            sys.exit(2)
-        elif n_warn:
-            sys.exit(1)
-        else:
-            sys.exit(0)
+        sys.exit(emit(envelope, json_mode=json_mode))
 
     except SystemExit:
         raise
     except Exception as exc:
+        envelope = CommandEnvelope(status="error", diagnostics=[{"severity": "error", "message": str(exc)}])
+        if json_mode:
+            sys.exit(emit(envelope, json_mode=True))
         print(f"❌ Contract verification failed: {exc}", file=sys.stderr)
         from forge.core.cli._shared import debug_enabled
         import traceback as _tb
@@ -162,7 +226,7 @@ def cmd_verify_contract(args):
             _tb.print_exc(file=sys.stderr)
         else:
             print("   Re-run with --debug for traceback details.", file=sys.stderr)
-        sys.exit(2)
+        sys.exit(envelope.exit_code())
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +247,10 @@ def register(sub) -> None:
     p_resources.add_argument("--key", help="Print only the value for a specific resource key")
     p_resources.add_argument(
         "--format", choices=["text", "json"], default="text",
-        help="Output format (default: text)",
+        help="Output format (default: text) — deprecated alias for --json",
+    )
+    p_resources.add_argument(
+        "--json", action="store_true", default=False, help="Machine-readable JSON output",
     )
     p_resources.set_defaults(func=cmd_resources)
 
@@ -207,5 +274,8 @@ def register(sub) -> None:
     p_vc.add_argument(
         "--verbose", "-v", action="store_true", default=False,
         help="Print details even for passing contracts",
+    )
+    p_vc.add_argument(
+        "--json", action="store_true", default=False, help="Machine-readable JSON output",
     )
     p_vc.set_defaults(func=cmd_verify_contract)

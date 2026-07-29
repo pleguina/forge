@@ -60,6 +60,61 @@ def _validator_payload(validator) -> dict:
     }
 
 
+def _validation_error_to_diagnostic(err, *, category_prefix: str) -> dict:
+    """Reshape one `ValidationError` (topgen/validation.py) into the
+    shared envelope's diagnostic-dict shape (release-plan Phase 6, §6.7)
+    — `code=None` (ValidationError has no stable code table, honest
+    absence), `action` from `suggestion`, `object_id` from `location`."""
+    d: dict = {
+        "severity": err.severity, "message": err.message, "code": None,
+        "category": f"{category_prefix}:{err.category}",
+    }
+    if err.location:
+        d["object_id"] = err.location
+    if err.suggestion:
+        d["action"] = err.suggestion
+    return d
+
+
+def _validators_to_envelope(*validators_with_prefix, metrics: Optional[dict] = None):
+    """Build a `CommandEnvelope` from one or more (validator, category_prefix)
+    pairs — shared by `cmd_validate` (design + optional registry) and
+    `cmd_validate_registry` (registry alone). `status` is the honest 3-way
+    pass/warn/fail derived from real severities; `--strict`'s warn->fail
+    exit-code promotion is applied by the caller via
+    `CommandEnvelope.exit_code(strict=...)`/`emit(..., strict=...)` — same
+    "status string never changes, only the exit code does" contract every
+    other envelope-adopting command follows (release-plan Phase 6, §6.0)."""
+    from forge.core.cli.envelope import CommandEnvelope
+
+    diagnostics: List[dict] = []
+    for validator, prefix in validators_with_prefix:
+        for err in validator.errors:
+            diagnostics.append(_validation_error_to_diagnostic(err, category_prefix=prefix))
+        for err in validator.warnings:
+            diagnostics.append(_validation_error_to_diagnostic(err, category_prefix=prefix))
+        for err in validator.infos:
+            diagnostics.append(_validation_error_to_diagnostic(err, category_prefix=prefix))
+
+    has_error = any(d["severity"] == "error" for d in diagnostics)
+    has_warning = any(d["severity"] == "warning" for d in diagnostics)
+    status = "fail" if has_error else ("warn" if has_warning else "pass")
+
+    next_actions: List[str] = []
+    seen = set()
+    for d in diagnostics:
+        if d["severity"] not in ("warning", "error") or "action" not in d:
+            continue
+        if d["action"] not in seen:
+            seen.add(d["action"])
+            next_actions.append(d["action"])
+
+    return CommandEnvelope(
+        status=status, diagnostics=diagnostics, metrics=dict(metrics or {}),
+        next_actions=next_actions,
+    )
+
+
 def _filter_unaccounted(port_list, patterns):
     """Return entries from *port_list* not matched by any fnmatch *pattern*.
 
@@ -74,6 +129,93 @@ def _filter_unaccounted(port_list, patterns):
         if not any(fnmatch(key, pat) for pat in patterns):
             unaccounted.append((inst, port, width))
     return unaccounted
+
+
+def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) -> dict:
+    """Module/connection/port maturity summary — factored out of
+    ``cmd_gen_top``'s inline ``maturity`` dict (release-plan Phase 6, §6.1)
+    so ``forge inspect`` can share it without running the generator.
+
+    ``report`` is the generator's own open/tied-port accounting
+    (``cmd_gen_top`` always has it). ``forge inspect`` never runs the
+    generator, so it always passes ``report=None`` — the port-accounting
+    fields and ``strict_pass`` then stay honestly absent (``None``) rather
+    than fabricated, since they cannot be known without the generator's
+    own port report. Module/connection/wiring-method counts are knowable
+    from *cfg*/*match_report* alone and always populate.
+    """
+    summary: dict = {
+        "modules": {
+            "total": len(cfg.modules),
+            "contract_driven": len(match_report.contract_driven_modules),
+            "compat_mode": len(match_report.compat_mode_modules),
+        },
+        "connections": dict(match_report.wiring_method_counts),
+    }
+
+    if report is None:
+        summary["ports"] = None
+        summary["strict_pass"] = None
+        return summary
+
+    open_outputs = report.get("open_outputs", [])
+    tied_inputs = report.get("tied_to_zero", [])
+    unaccounted_open = _filter_unaccounted(open_outputs, cfg.allowed_unconnected.open_outputs)
+    unaccounted_tied = _filter_unaccounted(tied_inputs, cfg.allowed_unconnected.tied_inputs)
+
+    summary["ports"] = {
+        "open_outputs": len(open_outputs),
+        "tied_inputs": len(tied_inputs),
+        "open_accounted": len(open_outputs) - len(unaccounted_open),
+        "tied_accounted": len(tied_inputs) - len(unaccounted_tied),
+    }
+    summary["strict_pass"] = (
+        not match_report.has_compat_modules()
+        and match_report.wiring_method_counts.get("auto_match", 0) == 0
+        and len(unaccounted_open) == 0
+        and len(unaccounted_tied) == 0
+    )
+    return summary
+
+
+def render_maturity_markdown(maturity: dict) -> str:
+    """Render a `_compute_maturity_summary` dict as Markdown — pure
+    presentation over an already-computed summary, no new maturity logic
+    (release-plan Phase 6, §6.5: `forge report`'s maturity/compatibility
+    report section, shared with `forge inspect` rather than duplicated)."""
+    modules = maturity["modules"]
+    lines = [
+        "# Contract maturity",
+        "",
+        f"- **modules**: {modules['total']} total, "
+        f"{modules['contract_driven']} contract-driven, "
+        f"{modules['compat_mode']} compat-mode",
+    ]
+    connections = maturity.get("connections") or {}
+    if connections:
+        conn_str = ", ".join(f"{k}={v}" for k, v in connections.items())
+        lines.append(f"- **connections**: {conn_str}")
+
+    ports = maturity.get("ports")
+    if ports is None:
+        lines.append(
+            "- **ports**: not available (no generator run — see `forge build --apply`"
+            " or `topgen gen-top`)"
+        )
+    else:
+        lines.append(
+            f"- **ports**: {ports['open_outputs']} open output(s) "
+            f"({ports['open_accounted']} accounted), "
+            f"{ports['tied_inputs']} tied input(s) ({ports['tied_accounted']} accounted)"
+        )
+
+    strict_pass = maturity.get("strict_pass")
+    if strict_pass is None:
+        lines.append("- **strict mode**: unknown (no generator run)")
+    else:
+        lines.append(f"- **strict mode**: {'PASS' if strict_pass else 'FAIL'}")
+
+    return "\n".join(lines) + "\n"
 
 
 def validate_generated_contracts(
@@ -969,37 +1111,34 @@ def cmd_lint_verilog(args):
 
 def cmd_validate(args):
     """Validate design.yml without generating output."""
-    json_mode = getattr(args, "json", False)
-    payload: dict = {"passed": False, "registry": None, "design": None, "stale": None}
+    from forge.core.cli.envelope import CommandEnvelope, emit
 
-    def _emit(code: int, *, error: str | None = None) -> None:
-        if json_mode:
-            payload["passed"] = code == 0
-            if error is not None:
-                payload["error"] = error
-            print(json.dumps(payload, indent=2))
-        sys.exit(code)
+    json_mode = getattr(args, "json", False)
+    strict = getattr(args, "strict", False)
+
+    def _fail_early(msg: str) -> None:
+        envelope = CommandEnvelope(status="fail", diagnostics=[{"severity": "error", "message": msg}])
+        if not json_mode:
+            print(f"❌ {msg}")
+            sys.exit(envelope.exit_code())
+        sys.exit(emit(envelope, json_mode=True))
 
     try:
         design_path = Path(args.design).expanduser().resolve()
 
         if not design_path.exists():
-            msg = f"Design file not found: {design_path}"
-            if not json_mode:
-                print(f"❌ {msg}")
-            _emit(1, error=msg)
+            _fail_early(f"Design file not found: {design_path}")
 
         import yaml as _yaml
 
         _raw_design = _yaml.safe_load(design_path.read_text()) or {}
         _registry_ref = _raw_design.get("registry")
+        validators: List[Any] = []
+
         if _registry_ref:
             registry_path = (design_path.parent / _registry_ref).resolve()
             if not registry_path.exists():
-                msg = f"Registry file not found: {registry_path}"
-                if not json_mode:
-                    print(f"❌ {msg}")
-                _emit(1, error=msg)
+                _fail_early(f"Registry file not found: {registry_path}")
 
             if not json_mode:
                 print(f"📖 Loading registry: {registry_path}")
@@ -1007,22 +1146,22 @@ def cmd_validate(args):
             reg_validator = validate_registry(registry_path)
             if not json_mode:
                 reg_validator.print_report()
-            payload["registry"] = _validator_payload(reg_validator)
+            validators.append((reg_validator, "registry"))
 
-            if reg_validator.has_errors():
+            if reg_validator.has_errors() or (strict and reg_validator.warnings):
                 if not json_mode:
-                    print(
-                        f"\n⛔ Registry has {len(reg_validator.errors)} error(s). "
-                        "Fix them before validating design."
-                    )
-                _emit(1)
-            if args.strict and reg_validator.warnings:
-                if not json_mode:
-                    print(
-                        f"\n⛔ Strict mode: treating {len(reg_validator.warnings)} "
-                        "registry warning(s) as errors"
-                    )
-                _emit(1)
+                    if reg_validator.has_errors():
+                        print(
+                            f"\n⛔ Registry has {len(reg_validator.errors)} error(s). "
+                            "Fix them before validating design."
+                        )
+                    else:
+                        print(
+                            f"\n⛔ Strict mode: treating {len(reg_validator.warnings)} "
+                            "registry warning(s) as errors"
+                        )
+                envelope = _validators_to_envelope(*validators)
+                sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
             if not json_mode:
                 print()
 
@@ -1035,85 +1174,99 @@ def cmd_validate(args):
         validator = validate_design(cfg, design_path)
         if not json_mode:
             validator.print_report()
-        payload["design"] = _validator_payload(validator)
+        validators.append((validator, "design"))
 
-        if validator.has_errors():
-            _emit(1)
-        elif args.strict and len(validator.warnings) > 0:
-            if not json_mode:
+        if validator.has_errors() or (strict and validator.warnings):
+            if not json_mode and not validator.has_errors():
                 print(f"\n⛔ Strict mode: Treating {len(validator.warnings)} warnings as errors")
-            _emit(1)
-        else:
-            if getattr(args, "check_stale", False):
-                if not json_mode:
-                    print()
-                    print("🕒 Checking for stale generated artifacts…")
-                stale_diag = ATGDiagnosticReport("stale-check")
-                output_dir = design_path.parent
-                stale_report = check_top_gen_staleness(output_dir, design_yml=design_path)
-                ip_info_candidates = (
-                    output_dir / "ip_info.yaml",
-                    output_dir.parent / "ip_info.yaml",
-                )
-                for _iic in ip_info_candidates:
-                    if _iic.exists():
-                        ip_stale = check_ip_info_staleness(_iic, design_yml=design_path)
-                        stale_report.stale.extend(ip_stale.stale)
-                        stale_report.missing.extend(ip_stale.missing)
-                        break
+            envelope = _validators_to_envelope(*validators)
+            sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
 
-                stale_lines = format_stale_report(stale_report)
-                payload["stale"] = {
-                    "count": len(stale_report.stale),
-                    "artifacts": stale_lines,
-                }
-                if stale_lines:
-                    if not json_mode:
-                        for line in stale_lines:
-                            print(f"  ⚠️  {line}")
-                        stale_diag.warn(
-                            "ATG007",
-                            f"{len(stale_report.stale)} stale artifact(s) detected",
-                            action="Re-run forge gen-top to rebuild",
-                            path=output_dir,
-                        )
-                        stale_diag.print_console(file=sys.stdout)
-                    if args.strict:
-                        if not json_mode:
-                            print("\n⛔ Strict mode: stale artifacts treated as errors")
-                        _emit(1)
-                elif not json_mode:
-                    print("  ✅ All generated artifacts are up to date")
-
+        metrics: Dict[str, Any] = {}
+        stale_diagnostic: Optional[dict] = None
+        if getattr(args, "check_stale", False):
             if not json_mode:
-                print("\n✅ Design is valid and ready for generation!")
-            _emit(0)
+                print()
+                print("🕒 Checking for stale generated artifacts…")
+            output_dir = design_path.parent
+            stale_report = check_top_gen_staleness(output_dir, design_yml=design_path)
+            ip_info_candidates = (
+                output_dir / "ip_info.yaml",
+                output_dir.parent / "ip_info.yaml",
+            )
+            for _iic in ip_info_candidates:
+                if _iic.exists():
+                    ip_stale = check_ip_info_staleness(_iic, design_yml=design_path)
+                    stale_report.stale.extend(ip_stale.stale)
+                    stale_report.missing.extend(ip_stale.missing)
+                    break
+
+            stale_lines = format_stale_report(stale_report)
+            metrics["stale"] = {"count": len(stale_report.stale), "artifacts": stale_lines}
+            if stale_lines:
+                if not json_mode:
+                    for line in stale_lines:
+                        print(f"  ⚠️  {line}")
+                stale_diagnostic = {
+                    "severity": "warning", "code": "ATG007", "category": "stale",
+                    "message": f"{len(stale_report.stale)} stale artifact(s) detected",
+                    "action": "Re-run forge gen-top to rebuild",
+                    "path": str(output_dir),
+                }
+                if strict:
+                    if not json_mode:
+                        print("\n⛔ Strict mode: stale artifacts treated as errors")
+                    envelope = _validators_to_envelope(*validators, metrics=metrics)
+                    envelope.diagnostics.append(stale_diagnostic)
+                    envelope.next_actions.append(stale_diagnostic["action"])
+                    sys.exit(emit(envelope, json_mode=json_mode, strict=True))
+            elif not json_mode:
+                print("  ✅ All generated artifacts are up to date")
+
+        if not json_mode:
+            print("\n✅ Design is valid and ready for generation!")
+        envelope = _validators_to_envelope(*validators, metrics=metrics)
+        if stale_diagnostic is not None:
+            envelope.diagnostics.append(stale_diagnostic)
+            envelope.next_actions.append(stale_diagnostic["action"])
+            if envelope.status == "pass":
+                envelope.status = "warn"
+        sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
 
     except SystemExit:
         raise
     except Exception as e:
+        envelope = CommandEnvelope(status="error", diagnostics=[{"severity": "error", "message": str(e)}])
         if json_mode:
-            print(json.dumps({"passed": False, "error": str(e)}, indent=2))
-            sys.exit(1)
+            sys.exit(emit(envelope, json_mode=True))
         print_cli_error(
             "Validation failed",
             e,
             hint="Fix the reported design or contract issue, then re-run forge validate.",
         )
-        sys.exit(1)
+        sys.exit(envelope.exit_code())
 
 
 def cmd_validate_registry(args):
     """Validate a modules.yml registry file independently."""
+    from forge.core.cli.envelope import CommandEnvelope, emit
+
     json_mode = getattr(args, "json", False)
+    strict = getattr(args, "strict", False)
     try:
         registry_path = Path(args.registry).expanduser().resolve()
         if not registry_path.exists():
-            if json_mode:
-                print(json.dumps({"passed": False, "error": f"Registry file not found: {registry_path}"}, indent=2))
-            else:
+            envelope = CommandEnvelope(
+                status="fail",
+                diagnostics=[{
+                    "severity": "error",
+                    "message": f"Registry file not found: {registry_path}",
+                }],
+            )
+            if not json_mode:
                 print(f"❌ Registry file not found: {registry_path}")
-            sys.exit(1)
+                sys.exit(envelope.exit_code())
+            sys.exit(emit(envelope, json_mode=True))
 
         if not json_mode:
             print(f"📖 Loading registry: {registry_path}")
@@ -1122,32 +1275,30 @@ def cmd_validate_registry(args):
         if not json_mode:
             validator.print_report()
 
-        strict_fail = args.strict and bool(validator.warnings)
-        exit_code = 1 if (validator.has_errors() or strict_fail) else 0
+        envelope = _validators_to_envelope((validator, "registry"))
 
         if json_mode:
-            payload = _validator_payload(validator)
-            payload["passed"] = exit_code == 0
-            print(json.dumps(payload, indent=2))
-        elif strict_fail and not validator.has_errors():
+            sys.exit(emit(envelope, json_mode=True, strict=strict))
+        if strict and envelope.status == "warn":
             print(
                 f"\n⛔ Strict mode: treating {len(validator.warnings)} warning(s) as errors"
             )
-
-        sys.exit(exit_code)
+        sys.exit(envelope.exit_code(strict=strict))
 
     except SystemExit:
         raise
     except Exception as e:
+        envelope = CommandEnvelope(
+            status="error", diagnostics=[{"severity": "error", "message": str(e)}],
+        )
         if json_mode:
-            print(json.dumps({"passed": False, "error": str(e)}, indent=2))
-            sys.exit(1)
+            sys.exit(emit(envelope, json_mode=True))
         print_cli_error(
             "Registry validation failed",
             e,
             hint="Fix the modules.yml registry issue, then re-run forge validate-registry.",
         )
-        sys.exit(1)
+        sys.exit(envelope.exit_code())
 
 
 @dataclass
@@ -1497,8 +1648,10 @@ def cmd_gen_top(args):
                     print(f"  {_preview_output.parent / _artifact}")
                 # design.ir.json (canonical IR snapshot) is emitted for both
                 # verilog and vhdl modes — see migration step 5 in
-                # docs/development/release-readiness.md.
+                # docs/development/release-readiness.md. provenance.json
+                # (release-plan Phase 5 slice 5.1) is written as its sibling.
                 print(f"  {_preview_output.parent / 'design.ir.json'}")
+                print(f"  {_preview_output.parent / 'provenance.json'}")
                 _should_gen_tb = args.mode == "verilog" and (
                     args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
                 )
@@ -1507,8 +1660,10 @@ def cmd_gen_top(args):
             elif args.mode == "bd":
                 # design.ir.json (canonical IR snapshot) is also emitted for
                 # --mode bd — see migration step 5 in
-                # docs/development/release-readiness.md.
+                # docs/development/release-readiness.md. provenance.json
+                # (release-plan Phase 5 slice 5.1) is written as its sibling.
                 print(f"  {_preview_output.parent / 'design.ir.json'}")
+                print(f"  {_preview_output.parent / 'provenance.json'}")
 
             assert not _ip_info_generated_now, (
                 "dry-run must never persist ip_info.yaml to disk"
@@ -1570,6 +1725,7 @@ def cmd_gen_top(args):
             ir_output = output.parent / "design.ir.json"
             ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
             print(f"  ✓ Canonical IR snapshot: {ir_output}")
+            _write_gen_top_provenance(project, ctx, args, ir_output)
 
         elif args.mode == "verilog":
             output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
@@ -1710,47 +1866,8 @@ def cmd_gen_top(args):
                     )
 
             maturity_output = output.parent / "maturity_report.json"
-            maturity = {
-                "modules": {
-                    "total": len(cfg.modules),
-                    "contract_driven": len(match_report.contract_driven_modules),
-                    "compat_mode": len(match_report.compat_mode_modules),
-                },
-                "connections": dict(match_report.wiring_method_counts),
-                "ports": {
-                    "open_outputs": len(report.get("open_outputs", [])),
-                    "tied_inputs": len(report.get("tied_to_zero", [])),
-                    "open_accounted": len(report.get("open_outputs", [])) - len(
-                        _filter_unaccounted(
-                            report.get("open_outputs", []),
-                            cfg.allowed_unconnected.open_outputs,
-                        )
-                    ),
-                    "tied_accounted": len(report.get("tied_to_zero", [])) - len(
-                        _filter_unaccounted(
-                            report.get("tied_to_zero", []),
-                            cfg.allowed_unconnected.tied_inputs,
-                        )
-                    ),
-                },
-                "strict_pass": (
-                    not match_report.has_compat_modules()
-                    and match_report.wiring_method_counts.get("auto_match", 0) == 0
-                    and len(
-                        _filter_unaccounted(
-                            report.get("open_outputs", []),
-                            cfg.allowed_unconnected.open_outputs,
-                        )
-                    ) == 0
-                    and len(
-                        _filter_unaccounted(
-                            report.get("tied_to_zero", []),
-                            cfg.allowed_unconnected.tied_inputs,
-                        )
-                    ) == 0
-                ),
-                "port_signature_hash": port_sig_hash if port_map_data else None,
-            }
+            maturity = _compute_maturity_summary(cfg, match_report, report)
+            maturity["port_signature_hash"] = port_sig_hash if port_map_data else None
             maturity_output.write_text(json.dumps(maturity, indent=2) + "\n")
             print(f"  ✓ Maturity report: {maturity_output}")
 
@@ -1760,6 +1877,7 @@ def cmd_gen_top(args):
             ir_output = output.parent / "design.ir.json"
             ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
             print(f"  ✓ Canonical IR snapshot: {ir_output}")
+            _write_gen_top_provenance(project, ctx, args, ir_output)
 
             should_gen_tb = args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
             if should_gen_tb:
@@ -1834,6 +1952,7 @@ def cmd_gen_top(args):
             ir_output = output.parent / "design.ir.json"
             ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
             print(f"  ✓ Canonical IR snapshot: {ir_output}")
+            _write_gen_top_provenance(project, ctx, args, ir_output)
 
     except Exception as e:
         print_cli_error(
@@ -1847,6 +1966,72 @@ def cmd_gen_top(args):
 # ---------------------------------------------------------------------------
 # gen-top internal helpers
 # ---------------------------------------------------------------------------
+
+def _gen_top_command_options(args) -> Dict[str, Any]:
+    """The subset of CLI args that affect generation output — recorded in
+    the provenance manifest so a future ``--explain-staleness`` can tell
+    "you changed how you called gen-top" apart from "an input file
+    changed" (same rationale as
+    ``forge.core.cli.groups.inspect._command_options``, scoped to
+    gen-top's own flags)."""
+    _system = getattr(args, "system", None)
+    _contracts_from = getattr(args, "contracts_from", None)
+    return {
+        "mode": getattr(args, "mode", None),
+        "top_name": getattr(args, "top_name", None),
+        "strict": getattr(args, "strict", False),
+        # --system/--contracts-from are argparse `type=Path` — stringify so
+        # the manifest stays plain-JSON-serializable (a bare `Path` isn't).
+        "system": str(_system) if _system is not None else None,
+        "contracts_from": str(_contracts_from) if _contracts_from is not None else None,
+    }
+
+
+def _write_gen_top_provenance(
+    project, ctx: "GenTopPlanContext", args, ir_output: Path,
+) -> Path:
+    """Write ``provenance.json`` as a sibling of ``design.ir.json`` — same
+    ``project`` object, same directory, same timing as the IR snapshot
+    (release-plan Phase 5 slice 5.1: "close the gap between the existing
+    IR-attached provenance manifest and gen-top, which never wrote one").
+
+    ``plan_hash`` is computed from ``ctx.project`` (the *pre-generation*
+    IR, before tie-off/top-port attachment) via the exact same
+    ``build_generation_plan``/``plan_hash`` call ``forge build`` already
+    uses — so a plan hash pinned via ``forge build --accept-plan-hash``
+    can be compared directly against the one a subsequent ``gen-top`` run
+    records here. ``output_hashes`` reuses ``forge build``'s own
+    ``_planned_output_artifacts`` for the candidate file list rather than
+    re-deriving gen-top's artifact set a third time — files that mode
+    didn't actually write (e.g. verilog-only artifacts when nothing
+    needed a testbench) are silently skipped by ``build_provenance``,
+    which only hashes files that exist.
+    """
+    from forge.ir.provenance import build_provenance, write_provenance
+    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
+    from forge.core.cli.groups.build import _planned_output_artifacts
+
+    plan = build_generation_plan(
+        ctx.project, ctx.match_report,
+        topology_group_issues=ctx.topology_group_issues,
+        cardinality_issues=ctx.cardinality_issues,
+        cdc_issues=ctx.cdc_issues,
+        compat_mode_modules=ctx.match_report.compat_mode_modules,
+        output_artifacts=_planned_output_artifacts(ctx, args),
+    )
+
+    manifest = build_provenance(
+        project,
+        command_options=_gen_top_command_options(args),
+        plan_hash=_plan_hash_of(plan),
+        output_paths=_planned_output_artifacts(ctx, args),
+        project_identity=ctx.c_root.name or None,
+    )
+    provenance_output = ir_output.parent / "provenance.json"
+    write_provenance(provenance_output, manifest)
+    print(f"  ✓ Provenance manifest: {provenance_output}")
+    return provenance_output
+
 
 def _print_gen_report(report: dict) -> None:
     sep = "=" * 70
