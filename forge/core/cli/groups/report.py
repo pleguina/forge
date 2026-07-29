@@ -22,11 +22,13 @@ renderer that already exists elsewhere in the codebase —
   `renderer.render_html`/`render_markdown_summary`, run over everything
   this command just wrote into the output directory.
 
-**Explicit, documented deferral**: topology SVG and the interactive
-design explorer are not implemented here — see the Honest deferral list
-in `docs/development/release-readiness.md`'s Phase 6 section. Both
-`next_actions` and the human output say so plainly, rather than silently
-omitting them.
+- topology: `forge.analyze.design_explorer` (release-plan Phase 8) — a
+  deterministic Graphviz DOT/SVG rendering (§8.1) of the same canonical IR
+  the maturity section above already builds, plus the self-contained
+  interactive HTML explorer (§8.2). Degrades gracefully: the DOT artifact
+  is always written; SVG is attempted and its absence (the real `dot`
+  binary not on PATH) is noted honestly in `next_actions`/diagnostics,
+  never silently omitted.
 """
 
 from __future__ import annotations
@@ -34,11 +36,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-_TOPOLOGY_DEFERRAL_NOTE = (
-    "Topology SVG and the interactive design explorer are not yet implemented "
-    "(release-plan §8) — this report does not include them."
-)
 
 
 def cmd_report(args) -> None:
@@ -59,7 +56,29 @@ def cmd_report(args) -> None:
     artifacts: List[str] = []
     diagnostics: List[Dict[str, Any]] = []
     metrics: Dict[str, Any] = {}
-    next_actions: List[str] = [_TOPOLOGY_DEFERRAL_NOTE]
+    next_actions: List[str] = []
+
+    # ── Topology DOT/SVG (release-plan Phase 8, §8.1) ───────────────────────
+    try:
+        n_edges = _write_topology_report(design_path, args, output_dir)
+        artifacts.append(str(output_dir / "topology.dot"))
+        artifacts.append(str(output_dir / "topology_explorer.html"))
+        metrics["topology_edges"] = n_edges
+        svg_path = output_dir / "topology.svg"
+        if svg_path.exists():
+            artifacts.append(str(svg_path))
+        else:
+            diagnostics.append({
+                "severity": "note",
+                "message": "topology.svg omitted — the `dot` binary is not on PATH "
+                           "(topology.dot was still written; install graphviz to render SVG)",
+            })
+            next_actions.append("Install graphviz (`dot` on PATH) to render topology.svg")
+    except Exception as exc:  # noqa: BLE001
+        diagnostics.append({
+            "severity": "warning",
+            "message": f"topology report failed: {exc}",
+        })
 
     # ── Maturity / compatibility report (reuses slice 6.1's helper) ────────
     try:
@@ -146,8 +165,20 @@ def cmd_report(args) -> None:
         })
 
     # ── Verification results (reused from a prior `forge test run`) ────────
+    # --results-json (slice 7.2) is preferred when given — it carries
+    # backend id, real duration, and waveform/artifact paths that JUnit's
+    # schema has no slot for. --junit-xml alone still works unchanged.
+    results_json_path = getattr(args, "results_json", None)
     junit_xml_path = getattr(args, "junit_xml", None)
-    if junit_xml_path and Path(junit_xml_path).exists():
+    if results_json_path and Path(results_json_path).exists():
+        import json
+
+        from forge.verify.results import render_results_markdown
+
+        payload = json.loads(Path(results_json_path).read_text())
+        (output_dir / "verification_results.md").write_text(render_results_markdown(payload))
+        artifacts.append(str(output_dir / "verification_results.md"))
+    elif junit_xml_path and Path(junit_xml_path).exists():
         from forge.verify.junit_xml import render_markdown as render_junit_markdown
 
         (output_dir / "verification_results.md").write_text(
@@ -157,8 +188,8 @@ def cmd_report(args) -> None:
     else:
         (output_dir / "verification_results.md").write_text(
             "# Verification results\n\n"
-            "No verification results yet — run `forge test run --junit-xml <path>` "
-            "and pass that path here with `--junit-xml`.\n"
+            "No verification results yet — run `forge test run --results-json <path>` "
+            "(or `--junit-xml <path>`) and pass that path here.\n"
         )
         artifacts.append(str(output_dir / "verification_results.md"))
         next_actions.append("No verification results yet — run `forge test run`")
@@ -185,6 +216,27 @@ def cmd_report(args) -> None:
         next_actions=next_actions,
     )
     sys.exit(emit(envelope, json_mode=json_mode))
+
+
+def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
+    from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
+    from forge.analyze.design_explorer.graph_model import build_design_graph
+    from forge.analyze.design_explorer.html_renderer import render_explorer_html
+    from forge.ir import build_project_ir_with_match_report
+
+    project, _cfg, _match_report = build_project_ir_with_match_report(
+        design_path,
+        contracts_from=getattr(args, "contracts_from", None),
+        ip_info=getattr(args, "ip_info", None),
+        build_dir=getattr(args, "build_dir", None),
+    )
+    graph = build_design_graph(project, source_roots=[design_path.parent])
+    dot_text = render_dot(graph)
+    (output_dir / "topology.dot").write_text(dot_text)
+    if dot_available():
+        render_svg(dot_text, output_dir / "topology.svg")
+    render_explorer_html(graph, output_dir / "topology_explorer.html")
+    return len(graph.edges)
 
 
 def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[str, Any]:
@@ -283,5 +335,10 @@ def register(sub) -> None:
     )
     p.add_argument("--provenance", help="Existing provenance.json (from forge build/inspect --provenance)")
     p.add_argument("--junit-xml", help="Existing JUnit XML (from a prior forge test run --junit-xml)")
+    p.add_argument(
+        "--results-json",
+        help="Existing versioned results JSON (from a prior forge test run --results-json); "
+             "preferred over --junit-xml when both are given",
+    )
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p.set_defaults(func=cmd_report)

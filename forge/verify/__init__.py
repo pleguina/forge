@@ -39,8 +39,9 @@ All generic orchestration is owned by this package.
 
 Framework-owned backends (auto-registered)
 -------------------------------------------
-  xsim  →  forge.verify.backend_xsim.XsimBackend
-  csim  →  forge.verify.backend_csim.CsimBackend
+  xsim       →  forge.verify.backend_xsim.XsimBackend
+  csim       →  forge.verify.backend_csim.CsimBackend
+  verilator  →  forge.verify.backend_verilator.VerilatorBackend
 
 Plugins can override these by calling ``register_backend()`` after import.
 """
@@ -51,6 +52,7 @@ def _register_framework_backends() -> None:
     from forge.verify.backend_registry import register_backend
     register_backend("xsim", "forge.verify.backend_xsim")
     register_backend("csim", "forge.verify.backend_csim")
+    register_backend("verilator", "forge.verify.backend_verilator")
 
 
 _register_framework_backends()

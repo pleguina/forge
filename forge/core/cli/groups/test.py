@@ -147,13 +147,57 @@ def _resolve_event_ids(selection) -> List[int]:
     return _enumerate_xml_event_ids(selection.dataset_xml)
 
 
-def _tail_of_log(outputs: Dict[str, Any], *, lines: int = 20) -> Optional[str]:
-    log_path = outputs.get("simulate_log")
+def _tail_of_log(log_path: Any, *, lines: int = 20) -> Optional[str]:
+    """Return the last *lines* of *log_path*, or None.
+
+    Takes the real stage-correct log path directly (typically
+    ``ExecutionResult.log_path``, slice 7.0) rather than always reading a
+    hardcoded ``outputs["simulate_log"]`` — the direct fix for a compile
+    failure's diagnostic message being read from the wrong (empty/stale)
+    log file."""
     if log_path is None or not Path(log_path).exists():
         return None
     text = Path(log_path).read_text(errors="replace")
     tail = "\n".join(text.splitlines()[-lines:])
     return tail or None
+
+
+def _build_event_artifacts(exec_result: Any, outputs: Dict[str, Any]) -> List[Any]:
+    """Build this event's ``ArtifactRef`` list from the backend's declared
+    outputs plus its waveform (if any), tagging the one log that matches
+    ``exec_result.log_path`` with the real stage that produced it — the
+    rest carry ``stage=None`` (honestly unknown at this granularity, never
+    guessed)."""
+    from forge.verify.results import ArtifactRef
+
+    refs: List[ArtifactRef] = []
+    result_log = getattr(exec_result, "log_path", None) if exec_result is not None else None
+    result_stage = getattr(exec_result, "stage", None) if exec_result is not None else None
+
+    for path in outputs.values():
+        if path is None:
+            continue
+        stage = result_stage if (result_log is not None and Path(path) == result_log) else None
+        refs.append(ArtifactRef(path=str(path), stage=stage, kind="log"))
+
+    waveform = getattr(exec_result, "waveform_path", None) if exec_result is not None else None
+    if waveform is not None:
+        refs.append(ArtifactRef(path=str(waveform), stage=result_stage, kind="waveform"))
+
+    return refs
+
+
+def _parse_event_checks(outputs: Dict[str, Any]) -> List[Any]:
+    """Scan the event's real ``simulate_log`` for ``FORGE_CHECK|`` records
+    (slice 7.3) — always ``simulate_log`` specifically, since that's where
+    the SV stimulus (and its checks) actually runs, never whichever log
+    happened to be the one a compile/elaborate failure returned."""
+    from forge.verify.results import parse_forge_check_lines
+
+    log_path = outputs.get("simulate_log")
+    if log_path is None or not Path(log_path).exists():
+        return []
+    return parse_forge_check_lines(Path(log_path).read_text(errors="replace"))
 
 
 def _regenerate_stimulus_for_event(flow_name: str, event_id: int, flow_dir: Path) -> bool:
@@ -309,7 +353,44 @@ def cmd_run(args) -> None:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
         return
 
-    results: List[Dict[str, Any]] = []
+    from forge.verify.results import RESULTS_SCHEMA, EventResult, FlowResult, diagnostic_for_event_failure
+
+    # ── Phase 7 slice 7.5: stimulus_mode == "readmemh" ──────────────────────
+    # Fixed-shape, non-recompiling stimulus: the plugin's gen_stimulus.py
+    # writes the .mem file + a content-stable stimulus_current.svh ONCE
+    # (below, before the loop) instead of _regenerate_stimulus_for_event's
+    # default per-event regenerate-and-recompile; the backend itself skips
+    # xvlog/xelab (or Verilator's build step) on every event after the
+    # first, real event selection happening only via the +EVENT_INDEX
+    # plusarg (never a recompile). Flows on the default svh_include
+    # mechanism are completely unaffected — this whole block is a no-op
+    # for them.
+    stimulus_mode = getattr(cfg, "stimulus_mode", "svh_include")
+    readmemh_mode = stimulus_mode == "readmemh"
+    id_to_index: Dict[str, int] = {}
+    if readmemh_mode:
+        try:
+            import importlib as _il
+            _il.import_module("bootstrap")
+            gen_stimulus_mod = _il.import_module("gen_stimulus")
+            generate_readmemh_stimulus = gen_stimulus_mod.generate_readmemh_stimulus
+        except (ImportError, AttributeError) as exc:
+            sys.exit(_guided_run_failure(
+                f"flow.stimulus_mode is 'readmemh' but the plugin's gen_stimulus.py "
+                f"has no generate_readmemh_stimulus(): {exc}",
+                json_mode=json_mode,
+                action="Implement generate_readmemh_stimulus(flow_name, flow_dir) in "
+                       "the plugin's tools/gen_stimulus.py (see plugins/passthrough_demo "
+                       "for a real reference implementation).",
+            ))
+            return
+        with _maybe_quiet_stdout(json_mode):
+            index_to_id = generate_readmemh_stimulus(flow_name, flow_path.parent)
+        id_to_index = {v: k for k, v in index_to_id.items()}
+
+    readmemh_work_dir = flow_path.parent / "xsim_work" / "readmemh_shared"
+
+    event_results: List[EventResult] = []
     for event_id in event_ids:
         part_selection = XmlRunSelection(
             event_id=event_id,
@@ -320,26 +401,78 @@ def cmd_run(args) -> None:
             dataset_parts_glob=None,
             probe_log=selection.probe_log,
         )
-        with _maybe_quiet_stdout(json_mode):
-            _regenerate_stimulus_for_event(flow_name, event_id, flow_path.parent)
-        work_dir = flow_path.parent / "xsim_work" / "per_event" / str(event_id)
+        event_id_str = str(event_id)
+        event_index: "int | None" = None
+
+        if readmemh_mode:
+            if event_id_str not in id_to_index:
+                sys.exit(_guided_run_failure(
+                    f"event id {event_id_str!r} not found in the readmemh dataset "
+                    f"(known: {sorted(id_to_index)})",
+                    json_mode=json_mode,
+                ))
+                return
+            event_index = id_to_index[event_id_str]
+            work_dir = readmemh_work_dir
+        else:
+            with _maybe_quiet_stdout(json_mode):
+                _regenerate_stimulus_for_event(flow_name, event_id, flow_path.parent)
+            work_dir = flow_path.parent / "xsim_work" / "per_event" / str(event_id)
+
         ctx = _build_runtime_context(
             flow_path, cfg, part_selection, importlib_module, work_dir=work_dir,
         )
-        with _maybe_quiet_stdout(json_mode):
-            rc = _run_one_loaded_flow(flow_path, cfg, part_selection, ctx, adapter, strict=strict)
-        outputs = adapter.describe_backend_outputs(cfg, ctx)
-        success = rc == 0
-        message = None if success else _tail_of_log(outputs)
-        results.append({
-            "event_id": event_id,
-            "success": success,
-            "outputs": {k: str(v) for k, v in outputs.items() if v is not None},
-            "message": message,
-        })
+        if readmemh_mode:
+            ctx.event_index = event_index
 
-    events_passed = sum(1 for r in results if r["success"])
-    events_failed = len(results) - events_passed
+        capture: Dict[str, Any] = {}
+        with _maybe_quiet_stdout(json_mode):
+            rc = _run_one_loaded_flow(
+                flow_path, cfg, part_selection, ctx, adapter, strict=strict, capture=capture,
+            )
+        success = rc == 0
+        exec_result = capture.get("result")
+        outputs = capture.get("outputs", {}) or {}
+        checker_ok = capture.get("checker_ok")
+
+        message = None if success else _tail_of_log(
+            getattr(exec_result, "log_path", None) if exec_result is not None else None
+        )
+
+        ev = EventResult(
+            event_id=event_id_str,
+            # Real event_index for readmemh-mode flows (the dataset
+            # position the +EVENT_INDEX plusarg actually selected);
+            # honestly None for svh_include flows, which have no such
+            # concept — never fabricated from loop iteration order.
+            event_index=event_index,
+            success=success,
+            backend_id=adapter.backend_id,
+            duration_s=getattr(exec_result, "duration_s", None) if exec_result is not None else None,
+            artifacts=_build_event_artifacts(exec_result, outputs),
+            checks=_parse_event_checks(outputs),
+        )
+        if not success:
+            ev.diagnostics = [diagnostic_for_event_failure(
+                event_id=event_id_str,
+                flow_name=getattr(cfg, "flow_name", flow_name),
+                stage=getattr(exec_result, "stage", None) if exec_result is not None else None,
+                checker_ok=checker_ok,
+                backend_success=getattr(exec_result, "success", False) if exec_result is not None else False,
+                log_path=str(exec_result.log_path) if exec_result is not None and exec_result.log_path else None,
+                log_tail=message,
+            )]
+        event_results.append(ev)
+
+    flow_result = FlowResult(
+        schema=RESULTS_SCHEMA,
+        flow_name=getattr(cfg, "flow_name", flow_name),
+        backend_id=adapter.backend_id,
+        events=event_results,
+    )
+
+    events_passed = sum(1 for e in event_results if e.success)
+    events_failed = len(event_results) - events_passed
 
     artifacts: List[str] = []
     if junit_xml_path:
@@ -348,40 +481,45 @@ def cmd_run(args) -> None:
         junit_path = Path(junit_xml_path).expanduser().resolve()
         write_junit_xml(
             junit_path,
-            suite_name=f"{getattr(cfg, 'flow_name', flow_name)}",
+            suite_name=flow_result.flow_name,
             results=[
                 {
-                    "name": f"event_{r['event_id']}",
-                    "success": r["success"],
-                    "message": r["message"],
+                    "name": f"event_{e.event_id}",
+                    "success": e.success,
+                    "message": (
+                        None if e.success else
+                        (e.diagnostics[0].context.get("log_tail") or e.diagnostics[0].message)
+                        if e.diagnostics else None
+                    ),
+                    "time": e.duration_s,
                 }
-                for r in results
+                for e in event_results
             ],
         )
         artifacts.append(str(junit_path))
 
-    for r in results:
-        artifacts.extend(r["outputs"].values())
+    results_json_path = getattr(args, "results_json", None)
+    if results_json_path:
+        import json
 
-    diagnostics = [
-        {
-            "severity": "error",
-            "code": "FWV013",
-            "message": f"event {r['event_id']}: simulation/checker failed"
-                       + (f" — {r['message']}" if r.get("message") else ""),
-            "context": {"event_id": r["event_id"]},
-        }
-        for r in results if not r["success"]
-    ]
+        results_path = Path(results_json_path).expanduser().resolve()
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        results_path.write_text(json.dumps(flow_result.to_dict(), indent=2) + "\n")
+        artifacts.append(str(results_path))
+
+    artifacts.extend(a.path for a in flow_result.artifacts)
+
+    diagnostics = [d.to_dict() for e in event_results for d in e.diagnostics]
 
     envelope = CommandEnvelope(
         status="fail" if events_failed else "pass",
         diagnostics=diagnostics,
         artifacts=artifacts,
         metrics={
-            "events_run": len(results),
+            "events_run": len(event_results),
             "events_passed": events_passed,
             "events_failed": events_failed,
+            "duration_s": flow_result.duration_s,
         },
     )
     sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
@@ -471,6 +609,11 @@ def register(sub) -> None:
         help="Enable Tier 2 probe CSV capture",
     )
     p_run.add_argument("--junit-xml", dest="junit_xml", default=None, help="Write a JUnit XML report to this path")
+    p_run.add_argument(
+        "--results-json", dest="results_json", default=None,
+        help="Write the full versioned FlowResult (schema, per-event backend id, "
+             "duration, artifacts, diagnostics) as JSON to this path",
+    )
     p_run.add_argument(
         "--strict", action="store_true", default=False,
         help="Also enforce canonical layout (same as forge verify run --strict)",

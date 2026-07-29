@@ -488,6 +488,7 @@ simulation:
   idle_cycles_after_reset:    {idle_cycles_after_reset}
   post_stimulus_drain_cycles: {post_stimulus_drain_cycles}
 {extra_sim_text}checker_mode: {checker_mode}
+stimulus_mode: {stimulus_mode}
 {xsim_section}
 {checker_section}"""
 
@@ -658,6 +659,7 @@ def generate_verify_flow_yml(
         post_stimulus_drain_cycles=drain,
         extra_sim_text=extra_sim_text,
         checker_mode=checker_mode,
+        stimulus_mode=getattr(flow_decl, "stimulus_mode", "svh_include"),
         xsim_section=xsim_text,
         checker_section=checker_text,
         source_path=str(source_path),

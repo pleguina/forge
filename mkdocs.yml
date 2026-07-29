@@ -1,0 +1,117 @@
+site_name: FORGE
+site_description: >-
+  Framework for Orchestrated RTL Generation & Evaluation — a plugin-agnostic,
+  contract-driven integration and verification framework for RTL/HLS firmware.
+# site_url is deliberately unset: the canonical public host is not yet
+# decided (release-plan Phase 9, slice 9.5 — status-honesty correction).
+# A placeholder URL here (e.g. the repo's own "https://github.com/<org>/forge/"
+# convention) makes MkDocs Material emit absolute-path links on pages like
+# 404.html that don't resolve locally — a real bug this exact placeholder
+# caused during development (see forge/tests/test_docs_site_links.py).
+# Set this for real only when slice 9.5's publish decision is made.
+docs_dir: docs
+site_dir: site
+strict: true
+
+# docs/plan/** is an internal release-planning/audit workspace (raw,
+# first-person, still-evolving), docs/internal/** is tracked-in-git
+# release-gating planning material (e.g. Phase 10 preflight/spec docs)
+# that still isn't public-site content, and
+# docs/development/release-readiness.md is a raw session-log/audit-trail —
+# none of these are fit for the public site. Nav omission alone does not
+# stop MkDocs from rendering a file, so all three are physically excluded
+# from the build here.
+exclude_docs: |
+  plan/**
+  internal/**
+  development/release-readiness.md
+
+theme:
+  name: material
+  font: false
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+# No analytics/social-card plugins, no CDN fonts (font: false above) — the
+# built site must load fully offline. See forge/tests/test_docs_site_offline.py.
+plugins:
+  - search
+
+extra:
+  version:
+    provider: mike
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Tutorials:
+      - Golden-Path Tutorial: tutorials/golden-path.md
+      - RTL Example (passthrough_demo): tutorials/rtl-example.md
+      - Mixed HLS/RTL Example (trigger_demo): tutorials/mixed-hls-rtl-example.md
+  - How-To Guides:
+      - Author Topology Contracts: how-to/author-topology-contracts.md
+      - Integrate Verification: how-to/integrate-verification.md
+      - Set Up the Verification Framework: how-to/setup-verification-framework.md
+      - Analyze Performance: how-to/analyze-performance.md
+      - Use the Visual Design Explorer: how-to/use-visual-explorer.md
+  - Concepts:
+      - Core Interface (Layer 1): concepts/core-interface.md
+      - Tooling Interface (Layer 2): concepts/tooling-interface.md
+      - Contracts and Protocols: concepts/contracts-and-protocols.md
+      - Clock and Reset Domains: concepts/clock-and-reset-domains.md
+      - Latency Model: concepts/latency-model.md
+      - Verification Model: concepts/verification-model.md
+      - Datasets and Provenance: concepts/datasets-and-provenance.md
+      - Visual Design Explorer: concepts/visual-explorer.md
+  - Reference:
+      - CLI Reference: reference/cli.md
+      - Canonical Roles: reference/canonical-roles.md
+      - Protocols: reference/protocols.md
+      - Interface Members: reference/interface-members.md
+      - Transformations: reference/transformations.md
+      - Diagnostic Catalogue: reference/diagnostics.md
+      - Support Matrix: reference/support-matrix.md
+      - Artifact Model Reference: reference/artifacts.md
+      - Support Classification: reference/support-classification.md
+  - Explanation:
+      - Architecture Rationale: explanation/architecture-rationale.md
+      - Extension APIs: explanation/extension-apis.md
+      - Project Scope: explanation/project-scope.md
+      - Scope and Interoperability: explanation/scope-and-interoperability.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Migration Notes: development/migration.md
+      - Security Policy: development/security.md
+      - Code of Conduct: development/code-of-conduct.md
+      - CLI Exit Codes: development/cli_exit_codes.md
+      - Schema Versioning: development/SCHEMA_VERSIONING.md
+      - Migration Tooling: development/MIGRATION_TOOLING.md

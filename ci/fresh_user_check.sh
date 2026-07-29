@@ -4,18 +4,22 @@
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Validates the forge package from the perspective of a fresh user, and
-# doubles as an agnosticism regression guard: everything through Stage 4
+# doubles as an agnosticism regression guard: everything through Stage 4b
 # runs against a freshly `init-plugin`-scaffolded plugin with a generic,
 # non-CMS name — if FORGE core ever regresses to assuming OMTF-specific
 # names or structure, this is the first place that would break.
 #
-#   1. Package installs cleanly from source (no pre-existing state assumed)
-#   2. CLI entry point works after install     (forge --help)
-#   3. forge verify init-plugin scaffolds a valid, generically-named plugin
-#   4. Scaffolded plugin passes doctor (READ-ONLY health check, incl. --json)
-#   5. forge topgen validate + forge verify prepare --dry-run on trigger_demo
-#   6. trigger_demo reference plugin passes doctor
-#   7. forge unit tests + trigger_demo plugin tests (no HLS / Vivado required)
+#   1-4. The documented quickstart sequence, sourced from
+#        ci/quickstart_commands.sh (install, forge --help, init-plugin
+#        scaffold, doctor) — the same file docs/getting-started/quickstart.md
+#        embeds verbatim, so this script and the published docs can never
+#        silently diverge.
+#   3b.  init-plugin --dry-run regression check
+#   4b.  Scaffolded plugin's doctor --json structural check, plus file/
+#        import/load assertions the quickstart itself doesn't need
+#   5.   forge topgen validate + forge verify prepare --dry-run on trigger_demo
+#   6.   trigger_demo reference plugin passes doctor
+#   7.   forge unit tests + trigger_demo plugin tests (no HLS / Vivado required)
 #
 # Prerequisites:
 #   - python3 + pip available on PATH
@@ -32,6 +36,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TRIGGER_PLUGIN="${REPO_ROOT}/plugins/trigger_demo"
 TRIGGER_FORGE_ROOT="${TRIGGER_PLUGIN}/forge"
+cd "${REPO_ROOT}"
 
 PASS_COLOR='\033[0;32m'
 FAIL_COLOR='\033[0;31m'
@@ -48,23 +53,30 @@ for arg in "$@"; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 1: Package install from source"
+section "Stages 1-4: the quickstart command sequence (ci/quickstart_commands.sh)"
 # ─────────────────────────────────────────────────────────────────────────
-if $SKIP_INSTALL; then
-    echo "  [skipped] --skip-install flag provided"
-else
-    pip install -q -e "${REPO_ROOT}/forge[parser]" pytest pytest-cov
-    pass "pip install -e forge[parser]"
+# Stages 1 (install), 2 (CLI check), 3 (scaffold), and 4 (doctor)'s core
+# commands are not duplicated here — they are sourced from
+# ci/quickstart_commands.sh, the same file docs/getting-started/quickstart.md
+# embeds verbatim, so CI keeps proving the exact documented commands work.
+# This script's own value-add stays below: extra pytest/pytest-cov install,
+# extra CLI --help coverage, a --dry-run regression check, and the deeper
+# structural assertions the quickstart itself doesn't need.
+SCRATCH_DIR="$(mktemp -d)"
+trap 'rm -rf "${SCRATCH_DIR}"' EXIT
+
+PLUGIN_ID="fresh_test_plugin"
+PLUGINS_ROOT="${SCRATCH_DIR}"
+# shellcheck source=ci/quickstart_commands.sh
+source "${REPO_ROOT}/ci/quickstart_commands.sh"
+pass "quickstart command sequence (install, forge --help, init-plugin, doctor)"
+
+if ! $SKIP_INSTALL; then
+    pip install -q pytest pytest-cov
 fi
 
 python3 -c "import forge; print(f'  forge imported OK (location: {forge.__file__})')"
 pass "forge package importable"
-
-# ─────────────────────────────────────────────────────────────────────────
-section "Stage 2: CLI entry point check"
-# ─────────────────────────────────────────────────────────────────────────
-forge --help > /dev/null
-pass "forge --help"
 
 forge verify doctor --help > /dev/null
 pass "forge verify doctor --help"
@@ -76,20 +88,12 @@ forge verify init-plugin --help > /dev/null
 pass "forge verify init-plugin --help"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 3: init-plugin scaffold (generic, non-CMS name)"
+section "Stage 3b: init-plugin --dry-run regression check"
 # ─────────────────────────────────────────────────────────────────────────
-SCRATCH_DIR="$(mktemp -d)"
-trap 'rm -rf "${SCRATCH_DIR}"' EXIT
-
-PLUGIN_ID="fresh_test_plugin"
-
-forge verify init-plugin "${PLUGIN_ID}" \
+forge verify init-plugin "${PLUGIN_ID}_dry_run_only" \
     --plugins-root "${SCRATCH_DIR}" \
     --dry-run | grep -q "Would create"
 pass "forge verify init-plugin --dry-run"
-
-forge verify init-plugin "${PLUGIN_ID}" \
-    --plugins-root "${SCRATCH_DIR}"
 
 SCAFFOLDED_VERIFY="${SCRATCH_DIR}/${PLUGIN_ID}/forge/verify"
 
@@ -133,7 +137,7 @@ EOF
 pass "Scaffolded design.verification.yml is loadable"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 4: forge verify doctor on scaffolded plugin"
+section "Stage 4b: doctor --json structural check"
 # ─────────────────────────────────────────────────────────────────────────
 DOCTOR_JSON="${SCRATCH_DIR}/doctor_out.json"
 set +e
@@ -143,9 +147,10 @@ set -e
 python3 - "${DOCTOR_JSON}" <<'EOF'
 import json, sys
 data = json.load(open(sys.argv[1]))
-for key in ("status", "counts", "diagnostics"):
+for key in ("status", "metrics", "diagnostics"):
     assert key in data, f"missing key: {key}"
-print(f"  status={data['status']} counts={data['counts']}")
+assert "counts" in data["metrics"], "missing key: metrics.counts"
+print(f"  status={data['status']} counts={data['metrics']['counts']}")
 EOF
 pass "doctor --json produces valid structured output for scaffolded plugin"
 
@@ -181,7 +186,7 @@ hard_errors = [e for e in errors if e.get("code") not in ("FWV015", "FWV019")]
 if hard_errors:
     print(f"Unexpected hard errors: {hard_errors}", file=sys.stderr)
     sys.exit(1)
-print(f"  status={data['status']} counts={data['counts']}")
+print(f"  status={data['status']} counts={data['metrics']['counts']}")
 EOF
 pass "trigger_demo doctor: no unexpected hard errors"
 

@@ -103,6 +103,41 @@ def emit_clocked_drive(
     return f"{indent}{signal} <= {sv_val};"
 
 
+def emit_check_record(
+    check_id: str,
+    label: str,
+    signal: str,
+    expected_hex: str,
+    width: int,
+    sv_exp: str,
+    *,
+    indent: str = "    ",
+) -> str:
+    """Return the unconditional ``FORGE_CHECK|...`` machine-readable log line.
+
+    Printed once per check, on **both** outcomes (pass and fail) — the
+    corrected slice 7.3 design. Parsing only a fail-only ``FAIL: ...`` line
+    cannot produce an ``observed`` value for a passing check, since no such
+    line is ever printed when nothing fails; this line always carries both
+    ``expected`` and ``observed``, regardless of outcome.
+
+    ``observed`` uses SV's ``%h`` (zero-padded to the signal's own
+    declared width, lowercase) so a passing check's ``observed`` string is
+    byte-identical to ``expected_hex`` — never just "the same numeric
+    value formatted differently" (which the corrected design's own pass
+    test relies on: ``expected == observed`` for a passing check).
+
+    ``sv_exp`` is the already-computed SV literal (e.g. ``"8'h3A"``) used
+    for the live ``passed`` comparison — reused, not re-derived from
+    *expected_hex*.
+    """
+    return (
+        f'{indent}$display("FORGE_CHECK|check_id={check_id}|label={label}|'
+        f'signal={signal}|expected={expected_hex}|observed=0x%h|width={width}|'
+        f'passed=%0d", {signal}, ({signal} === {sv_exp}));'
+    )
+
+
 def emit_output_check(
     signal: str,
     expected: int | str,
@@ -110,33 +145,52 @@ def emit_output_check(
     label: str = "",
     *,
     indent: str = "    ",
+    event_id: "int | str" = "",
 ) -> list[str]:
     """Return SV lines that check *signal* against *expected*.
 
-    Emits an ``if`` block that calls ``$fatal`` (and prints a FAIL line
-    compatible with the framework log-scanner) on mismatch.
+    Emits an unconditional ``FORGE_CHECK|...`` machine-readable record
+    (slice 7.3), then an ``if`` block that calls ``$fatal`` (and prints a
+    human-readable FAIL line compatible with the framework log-scanner) on
+    mismatch. The two are separate, deliberately: the human ``FAIL:`` line
+    is unchanged for people reading logs directly; ``FORGE_CHECK|`` is the
+    new machine-readable channel, printed on every outcome, not just fail.
 
     Args:
-        signal:   Output signal name in scope.
-        expected: Expected integer value or SV literal string.
-        width:    Bit width (used to format the literal).
-        label:    Human-readable checkpoint label for the FAIL message.
-        indent:   Leading indentation.
+        signal:    Output signal name in scope.
+        expected:  Expected integer value or SV literal string.
+        width:     Bit width (used to format the literal).
+        label:     Human-readable checkpoint label for the FAIL message.
+        indent:    Leading indentation.
+        event_id:  Event identifier this check belongs to, used to build a
+                   deterministic ``check_id`` (``f"{event_id}:{label}"``).
+                   Omit (default ``""``) for checks with no event context —
+                   ``check_id`` then falls back to the label alone.
 
     Returns:
         List of SV statement strings (one per line, no trailing newlines).
     """
+    tag = label or signal
+    check_id = f"{event_id}:{tag}" if event_id != "" else tag
+
     if isinstance(expected, int):
         if width == 1:
             sv_exp = f"1'b{expected & 1}"
+            expected_hex = f"0x{expected & 1:01x}"
         else:
             hex_digits = (width + 3) // 4
             sv_exp = f"{width}'h{expected:0{hex_digits}X}"
+            expected_hex = f"0x{expected:0{hex_digits}x}"
     else:
+        # Raw SV literal supplied by the caller — no framework-side integer
+        # value to reformat, so the FORGE_CHECK record's `expected` field
+        # carries the literal as-is (an honest gap: not currently exercised
+        # by any real caller, which all pass integers).
         sv_exp = str(expected)
+        expected_hex = str(expected)
 
-    tag = label or signal
     return [
+        emit_check_record(check_id, tag, signal, expected_hex, width, sv_exp, indent=indent),
         f"{indent}if ({signal} !== {sv_exp}) begin",
         emit_fail_display(tag, signal, sv_exp, indent=indent + "  "),
         f'{indent}  $fatal(1, "Check failed: {tag}");',
@@ -169,6 +223,69 @@ def emit_fail_display(
         f'{indent}$display("FAIL: {label} — expected {expected_sv}, '
         f'got %0h", {actual_signal});'
     )
+
+
+def emit_event_index_read(
+    var_name: str = "event_index",
+    *,
+    indent: str = "    ",
+) -> str:
+    """Return a SV line that reads the ``+EVENT_INDEX=N`` runtime plusarg
+    into *var_name*, defaulting to ``0`` when absent.
+
+    The one piece of framework-generic boilerplate every ``stimulus_mode:
+    readmemh`` plugin needs (slice 7.5) — reused verbatim rather than each
+    plugin hand-rolling its own ``$value$plusargs`` call. ``EVENT_INDEX``
+    (never ``EVENT_ID``) is deliberate: it addresses a fixed-shape memory
+    array by internal, always-contiguous position — an arbitrary string
+    ``event_id`` cannot be assumed numeric or contiguous at all.
+    """
+    return (
+        f'{indent}if (!$value$plusargs("EVENT_INDEX=%d", {var_name})) '
+        f"{var_name} = 0;"
+    )
+
+
+def emit_runtime_output_check(
+    signal: str,
+    expected_signal: str,
+    width: int = 1,
+    label: str = "",
+    *,
+    indent: str = "    ",
+) -> list[str]:
+    """Like :func:`emit_output_check`, but *expected_signal* is itself a
+    runtime SV expression (typically a variable read out of a
+    ``$readmemh`` memory word) rather than a compile-time-known Python
+    value.
+
+    Needed by the ``stimulus_mode: readmemh`` mechanism (slice 7.5): one
+    compiled testbench services many events, so the expected value varies
+    per ``+EVENT_INDEX`` at *simulation* runtime, not at *generation*
+    time — ``emit_output_check``'s Python-side hex formatting has nothing
+    to format ahead of time here. The ``FORGE_CHECK|`` record's
+    ``expected``/``observed`` fields are both filled from live signal
+    values via ``%h``, not pre-computed text.
+
+    ``check_id`` here is just *label* — the real per-event id is not known
+    at generation time (a single compiled TB runs many events), but each
+    simulation invocation writes its own ``simulate.log``, so the
+    real event_id attribution happens externally, one log per event, at
+    the same per-event granularity ``emit_output_check``'s checks get.
+    """
+    tag = label or signal
+    check_record = (
+        f'{indent}$display("FORGE_CHECK|check_id={tag}|label={tag}|'
+        f'signal={signal}|expected=0x%h|observed=0x%h|width={width}|'
+        f'passed=%0d", {expected_signal}, {signal}, ({signal} === {expected_signal}));'
+    )
+    return [
+        check_record,
+        f"{indent}if ({signal} !== {expected_signal}) begin",
+        emit_fail_display(tag, signal, expected_signal, indent=indent + "  "),
+        f'{indent}  $fatal(1, "Check failed: {tag}");',
+        f"{indent}end",
+    ]
 
 
 # ── Builder class ──────────────────────────────────────────────────────────
@@ -234,14 +351,19 @@ class StimulusEmitter:
         expected: int | str,
         width: int = 1,
         label: str = "",
+        event_id: "int | str" = "",
     ) -> "StimulusEmitter":
         """Append output-check lines for *signal* against *expected*.
 
-        Generates an ``if`` block that emits ``FAIL: <label>`` (recognised
-        by the framework log-scanner) and calls ``$fatal(1, ...)`` on mismatch.
+        Generates an unconditional ``FORGE_CHECK|...`` machine-readable
+        record (slice 7.3) plus an ``if`` block that emits ``FAIL: <label>``
+        (recognised by the framework log-scanner) and calls ``$fatal(1,
+        ...)`` on mismatch. Pass *event_id* so the record's ``check_id`` is
+        ``f"{event_id}:{label}"`` — deterministic and attributable to the
+        right event when this check is later parsed back per-event.
         """
         self._lines.extend(
-            emit_output_check(signal, expected, width, label, indent=self.indent)
+            emit_output_check(signal, expected, width, label, indent=self.indent, event_id=event_id)
         )
         return self
 
@@ -361,6 +483,43 @@ def write_run_stimulus_svh(
         parts.append("")
     parts.append(_SVH_TASK_OPEN)
     parts.append(body)
+    parts.append(_SVH_TASK_CLOSE)
+    parts.append("")  # trailing newline
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text("\n".join(parts))
+
+
+def write_readmemh_stimulus_svh(
+    *,
+    preamble_lines: "list[str]",
+    task_body_lines: "list[str]",
+    out_path: Path,
+    header_comment: str = "",
+) -> None:
+    """Write a complete ``stimulus_current.svh`` for ``stimulus_mode:
+    readmemh`` (slice 7.5).
+
+    Unlike :func:`write_run_stimulus_svh` (which wraps its *entire* body
+    inside the task), this mechanism genuinely needs module-scope
+    declarations — the ``$readmemh``-loaded memory array and the
+    ``initial`` block that loads it — *before* the task, not inside it
+    (SV does not allow an ``initial`` block nested inside a task).
+
+    ``validate_stimulus``'s contract only requires exactly one task
+    signature/``endtask`` pair to appear somewhere in the file, never that
+    the file contain *nothing else* — confirmed against every one of its
+    9 regex checks — so a module-scope preamble ahead of the task still
+    satisfies the contract unchanged.
+    """
+    parts: list[str] = [_SVH_HEADER]
+    if header_comment:
+        parts.append(f"// {header_comment}")
+        parts.append("")
+    parts.extend(preamble_lines)
+    parts.append("")
+    parts.append(_SVH_TASK_OPEN)
+    parts.append("\n".join(task_body_lines))
     parts.append(_SVH_TASK_CLOSE)
     parts.append("")  # trailing newline
 

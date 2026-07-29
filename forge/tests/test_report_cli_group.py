@@ -20,6 +20,8 @@ import pytest
 
 from forge.core.cli.main import build_parser
 
+DOT_AVAILABLE = shutil.which("dot") is not None
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PASSTHROUGH_DESIGN = REPO_ROOT / "plugins/passthrough_demo/forge/designs/design.yml"
 PASSTHROUGH_MODULES = REPO_ROOT / "plugins/passthrough_demo/forge/modules.yml"
@@ -52,7 +54,7 @@ def _run(capsys: pytest.CaptureFixture[str], group: str, *args: str) -> Result:
 
 _CLAIMED_ARTIFACTS = (
     "maturity.md", "latency_check.md", "verification_results.md",
-    "dashboard.html", "summary.md",
+    "dashboard.html", "summary.md", "topology.dot", "topology_explorer.html",
 )
 
 
@@ -76,9 +78,16 @@ def test_report_bundle_on_passthrough_demo(capsys: pytest.CaptureFixture[str], t
         assert path.exists() and path.stat().st_size > 0, f"{name} missing or empty"
 
     assert any("hls" in d["message"].lower() for d in payload["diagnostics"])
-    assert any("Topology SVG" in a for a in payload["next_actions"]), (
-        "the topology-SVG/explorer deferral must be present, not silently missing"
-    )
+
+    # topology.dot never requires `dot`; topology.svg degrades honestly
+    # (present when `dot` is on PATH, a real next_action note otherwise —
+    # never silently omitted either way).
+    if DOT_AVAILABLE:
+        assert str(output_dir / "topology.svg") in payload["artifacts"]
+        assert (output_dir / "topology.svg").stat().st_size > 0
+    else:
+        assert any("dot" in a.lower() for a in payload["next_actions"])
+        assert any("topology.svg" in d["message"] for d in payload["diagnostics"])
 
     maturity_md = (output_dir / "maturity.md").read_text()
     assert "Contract maturity" in maturity_md
@@ -179,3 +188,57 @@ def test_report_reuses_real_provenance_and_junit_artifacts(
 
     provenance_md = (output_dir / "provenance.md").read_text()
     assert "IR content hash" in provenance_md
+
+
+@skip_without_xsim
+def test_report_prefers_results_json_over_junit_xml(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Phase 7 slice 7.2: `forge report --results-json` reuses the richer
+    versioned FlowResult (backend id, real duration, waveform path) rather
+    than JUnit — and takes precedence when both are given, since it's a
+    strict superset of what JUnit's schema can express."""
+    dest_plugin = tmp_path / "plugins" / "passthrough_demo"
+    shutil.copytree(
+        REPO_ROOT / "plugins/passthrough_demo", dest_plugin,
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    design_yml = dest_plugin / "forge/designs/design.yml"
+    modules_yml = dest_plugin / "forge/modules.yml"
+    design_verification_yml = dest_plugin / "forge/verify/design.verification.yml"
+
+    gen_top_result = _run(
+        capsys, "topgen", "gen-top", str(design_yml),
+        "--mode", "verilog", "--consumer-root", str(tmp_path),
+        "--contracts-from", str(modules_yml),
+        "--output", str(tmp_path / "gen-top/design_passthrough_demo/algo_top.v"),
+        "--build-dir", str(tmp_path / "build/passthrough_demo"),
+    )
+    assert gen_top_result.returncode == 0, gen_top_result.stdout + gen_top_result.stderr
+
+    junit_path = tmp_path / "junit.xml"
+    results_json_path = tmp_path / "results.json"
+    test_run_result = _run(
+        capsys, "test", "run", str(design_verification_yml),
+        "--flow", "passthrough_xsim", "--plugin", "passthrough_demo",
+        "--consumer-root", str(tmp_path), "--event-id", "0",
+        "--junit-xml", str(junit_path), "--results-json", str(results_json_path),
+    )
+    assert test_run_result.returncode == 0, test_run_result.stdout + test_run_result.stderr
+    assert results_json_path.exists()
+
+    output_dir = tmp_path / "report"
+    report_result = _run(
+        capsys, "report", str(design_yml), "--contracts-from", str(modules_yml),
+        "--output", str(output_dir),
+        "--junit-xml", str(junit_path), "--results-json", str(results_json_path),
+        "--json",
+    )
+
+    assert report_result.returncode == 0, report_result.stdout + report_result.stderr
+    verification_md = (output_dir / "verification_results.md").read_text()
+    # Only render_results_markdown (not JUnit's renderer) emits a
+    # **backend** line — its presence proves --results-json was the one
+    # actually consumed, not just present alongside --junit-xml.
+    assert "**backend**: xsim" in verification_md
+    assert "PASS" in verification_md

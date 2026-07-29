@@ -251,3 +251,16 @@ class PluginBootstrapError(ForgeVerifyError):
       * ``bootstrap()`` function is missing or raises an exception.
       * ``declare_plugin_bootstrap()`` was never called.
     """
+
+
+# ── E-series: Dataset (Phase 7, slice 7.4a) ────────────────────────────────
+
+class DatasetContentHashError(ForgeVerifyError):
+    """Raised when a dataset file's declared ``source_content_hash`` does
+    not match the hash actually computed over its event content.
+
+    The hash is always recomputed on load and never trusted from the input
+    file — this is the real, reported error for a tampered or hand-edited
+    dataset file, never a silent accept of whatever hash string happened
+    to be present.
+    """

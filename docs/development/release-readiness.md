@@ -1329,8 +1329,446 @@ flows keep today's aggregate-only reporting); a freshly-`forge init`'d
 plugin's "real test" only proves the scaffolded pipeline works end to
 end, not that the user's eventual real algorithm is correct.
 
+## Phase 7 — Verification expansion
+
+Release plan §7.1-§7.5 (lines ~726-763). Full slice-ordering rationale,
+architecture-review corrections, and honest-deferral list live in the
+phase's own planning doc; summarized per-slice below as each lands.
+
+### Phase 7 (slice 7.0) — Result-model foundation
+
+| Item | Status | Evidence |
+|---|---|---|
+| Lift the checker stack out of `XsimBackend` | **DONE** | New `forge/verify/backend_checker.py`: `run_checker`/`_run_binary_checker`/`checker_binary_path`/`checker_command_args` as module-level functions taking `adapter`/`cfg`/`ctx`/`result` explicitly. `XsimBackend`'s three checker methods become thin delegates; `CsimBackend` untouched (never used this stack). |
+| `ExecutionStage` enum | **DONE** | New `forge/verify/execution_stage.py`: `PREFLIGHT`/`COMPILE`/`ELABORATE`/`SIMULATE`/`POST_CHECK`/`RESULT_PARSE`. Replaces free-form `backend_metadata["step"]` strings as the stage-identity mechanism. |
+| `ExecutionResult` enrichment | **DONE** | `backend_base.py`: added `stage`, `duration_s`, `backend_id` fields (additive, all defaulted). `duration_s` plumbed from `SubprocessResult.elapsed_s` through both `backend_xsim.py`'s and `backend_csim.py`'s `_run_logged` (now returns a `LoggedRun(exit_code, elapsed_s)` named tuple instead of a bare int). `waveform_path` populated for xsim only when `capabilities.supports_waveform` and the real `.wdb` file exists on disk post-run — never fabricated. |
+| Tests | **DONE** | `tests/verify/test_backend_checker.py` (21 new unit tests against real fake-tool scripts and real log files, matching `test_toolchain_versions.py`'s convention — no mocking the checker itself). `test_verify_run_xsim.py` extended with 2 real end-to-end tests: a real passing run asserting `duration_s > 0`, `waveform_path` exists on disk with `.wdb` suffix, `backend_id == "xsim"`, `stage == SIMULATE`; a real broken-SV-syntax fixture asserting `stage == ExecutionStage.COMPILE` (the direct fix for `_tail_of_log` always assuming the simulate stage). |
+| Full-suite verification | **DONE** | `856 passed, 9 skipped`, coverage `64.38%` (baseline `835 passed, 9 skipped`, `63.94%`) — **+21 tests, 0 regressions.** |
+
+### Phase 7 (slice 7.1) — Real Verilator backend (§7.2)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `supported_matrix.py` reshaped | **DONE** | `MatrixEntry` (public, was private `_MatrixEntry`) now carries `default_backend: str` + always-populated `allowed_backends: frozenset[str]` (no `None`-means-something special case) alongside the existing `classification`/`reason`. `canonical_backend_for()` renamed `default_backend_for()`; new `allowed_backends_for()`. `validate_flow_matrix`'s equality check became a membership check against `allowed_backends`, error text lists the full allowed set and names `default_backend` as recommended. `full_chip_rtl`/`single_module_rtl` widened to `{xsim, verilator}`; `reduced_chain_rtl`/`hls_csim`/`hls_cosim` stay single-backend (no driving use case). |
+| New `forge/verify/backend_verilator.py` | **DONE** | `BACKEND_ID = "verilator"`, 2-stage pipeline (`verilator --binary --timing --Wno-fatal` build, then run the built binary — no separate elaborate step, unlike xsim). Reuses `manifest_compile.prepare_from_manifest` for the manifest-driven source-file case (same helper xsim uses — HLS module expansion, dedup, `.dat` staging all reused, not reimplemented) and re-derives a plain Verilator `-f` source-file list from its xsim-flavoured `entries` output. Reuses 5 of xsim's 7 `validate_backend_requirements` checks (layout, TB exists, DUT RTL exists, stimulus file exists, `validate_stimulus`); drops the `wave.tcl` check; replaces the tool-hint text. Reuses the slice-7.0 checker stack unchanged via thin delegates. `--Wno-fatal` is required because Verilator's stricter-by-default lint (`INITIALDLY`) treats non-blocking assignments inside `initial` blocks — legal, xsim-accepted Verilog that the framework's shared TB-stimulus template genuinely uses — as fatal by default. |
+| Waveform capability — proven, not assumed | **DONE**, proven **False** | Empirically tested against the real passthrough_demo TB: `verilator --binary --trace-fst` builds and runs cleanly (real pass, `TB PASS: passthrough_verilator completed`) but produces **no `.fst` file**, because the framework-generated TB never calls `$dumpfile`/`$dumpvars` (xsim's `wave.tcl` mechanism is xsim-specific, not simulator-agnostic). `capabilities.supports_waveform = False` for Verilator in this slice, `waveform_path` stays `None` — never fabricated. A dedicated test (`test_run_backend_populates_enriched_execution_result_fields`) asserts this stays consistent (`supports_waveform is False` and no `.fst` exists on disk). |
+| Registration | **DONE** | `register_backend("verilator", "forge.verify.backend_verilator")` in `verify/__init__.py`, mirrored in `tests/conftest.py`'s reset-fixture re-registration list. |
+| Real second flow on the real reference plugin | **DONE** | `plugins/passthrough_demo/forge/verify/design.verification.yml` gained a second flow, `passthrough_verilator` — same DUT/TB/dataset as `passthrough_xsim`, only `backend: verilator` differs — proving `full_chip_rtl` is genuinely multi-backend end to end, not just matrix-declared. Real committed artifacts (`verify.flow.yml`, `tb_algo_top.sv`, `wave.tcl`, `port_map.yaml`, `stimulus_current.svh`) generated the same way `passthrough_xsim`'s were (`forge topgen gen-top` + `forge verify generate` + the plugin's own `gen_stimulus.py`), matching the existing committed-artifact convention exactly. |
+| Tests | **DONE** | New `tests/verify/test_verify_run_verilator.py` (5 real end-to-end tests, `shutil.which("verilator")`-gated, mirroring `test_verify_run_xsim.py`'s exact convention): real pass, real preflight-caught failure (missing DUT RTL, not a false pass), enriched-`ExecutionResult` assertions, real compile-stage-failure assertion. New `tests/verify/test_supported_matrix.py` (13 unit tests) covering the reshaped `MatrixEntry`/membership validation. |
+| Full-suite verification | **DONE** | `874 passed, 9 skipped`, coverage `64.60%` (baseline `856 passed, 9 skipped`, `64.38%`) — **+18 tests, 0 regressions.** Fixing this required also regenerating `passthrough_verilator`'s real committed artifacts, since `doctor`/`release-check` run against the real checked-in plugin, not a tmp copy — their first run after adding the new flow to `design.verification.yml` (before artifacts existed) genuinely failed, confirming the checks are real, not rubber-stamped. |
+
+### Phase 7 (slice 7.2) — Versioned structured per-flow/per-event verification results (§7.5 core)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `ArtifactSchema`/`ArtifactRef`/`EventResult`/`FlowResult` | **DONE** | New `forge/verify/results.py`. `ArtifactSchema("forge.verification_results", "1.0")` (`RESULTS_SCHEMA`) shared by every structured artifact this phase introduces. `ArtifactRef` carries `stage` (the real `ExecutionStage` when known — the one log matching `ExecutionResult.log_path`; `None`, honestly, for the rest of a backend's `describe_backend_outputs()` map, never guessed). `EventResult.event_id` is a `str` (matching slice 7.4a's dataset corrections ahead of that slice landing); `event_index` stays `None` until 7.4a's dataset envelope defines it for real. `checks: list = []` (empty, not populated — slice 7.3's job). Both `EventResult`/`FlowResult` get real `to_dict()`. |
+| `_run_one_loaded_flow` capture out-param | **DONE** | `verify/__main__.py`: added `capture: dict | None = None` — populated with the real `ExecutionResult` (including a synthetic one carrying `stage=PREFLIGHT` for every pre-execution failure path, so callers always get a real object) plus `checker_ok`/`outputs`. Additive and backward-compatible — the top-level `forge verify run` caller passes nothing and sees zero behavior change. |
+| Wired into `core/cli/groups/test.py::cmd_run` | **DONE** | Real `EventResult`/`FlowResult` objects replace the inline per-event dict. `_tail_of_log` now takes the real stage-correct `ExecutionResult.log_path` directly instead of always reading `outputs["simulate_log"]` — the direct fix for the confirmed bug (a compile failure's diagnostic previously always read the empty/stale simulate log). New `diagnostic_for_event_failure()` closes the "hardcodes FWV013 regardless of cause" bug with 3 real, stage-aware codes: **FWV021** (compile/elaborate failure), **FWV022** (checker rejected a result the simulator itself exited 0 on — new code), **FWV013** (genuine simulate-stage non-zero exit, unchanged meaning). |
+| JUnit `time` + `--results-json` | **DONE** | `junit_xml.py` needed no changes — its `time` attribute support already existed, unused; `cmd_run` now passes real `EventResult.duration_s` into it. New `--results-json <path>` (`forge test run`) writes `FlowResult.to_dict()` — schema tag, per-event backend id/duration/artifacts/diagnostics that JUnit's schema has no slot for. |
+| `forge report` reuse | **DONE** | New `render_results_markdown()` in `results.py`; `report.py`'s verification-results section prefers `--results-json` over `--junit-xml` when both given (richer data, JUnit stays supported unchanged). Checks `payload["schema"]["name"]`/`["version"]` before rendering — a real, minimal forward-compatibility gate, not a silent shape assumption; an unrecognised schema renders an honest "cannot render" message instead of guessing field names. |
+| Tests | **DONE** | New `tests/verify/test_results.py` (20 fast unit tests: dataclass `to_dict()` shapes, the 3-way stage-aware diagnostic-code selection, Markdown rendering incl. schema-mismatch handling). Real end-to-end additions to `tests/test_test_cli_group.py` (2 new: real `--results-json` output with real backend_id/duration/waveform artifact; a real compile failure producing a correctly-staged FWV021, not the old blind FWV013) and `tests/test_report_cli_group.py` (1 new: `--results-json` takes precedence over `--junit-xml`, proven by a results-only-renderer marker string). 3 pre-existing tests updated for the new (additive, expected) `duration_s` metric and the corrected FWV011 preflight-failure code — not weakened, the assertions now check real positive durations instead of being deleted. |
+| Full-suite verification | **DONE** | `897 passed, 9 skipped`, coverage `64.91%` (baseline `874 passed, 9 skipped`, `64.60%`) — **+23 tests, 0 regressions.** `results.py` itself at 100% coverage. |
+
+### Phase 7 (slice 7.3) — Machine-readable check records, pass and fail (§7.5 hardest item)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Unconditional `FORGE_CHECK\|...\|passed=0/1` SV record | **DONE** | `stimulus_helpers.py`: new `emit_check_record()` emits one `$display` line per check, on **both** outcomes, right before the existing `if (...) $fatal(...)` branch (which is unchanged — the human `FAIL:` line stays, `FORGE_CHECK\|` is a separate, additional channel). `emit_output_check()`/`StimulusEmitter.check()` gained an `event_id` parameter so `check_id` is deterministic (`f"{event_id}:{label}"`); `observed` uses SV's `%h` (zero-padded to the signal's declared width) so a passing check's `expected`/`observed` strings are byte-identical, not just numerically equal. `plugins/passthrough_demo/forge/verify/tools/gen_stimulus.py` (and the `forge init` scaffold template in `verify/__main__.py`) updated to pass `event_id=event_id`; both real checked-in `stimulus_current.svh` files (`passthrough_xsim`, `passthrough_verilator`) regenerated for real. |
+| Empirically verified against real xsim | **DONE** | Both outcomes proven on real hardware, not assumed: a real passing run produced `expected=0x3a\|observed=0x3a\|passed=1`; a deliberately-broken expected value produced `expected=0x00\|observed=0x3a\|passed=0` before `$fatal` correctly aborted the run. |
+| `CheckResult` + `parse_forge_check_lines()` | **DONE** | New in `results.py`: `CheckResult` (`check_id`, `label`, `signal`, `expected`, `observed`, `width`, `passed`) + a parser that only recognises the literal `FORGE_CHECK\|` marker — never the free-form `FAIL: ... — got ...` line. `EventResult.checks` (declared empty in slice 7.2) now populated by `core/cli/groups/test.py`'s new `_parse_event_checks()`, scanning the event's real `simulate_log` specifically (checks only ever run during the simulate stage). |
+| **Real bug found and fixed** (not part of the original plan) | **DONE** | `_run_one_loaded_flow`'s checker-invocation step (`verify/__main__.py`) was gated on `cfg.has_checker` — true only when a `checker:` YAML block is declared. But **every real reference flow in this repo** uses the *default* `checker_mode: log_scan` with no `checker:` block, and xsim/Verilator commonly exit 0 even after `$fatal` fires inside the simulated design (that's the entire reason `log_scan` mode exists). Net effect: the log-scan checker **never actually ran** for any real flow in this repo — a broken check inside the SV testbench was silently reported as a pass. Found via this slice's own real negative-control test (a deliberately-broken expected value kept reporting `events_passed: 1`). Fixed by removing the `has_checker` gate — the checker now runs whenever the backend succeeded and `adapter.run_checker` is defined, matching `run_checker`'s own internal `checker_mode` handling (which already correctly no-ops for `"none"` and needs no `checker:` block for `"log_scan"`). Diagnostic code for this exact failure mode is the new **FWV022** from slice 7.2 (checker rejected a result the simulator itself exited 0 on) — proving that code path for real, not just in a synthetic unit test. Verified via the full real suite (xsim + Verilator) plus `plugins/trigger_demo`'s structural/bootstrap test suite (110 tests) with 0 regressions; trigger_demo's real xsim execution path itself could not be re-verified end-to-end in this environment (its flows require HLS-synthesized RTL this session never built), an honest scope limit on this fix's empirical verification, not a gap in the fix's correctness. |
+| Tests | **DONE** | New `tests/verify/test_forge_check.py` (17 fast unit tests: SV emission shape, human FAIL line unchanged, hex zero-padding, log parsing on both outcomes, a full emit→parse round trip). Real end-to-end additions to `tests/test_test_cli_group.py` (2 new, using passthrough_demo's real 2-check golden event): a real passing run's `CheckResult`s have real, matching `expected`/`observed` read from a real log line; a deliberately-broken expected value produces a genuinely mismatched, `passed: false` `CheckResult` — and, since the checker-gate fix, a genuine `events_failed: 1` (before the fix this would have falsely reported a pass). |
+| Full-suite verification | **DONE** | `916 passed, 9 skipped`, coverage `65.06%` (baseline `897 passed, 9 skipped`, `64.91%`) — **+19 tests, 0 regressions.** `results.py` at 100% coverage. |
+
+**Honest deferral, as documented in the plan**: this mechanism only covers checks emitted via `StimulusEmitter.check()`/`emit_output_check`. Hand-written SV checks and `checker_mode="binary"` backends (which discard their own checker's stdout) get no structured expected/observed capture unless their authors independently adopt the same `FORGE_CHECK|` line convention — an open, extensible logging contract, not a framework-enforced requirement.
+
+### Phase 7 (slice 7.4a) — Dataset neutral envelope and format loaders (§7.3, layer A)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `DatasetFormatLoader` protocol + registry | **DONE** | New `forge/verify/dataset_format.py`: `DatasetFormatLoader` Protocol, `register_format_loader(suffix, loader)`/`get_format_loader(path)` — mirrors `backend_registry.py`'s pattern at the same small scale. Deliberately layer-A only: a `.xml` file's bytes are unambiguous regardless of what its events mean domain-wise; suffix dispatch does **not** extend to layer B (slice 7.4b), stated explicitly in the module docstring. |
+| `SerializedDataset`/`DatasetMetadata` (corrected shape) | **DONE** | `SemanticMetadata`/`EnvironmentMetadata` split — the hash-relevant identity (content hash, adapter id/version, preprocessing hash) kept separate from where/when the file was loaded (source path, timestamp, host), so relocating or reloading a dataset never changes its semantic identity. `event_ids: list[str]` always (never `int` — real external ids aren't guaranteed small contiguous integers); the internal, always-numeric `event_index` used for slice 7.5's memory addressing is deliberately *not* stored here — it's the caller's own position in `events`. `units` is member-scoped (qualified paths into an event dict), never a bare top-level mapping. |
+| Content hash computed and verified, never trusted | **DONE** | `compute_events_content_hash()` reuses `forge.core.utils.content_hash.hash_bytes` (no new hashing scheme) over canonicalized (sorted-key) JSON of `events` only — excludes the hash field itself and every `EnvironmentMetadata` field by construction (it never even sees them). `JsonDatasetLoader` always recomputes and compares against any declared `semantic.source_content_hash`; a mismatch raises the new `DatasetContentHashError` (added to `verify/exceptions.py`'s existing typed hierarchy) — never silently accepted. |
+| `XmlDatasetLoader` (reference/default) | **DONE** | Generic `<event id="N">`-root-child scanning, tag-name-agnostic at the event-field level (matches `core/cli/groups/test.py::_enumerate_xml_event_ids`'s proven pattern) — each child element's tag becomes a field key, its attributes the value; no per-plugin field-name hardcoding in the loader. Proven against a synthetic event shape deliberately disjoint from passthrough_demo's own (matching trigger_demo's real XML shape), not just the one real fixture. |
+| `JsonDatasetLoader` (second required format) | **DONE** | Real metadata fields as actual top-level JSON keys — closes "no dataset metadata exists anywhere" for datasets that adopt this format. New real fixture `plugins/passthrough_demo/forge/verify/schemas/data/passthrough_demo_golden.json` — same 2 events as the XML, real computed `source_content_hash`, `generator_version`. |
+| **Closed the real gap**: passthrough_demo's dataset is no longer decorative | **DONE** | `plugins/passthrough_demo/forge/verify/tools/gen_stimulus.py` rewritten: the hardcoded `_EVENTS` Python dict is gone; `_load_events()` now calls `get_format_loader(dataset_path).load(dataset_path)` for real (suffix-dispatched, so the same function drives both the XML and the new JSON sibling identically). Byte-identical event values (0x3A/0x00) — nothing regresses — but now via the real read path. Both real checked-in `stimulus_current.svh` files regenerated via the real path (content unchanged, confirming parity). |
+| Tests | **DONE** | New `tests/verify/test_dataset_format.py` (21 unit tests: both loaders against real fixtures, registry, content-hash determinism + tamper detection + path/time-exclusion proofs). Real end-to-end additions: `tests/verify/test_verify_run_xsim.py` gained a real xsim run driven by stimulus generated from the **JSON** dataset (format parity proven by an actual pass, not just "the loader doesn't crash"); `tests/test_test_cli_group.py`'s slice-7.3 negative-control test updated to edit the real XML file on disk (the hardcoded-dict mutation trick it used before no longer applies now that the dict is gone) — the intended, real proof that editing the dataset changes simulated behavior. |
+| Full-suite verification | **DONE** | `938 passed, 9 skipped`, coverage `65.23%` (baseline `916 passed, 9 skipped`, `65.06%`) — **+22 tests, 0 regressions.** `results.py`/`supported_matrix.py` at 100% coverage; `dataset_format.py` exercised by both unit and real end-to-end tests. `plugins/trigger_demo`'s own 110-test plugin-local suite re-confirmed unaffected. |
+
+### Phase 7 (slice 7.4b) — Project dataset-adapter protocol (§7.3, layer B)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `ProjectDatasetAdapter` protocol + `DatasetSource`/`CanonicalDataset` | **DONE** | New `forge/verify/dataset_adapter.py`. The load-bearing architectural boundary (project owns raw-data interpretation/preprocessing/domain mapping/golden model/comparison semantics; FORGE owns the adapter protocol, canonical envelope, hashing, execution, reporting) stated explicitly in the module docstring, not a footnote. `DatasetSource` wraps either a layer-A `SerializedDataset` (the common case) or a genuinely-external `raw_path` (bypassing layer A entirely) — exactly one is set. `CanonicalDataset` is a distinct type from `SerializedDataset` on purpose, even though structurally similar, since a `SerializedDataset` may not even be involved depending on the adapter. |
+| Explicit `adapter_id` selection, never suffix | **DONE** | `register_dataset_adapter(adapter_id, adapter)`/`get_dataset_adapter(adapter_id)` — mirrors `dataset_format.py`'s registry shape but keyed on an explicit id string. New `dataset.adapter: <adapter_id>` field on `DatasetDeclaration` (`design_contract.py`) — additive, defaults to `None`, doesn't disturb any existing flow. |
+| One real, tiny example adapter | **DONE** | `plugins/passthrough_demo/forge/verify/tools/dataset_adapter.py`: `passthrough.identity-xml` — a trivial identity `materialize()` (passthrough_demo's dataset genuinely needs no domain transformation). Registered at plugin bootstrap time (`bootstrap.py` now imports it). The real, committed `design.verification.yml` declares `dataset.adapter: passthrough.identity-xml` for real (not a synthetic fixture) — honestly noted as declared-but-not-yet-CLI-consumed (`gen_stimulus.py` still reads via the layer-A loader directly), the same "pre-carved, currently-dead extension point" pattern already established for `stimulus_mode` before slice 7.5 gives it real meaning. |
+| Cross-test module-cache isolation | **DONE** | `dataset_adapter` added to `tests/conftest.py`'s `_PLUGIN_TOOL_MODULE_NAMES` reset list — the same real cross-test contamination bug class documented in that file's own docstring (a later test silently reusing an earlier test's cached plugin module) would otherwise apply to this new module too. |
+| Tests | **DONE** | New `tests/verify/test_dataset_adapter.py` (10 tests): registry resolution by explicit id, a real assertion that two same-shaped sources resolve to genuinely different adapter objects (suffix never consulted), the real committed YAML's `dataset.adapter` field parsing for real. Real end-to-end addition to `tests/verify/test_verify_run_xsim.py`: passthrough_demo's real identity adapter `materialize()`s a real layer-A dataset, asserts byte-identical output to the direct loader path, then drives an actual xsim run from the adapter's own output through to a real pass — not just object-equality on paper. |
+| Full-suite verification | **DONE** | `949 passed, 9 skipped`, coverage `65.30%` (baseline `938 passed, 9 skipped`, `65.23%`) — **+11 tests, 0 regressions.** |
+
+**Explicit, documented, un-built scope** (per the plan): `vision.image-folder`, `omtf.root-events`, `network.pcap`, `audio.wav-folder`-style adapters are not implemented — the protocol they'd implement is real and proven via one trivial, genuinely-needed example; the adapters themselves belong to future project reference plugins, not this framework phase.
+
+### Phase 7 (slice 7.5) — Fixed-shape, non-recompiling stimulus mechanism (§7.4)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `stimulus_mode` wired through for real | **DONE** | The field existed only in `design_contract.py`'s `FlowDeclaration` before this slice — never reached `verify.flow.yml` or `FlowConfig`, confirmed dead by investigation. Now: `gen_sim.py`'s template emits `stimulus_mode: {value}` into every generated `verify.flow.yml`; `flow_loader.py`'s `FlowConfig` gained a real `stimulus_mode: str` field, parsed the same way `checker_mode` already is. Default `"svh_include"` unchanged for every existing flow. |
+| `.mem`-file writer (framework-owned) | **DONE** | New `forge/verify/readmemh_stimulus.py`: `write_event_memory_file(canonical, pack_event, out_path)` — one fixed-width hex word per event, `event_index` order. Packing a per-plugin bit layout into a fixed-width word is inherently per-DUT (port widths are project-specific), so `pack_event` is a plugin-supplied callback — the same framework/plugin ownership split already established for layer B. Returns the real `event_index → event_id` mapping (never fabricated). Documents the general variable-length "stimulus package" model (`forge.stimulus_package`) as a reserved-but-unimplemented future design, per the plan. |
+| SV emission helpers (framework-owned) | **DONE** | `stimulus_helpers.py` gained `emit_event_index_read()` (`+EVENT_INDEX`, never `+EVENT_ID` — an event_id is an arbitrary string per slice 7.4a, only the internal always-contiguous `event_index` addresses memory) and `emit_runtime_output_check()` (slice 7.3's `FORGE_CHECK|` mechanism, adapted for a *runtime* expected value — one compiled TB now services many events, so `expected` is read from memory at simulation time, not known at generation time; `check_id` is honestly just the label here, since the real per-event id isn't known at generation time either — external per-run log correlation already provides real attribution). New `write_readmemh_stimulus_svh()`: unlike `write_run_stimulus_svh`, needs a module-scope preamble (the `$readmemh`-loaded array + its `initial` load) genuinely *before* the task (SV disallows `initial` nested in a task) — confirmed this still satisfies all 9 of `validate_stimulus`'s regex checks unchanged, since the contract only requires exactly one task signature/`endtask` pair to appear, not that the file contain nothing else. |
+| Backend build-skip + plusarg forwarding | **DONE** | `backend_xsim.py`/`backend_verilator.py`: both skip their compile/build step when `cfg.stimulus_mode == "readmemh"` and a real build sentinel file from a prior successful compile exists in `work_dir`; both forward `ctx.event_index` (new field on `RuntimeContext`) as `-testplusarg EVENT_INDEX=N` (xsim) / `+EVENT_INDEX=N` (Verilator argv) — both mechanisms empirically verified against real `$value$plusargs` behavior before implementation, not assumed. |
+| `forge test run` wiring | **DONE** | `core/cli/groups/test.py::cmd_run`: when `stimulus_mode == "readmemh"`, the plugin's `gen_stimulus.generate_readmemh_stimulus()` is called **once**, before the per-event loop (not per event, unlike `_regenerate_stimulus_for_event`); all events in the run share one `xsim_work/readmemh_shared/` work dir (not `per_event/<id>/`); each event's real `event_index` (resolved from the real `event_id → event_index` mapping, string ids resolved explicitly — never assumed numeric) is set on `ctx.event_index` before that event's `_run_one_loaded_flow` call. `EventResult.event_index` is genuinely populated now for readmemh-mode events (honestly `None` for `svh_include` flows, which have no such concept). |
+| Real reference plugin, real committed artifacts | **DONE** | Third flow `passthrough_readmemh` added to `plugins/passthrough_demo/forge/verify/design.verification.yml` (same DUT/TB/dataset as `passthrough_xsim`; only `stimulus_mode: readmemh` differs). `gen_stimulus.py` gained `generate_readmemh_stimulus()` — real bit layout (`data_in(8)\|data_in_valid(1)\|data_out(8)\|data_out_valid(1)` = 18 bits/event), driven through the real layer-A/layer-B dataset pipeline (slices 7.4a/7.4b) unchanged. Real committed artifacts (`verify.flow.yml`, `tb_algo_top.sv`, `wave.tcl`, `port_map.yaml`, `stimulus_current.svh`, `passthrough_events.mem`) generated the same way the other two flows' were. |
+| **Real bug found and fixed while building this slice** | **DONE** | The very first `write_readmemh_stimulus_svh` draft produced a file with **two** `task automatic run_stimulus();` declarations (`stimulus_contract.py`'s check #7 would have rejected it) — the module-scope preamble was being written *inside* the auto-wrapped task by a naive first attempt (`write_run_stimulus_svh` wraps its *entire* argument in the task; a `reg`/`initial` preamble can't legally live there). Fixed by writing a real, dedicated `write_readmemh_stimulus_svh()` that places the preamble *before* opening the task — caught immediately by generating and reading back the real file, before any simulator was even invoked. |
+| Acceptance bar: real, observable compile-count reduction | **DONE** | Confirmed via real `forge test run --all-events` stdout: `"[xsim 1/3] Compiling"` appears **exactly once**, `"[xsim 1-2/3] Reusing existing compile+elaborate"` appears **exactly once**, `"[xsim 3/3] Simulating"` appears **twice** (both events genuinely still run) — across a real 2-event run on the real golden dataset, both events producing correct, *distinct* results (`0x3a`/valid=1 vs `0x00`/valid=0) with the correct real `event_id` recorded in each `EventResult`, not just the index. |
+| Regression guard | **DONE** | A parallel real end-to-end test confirms `passthrough_xsim` (the default `svh_include` flow) is completely unaffected: `"[xsim 1/3] Compiling"` still appears **twice** across 2 events, `per_event/<id>/` directories still used, "Reusing existing compile+elaborate" never printed. |
+| Tests | **DONE** | New `tests/verify/test_readmemh_stimulus.py` (11 unit tests: memory-file writing, event_index/event_id mapping with real non-numeric ids, plusarg emission, the runtime-check SV shape, and a real `validate_stimulus` contract-compliance proof for the preamble-before-task shape). Real end-to-end additions to `tests/test_test_cli_group.py` (2 new: the compile-once acceptance proof described above; the svh_include regression guard). |
+| Full-suite verification | **DONE** | `962 passed, 9 skipped`, coverage `65.42%` (baseline `949 passed, 9 skipped`, `65.30%`) — **+13 tests, 0 regressions.** `readmemh_stimulus.py` at 100% coverage. `plugins/trigger_demo`'s 110-test plugin-local suite re-confirmed unaffected. |
+
+**Honest deferral, as documented in the plan**: the general variable-length "stimulus package" model (`manifest.json`/`event_payload.mem`/`event_offsets.mem`, reserved schema name `forge.stimulus_package`) is a documented future design, not built — this slice covers fixed-shape event records only, a deliberate scope limit stated explicitly in `readmemh_stimulus.py`'s module docstring, not an oversight.
+
+### Phase 7 (slice 7.6) — Cross-slice integration acceptance test
+
+Not a new feature — one real, end-to-end chain proving every prior
+slice's output is genuinely consumable by the next (each slice's own
+tests only prove that slice in isolation):
+
+```
+JSON dataset file
+  -> 7.4a format loader (real content-hash verification)
+  -> 7.4b project adapter (passthrough.identity-xml)
+  -> CanonicalDataset
+  -> 7.5's stable stimulus memory (one real compile)
+  -> multiple real event runs, selected by event_id -> event_index
+  -> 7.3's machine-readable FORGE_CHECK records (pass and fail cases)
+  -> 7.2's versioned results.json (schema-checked)
+  -> JUnit XML (time populated)
+  -> forge report's verification_results.md
+```
+
+| Item | Status | Evidence |
+|---|---|---|
+| Fourth real reference flow: Verilator + readmemh together | **DONE** | `passthrough_readmemh_verilator` added to the real `design.verification.yml` — the same readmemh chain as `passthrough_readmemh`, but on the real Verilator backend, proving the whole chain is backend-agnostic, not incidentally xsim-only (slices 7.1's backend work and 7.5's readmemh work composing for real, for the first time). Real committed artifacts generated the same way as the other three flows. |
+| Full chain, real, on xsim (pass path) | **DONE** | New `tests/verify/test_phase7_integration.py::test_full_chain_json_dataset_through_report_on_xsim` — every arrow in the diagram above exercised with a real assertion: `JsonDatasetLoader` (real hash verified), `passthrough.identity-xml` adapter (`materialize()` output asserted byte-identical to the loader's), `generate_readmemh_stimulus()` driven from the **JSON** dataset specifically, a real `forge test run --all-events` (compile count asserted: exactly 1 real compile + exactly 1 real reuse), real `results.json` (schema tag checked, real per-event `event_index`, real matching `FORGE_CHECK` expected/observed), real JUnit (`time` populated and non-zero), and `forge report` actually rendering `verification_results.md` from that same `results.json` (not recomputing anything). |
+| Full chain, real, on xsim (fail path) | **DONE** | New `test_full_chain_fail_case_json_driven_readmemh_stimulus_on_xsim` — a real, deliberately-broken JSON golden value drives a real DUT-vs-golden mismatch, caught by slice 7.3's checker-gate bug fix (confirmed still holding), with a genuinely mismatched `FORGE_CHECK|...passed=0` record in the real simulate log — not a false pass. |
+| Full chain, real, on Verilator | **DONE** | New `test_full_chain_same_readmemh_flow_on_verilator` — the same real chain (`passthrough_readmemh_verilator`), same acceptance bar (compile-count reduction, real distinct per-event `results.json` values, real `backend_id == "verilator"`). |
+| No workaround needed | **DONE** | No integration seam was found broken by composing the six prior slices for the first time — every prior slice's own real end-to-end tests already exercised the real interfaces the next slice consumes, so the composition worked on the first real attempt once the fourth flow's artifacts existed. |
+| Full-suite verification | **DONE** | `965 passed, 9 skipped`, coverage `65.44%` (baseline `962 passed, 9 skipped`, `65.42%`) — **+3 tests, 0 regressions.** `plugins/trigger_demo`'s 110-test plugin-local suite re-confirmed unaffected one final time. |
+
+## Phase 7 closing summary
+
+All 8 slices (7.0–7.6) complete. Starting baseline (Phase 6's own exit
+state): `835 passed, 9 skipped`, coverage `63.94%`. Ending state:
+`965 passed, 9 skipped`, coverage `65.44%` — **+130 tests, +1.50%
+coverage, 0 regressions across the whole phase**, each slice's own
+full-suite run confirmed clean before moving to the next.
+
+**What shipped**: a real Verilator backend alongside xsim (2-backend
+matrix, empirically-honest waveform capability); versioned, schema-tagged
+structured verification results (`FlowResult`/`EventResult`/`ArtifactRef`,
+`--results-json`, stage-aware diagnostic codes replacing a single
+hardcoded one); machine-readable `FORGE_CHECK|` check records on both
+pass and fail outcomes; a real two-layer dataset architecture (layer A:
+`XmlDatasetLoader`/`JsonDatasetLoader` with computed-and-verified content
+hashing; layer B: the project-owned `ProjectDatasetAdapter` protocol, one
+real identity example); a fixed-shape, non-recompiling `readmemh`
+stimulus mechanism (compile once, reselect events via a runtime plusarg);
+and one real cross-slice integration test proving all of the above
+compose end to end, on two real backends.
+
+**Real bugs found and fixed along the way** (not part of the original
+plan, surfaced by this phase's own real end-to-end testing discipline):
+`_tail_of_log` always reading `simulate_log` regardless of which stage
+actually failed (slice 7.0/7.2 — the direct motivation for the
+`ExecutionStage` enum); every real flow in this repo silently never
+having its checker actually run because `_run_one_loaded_flow` gated the
+checker step on a `checker:` YAML block that `log_scan` mode never needed
+(slice 7.3/7.5 — found via this phase's own negative-control tests, a
+genuinely severe latent correctness gap, not a cosmetic one); a
+duplicate-task-declaration bug in the first draft of the readmemh SVH
+writer, caught immediately by generating and reading back the real file
+before any simulator was invoked (slice 7.5).
+
+**Honest deferrals** (documented, not fabricated — see each slice's own
+closure entry above for the reasoning): GHDL and cocotb/VUnit (no VHDL
+flow kind exists, no implementation surface, both explicitly out of
+scope per the plan); `trigger_demo`'s fragile C++ XML reader stays as-is
+(plugin-owned, optional cleanup); machine-readable check capture only
+covers `StimulusEmitter.check()`-authored checks, not hand-written SV or
+binary checkers; "seed" stays `None`-typed (no randomization exists
+anywhere in the verification path); the general variable-length
+"stimulus package" model (`forge.stimulus_package`) is a documented
+future design, not built; vision/ROOT/PCAP/audio dataset adapters are
+not built (the protocol is real and proven via one trivial example);
+`supported_matrix.py`'s multi-backend widening stayed scoped to
+`full_chip_rtl`/`single_module_rtl` only, the two kinds with real
+evidence of needing it.
+
+## Phase 8 — Visual design outputs
+
+Grounded in two parallel deep-investigation passes plus one architecture-
+review pass that found and fixed five real design defects before any
+code was written (see the phase-8 plan for the full narrative — not
+reproduced here). All 7 slices (8.0A, 8.0B, 8.1–8.5) complete.
+
+### Phase 8 (slice 8.0A) — Shared identity & artifact foundation
+
+| Item | Status | Evidence |
+|---|---|---|
+| `ArtifactSchema` moved to a neutral location | **DONE** | New `forge/core/artifact_schema.py`. `forge/verify/results.py` now imports it (`RESULTS_SCHEMA` unchanged in value/behavior) instead of defining it locally — a small, mechanical, behavior-preserving move; Phase 7's own `results.py` test suite re-run unmodified. |
+| `resolved_instance_id()` — the one shared instance-id rule | **DONE** | New `forge/ir/identifiers.py`. `forge/ir/build.py::_instance_id` now delegates to it (behavior-preserving for every existing single-instance case). `forge/analyze/latency_static/graph.py`'s `LatencyNode` gains `instance_id`/`display_name` fields (both node-construction loops populate them via the shared helper) — `.name`/existing bracket-form display behavior is untouched, closing the mismatch at its root rather than patching around it. |
+| `portable_display_path()` | **DONE** | New `forge/core/utils/portable_path.py` — never returns an absolute path; prefers a relative path under a given root, falls back to `basename#hash8` for anything outside every given root (never a `'../'`-laden path). **Deliberately not wired into `forge/ir/provenance.py::_relative_key()`** — see "Corrected during implementation" below; used directly by `graph_model.py` for `DesignGraph`'s own source-file paths instead. |
+| `forge/analyze/design_explorer/graph_model.py` — `DesignGraph` projection | **DONE** | `GraphNodeKind` (`instance`/`external-port`/`module-group`/`domain-group`), `ObjectReference`, `GraphNode`/`GraphEdge`/`ObjectRecord`, `DesignGraph` (with `source_ir_schema_version`/`source_ir_content_hash`/`overlay_hashes` provenance fields). Every `ResolvedTopLevelPort` **and** every `"$external"`/`"$tie_off"`-endpoint connection's own signal name materializes a real `EXTERNAL_PORT` node (the union closes the gap for `forge inspect`'s pre-generation IR, which never has `top_ports` populated at all — confirmed empirically). `MODULE_GROUP`/`DOMAIN_GROUP` nodes carry real `members` lists (not just `parent` pointers) for client-side re-parenting. |
+| Tests | **DONE** | New `tests/test_design_explorer_graph_model.py` (10 tests): provenance matches `content_hash()` exactly; trigger_demo's real 7/10/45 module/instance/connection counts reproduced exactly in the graph; every real `$external` connection resolves to a real node; determinism (build twice, byte-compare); absolute-path-leakage; module/domain-group membership. |
+
+### Phase 8 (slice 8.0B) — Overlay joins
+
+| Item | Status | Evidence |
+|---|---|---|
+| Latency join fix (the highest-risk finding) | **DONE** | `LatencyNode.instance_id` (via `resolved_instance_id()`) is now the real join key — closes the confirmed `"dec[0]"` (latency graph) vs. `"dec_0"` (IR) mismatch for any multi-instance module. **Real regression test**: `trigger_demo`'s `dec_0`..`dec_3` each independently resolve real latency data; `trig` shows the real `cycles=3` value. |
+| `MaturityStatus`/`MaturitySummary` (four real states) | **DONE** | `graph_model.py::_compute_module_maturity` — per-module rollup computed directly from real per-connection `wiring_method` (no new data source). `CONTRACT`/`COMPATIBILITY` only at the true extremes, `MIXED` for a real mix, `UNKNOWN` for no classified connections — never a lossy boolean. `_compute_maturity_summary()` (`core/cli/groups/topgen.py`) additively exposes the real per-module name lists (`contract_driven_names`/`compat_mode_names`) it already had on hand, so `forge report` and the graph overlay source from the same real lists. |
+| Diagnostic id-space fix (Defect 3) | **DONE** | `forge/ir/build.py`'s one free-text-`object_id` site (validator issues) now parses the issue's own `modules[N]...` YAML-path location and, when — and only when — it's genuinely module-scoped, emits the same structured `f"module:{name}"` convention the two other sites already use (`_validator_object_id()`); every other category honestly keeps its free-text location, not a fabricated link. `graph_model.py::parse_object_reference()` parses `object_id` into a typed `ObjectReference`; a `module-definition`/`interface` target resolves to the real `MODULE_GROUP` node and mirrors into every instance's `inherited_diagnostics` — never fanned out onto an arbitrary instance. |
+| `VerificationTarget` schema (Defect 4) | **DONE** | `forge/verify/results.py`: `VerificationTarget` (`object_kind`/`object_id`/`coverage_kind`) + `EventResult.targets: list = []` (additive, empty by default — Phase 7 results remain valid). Not populated this phase (real population needs plugin-facing flow-declaration work — honest deferral). The conservative "flow entry points" join ships instead: `forge/analyze/design_explorer/verification_join.py::join_flow_entry_points()` joins `flow.top_module` (matched against both the design module name and its `ip_info_key` ref) to the real `MODULE_GROUP` node — labeled "flow entry points" everywhere, never "verified modules". |
+| Tests | **DONE** | New `tests/test_design_explorer_overlays.py` (8 tests): the latency regression guard above; a real `MIXED`-status assertion on `trigger_demo`; `_compute_maturity_summary`'s new name lists; `parse_object_reference`'s two real conventions; a real, end-to-end validator-diagnostic round-trip (a genuinely module-scoped issue, built from a minimal real design on disk, resolving to the real `MODULE_GROUP` node — never an arbitrary instance); the verification join resolving `hit_decoder_xsim` → `module:dec` for real against `trigger_demo`'s real `design.verification.yml`, plus its honest-empty-dict case for an unknown flow. |
+| **Corrected during implementation**: `_relative_key()` does *not* delegate to `portable_display_path()` | **DONE**, deviating from the original plan text | The plan's slice 8.0A text called for `forge/ir/provenance.py::_relative_key()` to delegate to the new `portable_display_path()`. Doing so **broke a real, pre-existing, passing test** (`test_gen_top_writes_provenance_manifest_alongside_design_ir`): `output_hashes` keys have a genuine, different requirement — they must stay *reconstructable* (`(design_dir / key).resolve()` round-trips to the real output file, including build outputs that legitimately live in a completely different directory tree than `design.yml`, e.g. a `--build-dir` under a temp root) — `portable_display_path()`'s anti-leakage policy (never `'../'`, fall back to a hash label) is the right call for a rendered, potentially-shared visualization artifact, but silently breaks that reconstruction contract for provenance manifests. Reverted `_relative_key()` to its original `os.path.relpath`-based implementation, with a docstring explaining why the two utilities intentionally diverge. Zero-regressions took precedence over literal adherence to the plan text — a considered deviation, documented at the two call sites, not a shortcut. |
+
+### Phase 8 (slice 8.1) — Static SVG (§8.1)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `forge/analyze/design_explorer/escaping.py` | **DONE** | Centralized DOT identifier/label escaping, DOT HTML-like-label text escaping, HTML text/attribute escaping, JSON-in-`<script>` escaping (`</` → `<\/`, keeps valid JSON while breaking the literal `</script` sequence), and a stable derived DOM-safe id (`dom_safe_id`, `sha256`-based) — every renderer in the package routes text through these instead of interpolating raw strings. |
+| `forge/analyze/design_explorer/dot_renderer.py` | **DONE** | `render_dot()` — module-definition grouping via real `subgraph cluster_*` blocks (from real `MODULE_GROUP` members); external ports visually distinct; one edge per real `GraphEdge` (every real connection, including external-port ones, carries a real `id=` DOT attribute — the literal, checkable "every id appears in the rendered text" proof); styled by `wiring_method`; transformation/CDC labels; diagnostic-driven node border color. Clock/reset-domain grouping is *not* rendered as a second nested cluster hierarchy in the static view (Graphviz clusters don't support one node belonging to two independent compounds at once) — documented as the interactive explorer's job. `render_svg()`/`dot_available()` shell out to the real `dot` binary (confirmed present, `/usr/bin/dot`, graphviz 2.44.0), never raising themselves — the CLI layer decides whether absence is a hard failure. |
+| CLI: `--dot`/`--svg` split | **DONE** | `forge inspect --dot <path>` never requires `dot`; `--svg <path>` requires it and fails loudly and specifically (a real, actionable `CommandEnvelope` failure, not a silent no-op) when absent. `forge report`'s topology section always writes `topology.dot`, attempts `topology.svg`, and honestly notes in `next_actions`/diagnostics when SVG was skipped — `_TOPOLOGY_DEFERRAL_NOTE` removed (also removed from `forge init`'s stale next_actions, since `forge report`'s topology section is real now). |
+| Tests | **DONE** | New `tests/test_design_explorer_dot_renderer.py` (15 tests): every real connection id (including external-port ones) appears exactly once in the rendered DOT text on both reference plugins; a real SVG round-trip via the real `dot` binary; adversarial-name escaping (quotes, backslashes, arrows, angle brackets, ampersands) re-parsed through the real `dot` binary when available; `--svg` without `--dot` failing loudly with a scrubbed `PATH` (`test_toolchain_versions.py`'s fake-PATH convention); `--dot` succeeding with the same scrubbed `PATH`. |
+
+### Phase 8 (slice 8.2) — Interactive self-contained HTML (§8.2)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Vendored Cytoscape.js (core only) | **DONE** | `forge/analyze/design_explorer/vendor/cytoscape.min.js` — real, pinned `3.28.1` fetched from `unpkg.com/cytoscape@3.28.1` (npm-backed CDN mirror), `sha256=92d752b48ea949720675865197fd2a0001c95bc5888545e990af60321712d4c6`, verbatim upstream MIT `LICENSE`, `README.md` documenting version/source/hash/no-source-map-comments-present. Core only, per the corrected architecture's Option A — the official expand-collapse extension is not vendored (documented upgrade path if a future, larger reference design needs it). |
+| `forge/analyze/design_explorer/html_renderer.py` | **DONE** | `render_explorer_html()` — the `dashboards/renderer.py` self-contained-HTML pattern (plain string concatenation, one inline `_HTML_STYLE`), vendored JS read via `importlib.resources.files("forge.analyze.design_explorer").joinpath("vendor", ...)` and inlined (never `<script src=...>`), graph data as a `<script type="application/json">` island run through `json_script_safe()`. |
+| Real packaging gap found and fixed | **DONE** | `forge/pyproject.toml`'s explicit `packages` list was missing `forge.ir` entirely (a pre-existing gap, not introduced this phase) — a real wheel build of this project would have silently shipped a `forge.analyze.design_explorer` that raises `ModuleNotFoundError: No module named 'forge.ir'` the moment anything imported it, since `forge.ir.model`/`forge.ir.serialize` are `graph_model.py`'s own real dependencies. Found by the packaging test itself (a real `pip wheel` + fresh-venv install), not by inspection. Fixed additively (`forge.ir` added to `packages`; `forge.analyze.design_explorer` + its `vendor/*` glob added to `package-data`) — a real, scoped fix, not a workaround. |
+| CLI: `forge inspect --explorer` | **DONE** | `forge report`'s topology section also writes `topology_explorer.html`; `test_report_cli_group.py`'s deferral-note assertion replaced with real artifact-presence assertions (`topology.dot`/`topology_explorer.html` always; `topology.svg` conditional on `dot` availability, checked via the same `shutil.which` convention the test file already used for xsim). |
+| Tests | **DONE** | New `tests/test_design_explorer_html_renderer.py` (6 tests: precise offline-loading — no external `<script src>`/`<link href>`/`fetch(`/`XMLHttpRequest`/`WebSocket`/dynamic `import(`/external image-font URL, never a blanket `https://` ban; a real `html.parser`-based well-formedness check; absolute-path leakage; real embedded-JSON node/edge counts on `trigger_demo`; a literal `</script>` in a diagnostic message round-tripping safely through the data island). New `tests/test_design_explorer_packaging.py` (1 `integration`-marked test: real `pip wheel` from an isolated source copy + real fresh-venv install + real `importlib.resources` read-back, sha256-verified against the checked-in file, plus a real end-to-end render from the installed artifact). |
+
+### Phase 8 (slice 8.3/8.4) — Explorer functionality & selected-object details panel (§8.3/§8.4)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Pan/zoom, search, filters, clock-domain-grouping toggle, overlays (latency/maturity/verification), diagnostics-only view, path-to/from-node, physical-port expansion, collapse/expand (Option A) | **DONE** | All inline JS in `html_renderer.py`'s `_APP_JS`, reading the embedded `DesignGraph` JSON — no server round-trip. Collapse/expand: hides a `MODULE_GROUP`/`DOMAIN_GROUP`'s real children, hides edges with both endpoints hidden, synthesizes one aggregate edge per (visible-source, visible-target) pair with a real hidden-edge count label, restores the exact original edge set verbatim on expand — session-local UI state only, never written back into `DesignGraph`. Path-to/from-node uses Cytoscape.js core's own built-in `predecessors()`/`successors()` (no extension needed). |
+| Selected-object details panel | **DONE** | Client-side rendering from `ObjectRecord` entries (the typed registry `graph_model.py` builds once) — module details (kind, source files, contract, parameters, clock/reset domain, latency+provenance, diagnostics + `inherited_diagnostics`, physical interfaces); connection details (producer/consumer, wiring method, domains, transformations, matching evidence incl. real `rejected_candidates`). |
+| Tests | **DONE** | New `tests/test_design_explorer_functionality.py` (6 tests) and `tests/test_design_explorer_details_panel.py` (2 tests): real latency-overlay data (`trig`'s real `cycles=3`, every other instance honestly `None` or a different real value — never a fabricated stand-in); real wiring-method filter vocabulary; diagnostics-only-view sparsity proven honest (no real emission site produces an instance/connection-level diagnostic today — confirmed, not assumed); physical-port-expansion data present for an HLS module (`trig`) and honestly empty for an RTL module with no contract (`tfan`); real clock/reset-domain membership; a static content check that the collapse/expand + overlay + search functions are genuinely present and wired to the right identifiers in the rendered script. Both `test_module_details_...`/`test_connection_details_...` walk one real module (`trig`) and one real connection (`dec_0.decoded_hit->col.in_hit_0`, which carries a real `gather_scatter` transformation) from `trigger_demo`, asserting every §8.4-listed field is present-and-real or explicitly, documentedly absent. |
+| **Honest, environment-constrained deferral**: JS *execution* is not tested | **Documented** | No Node.js and no sudo/package-manager access exist in this environment (confirmed: `which node`/`npm` both fail, `dnf` requires a password this session doesn't have) — consistent with the release plan's own honest-deferral #7 (no browser-automation infrastructure, and this phase does not introduce one). A live collapse/expand round-trip or a live overlay switch is therefore validated via the data contract it reads from (every field above, real and tested at the Python level) and a static presence/wiring check on the rendered script — not by executing the JS. |
+
+### Phase 8 (slice 8.5) — Visual test suite (§8.5)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Determinism | **DONE** | `trigger_demo`'s real `DesignGraph` built twice: DOT text byte-identical, the embedded HTML explorer's JSON data island byte-identical. |
+| Stable identifiers | **DONE** | Every `GraphNode`/`GraphEdge` id set exactly equals the real, corresponding IR id set (instances, module-groups, connections) — not just "looks right" on inspection. |
+| Complete edge coverage | **DONE** | `len(DesignGraph.edges) == len(ResolvedDesign.connections)` exactly on `trigger_demo` (45 == 45), including every external-port connection, proven at both the graph-model level (8.0A) and the rendered-DOT-text level (8.1). |
+| Valid diagnostic links | **DONE** | Every `ObjectReference` a real diagnostic resolves to, on both reference plugins, is checked against the real `DesignGraph.objects` registry and (for `module-definition` targets) the real `MODULE_GROUP` node's diagnostics list — the direct regression guard for Defect 3's fix. |
+| Escaping/injection suite | **DONE** | A consolidated, parametrized suite (8 adversarial strings: quotes, backslashes, angle brackets, ampersands, a literal `</script>`, arrows/colons/dots already real in connection ids) fed through **both** renderers together on one hostile `ResolvedProject`, asserting the DOT output stays a well-formed digraph and the embedded JSON stays syntactically valid with the real hostile string still present (round-tripped, not corrupted or dropped). |
+| Vendored-package-data presence | **DONE** | Re-run as part of the full suite (`test_design_explorer_packaging.py`, slice 8.2). |
+| Offline HTML loading | **DONE** | Re-run as part of the full suite (`test_design_explorer_html_renderer.py`, slice 8.2) — the precise, non-blanket mechanism check, not a `"https://"` string ban (which would false-positive on `vendor/README.md`'s own legitimate upstream-URL citation). |
+| No absolute-path leakage | **DONE** | One consolidated test scanning DOT text, rendered HTML, and the embedded JSON island together for the real checkout's own absolute path substring. |
+| Performance tripwire | **DONE** | `trigger_demo` construction + DOT/JSON serialization only (excludes the `dot` subprocess's own unrelated startup-time variance) — measured ~8.5ms/iteration in this environment, ceiling set to 2s (roughly two orders of magnitude of headroom, generous on purpose per the plan's own instruction — this is a regression tripwire, not a scale proof). Real node/edge/instance/module counts are the primary signal; the timing ceiling is secondary. |
+| Tests | **DONE** | New `tests/test_design_explorer_visual_suite.py` (14 tests) — all of the above. |
+
+## Phase 8 closing summary
+
+All 7 slices (8.0A, 8.0B, 8.1–8.5) complete. Starting baseline (Phase 7's
+own exit state): `965 passed, 9 skipped`, coverage `65.44%`. Ending state
+(fresh venv, full suite including `integration`-marked tests):
+`1027 passed, 9 skipped`, coverage `67.40%` — **+62 tests, +1.96%
+coverage, 0 regressions across the whole phase**, each slice's own
+full-suite run confirmed clean before moving to the next.
+
+**What shipped**: a deterministic `DesignGraph` visualization projection
+of the canonical IR (typed node/edge/object-registry vocabulary, real
+provenance back to the IR's own content hash, real overlay joins for
+latency/maturity/verification); deterministic Graphviz DOT + SVG output
+(`forge inspect --dot/--svg`); a self-contained, fully offline,
+interactive HTML design explorer (`forge inspect --explorer`) with a
+real, pinned, sha256-verified vendored Cytoscape.js core, covering
+pan/zoom, search, module/clock/reset-domain grouping with collapse/
+expand, three real overlays, a diagnostics-only view, path-to/from-node
+traversal, on-demand physical-port expansion, and a selected-object
+details panel with real matching evidence and rejected alternatives;
+`forge report`'s topology section, replacing the Phase 6-era deferral
+note with real artifacts and honest SVG-absent degradation.
+
+**Real bugs found and fixed along the way** (not part of the original
+plan, surfaced by this phase's own real end-to-end testing discipline):
+the bracket-vs-underscore multi-instance instance-id mismatch between the
+latency-analysis graph and the canonical IR (`"dec[0]"` vs `"dec_0"`) —
+silently present since Phase 4, never caught because both reference
+plugins' *tested* fixtures were dominated by single-instance modules
+until this phase's own regression test exercised `trigger_demo`'s
+4-instance `dec` module through the join for the first time; a real
+packaging gap (`forge.ir` missing from `pyproject.toml`'s `packages`
+list) that would have silently broken *any* real wheel install of this
+project the moment anything imported `forge.ir`, not just this phase's
+own new code — found by the packaging test's real `pip wheel` +
+fresh-venv install, not by inspection.
+
+**One deliberate, documented deviation from the plan's literal text**:
+`forge/ir/provenance.py::_relative_key()` does **not** delegate to the
+new `forge.core.utils.portable_path.portable_display_path()`, despite
+the plan calling for it — doing so broke a real, pre-existing,
+passing test (`output_hashes` keys have a genuine reconstructability
+requirement `portable_display_path()`'s anti-leakage policy would have
+silently defeated). Zero-regressions took precedence; see slice 8.0B's
+table entry above for the full reasoning.
+
+**Honest deferrals** (documented, not fabricated — see each slice's own
+closure entry above for the reasoning): full FWV/ATG diagnostic-registry
+linking to the graph (real, substantial, cross-registry work the project
+has already twice declined to merge — only the IR-native
+`DiagnosticReference` list is linked this phase); the FWV diagnostic
+docstring table's own drift from real code (found, real, orthogonal to
+visualization); the `width_adapter`/`protocol_adapter`/`constant_source`
+transformation kinds (declared in the vocabulary, never emitted by any
+matcher/generator today — renderers handle them structurally but no real
+fixture exercises them); populating real `VerificationTarget`s (schema
+built this phase, population needs plugin-facing flow-declaration work);
+vendoring the official Cytoscape.js expand-collapse extension (the
+custom, lightweight collapse implementation is enough at this scale); a
+"diff two designs" visual view (straightforward to build on top of
+`serialize.diff_projects()` + `DesignGraph`, but never asked for by
+§8.1–§8.5's text); headless-browser/visual-regression testing (no
+browser-automation infrastructure exists in this repo, and — confirmed
+this phase — no Node.js or sudo/package-manager access exists in this
+sandbox either, so JS *execution* behavior is validated via its data
+contract and static content checks, not by running it); richer
+CDC-specific data beyond `crosses_clock_domain`/`crosses_reset_domain`
+(no first-class synchronizer-stage field exists in the IR to render).
+
+## Phase 9 — MkDocs Documentation
+
+Release plan §9.1-§9.4 (`docs/plan/FORGE_release_plan.md:881-956`). The
+plan went through two review passes before any file was written (an
+initial architecture review, 5 defects, then a deeper second review, 17
+further findings) — both folded into the executed plan rather than
+narrated as a separate changelog; see the plan file itself
+(`buzzing-mixing-hamming.md`-derived) for the full defect list. All six
+slices (9.0-9.5) complete.
+
+### Phase 9 (slice 9.0) — Pinned, offline-capable tooling foundation
+
+| Item | Status | Evidence |
+|---|---|---|
+| `mkdocs.yml` | **DONE** | New file, repo root. Material theme, `font: false` (no webfont CDN load), `extra.version.provider: mike`, `strict: true`, `exclude_docs:` for `docs/plan/**` and `docs/development/release-readiness.md` (this file) — MkDocs renders every file under `docs_dir` regardless of `nav:` membership, so nav omission alone does not exclude a file from the built site; `exclude_docs:` is the real mechanism. No `site_url` set — the canonical public host is not yet decided (see slice 9.5); a placeholder URL was tried during implementation and found to break Material's `404.html` (absolute-path links that don't resolve locally), removed once found. |
+| Pinned `docs` extra | **DONE** | `forge/pyproject.toml`: `docs = ["mkdocs>=1.6,<2.0", "mkdocs-material>=9.7,<10.0", "mike>=2.2,<3.0"]`, `all = ["forge[dev,parser,docs]"]`. |
+| 7-bucket skeleton | **DONE** | `docs/{getting-started,tutorials,how-to,concepts,reference,explanation,development}/` — every file the full nav references exists (as a real page by the time the phase closed; as a placeholder stub during early slices so `mkdocs build --strict` always passed structurally while content landed in parallel). |
+| CI job | **DONE** | `.gitlab-ci.yml`: `forge:docs-build` (validate stage) — `mkdocs build --strict` plus (added incrementally through 9.4) the doc-specific pytest suite. |
+| Exclusion proof | **DONE** | `forge/tests/test_docs_site_build.py` — a real `mkdocs build --strict` subprocess run, asserting `site/plan/` and any `*release-readiness*` path are truly absent from the built output (not just missing from `nav:`). |
+
+### Phase 9 (slice 9.1) — Content migration and compatibility
+
+| Item | Status | Evidence |
+|---|---|---|
+| Migrated the 9 legacy `docs/*.md` files | **DONE** | Redistributed by real content fit: `PLUGIN_AUTHOR_GUIDE.md`→`how-to/author-topology-contracts.md`, `VERIFY_PLUGIN_AUTHOR_GUIDE.md`→`how-to/integrate-verification.md`, `VERIFY_FRAMEWORK_SETUP.md`→`how-to/setup-verification-framework.md`, `ANALYSIS_GUIDE.md`→`how-to/analyze-performance.md`, `FRAMEWORK_CORE_INTERFACE.md`→`concepts/core-interface.md`, `FRAMEWORK_TOOLING_INTERFACE.md`→`concepts/tooling-interface.md`, `SUPPORT_CLASSIFICATION.md`→`reference/support-classification.md` (curated, not generated). `IP_INTERFACE_POLICY.md` split across `concepts/contracts-and-protocols.md` (architecture/core-rules/mapping-spec/three-layer model) and `concepts/latency-model.md` (module-timing metadata) — its canonical-role/protocol/member enumerations replaced with links to the new *generated* reference pages (slice 9.3) rather than a second hand-maintained copy. |
+| Root-file mirrors | **DONE** | `docs/development/{contributing,migration,security,code-of-conduct}.md`, each with a `<!-- Generated from /X.md. Do not edit directly. -->` header, byte-identical to their root source below that header (root files aren't reachable from inside `docs_dir` otherwise). Verified: `forge/tests/test_docs_staleness.py::test_root_file_mirrors_are_byte_synchronized`. |
+| Pointer pages | **DONE** | All 9 old `docs/*.md` paths, plus `forge/README.md`, replaced with a short `# Page moved` + link — external bookmarks/issue references to the old paths keep resolving. |
+| `docs/index.md` | **DONE** | New MkDocs site home page, adapted from `README.md`'s intro/scope table. |
+| Full suite | **DONE** | No `forge/` Python code touched this slice — content-only; `mkdocs build --strict` clean. |
+
+### Phase 9 (slice 9.2) — Tutorials and public explanation
+
+| Item | Status | Evidence |
+|---|---|---|
+| `ci/quickstart_commands.sh` | **DONE** | New file — the one executable source of truth for the 5-minute quickstart (install, `forge --help`, `verify init-plugin`, `verify doctor`). `docs/getting-started/quickstart.md` embeds its real command lines verbatim. `ci/fresh_user_check.sh`'s stages 1-4 now `source` this same file instead of duplicating the commands, so CI keeps proving the documented sequence actually works. |
+| Golden-path + reference-plugin tutorials | **DONE** | `docs/tutorials/golden-path.md`, `rtl-example.md` (`passthrough_demo`), `mixed-hls-rtl-example.md` (`trigger_demo`) — every CLI flag checked against live `--help` output before being documented, not assumed. |
+| New concept/explanation pages grounded in Phase 3/5/7/8 subsystems | **DONE** | `concepts/{clock-and-reset-domains,verification-model,datasets-and-provenance,visual-explorer}.md`, `how-to/use-visual-explorer.md`, `explanation/{architecture-rationale,extension-apis,project-scope,scope-and-interoperability}.md` — each grounded in the actual source (`forge.topgen.ip.cdc`, `forge.verify.dataset_format`, `forge.ir.provenance`, `forge.analyze.design_explorer`), not extrapolated. Per Defect 6, `project-scope.md` is an honest status note (a real domain-neutral reference project is still Phase 10's, not a placeholder tutorial). |
+| Full suite | **DONE** | Content-only; `mkdocs build --strict` clean. |
+
+### Phase 9 (slice 9.3) — Generated reference system (`forge.docsgen`)
+
+| Item | Status | Evidence |
+|---|---|---|
+| New package | **DONE** | `forge/docsgen/` — `type_formatter.py` (deterministic, Python-version-stable type-string rendering), `_type_resolution.py` (works around a real cross-version bug: quoted PEP 604 unions like `"int \| None"` evaluate to a useless `ForwardRef` on Python <3.10 unless rewritten first — found and fixed during this slice, see below), `artifact_walker.py` (`ARTIFACT_ROOTS`, a recursive dataclass/enum walker), `cli_reference.py` (walks the real `build_parser()` tree, including `forge verify`'s delegated sub-parser), `diagnostics_registry.py` (typed `DiagnosticDefinition` registry, AST-verified against every real emission site), `vocab_reference.py` (canonical roles/protocols/interface-members from live sources; an AST-verified transformation-kind registry, since none exists in the source), `support_matrix_reference.py`, `__main__.py` (`python -m forge.docsgen [--check]`). |
+| `MATRIX` public view | **DONE** | `forge/verify/supported_matrix.py`: `MATRIX = MappingProxyType(_MATRIX)` — the complete, real support matrix (`allowed_backends`/`reason` included, unlike the pre-existing lossy `SUPPORTED_MATRIX`/`EXPERIMENTAL_KINDS` views), runtime-immutable via `MappingProxyType` (a bare type annotation would not have been). Tests added to the existing `forge/tests/verify/test_supported_matrix.py`. |
+| Generated pages | **DONE** | `docs/reference/{cli,canonical-roles,protocols,interface-members,transformations,diagnostics,support-matrix,artifacts}.md` — all 8 generated by `python -m forge.docsgen`, verified byte-reproducible (`--check` mode; also exercised by `forge/tests/test_docsgen_main.py`). |
+| Tests | **DONE** | 9 new files, `forge/tests/test_docsgen_{type_formatter,type_resolution,ast_utils,artifact_walker,cli_reference,diagnostics_registry,vocab_reference,support_matrix_reference,main}.py` — generator unit tests + determinism checks + the AST-verification regression guards (e.g. a monkeypatch proving `generate_transformations_page()` raises if the registry drifts from real source). |
+| Full suite | **DONE** | `1100 passed, 8 skipped`, coverage `80.03%`, **0 regressions** (baseline before this slice's `forge/docsgen` tests existed: `1032 passed, 8 skipped`, measured via `ci/fresh_user_check.sh`'s own unit-test stage earlier in this session). |
+
+### Phase 9 (slice 9.4) — Documentation quality gates
+
+| Item | Status | Evidence |
+|---|---|---|
+| Built-HTML link/anchor checker | **DONE** | `forge/tests/test_docs_site_links.py` — crawls the real built `site/` output (not Markdown source): local pages, assets, and URL fragments (`#anchor`) all checked for real resolution; external `http(s)://`/`mailto:` explicitly, non-blockingly skipped. Found and fixed a real bug during development: Material's `404.html` legitimately uses site-root-relative absolute paths (`/assets/...`), which a naive path-join resolves against the OS filesystem root instead of the site root — fixed in the test's own resolution logic. |
+| No-external-runtime-asset test | **DONE** | `forge/tests/test_docs_site_offline.py` — real resource-loading tags (`<script src>`/`<img src>`/stylesheet-or-font `<link>`) checked for external hosts; inline `<script>` blocks checked for `fetch`/`XMLHttpRequest`/`WebSocket`. Deliberately scoped to the rendered HTML, not third-party vendored JS bundles, which may contain a dormant, feature-flagged code path this site's own config never activates. |
+| Staleness checks | **DONE** | `forge/tests/test_docs_staleness.py` — generated-reference staleness via `forge.docsgen`'s own real `--check` mode; root-mirror byte-sync (Defect 7) verified directly. |
+| CI wiring | **DONE** | `.gitlab-ci.yml`'s `forge:docs-build` job extended to run all of the above; `forge/docsgen`'s own unit tests run via the existing `forge:python-unit-tests` job (not duplicated); `ci/quickstart_commands.sh` already exercised for real by `forge:fresh-user-check`. |
+| Full suite | **DONE** | Doc-specific suite (`test_docs_site_build/links/offline.py`, `test_docs_staleness.py`) — `11 passed`, run standalone; full-suite regression confirmed clean at phase close (see closing summary). |
+
+### Phase 9 (slice 9.5) — Versioned artifact closure
+
+| Item | Status | Evidence |
+|---|---|---|
+| `ci/docs_publish.sh` | **DONE** | New file — deploys `dev` (from the current commit) and, if a `vMAJOR.MINOR.PATCH` tag exists, that tag's own docs (aliased `latest`, set as the default version) via `mike`. Each version is built from *its own* commit, in a disposable, isolated `git worktree` per version — proven during development with a scratch repo where "dev" and a tagged version had genuinely different content, confirming neither version is the other's build merely relabeled. The real checked-out working branch this script runs from is never touched (confirmed: no `gh-pages` branch or stray worktree ever appears in the invoking repo). |
+| Complete downloadable artifact | **DONE** | The script exports the *entire* `gh-pages`-equivalent tree (every version deployed that run, `versions.json`, alias redirects) as a plain directory — not just the one version that triggered the job. |
+| CI wiring | **DONE** | `.gitlab-ci.yml`: `forge:docs-versioned-artifact` (release stage), gated identically to `forge:framework-release-gate` (automatic on the default branch and version tags, manual/non-blocking on MRs). Artifact retained 30 days. |
+| Tests | **DONE** | New `forge/tests/test_docs_publish.py` (6 tests, run against a throwaway scratch git repo, never this repo's own git state) — version/alias deployment, per-version content isolation, default-version redirect, the no-tag case, and two explicit invariant checks (`branch -a`/`worktree list` unchanged in the real repo before vs. after). |
+| **Publication status (explicit, not glossed over)** | **build/artifact: DONE. publication: OPEN — BLOCKED ON HOST DECISION.** | No `--push` anywhere in `ci/docs_publish.sh` — nothing is pushed to any remote. Per `CONTRIBUTING.md`'s "Where this lives," the canonical host is still migrating from the provisional CERN GitLab origin to a not-yet-finalized public host; this phase deliberately does not fabricate a publish target. This is this slice's own legitimate, honestly-reported terminal state, not a shortfall. |
+
+## Phase 9 closing summary
+
+All 6 slices (9.0-9.5) complete. Starting baseline (measured via
+`ci/fresh_user_check.sh`'s unit-test stage early in this session, before
+`forge/docsgen` existed): `1032 passed, 8 skipped`. Ending state (fresh
+full-suite run, real Vivado xsim included): `1113 passed, 8 skipped`,
+coverage `80.17%` — **+81 tests, 0 regressions**, confirmed via two
+full-suite runs bracketing the phase (after slice 9.3, and again at
+close) plus targeted subset runs after each individual slice's own new
+tests.
+
+**What shipped**: a complete, offline-capable MkDocs (Material) site —
+7 Diátaxis-style buckets, the 9 legacy docs migrated and cross-linked, 3
+new tutorials, 8 pages generated directly from live code (`forge.docsgen`,
+a new package) so they cannot silently drift from what the code actually
+does, a built-HTML link/anchor checker, an offline-asset checker, generated-
+page and root-mirror staleness checks, and a real `mike`-based versioned
+artifact (`dev` + tagged releases, each built from its own commit).
+
+**Real bugs found and fixed along the way** (not part of the original
+plan, surfaced by this phase's own real testing discipline, matching the
+pattern established in Phases 7-8): `docs/IP_INTERFACE_POLICY.md` had a
+pre-existing dead relative link (a stale `topgen/algo_top_gen/...` path);
+`ci/fresh_user_check.sh`'s doctor-JSON structural assertion checked for a
+top-level `counts` key that had actually moved under `metrics.counts`
+back in Phase 6 — a real, currently-broken CI assertion, found only by
+actually running the script end-to-end rather than reading it; a
+placeholder `site_url` broke Material's `404.html` (absolute-path links
+that don't resolve locally); quoted PEP 604 union annotations
+(`"int | None"`) silently degrade to a useless `ForwardRef` on Python
+<3.10 under `typing.get_type_hints`, which would have made the artifact-
+reference generator silently miss every dataclass reachable only through
+such a field (`ArtifactRef`, `CheckResult`, `VerificationTarget`, and
+others) — found by testing the generator's actual output, not by
+inspection, and fixed in `forge/docsgen/_type_resolution.py`; both
+`README.md` and (transitively) the new `docs/index.md` understated real,
+tested CDC support (`forge.topgen.ip.cdc.verify_cdc` + generated
+`cdc_sync2ff` synchronizer RTL) as "no CDC validation exists yet" —
+corrected in both places once cross-checked against the actual code and
+its passing tests (`forge/tests/test_cdc*.py`).
+
+**Honest deferrals** (per the plan's own status-honesty correction, none
+fabricated as done): public documentation *publication* — the actual push
+to a real, reachable public URL — stays **explicitly OPEN, blocked on the
+canonical-host decision** (see slice 9.5's table row above); a genuinely
+unrelated-domain tutorial example (still Phase 10's, per Defect 6 —
+`explanation/project-scope.md` states this plainly rather than shipping a
+placeholder); the FWV/ATG diagnostic-registry emission-site refactor
+(migrating every call site onto a shared `DIAGNOSTICS["FWVxxx"]` lookup) —
+the AST-verified catalogue makes drift visible and CI-checked going
+forward, it does not itself rewrite every emission site; mkdocstrings/
+Sphinx-style Python API documentation — not attempted, since FORGE's
+public surface is its CLI/YAML/JSON contracts, not a Python library API
+for third-party import.
+
 ## Next recommended session (not started here)
 
-Phase 6 is complete. Per the release plan's own mandatory phase order
-(`docs/plan/FORGE_release_plan.md`), Phase 7 (verification expansion) is
-next, unrelated to Phase 6's own scope.
+Phase 9 is complete. Per the release plan's own mandatory phase order
+(`docs/plan/FORGE_release_plan.md`), Phase 10 — a genuinely unrelated-
+domain reference project (e.g. an image-processing pipeline) — is next.

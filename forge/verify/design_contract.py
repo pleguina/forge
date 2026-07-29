@@ -121,12 +121,20 @@ def classify_field(field_name: str) -> str:
 
 @dataclass(frozen=True)
 class DatasetDeclaration:
-    """A named XML-backed dataset reference."""
+    """A named XML-backed dataset reference.
+
+    ``adapter`` (Phase 7, slice 7.4b) optionally names a registered
+    :class:`~forge.verify.dataset_adapter.ProjectDatasetAdapter` by its
+    explicit ``adapter_id`` — never inferred from ``xml``'s suffix. Absent
+    (``None``) for datasets that don't yet use the layer-B adapter
+    protocol (the default, unchanged behavior).
+    """
     name:        str
     xml:         str          # relative path to the XML file
     parts_glob:  str | None = None
     parts:       tuple[str, ...] = ()
     description: str = ""
+    adapter:     str | None = None
 
 
 @dataclass(frozen=True)
@@ -443,6 +451,7 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
             parts_glob=(str(ds_body["parts_glob"]) if ds_body.get("parts_glob") else None),
             parts=tuple(str(v) for v in raw_parts),
             description=str(ds_body.get("description", "")),
+            adapter=(str(ds_body["adapter"]) if ds_body.get("adapter") else None),
         ))
 
     # ── Defaults

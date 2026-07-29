@@ -56,6 +56,7 @@ from typing import Dict, List, Optional
 import yaml
 
 from forge.analyze.latency_model import LatencyProvenance, LatencyValue
+from forge.ir.identifiers import resolved_instance_id
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +71,24 @@ class LatencyNode:
     kind: str             # "hls" | "rtl" | "unknown"
     latency: Optional[LatencyValue]
     is_variable: bool = False
+    # release-plan Phase 8: the real, canonical instance id
+    # (``forge.ir.identifiers.resolved_instance_id`` — e.g. "dec_0"), used
+    # for every join against the canonical IR (``ResolvedInstance.id``).
+    # ``display_name`` is the existing human-readable bracket form (e.g.
+    # "dec[0]") this module has always used for ``name`` — kept as its own
+    # field, unchanged, so any Markdown/report rendering that already
+    # depends on the bracket form is unaffected. Both default to ``name``
+    # in ``__post_init__`` so existing call sites (and this file's own
+    # legacy fallback path) that don't pass them explicitly still get a
+    # correct value for the common single-instance case.
+    instance_id: str = ""
+    display_name: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.instance_id:
+            self.instance_id = self.name
+        if not self.display_name:
+            self.display_name = self.name
 
     # --- Back-compat accessors -------------------------------------------
     # LatencyNode was a bare (latency_cycles, latency_source) pair before
@@ -352,7 +371,7 @@ def _build_graph_from_ir(
         # this module's docstring. Every instance of the same module
         # shares the exact same latency (a module/HLS-synthesis-level
         # fact, not something that varies per instance).
-        for inst_name in _instance_node_names(mod):
+        for idx, inst_name in enumerate(_instance_node_names(mod)):
             nodes[inst_name] = LatencyNode(
                 name=inst_name,
                 ref=ref,
@@ -360,6 +379,11 @@ def _build_graph_from_ir(
                 kind=mod.kind,
                 latency=lat,
                 is_variable=is_var,
+                # release-plan Phase 8: the real, canonical IR instance id
+                # (matches forge.ir.build.py's ResolvedInstance.id exactly)
+                # — the fix for the bracket-vs-underscore join mismatch.
+                instance_id=resolved_instance_id(mod.name, idx, mod.instances),
+                display_name=inst_name,
             )
 
     edges: List[LatencyEdge] = []
@@ -423,7 +447,7 @@ def _build_graph_legacy(
         kind = reg_entry.get("kind", "unknown")
         lat = latency_map.get(ref)
         is_var = bool(reg_entry.get("variable_latency", False))
-        for inst_name in _instance_names_raw(name, instances):
+        for idx, inst_name in enumerate(_instance_names_raw(name, instances)):
             nodes[inst_name] = LatencyNode(
                 name=inst_name,
                 ref=ref,
@@ -431,6 +455,8 @@ def _build_graph_legacy(
                 kind=kind,
                 latency=lat,
                 is_variable=is_var,
+                instance_id=resolved_instance_id(name, idx, instances),
+                display_name=inst_name,
             )
 
     # ── Edges ──────────────────────────────────────────────────────────────

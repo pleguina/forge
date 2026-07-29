@@ -14,6 +14,12 @@ datasets:
   passthrough_demo_golden:
     xml: schemas/data/passthrough_demo_golden.xml
     description: Golden reference dataset for the passthrough module
+    # Phase 7 slice 7.4b: passthrough_demo's dataset is already FORGE-shaped
+    # (no domain transformation needed), so it uses the trivial identity
+    # layer-B adapter — see tools/dataset_adapter.py. Declared for real, not
+    # yet consumed by the CLI pipeline (gen_stimulus.py still reads via the
+    # layer-A format loader directly); a documented, honest extension point.
+    adapter: passthrough.identity-xml
 
 # ─── Simulation Defaults ──────────────────────────────────────────────
 defaults:
@@ -43,4 +49,64 @@ flows:
     xsim:
       top_lib: xil_defaultlib
       use_sv_flag: false
+    coverage_intent:  functional
+
+  # Second real backend for the same DUT (Phase 7, slice 7.1) — proves
+  # single_module_rtl/full_chip_rtl are genuinely multi-backend, not just
+  # matrix-declared. Same top/TB/dataset as passthrough_xsim; only the
+  # backend differs.
+  - name:             passthrough_verilator
+    kind:             full_chip_rtl
+    backend:          verilator
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_passthrough_demo
+    dataset:          passthrough_demo_golden
+    default_event_id: 1
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 4
+    coverage_intent:  functional
+
+  # Fixed-shape, non-recompiling stimulus mechanism (Phase 7, slice 7.5).
+  # Same DUT/TB/dataset as passthrough_xsim; only stimulus_mode differs —
+  # proves xvlog/xelab compile once across both real golden events, event
+  # selection happening only via the +EVENT_INDEX runtime plusarg.
+  - name:             passthrough_readmemh
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_passthrough_demo
+    dataset:          passthrough_demo_golden
+    default_event_id: 1
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 4
+    stimulus_mode:    readmemh
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  functional
+
+  # Phase 7 slice 7.6: the same readmemh chain (dataset -> format loader ->
+  # project adapter -> stable stimulus memory -> compile once -> multiple
+  # real event runs -> FORGE_CHECK -> results.json), on the real Verilator
+  # backend instead of xsim — proves the whole chain is backend-agnostic,
+  # not incidentally xsim-only.
+  - name:             passthrough_readmemh_verilator
+    kind:             full_chip_rtl
+    backend:          verilator
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_passthrough_demo
+    dataset:          passthrough_demo_golden
+    default_event_id: 1
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 4
+    stimulus_mode:    readmemh
     coverage_intent:  functional

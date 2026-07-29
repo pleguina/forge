@@ -15,6 +15,7 @@ no contracts are given, IP metadata is collected in memory only.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -37,6 +38,7 @@ from ..topgen.ip.domains import (
 from ..topgen.ip.matcher import _expand_nd, auto_match_ports, load_ip_info
 from ..topgen.ip.parser import collect_all
 
+from .identifiers import resolved_instance_id
 from .model import (
     CardinalityCheckResult,
     DiagnosticReference,
@@ -63,8 +65,11 @@ _TIE_OFF = "$tie_off"
 
 def _instance_id(mod: Module, idx: int) -> str:
     """Same convention as ``forge.topgen.ip.matcher._inst`` — instance IDs
-    here must match ``conn_map`` keys for connections to resolve correctly."""
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    here must match ``conn_map`` keys for connections to resolve correctly.
+    Delegates to the one shared implementation (``forge.ir.identifiers``)
+    also used by ``forge.analyze.latency_static.graph`` — see that
+    module's docstring for the mismatch this closes."""
+    return resolved_instance_id(mod.name, idx, mod.instances)
 
 
 def build_tie_off_connections(
@@ -434,6 +439,33 @@ def build_project_ir_with_match_report(
     )
 
 
+_MODULES_INDEX_RE = re.compile(r"^modules\[(\d+)\]")
+
+
+def _validator_object_id(location: Optional[str], cfg: DesignConfig) -> Optional[str]:
+    """Turn a validator issue's free-text YAML-path ``location`` (e.g.
+    ``"modules[3].kind"``) into the same structured ``f"module:{name}"``
+    convention the two other diagnostic-emission sites below already use
+    (release-plan Phase 8, Defect 3), when — and only when — the location
+    is genuinely module-scoped and resolves to a real module index.
+
+    Every other validator category (``'connection'``/``'yaml'``/``'timing'``,
+    etc.) has no reliable index-to-IR-id mapping without guessing — those
+    honestly keep the free-text *location* as ``object_id``, exactly as
+    before. This is a real, scoped fix, not a claim that every diagnostic
+    is now linkable.
+    """
+    if not location:
+        return location
+    m = _MODULES_INDEX_RE.match(location)
+    if not m:
+        return location
+    idx = int(m.group(1))
+    if 0 <= idx < len(cfg.modules):
+        return f"module:{cfg.modules[idx].name}"
+    return location
+
+
 def _domain_diagnostics(unresolved: List[Tuple[str, str]]) -> List[DiagnosticReference]:
     """Wrap resolve_domain_nets's IR-agnostic (module, kind) pairs into
     DiagnosticReference objects — kept here (not in domains.py) so that
@@ -486,7 +518,7 @@ def assemble_project_ir(
                 + (f" (suggestion: {issue.suggestion})" if issue.suggestion else "")
             ),
             location=SourceLocation(file=str(design_path)) if issue.location else None,
-            object_id=issue.location,
+            object_id=_validator_object_id(issue.location, cfg),
         ))
 
     vocab = load_canonical_role_vocab()

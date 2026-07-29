@@ -149,6 +149,14 @@ def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) 
             "total": len(cfg.modules),
             "contract_driven": len(match_report.contract_driven_modules),
             "compat_mode": len(match_report.compat_mode_modules),
+            # release-plan Phase 8, slice 8.0B: the real per-module name
+            # lists were already sitting on match_report, previously
+            # discarded down to a bare len() here — additive so `forge
+            # report`'s existing Markdown section and the visual design
+            # explorer's per-module maturity overlay both source from the
+            # same real lists instead of recomputing them differently.
+            "contract_driven_names": sorted(match_report.contract_driven_modules),
+            "compat_mode_names": sorted(match_report.compat_mode_modules),
         },
         "connections": dict(match_report.wiring_method_counts),
     }

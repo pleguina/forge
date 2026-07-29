@@ -31,7 +31,7 @@ FORGE's public identity for this release is deliberately narrower than
 | Toolchains | Vivado (structural Verilog/VHDL, Block Design TCL), Vitis HLS, XSim |
 | Simulation backends | `xsim`, `csim`; Verilator is available as a lint tool only, not a simulation backend |
 | Verification datasets | XML-backed only (`design.verification.yml` + XML golden data) |
-| Clock/reset domains | A single functional clock/reset domain per module. `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** — no clock-domain model or CDC validation exists yet (see `docs/IP_INTERFACE_POLICY.md` "Reserved roles") |
+| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect (see `docs/IP_INTERFACE_POLICY.md` "Reserved roles"). Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist (`forge.topgen.ip.cdc.verify_cdc`), gated behind `gen-top --strict` |
 | Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see `docs/IP_INTERFACE_POLICY.md`) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
 

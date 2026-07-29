@@ -57,7 +57,7 @@ forge:lint:
     - mkdir -p ci-logs
     - |
       echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
-      flake8 forge/core forge/topgen forge/hls forge/verify forge/framework forge/analyze \
+      flake8 forge/core forge/topgen forge/hls forge/verify forge/framework forge/analyze forge/docsgen \
         2>&1 | tee -a ci-logs/lint.log
     - |
       echo "--- YAML lint ---" | tee -a ci-logs/lint.log
@@ -92,7 +92,7 @@ forge:type-check:
   script:
     - mkdir -p ci-logs
     - |
-      mypy forge/core forge/topgen forge/hls forge/verify forge/framework forge/analyze \
+      mypy forge/core forge/topgen forge/hls forge/verify forge/framework forge/analyze forge/docsgen \
         2>&1 | tee ci-logs/type-check.log
   artifacts:
     name: "forge-type-check-${CI_COMMIT_SHORT_SHA}"
@@ -210,6 +210,45 @@ forge:import-direction-check:
       - ci-logs/import-direction-check.log
 
 # ---------------------------------------------------------------------------
+# forge:docs-build
+#
+# Release-plan Phase 9. Slice 9.0: proves the MkDocs site actually builds
+# with zero warnings (--strict) and that exclude_docs: really keeps
+# docs/plan/** and docs/development/release-readiness.md out of the built
+# site, not just out of nav. Slice 9.4 adds the built-HTML link/anchor
+# checker, the no-external-runtime-asset check, and the generated-page /
+# root-mirror staleness checks — all run here for real via pytest rather
+# than re-implemented as shell checks (see forge/tests/test_docs_site_*.py,
+# test_docs_staleness.py). The forge.docsgen unit tests themselves
+# (test_docsgen_*.py) run as part of forge:python-unit-tests already, and
+# ci/quickstart_commands.sh's exact command sequence is already exercised
+# for real by forge:fresh-user-check — neither is duplicated here.
+# ---------------------------------------------------------------------------
+forge:docs-build:
+  stage: validate
+  tags:
+    - default-x86_64
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache -e "forge[docs]"
+  script:
+    - mkdir -p ci-logs
+    - mkdocs build --strict 2>&1 | tee ci-logs/docs-build.log
+    - |
+      python3 -m pytest \
+        forge/tests/test_docs_site_build.py \
+        forge/tests/test_docs_site_links.py \
+        forge/tests/test_docs_site_offline.py \
+        forge/tests/test_docs_staleness.py \
+        --tb=short -q 2>&1 | tee -a ci-logs/docs-build.log
+  artifacts:
+    name: "forge-docs-build-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/docs-build.log
+      - site/
+
+# ---------------------------------------------------------------------------
 # forge:python-unit-tests
 #
 # Runs the forge unit tests plus the trigger_demo verification proof suite.
@@ -316,3 +355,45 @@ forge:fresh-user-check:
     expire_in: 7 days
     paths:
       - ci-logs/fresh-user-check.log
+
+# ---------------------------------------------------------------------------
+# forge:docs-versioned-artifact
+#
+# Release-plan Phase 9, slice 9.5: builds the complete, versioned `mike`
+# documentation artifact (docs/status: build/artifact DONE this phase) and
+# publishes it only as a downloadable CI artifact — it is never pushed to
+# any remote. Public documentation *publication* stays explicitly OPEN,
+# blocked on the canonical-host decision (see CONTRIBUTING.md's "Where
+# this lives": the CERN GitLab origin is provisional; the project is
+# migrating to a public host not yet finalized). This is a deliberate,
+# honestly-reported terminal state for this slice, not a shortfall.
+#
+# Gated the same way as forge:framework-release-gate: automatic on the
+# default branch and on version tags, manual (non-blocking) on MRs.
+# ---------------------------------------------------------------------------
+forge:docs-versioned-artifact:
+  stage: release
+  tags:
+    - default-x86_64
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache -e "forge[docs]"
+    - git config user.email "ci@forge.local"
+    - git config user.name "forge-ci"
+  script:
+    - mkdir -p ci-logs
+    - bash ci/docs_publish.sh --output-dir docs-site-artifact 2>&1 | tee ci-logs/docs-publish.log
+  artifacts:
+    name: "forge-docs-site-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 30 days
+    paths:
+      - ci-logs/docs-publish.log
+      - docs-site-artifact/

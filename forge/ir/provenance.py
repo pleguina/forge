@@ -133,9 +133,25 @@ def _relative_key(path: Path, base_dir: Path) -> str:
     honestly compared against a manifest built from another — same
     "content hash should not answer 'did the caller's filesystem layout
     change'" rationale as ``serialize.py``'s ``_canonical_design_json``.
-    Falls back to the absolute path only when *path* has no relative
-    route to *base_dir* (e.g. a different drive on Windows) — an honest
-    absolute key beats a fabricated relative one.
+
+    Deliberately keeps its own ``os.path.relpath``-based implementation
+    rather than delegating to the newer, general-purpose
+    ``forge.core.utils.portable_path.portable_display_path()`` (release-
+    plan Phase 8, slice 8.0A): that utility intentionally *never* emits a
+    ``'../'``-laden relative path (falling back to a basename + hash
+    label instead), which is the right call for a rendered, potentially-
+    shared visualization artifact — but wrong here. A real, tested
+    contract already relies on ``output_hashes`` keys being reconstructable
+    (``(design_dir / key).resolve()`` round-trips to the real output file
+    — see ``test_gen_top_writes_provenance_manifest_alongside_design_ir``),
+    including for build outputs that legitimately live in a completely
+    different directory tree than ``design.yml`` (e.g. a ``--build-dir``
+    under a temp root). Falling back to a basename+hash label there would
+    silently break that reconstruction — a real regression, not a
+    portability improvement. Falls back to the absolute path only when
+    *path* has no relative route to *base_dir* at all (e.g. a different
+    drive on Windows) — an honest absolute key beats a fabricated
+    relative one.
     """
     try:
         return os.path.relpath(path, base_dir)

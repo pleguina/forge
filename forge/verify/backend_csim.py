@@ -66,8 +66,9 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from forge.verify.backend_base import (
     ArtifactRequirement,
@@ -75,6 +76,7 @@ from forge.verify.backend_base import (
     BackendCapabilities,
     ExecutionResult,
 )
+from forge.verify.execution_stage import ExecutionStage
 
 
 # ── Module-level constants ─────────────────────────────────────────────────
@@ -245,6 +247,8 @@ class CsimBackend(BackendAdapter):
         if tb_bin is None:
             return ExecutionResult(
                 success=False, exit_code=127,
+                stage=ExecutionStage.PREFLIGHT,
+                backend_id=BACKEND_ID,
                 backend_metadata={"error": f"binary not found: {cfg.tb_module}"},
             )
 
@@ -263,12 +267,15 @@ class CsimBackend(BackendAdapter):
             env = dict(os.environ)
             env.update(overrides)
 
-        exit_code = _run_logged(cmd, sim_log, env=env)
+        run = _run_logged(cmd, sim_log, env=env)
 
         result = ExecutionResult(
-            success=(exit_code == 0),
-            exit_code=exit_code,
+            success=(run.exit_code == 0),
+            exit_code=run.exit_code,
             log_path=sim_log,
+            stage=ExecutionStage.SIMULATE,
+            duration_s=run.elapsed_s,
+            backend_id=BACKEND_ID,
             backend_metadata={"tb_binary": str(tb_bin)},
         )
         # Allow plugin subclasses to post-process the result.
@@ -327,17 +334,24 @@ class CsimBackend(BackendAdapter):
 
 # ── Subprocess helper ──────────────────────────────────────────────────────
 
+class LoggedRun(NamedTuple):
+    """Result of one :func:`_run_logged` invocation."""
+    exit_code: int
+    elapsed_s: float
+
+
 def _run_logged(
     cmd: list[str],
     log_file: Path,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
-) -> int:
-    """Run *cmd*, capture output to *log_file*, return exit code.
+) -> LoggedRun:
+    """Run *cmd*, capture output to *log_file*, return exit code + duration.
 
     Delegates to :mod:`forge.verify.subprocess_wrapper` for structured capture
-    (command, cwd, exit code, log path all recorded in SubprocessResult).
-    Falls back to raw subprocess if env overrides are needed or wrapper import fails.
+    (command, cwd, exit code, log path, elapsed time all recorded in
+    SubprocessResult). Falls back to raw subprocess if env overrides are
+    needed or wrapper import fails.
 
     Args:
         cmd:      Command + arguments list.
@@ -363,11 +377,12 @@ def _run_logged(
             env_overrides=env_overrides or {},
             check=False,
         )
-        return result.exit_code
+        return LoggedRun(result.exit_code, result.elapsed_s)
     except ImportError:
         pass  # fallback
     # Fallback: raw subprocess with tee
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.monotonic()
     with open(log_file, "w") as lf:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -378,7 +393,7 @@ def _run_logged(
             sys.stdout.write(line)
             lf.write(line)
         proc.wait()
-    return proc.returncode
+    return LoggedRun(proc.returncode, time.monotonic() - t0)
 
 
 # ── Module ADAPTER singleton ───────────────────────────────────────────────

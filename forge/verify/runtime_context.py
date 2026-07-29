@@ -15,6 +15,11 @@ Generic fields
 --------------
   work_dir         Absolute path to the backend's working directory.
   probe_log        Whether Tier 2 probe CSV capture is enabled.
+  event_index      Internal, always-numeric event position for
+                    ``stimulus_mode: readmemh`` flows (slice 7.5) — the
+                    ``+EVENT_INDEX=N`` plusarg backends pass to the
+                    simulator. ``None`` for the default ``svh_include``
+                    mechanism, which needs no runtime event selection.
   extra_overrides  Arbitrary backend-specific overrides (backend-prefixed
                    keys, e.g. ``{"xsim_debug": True}``).
 
@@ -53,6 +58,8 @@ class RuntimeContext:
                       # Always pass a Path object in practice.
 
     probe_log: bool = False  # enable Tier 2 probe CSV capture
+
+    event_index: "int | None" = None  # readmemh-mode runtime event selection (slice 7.5)
 
     # Backend-specific overrides use backend-prefixed keys, e.g.:
     #   {"xsim_debug": True, "xsim_extra_flags": "--debug all"}

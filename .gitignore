@@ -4,6 +4,10 @@
 **/.pytest_cache/
 *.pyc
 
+# MkDocs build output (mkdocs.yml, site_dir: site)
+/site/
+.pip-cache/
+
 # Python packaging artifacts
 **/*.egg-info/
 .coverage
@@ -26,6 +30,8 @@ tb_*.json
 vitis_hls.log
 xvlog.log
 xvlog.pb
+xelab.log
+xelab.pb
 
 # Generated outputs
 out/

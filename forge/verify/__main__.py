@@ -372,14 +372,31 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return _run_one_loaded_flow(flow_path, cfg, selection, ctx, adapter, strict=strict)
 
 
-def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, adapter, strict: bool = False) -> int:
-    """Run one resolved XML selection through preflight, backend, and checker."""
+def _run_one_loaded_flow(
+    flow_path: Path, cfg, selection: XmlRunSelection, ctx, adapter, strict: bool = False,
+    capture: "dict | None" = None,
+) -> int:
+    """Run one resolved XML selection through preflight, backend, and checker.
+
+    ``capture``, when given a dict, is populated with the richer data this
+    function already computes but historically threw away (bare ``int``
+    return) — ``capture["result"]`` (a real ``ExecutionResult``, including
+    for pre-execution failures via a synthetic one so callers always get a
+    real object), ``capture["checker_ok"]``, ``capture["outputs"]``.
+    Existing callers that don't pass ``capture`` see no behavior change.
+    """
+    from forge.verify.backend_base import ExecutionResult
+    from forge.verify.execution_stage import ExecutionStage
 
     # ── 5. Preflight ─────────────────────────────────────────────────────────
     from forge.verify.preflight import run_preflight
     pre = run_preflight(cfg, xml_input=selection.dataset_xml)
     pre.print_summary()
     if not pre.ok:
+        if capture is not None:
+            capture["result"] = ExecutionResult(
+                success=False, stage=ExecutionStage.PREFLIGHT, backend_id=adapter.backend_id,
+            )
         return 1
 
     # ── Strict-mode layout check ──────────────────────────────────────────────
@@ -391,6 +408,10 @@ def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, 
             print("[strict] Layout violations:", file=sys.stderr)
             for le in _layout_errors:
                 print(f"  {le}", file=sys.stderr)
+            if capture is not None:
+                capture["result"] = ExecutionResult(
+                    success=False, stage=ExecutionStage.PREFLIGHT, backend_id=adapter.backend_id,
+                )
             return 1
 
     # ── 7. Validate backend requirements ─────────────────────────────────────
@@ -398,12 +419,20 @@ def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, 
     if errors:
         for e in errors:
             print(f"ERROR (backend validation): {e}", file=sys.stderr)
+        if capture is not None:
+            capture["result"] = ExecutionResult(
+                success=False, stage=ExecutionStage.PREFLIGHT, backend_id=adapter.backend_id,
+            )
         return 1
 
     # ── 8. Prepare inputs ────────────────────────────────────────────────────
     try:
         adapter.prepare_backend_inputs(cfg, ctx)
     except Exception as exc:  # noqa: BLE001
+        if capture is not None:
+            capture["result"] = ExecutionResult(
+                success=False, stage=ExecutionStage.PREFLIGHT, backend_id=adapter.backend_id,
+            )
         return _print_guided_error(
             "prepare",
             exc,
@@ -414,19 +443,39 @@ def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, 
     try:
         result = adapter.run_backend(cfg, ctx)
     except Exception as exc:  # noqa: BLE001
+        if capture is not None:
+            # Stage genuinely unknown — the backend threw before returning a
+            # result, so no real ExecutionResult exists to report one from.
+            capture["result"] = ExecutionResult(
+                success=False, stage=None, backend_id=adapter.backend_id,
+            )
         return _print_guided_error(
             "run",
             exc,
             action="Check simulator logs, tool setup, and generated artifacts, then re-run forge verify run.",
         )
 
+    if capture is not None:
+        capture["result"] = result
+
     if not result.success:
         print(f"FAIL  (backend exited {result.exit_code})", file=sys.stderr)
 
     # ── 10. Checker lifecycle ────────────────────────────────────────────────
+    # Real bug found while building slice 7.3's end-to-end test (not part of
+    # the original plan): this used to gate on `cfg.has_checker` (a
+    # `checker:` YAML block), so any flow on the *default* `checker_mode:
+    # log_scan` without a declared `checker:` section — every real reference
+    # flow in this repo, confirmed by inspection — never actually had its
+    # log scanned for `$fatal`/`FAIL:` markers, since `run_checker()`'s own
+    # log_scan mode needs no `checker:` block at all. A simulator process
+    # commonly exits 0 even after `$fatal` fires inside the simulated
+    # design (that is the whole reason a log-scan checker mode exists), so
+    # this silently reported PASS for genuinely failed checks. The checker
+    # must run whenever the adapter defines one and the backend itself
+    # succeeded — `has_checker` was never the right gate.
     checker_ok: bool | None = None
-    has_checker = getattr(cfg, "has_checker", False)
-    if has_checker and result.success:
+    if result.success:
         run_checker = getattr(adapter, "run_checker", None)
         if callable(run_checker):
             try:
@@ -442,8 +491,13 @@ def _run_one_loaded_flow(flow_path: Path, cfg, selection: XmlRunSelection, ctx, 
             # No plugin checker hook — treat as not-applicable.
             checker_ok = None
 
+    if capture is not None:
+        capture["checker_ok"] = checker_ok
+
     # ── 11. Artifact summary ─────────────────────────────────────────────────
     outputs = adapter.describe_backend_outputs(cfg, ctx)
+    if capture is not None:
+        capture["outputs"] = outputs
     print()
     print(f"[run] flow:    {getattr(cfg, 'flow_name', flow_path.name)}")
     print(f"[run] backend: {adapter.backend_id}")
@@ -1045,8 +1099,8 @@ def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
         em.tick()  # one more posedge: lets that NBA update settle before we read it
 
     with em.event_block("checks"):
-        em.check("{plugin_id}_data_out", ev["data_out"], width=8, label="data_out_check")
-        em.check("{plugin_id}_data_out_valid", ev["data_out_valid"], width=1, label="data_out_valid_check")
+        em.check("{plugin_id}_data_out", ev["data_out"], width=8, label="data_out_check", event_id=event_id)
+        em.check("{plugin_id}_data_out_valid", ev["data_out_valid"], width=1, label="data_out_valid_check", event_id=event_id)
 
     with em.event_block("drain"):
         em.drive("{plugin_id}_data_in_valid", 0, width=1)

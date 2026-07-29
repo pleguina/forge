@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from forge.verify.execution_stage import ExecutionStage
+
 
 # ── Shared data contracts ──────────────────────────────────────────────────
 
@@ -88,6 +90,9 @@ class ExecutionResult:
     observed_output_path: Path | None = None  # CSV fed to the checker
     exit_code:            int = 0
     backend_metadata:     dict[str, Any] = field(default_factory=dict)
+    stage:                ExecutionStage | None = None  # which stage produced this result
+    duration_s:           float | None = None  # wall-clock seconds for this stage's subprocess
+    backend_id:           str = ""  # e.g. "xsim", "verilator" — set by the adapter itself
 
 
 # ── Abstract base class ────────────────────────────────────────────────────

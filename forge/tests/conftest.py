@@ -24,7 +24,9 @@ import sys
 
 import pytest
 
-_PLUGIN_TOOL_MODULE_NAMES = ("bootstrap", "gen_stimulus", "flow_config", "runtime_context")
+_PLUGIN_TOOL_MODULE_NAMES = (
+    "bootstrap", "gen_stimulus", "flow_config", "runtime_context", "dataset_adapter",
+)
 
 
 def _clear_plugin_bootstrap_state() -> None:
@@ -48,6 +50,7 @@ def _clear_plugin_bootstrap_state() -> None:
 
     register_backend("xsim", "forge.verify.backend_xsim")
     register_backend("csim", "forge.verify.backend_csim")
+    register_backend("verilator", "forge.verify.backend_verilator")
 
 
 @pytest.fixture(autouse=True)

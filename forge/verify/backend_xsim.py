@@ -45,15 +45,18 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+from forge.verify import backend_checker
 from forge.verify.backend_base import (
     ArtifactRequirement,
     BackendAdapter,
     BackendCapabilities,
     ExecutionResult,
 )
+from forge.verify.execution_stage import ExecutionStage
 
 
 # ── Module-level constants ─────────────────────────────────────────────────
@@ -385,7 +388,15 @@ class XsimBackend(BackendAdapter):
         prj_path.write_text("\n".join(lines) + "\n")
 
     def run_backend(self, cfg: Any, ctx: Any) -> ExecutionResult:
-        """Execute xvlog → xelab → xsim, honouring override hooks."""
+        """Execute xvlog → xelab → xsim, honouring override hooks.
+
+        When ``cfg.stimulus_mode == "readmemh"`` (slice 7.5), xvlog/xelab
+        are skipped once a real, previously-successful build sentinel
+        exists in ``work_dir`` — the fixed-shape stimulus mechanism's
+        whole point is compiling once and reselecting which event runs via
+        the ``+EVENT_INDEX`` plusarg, not recompiling per event. Flows on
+        the default ``svh_include`` mechanism always recompile, unchanged.
+        """
         work_dir = Path(ctx.work_dir).resolve()
         flow_dir = Path(cfg.flow_file).parent.resolve()
         prj_file = work_dir / COMPILE_PROJECT_FILE
@@ -396,43 +407,56 @@ class XsimBackend(BackendAdapter):
         xelab_log    = work_dir / "xelab.log"
         simulate_log = work_dir / "simulate.log"
 
-        # ── xvlog ──────────────────────────────────────────────────────────
-        print(f"[xsim 1/3] Compiling  ({cfg.tb_module})")
-        xvlog_cmd = ["xvlog", "--incr", "--relax"]
-        if self.xvlog_use_sv_flag(cfg):
-            xvlog_cmd.append("--sv")
-        xvlog_cmd += ["--include", str(flow_dir)]
-        for inc_dir in self.extra_include_dirs(cfg):
-            xvlog_cmd += ["--include", str(inc_dir)]
-        xvlog_cmd += self.extra_compile_flags(cfg)
-        if getattr(ctx, "probe_log", False):
-            xvlog_cmd += ["-d", "PROBE_LOG=1"]
-        xvlog_cmd += ["-prj", str(prj_file)]
+        readmemh_mode = getattr(cfg, "stimulus_mode", "svh_include") == "readmemh"
+        build_sentinel = work_dir / ".compile_elaborate_complete"
 
-        ret = _run_logged(xvlog_cmd, xvlog_log, cwd=work_dir)
-        if ret != 0:
-            return ExecutionResult(
-                success=False, exit_code=ret, log_path=xvlog_log,
-                backend_metadata={"step": "xvlog"},
-            )
+        if readmemh_mode and build_sentinel.exists():
+            print(f"[xsim 1-2/3] Reusing existing compile+elaborate (stimulus_mode=readmemh)")
+        else:
+            # ── xvlog ──────────────────────────────────────────────────────
+            print(f"[xsim 1/3] Compiling  ({cfg.tb_module})")
+            xvlog_cmd = ["xvlog", "--incr", "--relax"]
+            if self.xvlog_use_sv_flag(cfg):
+                xvlog_cmd.append("--sv")
+            xvlog_cmd += ["--include", str(flow_dir)]
+            for inc_dir in self.extra_include_dirs(cfg):
+                xvlog_cmd += ["--include", str(inc_dir)]
+            xvlog_cmd += self.extra_compile_flags(cfg)
+            if getattr(ctx, "probe_log", False):
+                xvlog_cmd += ["-d", "PROBE_LOG=1"]
+            xvlog_cmd += ["-prj", str(prj_file)]
 
-        # ── xelab ──────────────────────────────────────────────────────────
-        print(f"[xsim 2/3] Elaborating (snapshot={snapshot})")
-        xelab_cmd = [
-            "xelab", "--incr", "--debug", "typical", "--relax",
-            "-L", "xil_defaultlib",
-        ]
-        xelab_cmd += self.extra_elab_lib_flags(cfg)
-        xelab_cmd += self.extra_elab_flags(cfg)
-        xelab_cmd.append(self.qualify_top_name(cfg))
-        xelab_cmd += self.extra_top_modules(cfg)
-        xelab_cmd += ["-s", snapshot]
-        ret = _run_logged(xelab_cmd, xelab_log, cwd=work_dir)
-        if ret != 0:
-            return ExecutionResult(
-                success=False, exit_code=ret, log_path=xelab_log,
-                backend_metadata={"step": "xelab"},
-            )
+            run = _run_logged(xvlog_cmd, xvlog_log, cwd=work_dir)
+            if run.exit_code != 0:
+                return ExecutionResult(
+                    success=False, exit_code=run.exit_code, log_path=xvlog_log,
+                    stage=ExecutionStage.COMPILE, duration_s=run.elapsed_s,
+                    backend_id=BACKEND_ID,
+                    backend_metadata={"step": "xvlog"},
+                )
+
+            # ── xelab ──────────────────────────────────────────────────────
+            print(f"[xsim 2/3] Elaborating (snapshot={snapshot})")
+            xelab_cmd = [
+                "xelab", "--incr", "--debug", "typical", "--relax",
+                "-L", "xil_defaultlib",
+            ]
+            xelab_cmd += self.extra_elab_lib_flags(cfg)
+            xelab_cmd += self.extra_elab_flags(cfg)
+            xelab_cmd.append(self.qualify_top_name(cfg))
+            xelab_cmd += self.extra_top_modules(cfg)
+            xelab_cmd += ["-s", snapshot]
+            run = _run_logged(xelab_cmd, xelab_log, cwd=work_dir)
+            if run.exit_code != 0:
+                return ExecutionResult(
+                    success=False, exit_code=run.exit_code, log_path=xelab_log,
+                    stage=ExecutionStage.ELABORATE, duration_s=run.elapsed_s,
+                    backend_id=BACKEND_ID,
+                    backend_metadata={"step": "xelab"},
+                )
+
+            if readmemh_mode:
+                build_sentinel.write_text("1")
 
         # ── xsim ───────────────────────────────────────────────────────────
         print("[xsim 3/3] Simulating")
@@ -442,12 +466,25 @@ class XsimBackend(BackendAdapter):
             if wave_tcl.resolve() != staged_wave_tcl.resolve():
                 shutil.copy2(wave_tcl, staged_wave_tcl)
             xsim_cmd += ["-tclbatch", str(staged_wave_tcl)]
-        ret = _run_logged(xsim_cmd, simulate_log, cwd=work_dir)
+        event_index = getattr(ctx, "event_index", None)
+        if readmemh_mode and event_index is not None:
+            xsim_cmd += ["-testplusarg", f"EVENT_INDEX={event_index}"]
+        run = _run_logged(xsim_cmd, simulate_log, cwd=work_dir)
+
+        waveform_path: Path | None = None
+        if self.capabilities.supports_waveform:
+            candidate = work_dir / f"{snapshot}.wdb"
+            if candidate.exists():
+                waveform_path = candidate
 
         return ExecutionResult(
-            success=(ret == 0),
-            exit_code=ret,
+            success=(run.exit_code == 0),
+            exit_code=run.exit_code,
             log_path=simulate_log,
+            stage=ExecutionStage.SIMULATE,
+            duration_s=run.elapsed_s,
+            backend_id=BACKEND_ID,
+            waveform_path=waveform_path,
             backend_metadata={
                 "step":     "xsim",
                 "snapshot": snapshot,
@@ -458,92 +495,24 @@ class XsimBackend(BackendAdapter):
     def run_checker(self, cfg: Any, ctx: Any, result: ExecutionResult) -> bool:
         """Determine pass/fail according to ``checker_mode`` in the flow config.
 
-        ``"log_scan"`` (default)
-            Scans the simulate log for standard fatal markers plus any
-            plugin-supplied custom patterns (:meth:`custom_checker_patterns`).
-
-        ``"binary"``
-            Invokes an external checker binary declared in the ``checker:``
-            section of ``verify.flow.yml``.  The binary is located via
-            :meth:`checker_binary_path`; its CLI arguments are assembled from
-            :meth:`checker_command_args`.
-
-        ``"none"``
-            Always passes (simulator exit code only).
+        Thin delegate to the simulator-agnostic checker stack in
+        :mod:`forge.verify.backend_checker` — see that module for the
+        ``"log_scan"``/``"binary"``/``"none"`` behavior.
         """
-        checker_mode = getattr(cfg, "checker_mode", "log_scan")
-
-        if checker_mode == "none":
-            return result.success
-
-        if not result.success:
-            return False
-
-        if checker_mode == "binary":
-            return self._run_binary_checker(cfg, ctx, result)
-
-        # Default: log_scan
-        if result.log_path and result.log_path.exists():
-            text = result.log_path.read_text(errors="replace")
-            builtin_markers = ("$fatal", "ASSERTION FAILED", "TEST FAILED", "FAIL:")
-            all_markers = list(builtin_markers) + self.custom_checker_patterns(cfg)
-            for marker in all_markers:
-                if marker in text:
-                    print(f"[checker] Failure marker detected: {marker!r}")
-                    return False
-        return True
-
-    def _run_binary_checker(self, cfg: Any, ctx: Any, result: ExecutionResult) -> bool:
-        """Run the external checker binary declared in ``checker:`` of verify.flow.yml."""
-        import subprocess as _sp  # noqa: PLC0415
-
-        checker_cfg = getattr(cfg, "checker", None)
-        if checker_cfg is None:
-            return True
-
-        bin_path = self.checker_binary_path(cfg)
-        if bin_path is None or not bin_path.exists():
-            tool = getattr(checker_cfg, "tool", "<unknown>")
-            print(f"[checker] Skipped — binary not found: {tool}", file=sys.stderr)
-            return True
-
-        cmd = [str(bin_path)] + self.checker_command_args(cfg, ctx, result)
-        ret = _sp.run(cmd, check=False)
-        if ret.returncode == 0:
-            print("Scoreboard check: PASS")
-            return True
-        print("Scoreboard check: FAIL", file=sys.stderr)
-        return False
+        return backend_checker.run_checker(self, cfg, ctx, result)
 
     # ── Override hook: checker binary location ────────────────────────────
 
     def checker_binary_path(self, cfg: Any) -> "Path | None":
         """Return the path to the external checker binary, or ``None``.
 
-        Called by :meth:`_run_binary_checker` when ``checker_mode == "binary"``.
+        Called by the lifted checker stack when ``checker_mode == "binary"``.
         Override in a plugin subclass to locate the checker binary (e.g. from
         a build directory or environment variable).
 
-        Default returns ``None`` (checker is skipped).
+        Default delegates to :func:`forge.verify.backend_checker.checker_binary_path`.
         """
-        checker = getattr(cfg, "checker", None)
-        if checker is None:
-            return None
-        binary = getattr(checker, "binary", None)
-        if binary is not None:
-            return Path(binary)
-        tool = getattr(checker, "tool", "")
-        if tool:
-            candidate = Path(tool)
-            if candidate.is_absolute() and candidate.exists():
-                return candidate
-            found = shutil.which(tool)
-            if found:
-                return Path(found)
-            rel = Path(cfg.consumer_root) / tool
-            if rel.exists():
-                return rel
-        return None
+        return backend_checker.checker_binary_path(cfg)
 
     # ── Override hook: checker command arguments ──────────────────────────
 
@@ -555,38 +524,12 @@ class XsimBackend(BackendAdapter):
     ) -> list[str]:
         """Return CLI arguments for the external checker binary.
 
-        Called by :meth:`_run_binary_checker` after :meth:`checker_binary_path`.
+        Called by the lifted checker stack after :meth:`checker_binary_path`.
         Override to provide the checker-specific argument list.
 
-        Default returns an empty list.
+        Default delegates to :func:`forge.verify.backend_checker.checker_command_args`.
         """
-        checker = getattr(cfg, "checker", None)
-        if checker is None:
-            return []
-        args = list(getattr(checker, "args", ()) or [])
-        if not args:
-            obs = getattr(checker, "observed_log", None)
-            xml_input = getattr(ctx, "xml_input", None) or getattr(cfg, "dataset_xml", None)
-            # v1.0 framework-standard checker contract for XML-backed datasets.
-            return [
-                "--obs", str(obs),
-                "--xml", str(xml_input),
-                "--event-id", str(getattr(ctx, "event_id", 1)),
-                "--latency", str(getattr(checker, "latency_cycles", 0)),
-                "--tolerance", str(getattr(checker, "tolerance", 0)),
-            ]
-        format_map = {
-            "observed_log": str(getattr(checker, "observed_log", "")),
-            "dataset_xml": str(getattr(ctx, "xml_input", None) or getattr(cfg, "dataset_xml", "")),
-            "event_id": str(getattr(ctx, "event_id", 1)),
-            "latency_cycles": str(getattr(checker, "latency_cycles", 0)),
-            "tolerance": str(getattr(checker, "tolerance", 0)),
-            "pass_condition": str(getattr(checker, "pass_condition", "")),
-            "consumer_root": str(getattr(cfg, "consumer_root", "")),
-            "flow_dir": str(Path(cfg.flow_file).parent.resolve()),
-            "work_dir": str(getattr(ctx, "work_dir", "") or result.backend_metadata.get("work_dir", "")),
-        }
-        return [str(a).format(**format_map) for a in args]
+        return backend_checker.checker_command_args(cfg, ctx, result)
 
     def describe_backend_outputs(self, cfg: Any, ctx: Any) -> dict[str, Path | None]:
         return {
@@ -607,12 +550,18 @@ def _locate_wave_tcl(cfg: Any, flow_dir: Path) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _run_logged(cmd: list[str], log_file: Path, cwd: Path | None = None) -> int:
-    """Run *cmd*, capture output to *log_file*, return exit code.
+class LoggedRun(NamedTuple):
+    """Result of one :func:`_run_logged` invocation."""
+    exit_code: int
+    elapsed_s: float
+
+
+def _run_logged(cmd: list[str], log_file: Path, cwd: Path | None = None) -> LoggedRun:
+    """Run *cmd*, capture output to *log_file*, return exit code + duration.
 
     Delegates to :mod:`forge.verify.subprocess_wrapper` for structured capture
-    (command, cwd, exit code, log path all recorded in SubprocessResult).
-    Falls back to raw subprocess if wrapper import fails.
+    (command, cwd, exit code, log path, elapsed time all recorded in
+    SubprocessResult). Falls back to raw subprocess if wrapper import fails.
     """
     try:
         from forge.verify.subprocess_wrapper import run_subprocess  # noqa: PLC0415
@@ -623,11 +572,12 @@ def _run_logged(cmd: list[str], log_file: Path, cwd: Path | None = None) -> int:
             tool_name=cmd[0] if cmd else "xsim",
             check=False,
         )
-        return result.exit_code
+        return LoggedRun(result.exit_code, result.elapsed_s)
     except ImportError:
         pass  # fallback
     # Fallback: raw subprocess with tee
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.monotonic()
     with open(log_file, "w") as lf:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -638,7 +588,7 @@ def _run_logged(cmd: list[str], log_file: Path, cwd: Path | None = None) -> int:
             sys.stdout.write(line)
             lf.write(line)
         proc.wait()
-    return proc.returncode
+    return LoggedRun(proc.returncode, time.monotonic() - t0)
 
 
 # ── Module ADAPTER singleton ───────────────────────────────────────────────

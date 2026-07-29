@@ -21,6 +21,9 @@ _declare(PLUGIN_ID, __name__)
 def bootstrap() -> None:
     """Declare passthrough_demo with the framework.  Idempotent."""
     from forge.verify.plugin_registry import is_plugin_bootstrapped, mark_bootstrapped
+
+    import dataset_adapter as _dataset_adapter  # noqa: F401  (self-registers on import)
+
     if is_plugin_bootstrapped(PLUGIN_ID):
         return
     mark_bootstrapped(

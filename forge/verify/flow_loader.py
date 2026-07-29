@@ -227,6 +227,7 @@ class FlowConfig:
     # ── stimulus: (defaults applied when section absent)
     stimulus_tool:     str   # binary name
     stimulus_fallback: str   # "idle" | "fail"
+    stimulus_mode:     str   # "svh_include" (default) | "readmemh" (slice 7.5) | "structured_csv" | "none"
 
     # ── compile:
     compile_excluded_sources: tuple[Path, ...]
@@ -465,6 +466,7 @@ def parse_generic_flow_fields(
         "outputs_waveform": _abs_opt(outputs_raw.get("waveform"), flow_dir),
         "stimulus_tool":     str(stimulus_raw.get("tool",     "xml_to_sv_stimulus")),
         "stimulus_fallback": str(stimulus_raw.get("fallback", "idle")),
+        "stimulus_mode":     str(raw.get("stimulus_mode", "svh_include")),
         "compile_excluded_sources": tuple(
             _abs(str(e), consumer_root)
             for e in (compile_raw.get("excluded_sources") or [])

@@ -139,6 +139,48 @@ def cmd_inspect(args):
         if not json_mode:
             print(f"✅ provenance manifest written to {prov_path}")
 
+    # ── §8.1 static DOT/SVG (release-plan Phase 8) ──────────────────────
+    # `--dot` never requires the real `dot` binary (it's a plain text
+    # template); `--svg` does, and fails loudly and specifically when it's
+    # not on PATH — it never silently no-ops on an explicit user request.
+    if getattr(args, "dot", None) or getattr(args, "svg", None) or getattr(args, "explorer", None):
+        from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
+        from forge.analyze.design_explorer.graph_model import build_design_graph
+
+        graph = build_design_graph(project, source_roots=[design_path.parent])
+        dot_text = render_dot(graph)
+
+        if getattr(args, "explorer", None):
+            from forge.analyze.design_explorer.html_renderer import render_explorer_html
+
+            explorer_path = Path(args.explorer).expanduser().resolve()
+            render_explorer_html(graph, explorer_path)
+            artifacts.append(str(explorer_path))
+            if not json_mode:
+                print(f"✅ interactive explorer written to {explorer_path}")
+
+        if getattr(args, "dot", None):
+            dot_path = Path(args.dot).expanduser().resolve()
+            dot_path.parent.mkdir(parents=True, exist_ok=True)
+            dot_path.write_text(dot_text)
+            artifacts.append(str(dot_path))
+            if not json_mode:
+                print(f"✅ DOT written to {dot_path}")
+
+        if getattr(args, "svg", None):
+            if not dot_available():
+                sys.exit(_guided_failure(
+                    "Graphviz `dot` binary not found on PATH — install graphviz to render "
+                    "--svg (--dot's plain text output never requires it).",
+                    json_mode=json_mode,
+                ))
+            svg_path = Path(args.svg).expanduser().resolve()
+            if not render_svg(dot_text, svg_path):
+                sys.exit(_guided_failure(f"`dot` failed to render SVG to {svg_path}", json_mode=json_mode))
+            artifacts.append(str(svg_path))
+            if not json_mode:
+                print(f"✅ SVG written to {svg_path}")
+
     status = "fail" if errors else ("warn" if warnings else "pass")
     ir_hash = content_hash(project)
     envelope = CommandEnvelope(
@@ -386,4 +428,7 @@ def register(sub) -> None:
         "--explain-staleness",
         help="Compare against a previously --provenance'd manifest and explain why it's stale",
     )
+    p.add_argument("--dot", help="Write a deterministic Graphviz DOT rendering of the design (never requires `dot`)")
+    p.add_argument("--svg", help="Write an SVG rendering of the design (requires the `dot` binary on PATH)")
+    p.add_argument("--explorer", help="Write a self-contained, offline, interactive HTML design explorer")
     p.set_defaults(func=cmd_inspect)

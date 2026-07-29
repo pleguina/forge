@@ -5,6 +5,13 @@ Generates ``stimulus_current.svh`` for the passthrough_xsim flow: drives
 data_in/data_in_valid for one cycle, then checks that data_out/data_out_valid
 carry the same value one cycle later (the DUT's entire behavior).
 
+Reads its golden events for real from ``schemas/data/passthrough_demo_golden.xml``
+via :class:`forge.verify.dataset_format.XmlDatasetLoader` (Phase 7, slice
+7.4a) — this used to be a hardcoded Python dict that nothing ever
+cross-checked against the XML file, so the declared golden data and the
+simulated data could silently diverge. Now the XML file is the single
+source of truth; edit it and the simulated behavior changes accordingly.
+
 Usage::
 
     python3 gen_stimulus.py --flow passthrough_xsim [--event-id <n>]
@@ -13,28 +20,73 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any, Dict
 
-from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
+from forge.verify.dataset_adapter import DatasetSource, get_dataset_adapter
+from forge.verify.dataset_format import get_format_loader
+from forge.verify.readmemh_stimulus import write_event_memory_file
+from forge.verify.stimulus_helpers import (
+    StimulusEmitter,
+    emit_event_index_read,
+    emit_runtime_output_check,
+    write_readmemh_stimulus_svh,
+    write_run_stimulus_svh,
+)
 
-# Golden events, matching schemas/data/passthrough_demo_golden.xml.
-_EVENTS = {
-    0: {"data_in": 0x3A, "data_in_valid": 1, "data_out": 0x3A, "data_out_valid": 1},
-    1: {"data_in": 0x00, "data_in_valid": 0, "data_out": 0x00, "data_out_valid": 0},
-}
+_DATASET_XML = Path(__file__).resolve().parents[1] / "schemas/data/passthrough_demo_golden.xml"
+
+# ── readmemh-mode bit layout (Phase 7, slice 7.5) ──────────────────────
+# One fixed-width word per event: data_in(8) | data_in_valid(1) |
+# data_out(8) | data_out_valid(1) = 18 bits, MSB to LSB in that order.
+_MEM_FILE_NAME = "passthrough_events.mem"
+_WORD_WIDTH_BITS = 18
 
 
-def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
+def _pack_event_word(ev: "Dict[str, Any]") -> str:
+    data_in       = int(ev["in"]["data_in"], 0)
+    data_in_valid = int(ev["in"]["data_in_valid"], 0)
+    data_out       = int(ev["golden"]["data_out"], 0)
+    data_out_valid = int(ev["golden"]["data_out_valid"], 0)
+    word = (data_in << 10) | (data_in_valid << 9) | (data_out << 1) | data_out_valid
+    hex_digits = (_WORD_WIDTH_BITS + 3) // 4
+    return f"{word:0{hex_digits}x}"
+
+
+def _load_events(dataset_path: Path = _DATASET_XML) -> "Dict[str, Dict[str, Any]]":
+    """Load the real golden dataset, keyed by its real string event id.
+
+    Dispatches by *dataset_path*'s suffix (``.xml``/``.json``) via the
+    layer-A format-loader registry — never hardcodes one format, so this
+    same function drives both the real committed XML dataset and its real
+    JSON sibling identically.
+    """
+    dataset = get_format_loader(dataset_path).load(dataset_path)
+    return dict(zip(dataset.metadata.event_ids, dataset.events))
+
+
+def generate_for_flow(
+    flow_name: str, event_id: int, out_path: Path, *, dataset_path: Path = _DATASET_XML,
+) -> None:
     """Generate stimulus for *flow_name* event *event_id*.
 
     The framework guarantees that the testbench provides:
       - ``ap_clk``  — DUT clock (driven by TB)
       - ``ap_rst``  — synchronous active-high reset (driven by TB)
 
-    Everything else is driven/checked here.
+    Everything else is driven/checked here, read from the real dataset.
     """
-    if event_id not in _EVENTS:
-        raise ValueError(f"Unknown event id: {event_id} (known: {sorted(_EVENTS)})")
-    ev = _EVENTS[event_id]
+    events = _load_events(dataset_path)
+    key = str(event_id)
+    if key not in events:
+        raise ValueError(
+            f"Unknown event id: {event_id} "
+            f"(known: {sorted(events, key=int)}, dataset: {dataset_path})"
+        )
+    ev = events[key]
+    data_in       = int(ev["in"]["data_in"], 0)
+    data_in_valid = int(ev["in"]["data_in_valid"], 0)
+    data_out       = int(ev["golden"]["data_out"], 0)
+    data_out_valid = int(ev["golden"]["data_out_valid"], 0)
 
     em = StimulusEmitter()
 
@@ -45,14 +97,14 @@ def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
         em.tick()
 
     with em.event_block(f"event_{event_id}"):
-        em.drive("pt_data_in", ev["data_in"], width=8)
-        em.drive("pt_data_in_valid", ev["data_in_valid"], width=1)
+        em.drive("pt_data_in", data_in, width=8)
+        em.drive("pt_data_in_valid", data_in_valid, width=1)
         em.tick()  # posedge: DUT samples input, schedules registered output (NBA)
         em.tick()  # one more posedge: lets that NBA update settle before we read it
 
     with em.event_block("checks"):
-        em.check("pt_data_out", ev["data_out"], width=8, label="data_out_check")
-        em.check("pt_data_out_valid", ev["data_out_valid"], width=1, label="data_out_valid_check")
+        em.check("pt_data_out", data_out, width=8, label="data_out_check", event_id=event_id)
+        em.check("pt_data_out_valid", data_out_valid, width=1, label="data_out_valid_check", event_id=event_id)
 
     with em.event_block("drain"):
         em.drive("pt_data_in_valid", 0, width=1)
@@ -60,6 +112,80 @@ def generate_for_flow(flow_name: str, event_id: int, out_path: Path) -> None:
 
     write_run_stimulus_svh(em, out_path, header_comment=f"flow={flow_name} event={event_id}")
     print(f"  wrote {out_path}")
+
+
+def generate_readmemh_stimulus(
+    flow_name: str, flow_dir: Path, *, dataset_path: Path = _DATASET_XML,
+) -> "Dict[int, str]":
+    """Write the fixed-shape, non-recompiling readmemh stimulus mechanism
+    (Phase 7, slice 7.5) once for *flow_dir*: a real ``.mem`` file (one
+    fixed-width hex word per event, via the layer-A/layer-B dataset
+    pipeline unchanged from ``generate_for_flow``) plus a content-stable
+    ``stimulus_current.svh`` that indexes into it at runtime via
+    ``+EVENT_INDEX=N`` — written once regardless of which event will
+    eventually run, unlike ``generate_for_flow``'s per-event regeneration.
+
+    Returns the real ``event_index → event_id`` mapping.
+    """
+    serialized = get_format_loader(dataset_path).load(dataset_path)
+    adapter = get_dataset_adapter("passthrough.identity-xml")
+    canonical = adapter.materialize(DatasetSource(serialized=serialized), {})
+
+    mem_path = flow_dir / _MEM_FILE_NAME
+    index_to_id = write_event_memory_file(canonical, _pack_event_word, mem_path)
+
+    top_bit = _WORD_WIDTH_BITS - 1
+    preamble = [
+        f"reg [{top_bit}:0] event_mem [0:{len(index_to_id) - 1}];",
+        # Absolute path: valid regardless of which work_dir a backend
+        # actually simulates from (xsim vs. Verilator use different work
+        # dir conventions) — no staging step needed.
+        f'initial $readmemh("{mem_path.resolve()}", event_mem);',
+    ]
+
+    body: "list[str]" = [
+        "    integer event_index;",
+        f"    reg [{top_bit}:0] event_word;",
+        "    reg [7:0] exp_data_out;",
+        "    reg exp_data_out_valid;",
+        "",
+        emit_event_index_read("event_index"),
+        "    event_word = event_mem[event_index];",
+        "",
+        "    ap_rst <= 1'b1;",
+        "    @(posedge ap_clk);",
+        "    @(posedge ap_clk);",
+        "    @(posedge ap_clk);",
+        "    @(posedge ap_clk);",
+        "    ap_rst <= 1'b0;",
+        "    @(posedge ap_clk);",
+        "",
+        "    pt_data_in <= event_word[17:10];",
+        "    pt_data_in_valid <= event_word[9];",
+        "    exp_data_out = event_word[8:1];",
+        "    exp_data_out_valid = event_word[0];",
+        "    @(posedge ap_clk);",
+        "    @(posedge ap_clk);",
+        "",
+    ]
+    body += emit_runtime_output_check("pt_data_out", "exp_data_out", width=8, label="data_out_check")
+    body += emit_runtime_output_check("pt_data_out_valid", "exp_data_out_valid", width=1, label="data_out_valid_check")
+    body += [
+        "",
+        "    pt_data_in_valid <= 1'b0;",
+        "    @(posedge ap_clk);",
+        "    @(posedge ap_clk);",
+    ]
+
+    out_path = flow_dir / "stimulus_current.svh"
+    write_readmemh_stimulus_svh(
+        preamble_lines=preamble,
+        task_body_lines=body,
+        out_path=out_path,
+        header_comment=f"flow={flow_name} stimulus_mode=readmemh",
+    )
+    print(f"  wrote {out_path} (readmemh, {len(index_to_id)} event(s) in {mem_path.name})")
+    return index_to_id
 
 
 def main() -> None:

@@ -31,10 +31,12 @@ task automatic run_stimulus();
 
 
     // ── checks ──
+    $display("FORGE_CHECK|check_id=0:data_out_check|label=data_out_check|signal=pt_data_out|expected=0x3a|observed=0x%h|width=8|passed=%0d", pt_data_out, (pt_data_out === 8'h3A));
     if (pt_data_out !== 8'h3A) begin
       $display("FAIL: data_out_check — expected 8'h3A, got %0h", pt_data_out);
       $fatal(1, "Check failed: data_out_check");
     end
+    $display("FORGE_CHECK|check_id=0:data_out_valid_check|label=data_out_valid_check|signal=pt_data_out_valid|expected=0x1|observed=0x%h|width=1|passed=%0d", pt_data_out_valid, (pt_data_out_valid === 1'b1));
     if (pt_data_out_valid !== 1'b1) begin
       $display("FAIL: data_out_valid_check — expected 1'b1, got %0h", pt_data_out_valid);
       $fatal(1, "Check failed: data_out_valid_check");

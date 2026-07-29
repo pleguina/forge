@@ -187,8 +187,6 @@ def cmd_init(args) -> None:
         next_actions=[
             f"Replace the scaffolded RTL stub ({rtl_stub}) with your real algorithm, "
             f"then replace {golden_xml} with real golden data",
-            "Topology SVG and the interactive design explorer are not yet implemented "
-            "(release-plan §8)",
         ],
     )
     sys.exit(emit(envelope, json_mode=json_mode))
