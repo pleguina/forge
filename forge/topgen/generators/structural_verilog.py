@@ -3,11 +3,12 @@ import json
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Set
+from typing import Any, Dict, List, Optional, Tuple, Set
 
 import yaml  # To read system.yml
 
 from ..config import DesignConfig, Module, resolve_declared_path
+from ..ip.domains import resolve_domain_nets
 from ..ip.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
 from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
@@ -64,6 +65,33 @@ def _base_of(name: str) -> str:
 
 def _inst(mod: Module, idx: int) -> str:
     return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+
+def _domain_to_top_level_net(domain_name: str, *, is_clock: bool) -> str:
+    """Translate a resolved clock/reset domain identity (the raw port name
+    — see forge.topgen.ip.domains.resolve_domain_nets) into the actual
+    top-level net name this generator wires it to.
+
+    This generator's own clock/reset auto-map (the per-instance port-
+    mapping loop below) collapses every *standard*-name variant
+    (``clk``/``clock``/``ap_clk``, or anything ending ``_clk``/``_ap_clk``
+    for clocks; ``rst``/``reset``/``ap_rst``/``rst_n``, or anything ending
+    ``_rst``/``_ap_rst``/``_rst_n`` for resets) onto the single literal
+    ``ap_clk``/``ap_rst`` top-level port, regardless of which specific
+    variant string a module's contract declared. A non-standard name (e.g.
+    ``clk_b``) becomes its own same-named top-level global net instead.
+    Used by CDC synchronizer emission to reference the net that actually
+    exists in the generated file, not the raw domain identity string.
+    """
+    if is_clock:
+        if domain_name in ("clk", "clock", "ap_clk") or domain_name.endswith("_clk") or domain_name.endswith("_ap_clk"):
+            return "ap_clk"
+    else:
+        if (
+            domain_name in ("rst", "reset", "ap_rst", "rst_n")
+            or domain_name.endswith("_rst") or domain_name.endswith("_ap_rst") or domain_name.endswith("_rst_n")
+        ):
+            return "ap_rst"
+    return domain_name
 
 def _vtype(width: int) -> str:
     """Return Verilog type string: wire for 1-bit, wire [N-1:0] for multi-bit."""
@@ -418,6 +446,7 @@ def write_structural_verilog(
     top_name: str = "algo_top",
     system_yml: Path | None = None,          # framework awareness
     contracts: Dict | None = None,           # loaded interface contracts (for clock_free)
+    match_report: Any = None,                # auto_match_ports's MatchReport (for CDC domain resolution)
 ) -> Dict[str, Any]:
     """
     Generate a structural Verilog top that wires algorithm modules together.
@@ -429,30 +458,54 @@ def write_structural_verilog(
 
     If system_yml is None, behavior matches the previous implementation: only
     user-declared externals are lifted as <inst>_<pin>.
+
+    ``match_report`` (release-plan §3.2, Phase 3 slice 3) is required only
+    when a connection declares ``cdc: {kind: 2ff_sync}`` — it's what lets
+    this function resolve the *destination* instance's own clock/reset net
+    (which may differ from the design's default ``ap_clk``/``ap_rst`` in a
+    multi-domain design) via ``forge.topgen.ip.domains.resolve_domain_nets``,
+    the same resolver the IR and ``forge.topgen.ip.cdc.verify_cdc`` use.
+    ``cdc: {kind: async_fifo}`` is accepted (structurally approved, no
+    strict-mode violation) but does not emit a FIFO body this release —
+    the connection is wired directly, same as if no adapter were declared;
+    see ``docs/development/release-readiness.md``'s Phase 3 slice 3 entry
+    for this documented limitation.
     """
     NL = "\n"
     lines: List[str] = []
     emit = lines.append
     external_output_bindings: Dict[Tuple[str, str], str] = {}
 
-    # Build maps for register_stages, delay_cycles, and boundary tags.
+    # Build maps for register_stages, delay_cycles, boundary tags, and CDC
+    # adapter declarations.
     reg_stages_map: Dict[Tuple[str, str], int] = {}
     delay_cycles_map: Dict[Tuple[str, str], int] = {}
     boundary_map: Dict[Tuple[str, str], str] = {}  # (src_inst, dst_inst) -> tag
+    cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}  # (src_inst, dst_inst) -> cdc dict
     for conn in cfg.connections:
-        src_mod = next(m for m in cfg.modules if m.name == conn.from_)
-        dst_mod = next(m for m in cfg.modules if m.name == conn.to)
+        src_mod_obj = next(m for m in cfg.modules if m.name == conn.from_)
+        dst_mod_obj = next(m for m in cfg.modules if m.name == conn.to)
         # For each instance combination, store register stages and delay cycles
-        for src_idx in range(src_mod.instances):
-            for dst_idx in range(dst_mod.instances):
-                src_inst = _inst(src_mod, src_idx)
-                dst_inst = _inst(dst_mod, dst_idx)
+        for src_idx in range(src_mod_obj.instances):
+            for dst_idx in range(dst_mod_obj.instances):
+                src_inst = _inst(src_mod_obj, src_idx)
+                dst_inst = _inst(dst_mod_obj, dst_idx)
                 if conn.register_stages > 0:
                     reg_stages_map[(src_inst, dst_inst)] = conn.register_stages
                 if conn.delay_cycles > 0:
                     delay_cycles_map[(src_inst, dst_inst)] = conn.delay_cycles
                 if conn.boundary:
                     boundary_map[(src_inst, dst_inst)] = conn.boundary
+                if conn.cdc:
+                    cdc_map[(src_inst, dst_inst)] = conn.cdc
+
+    if cdc_map and match_report is None:
+        raise ValueError(
+            "one or more connections declare 'cdc:' but write_structural_verilog "
+            "was not given a match_report — pass the MatchReport auto_match_ports "
+            "returned so the destination instance's real clock/reset net can be "
+            "resolved (forge.topgen.ip.domains.resolve_domain_nets)."
+        )
 
     # ---------- helpers (local to this function) --------------------------
     def _parse_system_aliases(system_yml: Path | None) -> tuple[Dict[Tuple[str, str], str], Dict[Tuple[str, str], str]]:
@@ -513,10 +566,10 @@ def write_structural_verilog(
     alias_in, alias_out = _parse_system_aliases(system_yml)
 
     # ---------- tracking for report ---------------------------------------
-    unconnected_inputs = []   # [(instance, port, width)]
-    unconnected_outputs = []  # [(instance, port, width)]
-    open_outputs = []         # [(instance, port, width)]
-    tied_to_zero = []        # [(instance, port, width)]
+    unconnected_inputs: List[Tuple[str, str, int]] = []   # [(instance, port, width)]
+    unconnected_outputs: List[Tuple[str, str, int]] = []  # [(instance, port, width)]
+    open_outputs: List[Tuple[str, str, int]] = []         # [(instance, port, width)]
+    tied_to_zero: List[Tuple[str, str, int]] = []         # [(instance, port, width)]
 
     emit("// ------------------------------------------------------------")
     emit("//  Auto-generated by topgen – structural Verilog top")
@@ -536,6 +589,16 @@ def write_structural_verilog(
             ilabel = _inst(mod, i)
             inst_to_mod[ilabel] = mod.name
             inst_to_params[ilabel] = mod.parameters  # Store parameters for this instance
+
+    # Phase 3.2 (release-plan §3.2, slice 3): resolve each module's real
+    # clock/reset net so a CDC synchronizer instance can be clocked/reset
+    # by the *destination* domain, not always assumed to be ap_clk/ap_rst.
+    clock_of_module: Dict[str, Optional[str]] = {}
+    reset_of_module: Dict[str, Optional[str]] = {}
+    if cdc_map:
+        clock_of_module, reset_of_module, _unresolved = resolve_domain_nets(
+            cfg, contracts or {}, match_report, global_nets, inst_to_mod,
+        )
 
     def _pin_width_for_inst(inst: str, pin: str) -> int:
         """
@@ -558,13 +621,23 @@ def write_structural_verilog(
     # ====== Module declaration =============================================
     module_ports: List[str] = []
     declared_names: Set[str] = set()
+    # Structured mirror of module_ports (migration step 6 — release-plan
+    # §1.4 / docs/development/release-readiness.md): recorded alongside the
+    # text declarations below so callers (generate_port_map, the canonical
+    # IR) can consume the resolved top-level port list directly instead of
+    # re-parsing it back out of the generated Verilog file. This list has
+    # zero influence on `lines`/`emit()` — it only records what's already
+    # being decided.
+    top_ports: List[Dict[str, Any]] = []
 
     if cfg.connect_clock:
         module_ports.append("input ap_clk")
         declared_names.add("ap_clk")
+        top_ports.append({"name": "ap_clk", "direction": "in", "width": 1})
     if cfg.connect_reset:
         module_ports.append("input ap_rst")
         declared_names.add("ap_rst")
+        top_ports.append({"name": "ap_rst", "direction": "in", "width": 1})
 
     # Add control signals as inputs (only if not generated internally)
     # Check if any module outputs this control signal
@@ -573,7 +646,7 @@ def write_structural_verilog(
         for p in ports_by_mod[mod.name]:
             if p["dir"] == "output" and p["name"] in cfg.control_signals:
                 control_signal_sources[p["name"]] = mod.name
-    
+
     for sig_name, sig_config in cfg.control_signals.items():
         # Skip if this signal is generated by a module (not a top-level input)
         if sig_name in control_signal_sources:
@@ -584,6 +657,7 @@ def write_structural_verilog(
             else:
                 module_ports.append(f"input [{sig_config.width-1}:0] {sig_name}")
             declared_names.add(sig_name)
+            top_ports.append({"name": sig_name, "direction": "in", "width": sig_config.width})
 
     # Add ports for any other global nets (besides clock/reset)
     for gnet_name, binds in global_nets.items():
@@ -594,6 +668,7 @@ def write_structural_verilog(
             # All instances of this signal should be inputs (global signals drive modules)
             module_ports.append(f"input {gnet_name}")
             declared_names.add(gnet_name)
+            top_ports.append({"name": gnet_name, "direction": "in", "width": 1})
 
     # Emit top-level ports.
     # If (inst,pin) has an alias from system.yml, use the framework name; otherwise use <inst>_<pin>.
@@ -638,6 +713,11 @@ def write_structural_verilog(
                     continue
                 module_ports.append(_port_decl(top_port_name, ext_dir, w))
                 declared_names.add(top_port_name)
+                top_ports.append({
+                    "name": top_port_name,
+                    "direction": "in" if ext_dir == "input" else "out",
+                    "width": w,
+                })
 
     # Add DEBUG ports - expose ALL ports of modules marked with debug: true
     for mod in cfg.modules:
@@ -660,10 +740,11 @@ def write_structural_verilog(
                 
                 if debug_port_name in declared_names:
                     continue
-                
+
                 # Debug ports are outputs (so we can monitor them)
                 module_ports.append(_port_decl(debug_port_name, "output", w))
                 declared_names.add(debug_port_name)
+                top_ports.append({"name": debug_port_name, "direction": "out", "width": w})
 
     emit(f"module {top_name} (")
     if module_ports:
@@ -680,11 +761,13 @@ def write_structural_verilog(
     driver_net_set: Set[str] = set()
     reg_stage_nets: Set[str] = set()  # Wires for register stage outputs
     delay_nets: Set[str] = set()  # Wires for signal_delay outputs
+    sync_nets: Set[str] = set()  # Wires for cdc_sync2ff outputs
 
     for (src_i, dst_i), pairs in conn_map.items():
         src_mod = inst_to_mod[src_i]
         num_stages = reg_stages_map.get((src_i, dst_i), 0)
         num_delays = delay_cycles_map.get((src_i, dst_i), 0)
+        cdc_kind = cdc_map.get((src_i, dst_i), {}).get("kind")
 
         for (s_pin_raw, _d_pin_raw) in pairs:
             s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
@@ -719,6 +802,18 @@ def write_structural_verilog(
                     else:
                         emit(f"  wire [{w-1}:0] {delay_net};")
                     delay_nets.add(delay_net)
+
+            # cdc: {kind: 2ff_sync} — intermediate wire for the synchronizer
+            # output. async_fifo emits no RTL this release (see this
+            # function's docstring) so it needs no intermediate net.
+            if cdc_kind == "2ff_sync":
+                sync_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}")
+                if sync_net not in sync_nets:
+                    if w == 1:
+                        emit(f"  wire {sync_net};")
+                    else:
+                        emit(f"  wire [{w-1}:0] {sync_net};")
+                    sync_nets.add(sync_net)
 
     for (ilabel, pname), _top_port_name in external_output_bindings.items():
         raw_net = f"net_{ilabel}_{pname}"
@@ -844,10 +939,18 @@ def write_structural_verilog(
                         if not src_pin:
                             src_pin = pname
 
-                        # Check if delay cycles or register stages exist between src and dst
+                        # Check if a CDC synchronizer, delay cycles, or register
+                        # stages exist between src and dst — CDC takes priority:
+                        # a domain crossing needs the synchronizer regardless of
+                        # any also-declared delay/register on the same connection.
+                        cdc_kind = cdc_map.get((src_i, ilabel), {}).get("kind")
                         num_delays = delay_cycles_map.get((src_i, ilabel), 0)
                         num_stages = reg_stages_map.get((src_i, ilabel), 0)
-                        if num_delays > 0:
+                        if cdc_kind == "2ff_sync":
+                            # Connect to the synchronized output
+                            sync_net = _verilog_ident(f"sync_net_{src_i}_{ilabel}_{src_pin}")
+                            pm.append(f"    .{pname}({sync_net})")
+                        elif num_delays > 0:
                             # Connect to delayed output
                             delay_net = _verilog_ident(f"delay_net_{src_i}_{ilabel}_{src_pin}")
                             pm.append(f"    .{pname}({delay_net})")
@@ -856,7 +959,9 @@ def write_structural_verilog(
                             reg_net = _verilog_ident(f"reg_net_{src_i}_{ilabel}_{src_pin}")
                             pm.append(f"    .{pname}({reg_net})")
                         else:
-                            # Direct connection
+                            # Direct connection (also covers cdc: {kind: async_fifo}
+                            # — approved structurally, but no FIFO RTL this release,
+                            # see this function's docstring)
                             pm.append(f"    .{pname}({_verilog_ident(f'net_{src_i}_{src_pin}')})")
                     else:
                         # Tie to zero
@@ -989,6 +1094,70 @@ def write_structural_verilog(
 
                     delay_counter += 1
 
+    # ====== CDC Synchronizer Instances (release-plan §3.2, slice 3) =======
+    # A real 2-flop synchronizer is emitted for cdc: {kind: 2ff_sync}
+    # connections, clocked/reset by the *destination* instance's own
+    # resolved clock/reset net (which may differ from ap_clk/ap_rst in a
+    # multi-domain design). async_fifo is structurally approved (see
+    # forge.topgen.ip.cdc.verify_cdc) but emits no FIFO body this
+    # release — documented limitation, not a silent gap.
+    if cdc_map:
+        emit("  // CDC synchronizers for declared clock-domain-crossing connections")
+        cdc_sync_counter = 0
+        for (src_i, dst_i), pairs in conn_map.items():
+            cdc = cdc_map.get((src_i, dst_i))
+            if not cdc:
+                continue
+            src_mod = inst_to_mod[src_i]
+            dst_mod = inst_to_mod[dst_i]
+
+            if cdc.get("kind") == "async_fifo":
+                emit(
+                    f"  // NOTE: connection {src_i}->{dst_i} declares "
+                    f"cdc: {{kind: async_fifo}} — FIFO RTL generation is not "
+                    "implemented yet (release-plan Phase 3 slice 3 limitation); "
+                    "wired directly, no crossing protection applied."
+                )
+                emit("")
+                continue
+
+            if cdc.get("kind") != "2ff_sync":
+                continue
+
+            # resolve_domain_nets's domain identity is the raw port name
+            # verbatim (e.g. "rst") — but this generator's own clock/reset
+            # auto-map (above) aliases every standard-name variant onto the
+            # single literal ap_clk/ap_rst top-level port regardless of
+            # which variant a given module's contract used. Translate
+            # through the same rule here, or the synchronizer would
+            # reference a top-level net that doesn't exist.
+            dst_clk_domain = clock_of_module.get(dst_mod)
+            dst_rst_domain = reset_of_module.get(dst_mod)
+            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
+            dst_rst_net = _domain_to_top_level_net(dst_rst_domain, is_clock=False) if dst_rst_domain else "ap_rst"
+
+            for s_pin_raw, d_pin_raw in pairs:
+                s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
+                d_pin = _canon_pin(ip_info, dst_mod, d_pin_raw)
+                w = _pin_width_for_inst(src_i, s_pin)
+
+                src_net = _verilog_ident(f"net_{src_i}_{s_pin}")
+                sync_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}")
+                inst_name = f"cdc_sync_{cdc_sync_counter}"
+
+                emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (2ff_sync)")
+                emit(f"  cdc_sync2ff #(")
+                emit(f"    .WIDTH({w})")
+                emit(f"  ) {inst_name} (")
+                emit(f"    .dst_clk({dst_clk_net}),")
+                emit(f"    .dst_rst({dst_rst_net}),")
+                emit(f"    .din({src_net}),")
+                emit(f"    .dout({sync_net})")
+                emit(f"  );")
+                emit("")
+
+                cdc_sync_counter += 1
+
     # ====== Control Signal Distribution (NEW) =============================
     emit("  // Control signal distribution with delays")
     for sig_name, sig_config in cfg.control_signals.items():
@@ -1058,6 +1227,7 @@ def write_structural_verilog(
         "total_modules": len(cfg.modules),
         "total_instances": sum(m.instances for m in cfg.modules),
         "total_connections": sum(len(pairs) for pairs in conn_map.values()),
+        "top_ports": top_ports,
     }
     
     return report

@@ -106,6 +106,39 @@ Each role entry for an N-D template port grid specifies:
 
 The number of `{N}` placeholders in `raw_port_tpl` must equal the length of `dims`.
 
+### Partitioned roles: `partition` and `coordinates`
+
+A role that is one of several partition slots on a multi-instance consumer
+(matched via `topology_groups`' `instance_assign`) declares its slot label
+using either of two equivalent forms:
+
+- the legacy scalar label — `partition: lower_pair` — a single free-form
+  string, matched by exact equality.
+- a structured mapping — `coordinates: {sector: 2, station: 1}` — one or
+  more named axes, matched as a set (axis order doesn't matter).
+
+Both forms normalize to the same internal comparison key (see
+`forge/topgen/ip/coordinates.py`), so:
+- a `design.yml`'s `instance_assign` entries may use `partition:` or
+  `coordinates:` independently of which form the target interface contract's
+  roles use, as long as the resolved key matches;
+- two roles on the same consumer contract that resolve to the same key
+  (whether both use `partition`, both use `coordinates`, or one of each) are
+  rejected as a duplicate-coordinate schema error;
+- an `instance_assign` entry whose key matches no consumer role's key is
+  rejected as an unresolved-coordinate error, listing the available keys.
+
+Prefer `coordinates:` for genuinely multi-axis topology (e.g. a 2D
+sector/station grid) — it's self-documenting and lets the duplicate/coverage
+checks reason about axes individually in future releases. Prefer the plain
+`partition:` string when there's truly only one axis; it isn't deprecated,
+and no existing `partition:`-based interface contract or design needs to
+change to keep working.
+
+See "Declarative cardinality" below for `exactly one producer`/forbidden
+fan-out/required-completeness constraints beyond coordinate matching
+itself.
+
 Consumer-specific extension roles that are not part of the generic framework vocabulary should use a consumer-owned prefix and carry `extension: true`.
 
 Example:
@@ -115,11 +148,227 @@ Example:
 
 ---
 
+### Protocol semantics: `protocol`
+
+Any role may declare an optional `protocol:` string describing its
+handshake semantics:
+
+```yaml
+roles:
+  decoded_hit:
+    raw_port: decoded_hit
+    direction: output
+    width: 32
+    wiring_kind: decoded_hit
+    protocol: valid-only
+```
+
+Documented built-in values:
+
+- `combinational` — no clock-relative timing at all (pure combinational logic).
+- `valid-only` — a data signal accompanied by a valid strobe, no backpressure
+  (e.g. `hit_decoder_ip.interface.yaml`'s `raw_hit`/`decoded_hit` — a
+  `clock_free`, `II=1` decoder gated only by `raw_valid`/`decoded_valid`).
+- `ready-valid` — a full ready/valid handshake with backpressure.
+- `fixed-frame` — a fixed-length, framed transfer (e.g. a fixed number of
+  cycles per transaction, no per-cycle handshake signal).
+
+`protocol` is optional and absent by default (`None`) — no existing
+interface contract needs to declare it to keep working. A declared value
+outside this set is a contract-verification error
+(`forge topgen verify-contract`), not a silent no-op.
+
+**Scope of this release**: `protocol` is descriptive metadata, surfaced
+through `LoadedContract.get_connection_roles()` and the canonical IR
+(`ResolvedLogicalInterface.protocol`) for inspection (`forge inspect`).
+Full protocol *compatibility validation across matched connections* (e.g.
+rejecting a `ready-valid` producer feeding a `valid-only` consumer) is
+**not yet implemented** — topology matching still operates per role, not
+per grouped interface (see "Interface members" below and
+`docs/development/release-readiness.md`). Do not implement a full new
+HDL/assertion language for this — that is explicitly out of scope.
+
+---
+
+### Interface members: `interface` and `member`
+
+By default every physical signal is its own independent logical interface
+— a `raw_hit` role and its companion `raw_valid` role show up in
+`forge inspect` as two unrelated interfaces even though they are one
+handshake. A role may opt into **grouping** by declaring both fields:
+
+```yaml
+roles:
+  raw_hit:
+    raw_port: raw_hit
+    direction: input
+    width: 32
+    wiring_kind: raw_detector_hit
+    protocol: valid-only
+    interface: raw_detector_hit   # group name — shared across members
+    member: data                  # this role's part within the group
+
+  raw_valid:
+    raw_port: raw_valid
+    direction: input
+    width: 1
+    wiring_kind: raw_hit_valid
+    protocol: valid-only
+    interface: raw_detector_hit
+    member: valid
+```
+
+Recognized `member` values: `data`, `valid`, `ready`, `last`, `metadata`
+(`forge.topgen.ip.contract_verifier.KNOWN_MEMBERS`). An unrecognized value
+is a contract-verification error; declaring `member:` without `interface:`
+is a warning (it has no effect on its own).
+
+Roles sharing one `interface:` name are merged into a single
+`ResolvedLogicalInterface` in the canonical IR, with one
+`ResolvedInterfaceMember` per role. The group's `wiring_kind`,
+`coordinates`, and `protocol` are taken from the `data` member (or the
+first declared role if none is named `data`). A `ready` member commonly
+flows the *opposite* physical direction from `data`/`valid` (e.g. a
+consumer's `ready` output paired with its `data`/`valid` inputs); when a
+member's own `direction:` differs from the group's, it is recorded on
+`ResolvedInterfaceMember.direction` rather than forcing every member to
+share one direction.
+
+Declaring the same `member` name twice within one `interface` group is a
+contract-verification error (ambiguous — which role is "the" `valid`
+signal?).
+
+**Not required**: `interface`/`member` are entirely optional. A role that
+omits them keeps today's 1:1 behavior unchanged — this is additive, not a
+migration. Topology matching (`forge.topgen.ip.matcher`) still operates
+per role/`wiring_kind`, independent of grouping; grouping is currently an
+IR/inspection-level representation, not a matching-time construct.
+
+---
+
+### Declarative cardinality: `cardinality`
+
+Any role may declare an optional `cardinality:` block bounding how many
+producers may drive it (`input` roles) or how many consumers it may drive
+(`output` roles):
+
+```yaml
+roles:
+  raw_hit:
+    raw_port: raw_hit
+    direction: input
+    width: 32
+    cardinality:
+      producers: {min: 1, max: 1}   # exactly one producer, required
+
+  decoded_hit:
+    raw_port: decoded_hit
+    direction: output
+    width: 32
+    cardinality:
+      fanout: forbidden              # sugar for consumers: {max: 1}
+```
+
+Fields (see `forge/topgen/ip/cardinality.py`):
+
+- `producers: {min, max}` — **input roles only**. How many distinct
+  producer pins may drive this role. `max` may be an integer or the
+  literal string `many`.
+- `consumers: {min, max}` — **output roles only**. How many distinct
+  consumer pins this role may drive.
+- `fanout: allowed | forbidden` — sugar for `consumers.max` (`allowed` →
+  `many`, `forbidden` → `1`). Output roles only.
+- `completeness: required | optional` — sugar for the relevant bound's
+  `min` (`required` → at least 1, `optional` → 0 without raising it).
+
+Declaring `producers` on an output role, `consumers`/`fanout` on an input
+role, or an unrecognized key is a contract-verification error — the
+direction/key mismatch is deliberate, not a leniency gap, since it usually
+signals the role's `direction:` or the intended constraint is wrong.
+
+**Where enforcement happens**: `parse_cardinality` only validates one
+role's block *in isolation* (used by `ContractVerifier` for structural
+checks — bad bounds, wrong key for the role's direction). Checking whether
+the *actual wired design* satisfies a bound is a separate, design-wide
+check: `forge.topgen.ip.cardinality.verify_cardinality(design_cfg,
+contracts, match_report)`, run against
+`forge.topgen.ip.matcher.MatchReport` — the same object
+`auto_match_ports` already returns. It reports:
+
+- **producers below `min`** (a required input never got connected —
+  "required completeness");
+- **producers above `max`** (an ambiguous fan-in the matcher's
+  first-driver-wins guard silently resolved by picking the first match —
+  now surfaced via `MatchReport.rejected_fanin`, instead of silently
+  dropping the losing candidate);
+- **consumers outside `[min, max]`** (forbidden or insufficient fan-out on
+  an output role).
+
+`forge topgen gen-top --strict` fails the build when `verify_cardinality`
+reports any `error`-severity issue, the same pattern already used for
+`verify_topology_groups`.
+
+**Scope of this release**: cardinality is evaluated **per individual
+physical pin**, after array/N-D roles are expanded to concrete port names
+— there's no separate group-level DSL for scatter/gather cardinality (each
+expanded pin of a `prefix_array`/`nd_tpl` role is checked exactly like a
+scalar role). A `cardinality:` block declared on a grouped interface
+(Phase 2.5) is read from the group's `member: data` role and surfaced on
+`ResolvedLogicalInterface.cardinality` in the canonical IR — descriptive
+only there; `verify_cardinality` (not IR construction) is what actually
+enforces it.
+
+---
+
+### Schema versioning: `schema_version`
+
+The `ip_interface:` block may declare an optional `schema_version:` string
+(`"major.minor"`, e.g. `"1.0"`):
+
+```yaml
+ip_interface:
+  schema_version: "1.0"
+  module_name: hit_decoder
+  ...
+```
+
+Absence is valid and silent — no existing contract needs to declare it to
+keep working. A declared value is checked against
+`forge.topgen.ip.contract_loader.INTERFACE_CONTRACT_SCHEMA_VERSION`: same
+major with a declared minor the current FORGE build doesn't recognize is a
+warning (fields beyond that minor may be ignored); a different major is a
+contract-verification error. See
+`docs/development/SCHEMA_VERSIONING.md` for the full policy shared across
+all four user-facing FORGE schemas (design topology, module registry,
+interface contract, verification contract), including compatible-addition,
+deprecation, and removal rules.
+
+---
+
 ## Canonical role vocabulary
 
 See [`canonical_roles.yaml`](topgen/algo_top_gen/ip/canonical_roles.yaml) for the frozen role set.
 
 Do not add new roles to that file without updating this policy. Extension roles in individual `*.interface.yaml` files do not require changes to the central vocabulary.
+
+### Reserved roles
+
+A canonical role may carry `status: reserved` in `canonical_roles.yaml`.
+This marks a role that is accepted in a contract for forward compatibility
+but has **no functional effect in the current release** — no dedicated
+wiring, no validation, no generated behavior beyond appearing in the
+contract. `ContractVerifier` emits an explicit warning (not an error) for
+any reserved role it encounters, so a plugin author never silently assumes
+unsupported behavior is active.
+
+Currently reserved: `clock_secondary`, `reset_secondary` — declared for a
+future multi-clock-domain / clock-domain-crossing (CDC) release. FORGE's
+generator and verifier today assume a single functional clock/reset domain
+per module; declaring these roles does not create a second domain, trigger
+any CDC synchronizer insertion, or change generated RTL in any way. Do not
+rely on them for anything beyond documenting future intent. See
+`docs/development/release-readiness.md` for the tracked status of full
+clock/reset-domain support.
 
 ---
 
@@ -176,6 +425,53 @@ topgen verify-contract \
 ```
 
 Exit codes: 0 = pass, 1 = warnings only, 2 = errors.
+
+---
+
+## Module timing metadata (`latency_cycles` / `latency_hint` / `variable_latency`)
+
+A `modules.yml` registry entry (or a design-level module entry, which
+overrides the registry's value) may declare optional timing metadata,
+modeled as `forge.topgen.config.ModuleTiming` and carried on
+`Module.timing`:
+
+```yaml
+modules:
+  - name: hit_decoder
+    kind: hls
+    latency_hint: 3        # rough manual estimate
+```
+
+```yaml
+modules:
+  - name: fixed_latency_module
+    kind: rtl
+    latency_cycles: 7      # explicit, authoritative fixed latency
+```
+
+```yaml
+modules:
+  - name: data_dependent_module
+    kind: hls
+    variable_latency: true # latency is data-dependent, not a fixed cycle count
+```
+
+**Resolution order** (used by `forge analyze latency-check` and the
+canonical IR's `ResolvedModuleDefinition.latency_cycles`/`.latency_hint`/
+`.is_variable_latency`): `latency_cycles` (explicit) > an externally
+supplied HLS synthesis report (a runtime overlay from actual build
+artifacts, not registry/design data — see
+`forge.analyze.hls_reports.extractor`) > `latency_hint` (rough estimate) >
+unknown.
+
+**Conflict rule**: `latency_cycles` and `variable_latency: true` are
+contradictory — declaring both is a registry validation error
+(`forge topgen validate-registry`), not a silent override. Declare exactly
+one, or neither (unknown latency).
+
+All three fields are optional; a module that declares none of them has
+`Module.timing is None` and behaves identically to a plugin authored
+before this field existed.
 
 ---
 

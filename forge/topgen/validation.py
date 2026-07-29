@@ -12,7 +12,8 @@ This module ensures design.yml is correct before generation:
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Tuple
 from dataclasses import dataclass
-from .config import DesignConfig, Module
+from .config import DESIGN_SCHEMA_VERSION, MODULE_REGISTRY_SCHEMA_VERSION, DesignConfig, Module
+from forge.core.schema_version import check_schema_version
 
 
 @dataclass
@@ -59,14 +60,25 @@ class DesignValidator:
     def validate_all(self) -> bool:
         """Run all validations. Returns True if no errors."""
         self.validate_basic_fields()
+        self.validate_schema_version()
         self.validate_timing()
         self.validate_modules()
         self.validate_connections()
         self.validate_control_signals()
         self.validate_consistency()
-        
+
         return len(self.errors) == 0
-    
+
+    def validate_schema_version(self):
+        """release-plan §2.7: an undeclared schema_version is silent (fully
+        backward compatible); a declared one is checked for compatibility
+        against DESIGN_SCHEMA_VERSION."""
+        for issue in check_schema_version(self.cfg.schema_version, DESIGN_SCHEMA_VERSION, schema_name="design.yml"):
+            if issue.severity == "error":
+                self.add_error("schema", issue.message)
+            else:
+                self.add_warning("schema", issue.message)
+
     def validate_basic_fields(self):
         """Validate basic required fields."""
         # FPGA part
@@ -446,8 +458,9 @@ _KNOWN_MODULE_KEYS: Set[str] = {
     'cflags', 'stages', 'build', 'verify', 'description',
     # Contract-driven topology extension fields (used by forge topgen gen-top)
     'interface_contract',
-    # Latency annotation fields (used by forge analyze)
-    'latency_hint', 'latency_cycles',
+    # Latency annotation fields (used by forge analyze / the canonical IR
+    # via Module.timing — see topgen/config.py::ModuleTiming)
+    'latency_hint', 'latency_cycles', 'variable_latency',
 }
 _KNOWN_BUILD_KEYS: Set[str] = {
     'stages', 'csim_opts', 'synth_opts', 'cosim_opts', 'export_opts',
@@ -498,6 +511,7 @@ class RegistryValidator:
                 seen_names.add(name)
                 kind = mod.get('kind')
                 self._validate_kind_requirements(mod, name, kind, loc)
+                self._validate_timing_fields(mod, name, loc)
                 if 'build' in mod:
                     self._validate_build_section(mod['build'], name, kind, f"{loc}.build")
                 if 'verify' in mod:
@@ -565,6 +579,13 @@ class RegistryValidator:
         if not self._raw.get('registry_version'):
             self.add_warning('schema', "Missing 'registry_version' field",
                              suggestion="Add: registry_version: '1'")
+        for issue in check_schema_version(
+            self._raw.get('registry_version'), MODULE_REGISTRY_SCHEMA_VERSION, schema_name="modules.yml",
+        ):
+            if issue.severity == "error":
+                self.add_error('schema', issue.message)
+            else:
+                self.add_warning('schema', issue.message)
         if 'modules' not in self._raw:
             self.add_error('schema', "Registry has no 'modules' key",
                            suggestion="Add a top-level 'modules:' sequence")
@@ -602,6 +623,24 @@ class RegistryValidator:
                            suggestion=f"Valid kinds: {', '.join(sorted(_KNOWN_KINDS))}")
 
         return name
+
+    def _validate_timing_fields(self, mod: dict, name: str, loc: str):
+        """A module cannot declare both a fixed explicit latency
+        (latency_cycles) and variable_latency: true — contradictory.
+        Reported as a structured error here (the user-facing surface for
+        YAML mistakes); ModuleTiming.__post_init__ raising ValueError is a
+        defense-in-depth backstop for direct programmatic construction,
+        not the primary path."""
+        if mod.get('latency_cycles') is not None and mod.get('variable_latency'):
+            self.add_error(
+                'module',
+                f"module '{name}' declares both 'latency_cycles' (a fixed "
+                "explicit latency) and 'variable_latency: true' — these are "
+                "contradictory",
+                location=f"{loc}.latency_cycles",
+                suggestion="Declare only one: latency_cycles for a known fixed "
+                           "latency, or variable_latency: true for a data-dependent one.",
+            )
 
     def _validate_kind_requirements(self, mod: dict, name: str, kind: Optional[str], loc: str):
         """Enforce what each kind needs to be buildable / elaboratable."""

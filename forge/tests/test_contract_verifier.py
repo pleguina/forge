@@ -394,6 +394,291 @@ class TestNoRegression:
         assert result.passed
 
 
+class TestReservedRoles:
+    """clock_secondary/reset_secondary are declared in canonical_roles.yaml
+    but have no clock-domain/CDC model behind them yet (audit gap #4: dead,
+    misleading stub). They must be explicitly surfaced as reserved, not
+    silently accepted as if multi-clock-domain support existed."""
+
+    def test_clock_secondary_is_flagged_reserved(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "clk2", "direction": "IN", "width": 1, "type": "wire"},
+        ])
+        ct = _contract(
+            {"clock_secondary": {"raw_port": "clk2", "direction": "input", "width": 1}},
+            clock_free=True, reset_free=True,
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed  # reserved is a warning, not an error
+        assert any(
+            "clock_secondary" in i.role and "RESERVED" in i.message
+            for i in result.issues
+        )
+
+    def test_reset_secondary_is_flagged_reserved(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "rst2", "direction": "IN", "width": 1, "type": "wire"},
+        ])
+        ct = _contract(
+            {"reset_secondary": {"raw_port": "rst2", "direction": "input", "width": 1}},
+            clock_free=True, reset_free=True,
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+        assert any(
+            "reset_secondary" in i.role and "RESERVED" in i.message
+            for i in result.issues
+        )
+
+    def test_non_reserved_role_is_not_flagged(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract(
+            {"clock_primary": {"raw_port": "din", "direction": "input", "width": 8}},
+            reset_free=True,
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert not any("RESERVED" in i.message for i in result.issues)
+
+
+class TestProtocolSemantics:
+    """protocol: is optional metadata on a role (release-plan §2.2 / Phase
+    2.2 — docs/development/release-readiness.md). Absent is valid (no
+    existing contract needs to declare it); a declared value must be one
+    of the known built-ins."""
+
+    def test_no_protocol_declared_is_valid(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract(
+            {"some_input": {"raw_port": "din", "direction": "input", "width": 8}},
+            combinatorial=True,
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+        assert not any("protocol" in i.message for i in result.issues)
+
+    def test_each_known_protocol_value_is_valid(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        for value in ("combinational", "valid-only", "ready-valid", "fixed-frame"):
+            ct = _contract(
+                {"some_input": {
+                    "raw_port": "din", "direction": "input", "width": 8,
+                    "protocol": value,
+                }},
+                combinatorial=True,
+            )
+            result = _verify(tmp_path, ip, ct)
+            assert result.passed, f"protocol={value!r} should be valid"
+
+    def test_unknown_protocol_value_is_a_structured_error(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract(
+            {"some_input": {
+                "raw_port": "din", "direction": "input", "width": 8,
+                "protocol": "totally-made-up",
+            }},
+            combinatorial=True,
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert not result.passed
+        assert any(
+            "some_input" in i.role and "unknown protocol" in i.message
+            for i in result.issues
+        )
+
+
+class TestInterfaceMembers:
+    """interface: / member: grouping (release-plan §2.5). Optional — a
+    role that omits them keeps today's 1:1 role-per-interface behavior."""
+
+    def test_grouped_roles_with_known_members_are_valid(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "raw_hit", "direction": "IN", "width": 32, "type": "wire"},
+            {"name": "raw_valid", "direction": "IN", "width": 1, "type": "wire"},
+        ])
+        ct = _contract({
+            "raw_hit": {
+                "raw_port": "raw_hit", "direction": "input", "width": 32,
+                "interface": "raw_detector_hit", "member": "data",
+            },
+            "raw_valid": {
+                "raw_port": "raw_valid", "direction": "input", "width": 1,
+                "interface": "raw_detector_hit", "member": "valid",
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+
+    def test_unknown_member_value_is_a_structured_error(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract({
+            "some_input": {
+                "raw_port": "din", "direction": "input", "width": 8,
+                "interface": "grp", "member": "totally-made-up",
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert not result.passed
+        assert any(
+            "some_input" in i.role and "unknown member" in i.message
+            for i in result.issues
+        )
+
+    def test_member_without_interface_warns(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract({
+            "some_input": {
+                "raw_port": "din", "direction": "input", "width": 8,
+                "member": "data",
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed  # warning only, not an error
+        assert any(
+            "some_input" in i.role and "no grouping effect" in i.message
+            for i in result.issues
+        )
+
+    def test_duplicate_member_in_same_group_is_an_error(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "valid_a", "direction": "IN", "width": 1, "type": "wire"},
+            {"name": "valid_b", "direction": "IN", "width": 1, "type": "wire"},
+        ])
+        ct = _contract({
+            "valid_a": {
+                "raw_port": "valid_a", "direction": "input", "width": 1,
+                "interface": "grp", "member": "valid",
+            },
+            "valid_b": {
+                "raw_port": "valid_b", "direction": "input", "width": 1,
+                "interface": "grp", "member": "valid",
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert not result.passed
+        assert any("more than once" in i.message for i in result.issues)
+
+
+class TestSchemaVersioning:
+    """schema_version: on *.interface.yaml (release-plan §2.7). Absence is
+    valid (fully backward compatible); a declared value is checked against
+    INTERFACE_CONTRACT_SCHEMA_VERSION."""
+
+    def test_no_schema_version_is_valid(self, tmp_path):
+        ip = _ip_info_with_ports([{"name": "din", "direction": "IN", "width": 8, "type": "wire"}])
+        ct = _contract({"some_input": {"raw_port": "din", "direction": "input", "width": 8}}, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+        assert not any("schema_version" in i.message for i in result.issues)
+
+    def test_matching_schema_version_is_valid(self, tmp_path):
+        ip = _ip_info_with_ports([{"name": "din", "direction": "IN", "width": 8, "type": "wire"}])
+        ct = _contract(
+            {"some_input": {"raw_port": "din", "direction": "input", "width": 8}},
+            combinatorial=True, schema_version="1.0",
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+
+    def test_newer_minor_is_a_warning_only(self, tmp_path):
+        ip = _ip_info_with_ports([{"name": "din", "direction": "IN", "width": 8, "type": "wire"}])
+        ct = _contract(
+            {"some_input": {"raw_port": "din", "direction": "input", "width": 8}},
+            combinatorial=True, schema_version="1.99",
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed  # warning only
+        assert any(i.severity == "warning" and "newer" in i.message for i in result.issues)
+
+    def test_different_major_is_a_structured_error(self, tmp_path):
+        ip = _ip_info_with_ports([{"name": "din", "direction": "IN", "width": 8, "type": "wire"}])
+        ct = _contract(
+            {"some_input": {"raw_port": "din", "direction": "input", "width": 8}},
+            combinatorial=True, schema_version="2.0",
+        )
+        result = _verify(tmp_path, ip, ct)
+        assert not result.passed
+        assert any(i.severity == "error" and "incompatible" in i.message for i in result.issues)
+
+
+class TestDeclarativeCardinality:
+    """cardinality: block structural validation (release-plan §2.4).
+    Design-level enforcement (does the wired design satisfy the declared
+    bound) is covered separately in test_cardinality.py — ContractVerifier
+    only validates one contract's cardinality: block in isolation."""
+
+    def test_valid_producers_bound_is_valid(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract({
+            "some_input": {
+                "raw_port": "din", "direction": "input", "width": 8,
+                "cardinality": {"producers": {"min": 1, "max": 1}},
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+
+    def test_valid_fanout_sugar_is_valid(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "dout", "direction": "OUT", "width": 8, "type": "wire"},
+        ])
+        ct = _contract({
+            "some_output": {
+                "raw_port": "dout", "direction": "output", "width": 8,
+                "cardinality": {"fanout": "forbidden"},
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed
+
+    def test_unknown_cardinality_key_is_a_structured_error(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract({
+            "some_input": {
+                "raw_port": "din", "direction": "input", "width": 8,
+                "cardinality": {"bogus": 1},
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert not result.passed
+        assert any(
+            "some_input" in i.role and "invalid cardinality" in i.message
+            for i in result.issues
+        )
+
+    def test_consumers_on_input_role_is_a_structured_error(self, tmp_path):
+        ip = _ip_info_with_ports([
+            {"name": "din", "direction": "IN", "width": 8, "type": "wire"},
+        ])
+        ct = _contract({
+            "some_input": {
+                "raw_port": "din", "direction": "input", "width": 8,
+                "cardinality": {"consumers": {"max": 1}},
+            },
+        }, combinatorial=True)
+        result = _verify(tmp_path, ip, ct)
+        assert not result.passed
+        assert any(
+            "some_input" in i.role and "invalid cardinality" in i.message
+            for i in result.issues
+        )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Topology group verification tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -513,6 +798,79 @@ class TestTopologyGroupVerification:
         cfg = _mock_design([_mod("s", instances=5), _mod("d")], [tg])
         issues = verify_topology_groups(cfg, {"s": src, "d": dst})
         assert any("nonexistent" in i.message and "not found" in i.message for i in issues)
+
+    def test_valid_structured_coordinates(self):
+        """Structured coordinates:` mappings validate the same way legacy
+        partition strings do (audit gap #2 — additive, not a replacement)."""
+        src = _loaded_contract({
+            "out": {"raw_port": "o", "direction": "output", "width": 1,
+                    "wiring_kind": "w"},
+        })
+        dst = _loaded_contract({
+            "in_a": {"raw_port_prefix": "a_", "count": 5,
+                     "direction": "input", "width": 1, "wiring_kind": "w",
+                     "coordinates": {"sector": 1, "station": 1}},
+            "in_b": {"raw_port_prefix": "b_", "count": 5,
+                     "direction": "input", "width": 1, "wiring_kind": "w",
+                     "coordinates": {"sector": 2, "station": 1}},
+        })
+        tg = TopologyGroup(
+            name="coord_ok", family="f", from_="s", to="d",
+            wiring_kind="w",
+            instance_assign=[
+                InstanceAssign(instances=(0, 5), coordinates={"sector": 1, "station": 1}),
+                InstanceAssign(instances=(5, 10), coordinates={"sector": 2, "station": 1}),
+            ],
+        )
+        cfg = _mock_design([_mod("s", instances=10), _mod("d")], [tg])
+        issues = verify_topology_groups(cfg, {"s": src, "d": dst})
+        assert not any(i.severity == "error" for i in issues)
+
+    def test_unresolvable_structured_coordinate_is_an_error(self):
+        """A structured coordinate that matches no consumer role errors,
+        same as an unresolvable legacy partition label."""
+        src = _loaded_contract({
+            "out": {"raw_port": "o", "direction": "output", "width": 1,
+                    "wiring_kind": "w"},
+        })
+        dst = _loaded_contract({
+            "in_x": {"raw_port_prefix": "x_", "count": 5,
+                     "direction": "input", "width": 1, "wiring_kind": "w",
+                     "coordinates": {"sector": 1}},
+        })
+        tg = TopologyGroup(
+            name="bad_coord", family="f", from_="s", to="d",
+            wiring_kind="w",
+            instance_assign=[InstanceAssign(instances=(0, 5), coordinates={"sector": 9})],
+        )
+        cfg = _mock_design([_mod("s", instances=5), _mod("d")], [tg])
+        issues = verify_topology_groups(cfg, {"s": src, "d": dst})
+        assert any("sector=9" in i.message and "not found" in i.message for i in issues)
+
+    def test_duplicate_coordinate_across_consumer_roles_is_an_error(self):
+        """Two consumer roles declaring the same coordinate (structured or
+        legacy) is flagged, generalizing duplicate-partition detection to
+        the verify path (not just topology_deriver's derivation path)."""
+        src = _loaded_contract({
+            "out": {"raw_port": "o", "direction": "output", "width": 1,
+                    "wiring_kind": "w"},
+        })
+        dst = _loaded_contract({
+            "in_a": {"raw_port_prefix": "a_", "count": 5,
+                     "direction": "input", "width": 1, "wiring_kind": "w",
+                     "coordinates": {"sector": 1}},
+            "in_b": {"raw_port_prefix": "b_", "count": 5,
+                     "direction": "input", "width": 1, "wiring_kind": "w",
+                     "coordinates": {"sector": 1}},
+        })
+        tg = TopologyGroup(
+            name="dup_coord", family="f", from_="s", to="d",
+            wiring_kind="w",
+            instance_assign=[InstanceAssign(instances=(0, 5), coordinates={"sector": 1})],
+        )
+        cfg = _mock_design([_mod("s", instances=5), _mod("d")], [tg])
+        issues = verify_topology_groups(cfg, {"s": src, "d": dst})
+        assert any("duplicate coordinate" in i.message and "sector=1" in i.message for i in issues)
 
     def test_invalid_role_pair_name(self):
         """role_pairs referencing non-existent roles produce errors."""

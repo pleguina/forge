@@ -51,3 +51,10 @@ hasn't existed since the pre-`arc` package layout. Move the plugin's
 sys.path block from `bootstrap.py`/`gen_stimulus.py` — the framework now
 just needs to be pip-installed (`pip install -e forge/`) for
 `from forge.verify.X import Y` to work directly.
+
+This can now be automated: `forge topgen migrate --kind legacy-plugin-layout
+--plugin-root <plugin> [--dry-run]`. See
+`docs/development/MIGRATION_TOOLING.md` for this and four other migration
+helpers (schema-version insertion, partition-string-to-coordinates,
+the deprecated `verify.design.yml` filename, and compatibility-mode
+contract inference).

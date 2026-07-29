@@ -7,6 +7,7 @@
 # and one full-chip RTL integration flow over the generated algo_top.
 # ═══════════════════════════════════════════════════════════════════════════
 
+schema_version: "1.0"
 plugin: trigger_demo
 
 # ─── Datasets ────────────────────────────────────────────────────────────

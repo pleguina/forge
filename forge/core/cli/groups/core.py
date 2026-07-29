@@ -7,6 +7,61 @@ from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
+# Resource path resolution (shared with `forge doctor`)
+# ---------------------------------------------------------------------------
+
+def _walk_up_for(name: str, *, is_dir: bool) -> Path | None:
+    """Walk up from cwd and this file's location looking for *name*.
+
+    Used for repo-root artifacts that live *outside* the installed
+    ``forge`` package (only present in a source checkout of the framework
+    repo, e.g. ``docs/`` and ``normalized_signal_families.yaml``).
+    """
+    for start in (Path.cwd(), Path(__file__).resolve()):
+        p = start
+        for _ in range(15):
+            candidate = p / name
+            if (candidate.is_dir() if is_dir else candidate.is_file()):
+                return candidate
+            if p.parent == p:
+                break
+            p = p.parent
+    return None
+
+
+def resolve_framework_resources() -> "dict[str, dict[str, object]]":
+    """Return ``{key: {"path": str, "exists": bool}}`` for known framework
+    resource files/directories.
+
+    Shared by ``forge core resources`` and ``forge doctor``.
+    """
+    import forge.hls as _hls
+    import forge.topgen.ip as _topgen_ip
+
+    hls_templates = Path(_hls.__file__).parent / "templates"
+    canonical_roles = Path(_topgen_ip.__file__).parent / "canonical_roles.yaml"
+    # These two are framework-repo-root artifacts, not installed package
+    # resources — only resolvable in a source checkout of the framework
+    # repo (sibling to forge/), not in a plain `pip install forge`.
+    docs_dir = _walk_up_for("docs", is_dir=True)
+    signal_families = _walk_up_for("normalized_signal_families.yaml", is_dir=False)
+
+    resources: dict[str, dict[str, object]] = {
+        "hls_templates": {"path": str(hls_templates), "exists": hls_templates.is_dir()},
+        "canonical_roles": {"path": str(canonical_roles), "exists": canonical_roles.is_file()},
+        "normalized_signal_families": {
+            "path": str(signal_families) if signal_families else None,
+            "exists": signal_families is not None,
+        },
+        "docs_root": {
+            "path": str(docs_dir) if docs_dir else None,
+            "exists": docs_dir is not None,
+        },
+    }
+    return resources
+
+
+# ---------------------------------------------------------------------------
 # Command implementations
 # ---------------------------------------------------------------------------
 
@@ -14,7 +69,7 @@ def cmd_resources(args):
     """Print installed framework resource paths."""
     import json as _json
 
-    resources: dict[str, str] = {}
+    resources = resolve_framework_resources()
 
     if getattr(args, "key", None):
         value = resources.get(args.key)
@@ -25,14 +80,15 @@ def cmd_resources(args):
                 file=sys.stderr,
             )
             sys.exit(1)
-        print(value)
+        print(value["path"])
         return
 
     if getattr(args, "format", None) == "json":
         print(_json.dumps(resources, indent=2))
     else:
         for k, v in resources.items():
-            print(f"{k}={v}")
+            marker = "" if v["exists"] else "  (missing)"
+            print(f"{k}={v['path']}{marker}")
 
 
 def cmd_verify_contract(args):

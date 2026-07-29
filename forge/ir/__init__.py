@@ -1,0 +1,67 @@
+"""Canonical resolved-design IR (first slice — see forge/ir/model.py)."""
+
+from .model import (
+    IR_SCHEMA_VERSION,
+    DiagnosticReference,
+    ResolvedClockDomain,
+    ResolvedConnection,
+    ResolvedDesign,
+    ResolvedEndpoint,
+    ResolvedInstance,
+    ResolvedInterfaceMember,
+    ResolvedLogicalInterface,
+    ResolvedModuleDefinition,
+    ResolvedPhysicalBinding,
+    ResolvedProject,
+    ResolvedResetDomain,
+    ResolvedTopLevelPort,
+    ResolvedTransformation,
+    ResolvedVerificationPlan,
+    SourceLocation,
+)
+from .build import assemble_project_ir, build_project_ir
+from .project import project_to_conn_map
+from .serialize import content_hash, diff_projects, to_json_dict, to_json_str
+from .provenance import (
+    PROVENANCE_SCHEMA_VERSION,
+    ProvenanceManifest,
+    StalenessExplanation,
+    build_provenance,
+    explain_staleness,
+    read_provenance,
+    write_provenance,
+)
+
+__all__ = [
+    "PROVENANCE_SCHEMA_VERSION",
+    "ProvenanceManifest",
+    "StalenessExplanation",
+    "build_provenance",
+    "explain_staleness",
+    "read_provenance",
+    "write_provenance",
+    "assemble_project_ir",
+    "project_to_conn_map",
+    "IR_SCHEMA_VERSION",
+    "DiagnosticReference",
+    "ResolvedClockDomain",
+    "ResolvedConnection",
+    "ResolvedDesign",
+    "ResolvedEndpoint",
+    "ResolvedInstance",
+    "ResolvedInterfaceMember",
+    "ResolvedLogicalInterface",
+    "ResolvedModuleDefinition",
+    "ResolvedPhysicalBinding",
+    "ResolvedProject",
+    "ResolvedResetDomain",
+    "ResolvedTopLevelPort",
+    "ResolvedTransformation",
+    "ResolvedVerificationPlan",
+    "SourceLocation",
+    "build_project_ir",
+    "content_hash",
+    "diff_projects",
+    "to_json_dict",
+    "to_json_str",
+]

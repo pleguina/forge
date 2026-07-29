@@ -41,17 +41,28 @@ roles:
     category: clock_reset
 
   clock_secondary:
-    description: "Secondary clock (cross-clock-domain modules only)"
+    description: >
+      Secondary clock (cross-clock-domain modules only). RESERVED: declared
+      for a future multi-clock-domain / CDC release. The framework accepts
+      this role in a contract but currently has no clock-domain model, no
+      CDC validation, and performs no special wiring or checking for it —
+      declaring it has no functional effect today. See
+      docs/IP_INTERFACE_POLICY.md "Reserved roles".
     direction: input
     width: 1
     required: false
+    status: reserved
     category: clock_reset
 
   reset_secondary:
-    description: "Secondary reset (optional complement to reset_primary)"
+    description: >
+      Secondary reset (optional complement to reset_primary). RESERVED: see
+      clock_secondary above — no clock-domain model exists yet, so this
+      role currently has no functional effect.
     direction: input
     width: 1
     required: false
+    status: reserved
     category: clock_reset
 
   # ── Configuration inputs ───────────────────────────────────────────────────

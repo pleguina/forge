@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
+from .coordinates import CoordinateKey, coordinate_key, coordinate_label
+
 if TYPE_CHECKING:
     from ..config import TopologyGroup, InstanceAssign
     from .contract_loader import LoadedContract
@@ -122,9 +124,11 @@ def _resolve_instance_partition(
 
     When a multi-instance producer connects to a partitioned consumer, each
     ``instance_assign`` entry maps a range of producer instances to a consumer
-    partition.  The producer contract is expected to have a single output role
-    for the matching wiring_kind (since each instance produces one output).
-    The consumer contract has multiple roles with different ``partition`` labels.
+    coordinate.  The producer contract is expected to have a single output
+    role for the matching wiring_kind (since each instance produces one
+    output).  The consumer contract has multiple roles with different
+    coordinates, declared as either a legacy ``partition:`` string or a
+    structured ``coordinates:`` mapping (see ``forge.topgen.ip.coordinates``).
     """
     # Producer: expect exactly one output role per wiring_kind
     # (each instance of the producer has this single output)
@@ -136,30 +140,31 @@ def _resolve_instance_partition(
         )
     src_role = src_roles[0]
 
-    # Consumer: group input roles by partition
-    dst_by_partition: Dict[str, Dict] = {}
+    # Consumer: group input roles by coordinate key
+    dst_by_coord: Dict[CoordinateKey, Dict] = {}
     for r in dst_roles:
-        part = r.get("partition")
-        if part is None:
+        coord = coordinate_key(r)
+        if coord is None:
             raise ValueError(
                 f"topology_group '{tg.name}': consumer role '{r['role_name']}' "
-                f"has wiring_kind '{r['wiring_kind']}' but no partition label"
+                f"has wiring_kind '{r['wiring_kind']}' but no partition/coordinates label"
             )
-        if part in dst_by_partition:
+        if coord in dst_by_coord:
             raise ValueError(
-                f"topology_group '{tg.name}': duplicate partition '{part}' "
-                f"in consumer roles"
+                f"topology_group '{tg.name}': duplicate coordinate "
+                f"'{coordinate_label(coord)}' in consumer roles"
             )
-        dst_by_partition[part] = r
+        dst_by_coord[coord] = r
 
     pairs: List[Tuple[str, str, Optional[int], Optional[dict]]] = []
     for ia in tg.instance_assign:
-        dst_role = dst_by_partition.get(ia.partition)
+        ia_coord = ia.coordinate_key()
+        dst_role = dst_by_coord.get(ia_coord)
         if dst_role is None:
             raise ValueError(
-                f"topology_group '{tg.name}': partition '{ia.partition}' "
-                f"not found in consumer contract. "
-                f"Available: {sorted(dst_by_partition.keys())}"
+                f"topology_group '{tg.name}': coordinate "
+                f"'{coordinate_label(ia_coord)}' not found in consumer contract. "
+                f"Available: {sorted(coordinate_label(k) for k in dst_by_coord)}"
             )
 
         start, end = ia.instances
@@ -169,8 +174,8 @@ def _resolve_instance_partition(
         if instance_count != dst_count:
             raise ValueError(
                 f"topology_group '{tg.name}': instance range [{start},{end}) "
-                f"has {instance_count} instances but partition '{ia.partition}' "
-                f"has count={dst_count}"
+                f"has {instance_count} instances but coordinate "
+                f"'{coordinate_label(ia_coord)}' has count={dst_count}"
             )
 
         # Resolve the physical port names
@@ -185,7 +190,7 @@ def _resolve_instance_partition(
                 dst_port,
                 src_inst_idx,
                 {"kind": "topology_group", "group": tg.name,
-                 "partition": ia.partition, "src_instance": src_inst_idx},
+                 "partition": coordinate_label(ia_coord), "src_instance": src_inst_idx},
             ))
 
     return pairs
@@ -197,35 +202,37 @@ def _resolve_auto_match(
     group_name: str,
 ) -> List[Tuple[str, str, None, None]]:
     """
-    Auto-match producer and consumer roles by wiring_kind + partition.
+    Auto-match producer and consumer roles by wiring_kind + coordinates.
 
-    When partition labels exist, matches by (wiring_kind, partition).
-    When no partitions exist, matches by wiring_kind alone (1:1 only).
+    When coordinates (or the legacy ``partition`` label) exist, matches by
+    ``(wiring_kind, coordinate_key)``. When no coordinates exist, matches by
+    wiring_kind alone (1:1 only).
     """
-    # Group by (wiring_kind, partition) — partition=None for unpartitioned roles
-    src_grouped: Dict[Tuple[str, Optional[str]], List[Dict]] = defaultdict(list)
+    # Group by (wiring_kind, coordinate_key) — coordinate_key=None for
+    # unpartitioned roles
+    src_grouped: Dict[Tuple[str, Optional[CoordinateKey]], List[Dict]] = defaultdict(list)
     for r in src_roles:
-        key = (r["wiring_kind"], r.get("partition"))
+        key = (r["wiring_kind"], coordinate_key(r))
         src_grouped[key].append(r)
 
-    dst_grouped: Dict[Tuple[str, Optional[str]], List[Dict]] = defaultdict(list)
+    dst_grouped: Dict[Tuple[str, Optional[CoordinateKey]], List[Dict]] = defaultdict(list)
     for r in dst_roles:
-        key = (r["wiring_kind"], r.get("partition"))
+        key = (r["wiring_kind"], coordinate_key(r))
         dst_grouped[key].append(r)
 
     pairs: List[Tuple[str, str, None, None]] = []
 
-    # Match by (wiring_kind, partition) keys
+    # Match by (wiring_kind, coordinate_key) keys
     for key in src_grouped:
         if key not in dst_grouped:
             continue
         sg = src_grouped[key]
         dg = dst_grouped[key]
         if len(sg) != 1 or len(dg) != 1:
-            wk, part = key
+            wk, coord = key
             raise ValueError(
                 f"topology_group '{group_name}': ambiguous match for "
-                f"wiring_kind='{wk}', partition='{part}' — "
+                f"wiring_kind='{wk}', coordinate='{coordinate_label(coord)}' — "
                 f"{len(sg)} src roles, {len(dg)} dst roles. "
                 f"Use role_pairs for explicit disambiguation."
             )
@@ -273,11 +280,18 @@ def _expand_role_pair(
             ))
 
     elif sk == "scalar" and dk == "prefix_array":
-        # Gather: individual producer instances → one consumer's array elements
+        # Gather: individual producer instances → one consumer's array elements.
+        # `slot` (4th element) already fully determines instance selection in
+        # the matcher's replication loop, so tagging `meta` here (symmetric
+        # with scatter's tag above) is purely additive evidence — it does not
+        # change which pairs get wired.
         port = src_role["raw_port"]
         pfx = dst_role["raw_port_prefix"]
         for i in range(dst_role["count"]):
-            pairs.append((port, f"{pfx}{i}", i, None))
+            pairs.append((
+                port, f"{pfx}{i}", i,
+                {"kind": "gather", "target_index": i},
+            ))
 
     else:
         raise ValueError(

@@ -54,11 +54,15 @@ all = [
     "forge[dev,parser]",
 ]
 
+# Migrating to a public host; <org> is a placeholder until finalized (see
+# CONTRIBUTING.md's "Where this lives"). The CERN GitLab origin
+# (gitlab.cern.ch/p2u-omtf-ops/arc-framework) remains authoritative until
+# the migration lands — update these once it does.
 [project.urls]
-Homepage = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
-Documentation = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework/-/blob/main/forge/README.md"
-Repository = "https://gitlab.cern.ch/p2u-omtf-ops/arc-framework"
-Issues = "https://gitlab.cern.ch/pleguina/arc-framework/-/issues"
+Homepage = "https://github.com/<org>/forge"
+Documentation = "https://github.com/<org>/forge/blob/main/forge/README.md"
+Repository = "https://github.com/<org>/forge"
+Issues = "https://github.com/<org>/forge/issues"
 
 [project.scripts]
 forge = "forge.core.cli.main:main"
@@ -97,7 +101,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=forge --cov-report=html --cov-report=term --cov-fail-under=26"
+addopts = "-v --cov=forge --cov-report=html --cov-report=term --cov-fail-under=49"
 markers = [
     "integration: full-chain integration tests using real local repos (deselect with -m 'not integration')",
 ]

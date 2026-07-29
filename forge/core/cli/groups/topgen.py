@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from forge.topgen.config import DesignConfig
 from forge.topgen.ip.unpacker import unpack_ip_archives
@@ -19,6 +22,10 @@ from forge.topgen.generators.block_design import write_bd_tcl
 from forge.topgen.generators.sv_testbench_generator import generate_sv_testbench
 from forge.topgen.generators.design_parameters import write_design_parameters
 from forge.topgen.validation import validate_design, validate_registry
+from forge.ir.build import assemble_project_ir, build_tie_off_connections
+from forge.ir.model import ResolvedTopLevelPort
+from forge.ir.project import project_to_conn_map
+from forge.ir.serialize import to_json_dict
 from forge.core.diagnostics import ATGDiagnosticReport
 from forge.core.stale_detection import (
     check_top_gen_staleness,
@@ -40,6 +47,18 @@ from forge.core.cli._shared import (
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _validator_payload(validator) -> dict:
+    """Serialize a DesignValidator/RegistryValidator (topgen/validation.py)
+    into a JSON-ready dict. Their errors/warnings/infos are plain
+    ValidationError dataclasses, so this is a direct asdict() mapping."""
+    return {
+        "passed": not validator.has_errors(),
+        "errors": [dataclasses.asdict(e) for e in validator.errors],
+        "warnings": [dataclasses.asdict(e) for e in validator.warnings],
+        "infos": [dataclasses.asdict(e) for e in validator.infos],
+    }
+
 
 def _filter_unaccounted(port_list, patterns):
     """Return entries from *port_list* not matched by any fnmatch *pattern*.
@@ -281,11 +300,13 @@ def generate_build_manifest(
 
         manifest["modules"][module_name] = module_info
 
-    # ── Framework support RTL: RegisterStage, signal_delay, slr_crossing_delay ──
+    # ── Framework support RTL: RegisterStage, signal_delay, slr_crossing_delay,
+    #    cdc_sync2ff ──
     # When any connection uses register_stages or delay_cycles, topgen generates
     # RegisterStage / signal_delay instances in algo_top.v.  Boundary-tagged
     # delay connections use slr_crossing_delay instead of signal_delay.
-    # All three modules must be in the compile list for simulation and synthesis.
+    # cdc: {kind: 2ff_sync} connections need cdc_sync2ff (release-plan §3.2).
+    # All must be in the compile list for simulation and synthesis.
     needs_register_stage    = any(getattr(conn, "register_stages", 0) > 0 for conn in cfg.connections)
     needs_signal_delay      = any(
         getattr(conn, "delay_cycles", 0) > 0 and not getattr(conn, "boundary", None)
@@ -295,11 +316,16 @@ def generate_build_manifest(
         getattr(conn, "delay_cycles", 0) > 0 and getattr(conn, "boundary", None)
         for conn in cfg.connections
     )
+    needs_cdc_sync2ff = any(
+        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "2ff_sync"
+        for conn in cfg.connections
+    )
     _search_roots = [r for r in [project_root, ip_root, manifest_output.parent] if r]
     for target_name, needed in [
         ("RegisterStage.v",      needs_register_stage),
         ("signal_delay.v",       needs_signal_delay),
         ("slr_crossing_delay.v", needs_slr_crossing_delay),
+        ("cdc_sync2ff.v",        needs_cdc_sync2ff),
     ]:
         if not needed:
             continue
@@ -317,7 +343,7 @@ def generate_build_manifest(
             if parent_str not in manifest["include_dirs"]:
                 manifest["include_dirs"].append(parent_str)
         else:
-            print(f"  ⚠️  {target_name} not found — needed for register_stages/delay_cycles/boundary")
+            print(f"  ⚠️  {target_name} not found — needed for register_stages/delay_cycles/boundary/cdc")
 
     manifest["verilog_files"] = list(dict.fromkeys(manifest["verilog_files"]))
     manifest["include_dirs"] = list(dict.fromkeys(manifest["include_dirs"]))
@@ -346,13 +372,26 @@ def generate_port_map(
     verilog_path: Path,
     output_path: Path,
     interface_metadata: dict | None = None,
+    *,
+    ports: dict[str, tuple[str, int]] | None = None,
 ):
-    """Scan the generated algo_top.v port list and write port_map.yaml."""
+    """Write port_map.yaml from the top-level port list.
+
+    Migration step 6 (docs/development/release-readiness.md): when *ports*
+    is given (``{name: (direction, width)}``, the same shape
+    ``forge.core.utils.hdl_parser._scan_verilog_ports`` returns), it is
+    used directly — this is ``write_structural_verilog``'s own
+    ``report["top_ports"]``, so the resolved top-level port list no longer
+    needs to be independently re-derived by re-parsing the file it just
+    wrote. When *ports* is omitted (the default), behavior is unchanged
+    from before: ``verilog_path`` is scanned via ``_scan_verilog_ports``.
+    """
     import yaml as _yaml
     from forge.core.utils.hdl_parser import _scan_verilog_ports
     from forge.core.utils import port_signature as _sig
 
-    ports = _scan_verilog_ports(verilog_path)
+    if ports is None:
+        ports = _scan_verilog_ports(verilog_path)
     if not ports:
         print(f"  ⚠  Could not parse ports from {verilog_path} — port_map.yaml not written")
         return None, None
@@ -855,8 +894,9 @@ def cmd_match_ports(args):
 
         if global_nets:
             print(f"\nGlobal nets: {len(global_nets)}")
-            for net, ports in global_nets.items():
-                print(f"  {net}: {', '.join(ports)}")
+            for net, binds in global_nets.items():
+                fanout = ", ".join(f"{inst}.{port}" for inst, port in binds)
+                print(f"  {net}: {fanout}")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -929,58 +969,85 @@ def cmd_lint_verilog(args):
 
 def cmd_validate(args):
     """Validate design.yml without generating output."""
+    json_mode = getattr(args, "json", False)
+    payload: dict = {"passed": False, "registry": None, "design": None, "stale": None}
+
+    def _emit(code: int, *, error: str | None = None) -> None:
+        if json_mode:
+            payload["passed"] = code == 0
+            if error is not None:
+                payload["error"] = error
+            print(json.dumps(payload, indent=2))
+        sys.exit(code)
+
     try:
         design_path = Path(args.design).expanduser().resolve()
 
         if not design_path.exists():
-            print(f"❌ Design file not found: {design_path}")
-            sys.exit(1)
+            msg = f"Design file not found: {design_path}"
+            if not json_mode:
+                print(f"❌ {msg}")
+            _emit(1, error=msg)
 
         import yaml as _yaml
 
         _raw_design = _yaml.safe_load(design_path.read_text()) or {}
         _registry_ref = _raw_design.get("registry")
-        registry_errors = 0
         if _registry_ref:
             registry_path = (design_path.parent / _registry_ref).resolve()
             if not registry_path.exists():
-                print(f"❌ Registry file not found: {registry_path}")
-                sys.exit(1)
-            print(f"📖 Loading registry: {registry_path}")
-            print("🔍 Validating registry...\n")
-            reg_validator = validate_registry(registry_path)
-            reg_validator.print_report()
-            registry_errors = len(reg_validator.errors)
-            if registry_errors:
-                print(
-                    f"\n⛔ Registry has {registry_errors} error(s). "
-                    "Fix them before validating design."
-                )
-                sys.exit(1)
-            if args.strict and reg_validator.warnings:
-                print(
-                    f"\n⛔ Strict mode: treating {len(reg_validator.warnings)} "
-                    "registry warning(s) as errors"
-                )
-                sys.exit(1)
-            print()
+                msg = f"Registry file not found: {registry_path}"
+                if not json_mode:
+                    print(f"❌ {msg}")
+                _emit(1, error=msg)
 
-        print(f"📖 Loading design: {design_path}")
+            if not json_mode:
+                print(f"📖 Loading registry: {registry_path}")
+                print("🔍 Validating registry...\n")
+            reg_validator = validate_registry(registry_path)
+            if not json_mode:
+                reg_validator.print_report()
+            payload["registry"] = _validator_payload(reg_validator)
+
+            if reg_validator.has_errors():
+                if not json_mode:
+                    print(
+                        f"\n⛔ Registry has {len(reg_validator.errors)} error(s). "
+                        "Fix them before validating design."
+                    )
+                _emit(1)
+            if args.strict and reg_validator.warnings:
+                if not json_mode:
+                    print(
+                        f"\n⛔ Strict mode: treating {len(reg_validator.warnings)} "
+                        "registry warning(s) as errors"
+                    )
+                _emit(1)
+            if not json_mode:
+                print()
+
+        if not json_mode:
+            print(f"📖 Loading design: {design_path}")
         cfg = DesignConfig.load_relaxed(design_path)
 
-        print("🔍 Validating design configuration...\n")
+        if not json_mode:
+            print("🔍 Validating design configuration...\n")
         validator = validate_design(cfg, design_path)
-        validator.print_report()
+        if not json_mode:
+            validator.print_report()
+        payload["design"] = _validator_payload(validator)
 
         if validator.has_errors():
-            sys.exit(1)
+            _emit(1)
         elif args.strict and len(validator.warnings) > 0:
-            print(f"\n⛔ Strict mode: Treating {len(validator.warnings)} warnings as errors")
-            sys.exit(1)
+            if not json_mode:
+                print(f"\n⛔ Strict mode: Treating {len(validator.warnings)} warnings as errors")
+            _emit(1)
         else:
             if getattr(args, "check_stale", False):
-                print()
-                print("🕒 Checking for stale generated artifacts…")
+                if not json_mode:
+                    print()
+                    print("🕒 Checking for stale generated artifacts…")
                 stale_diag = ATGDiagnosticReport("stale-check")
                 output_dir = design_path.parent
                 stale_report = check_top_gen_staleness(output_dir, design_yml=design_path)
@@ -996,26 +1063,38 @@ def cmd_validate(args):
                         break
 
                 stale_lines = format_stale_report(stale_report)
+                payload["stale"] = {
+                    "count": len(stale_report.stale),
+                    "artifacts": stale_lines,
+                }
                 if stale_lines:
-                    for line in stale_lines:
-                        print(f"  ⚠️  {line}")
-                    stale_diag.warn(
-                        "ATG007",
-                        f"{len(stale_report.stale)} stale artifact(s) detected",
-                        action="Re-run forge gen-top to rebuild",
-                        path=output_dir,
-                    )
-                    stale_diag.print_console(file=sys.stdout)
+                    if not json_mode:
+                        for line in stale_lines:
+                            print(f"  ⚠️  {line}")
+                        stale_diag.warn(
+                            "ATG007",
+                            f"{len(stale_report.stale)} stale artifact(s) detected",
+                            action="Re-run forge gen-top to rebuild",
+                            path=output_dir,
+                        )
+                        stale_diag.print_console(file=sys.stdout)
                     if args.strict:
-                        print("\n⛔ Strict mode: stale artifacts treated as errors")
-                        sys.exit(1)
-                else:
+                        if not json_mode:
+                            print("\n⛔ Strict mode: stale artifacts treated as errors")
+                        _emit(1)
+                elif not json_mode:
                     print("  ✅ All generated artifacts are up to date")
 
-            print("\n✅ Design is valid and ready for generation!")
-            sys.exit(0)
+            if not json_mode:
+                print("\n✅ Design is valid and ready for generation!")
+            _emit(0)
 
+    except SystemExit:
+        raise
     except Exception as e:
+        if json_mode:
+            print(json.dumps({"passed": False, "error": str(e)}, indent=2))
+            sys.exit(1)
         print_cli_error(
             "Validation failed",
             e,
@@ -1026,34 +1105,264 @@ def cmd_validate(args):
 
 def cmd_validate_registry(args):
     """Validate a modules.yml registry file independently."""
+    json_mode = getattr(args, "json", False)
     try:
         registry_path = Path(args.registry).expanduser().resolve()
         if not registry_path.exists():
-            print(f"❌ Registry file not found: {registry_path}")
+            if json_mode:
+                print(json.dumps({"passed": False, "error": f"Registry file not found: {registry_path}"}, indent=2))
+            else:
+                print(f"❌ Registry file not found: {registry_path}")
             sys.exit(1)
 
-        print(f"📖 Loading registry: {registry_path}")
-        print("🔍 Validating registry...\n")
+        if not json_mode:
+            print(f"📖 Loading registry: {registry_path}")
+            print("🔍 Validating registry...\n")
         validator = validate_registry(registry_path)
-        validator.print_report()
+        if not json_mode:
+            validator.print_report()
 
-        if validator.has_errors():
-            sys.exit(1)
-        elif args.strict and validator.warnings:
+        strict_fail = args.strict and bool(validator.warnings)
+        exit_code = 1 if (validator.has_errors() or strict_fail) else 0
+
+        if json_mode:
+            payload = _validator_payload(validator)
+            payload["passed"] = exit_code == 0
+            print(json.dumps(payload, indent=2))
+        elif strict_fail and not validator.has_errors():
             print(
                 f"\n⛔ Strict mode: treating {len(validator.warnings)} warning(s) as errors"
             )
-            sys.exit(1)
-        else:
-            sys.exit(0)
 
+        sys.exit(exit_code)
+
+    except SystemExit:
+        raise
     except Exception as e:
+        if json_mode:
+            print(json.dumps({"passed": False, "error": str(e)}, indent=2))
+            sys.exit(1)
         print_cli_error(
             "Registry validation failed",
             e,
             hint="Fix the modules.yml registry issue, then re-run forge validate-registry.",
         )
         sys.exit(1)
+
+
+@dataclass
+class GenTopPlanContext:
+    """Everything ``cmd_gen_top`` computes before its dry-run/real-write
+    fork (design/path/contract/ip_info resolution, matching, the 3
+    structured strict-check issue lists, and the pre-generation IR) —
+    bundled so ``forge build`` (release-plan §3.4) can reuse the exact
+    same computation without cmd_gen_top's sys.exit-based control flow.
+    Adding a field here must never change any existing print/exit
+    behavior in ``cmd_gen_top`` — this is pure extraction, not a behavior
+    change (see ``compute_gen_top_plan``'s docstring)."""
+    cfg: DesignConfig
+    design_path: Path
+    c_root: Path
+    ip_root: Path
+    build_root: Path
+    hls_build_root: Path
+    src_root: Path
+    xml_stimulus_tool: Optional[Path]
+    output_dir: Path
+    ip_info_file: Path
+    contracts_from: Optional[str]
+    contracts_from_path: Optional[Path]
+    contracts: Optional[Dict[str, Any]]
+    ip_info: Dict[str, Any]
+    ip_info_generated_now: bool
+    conn_map: Any
+    global_nets: Any
+    match_report: Any
+    project: Any  # forge.ir.model.ResolvedProject — pre-generation IR, no tie_off/top_ports yet
+    topology_group_issues: List[Any]
+    cardinality_issues: List[Any]
+    cdc_issues: List[Any]
+
+
+def compute_gen_top_plan(
+    cfg: DesignConfig,
+    design_path: Path,
+    args,
+    *,
+    read_only: bool,
+    emit_progress: bool = True,
+) -> GenTopPlanContext:
+    """Behavior-preserving extraction of ``cmd_gen_top``'s compute phase
+    (path/contract/ip_info resolution, matching, and the 3 structured
+    strict-check issue lists), used both by ``cmd_gen_top`` itself and by
+    ``forge build`` (release-plan §3.4).
+
+    Callers must have already loaded and validated *cfg* — the two
+    "can't even start" failure modes (missing design file, validation
+    errors) keep their existing custom print+exit messages in
+    ``cmd_gen_top`` rather than being folded into this function, which
+    raises ordinary exceptions (same as every call in this range already
+    did before extraction — they were always inside ``cmd_gen_top``'s own
+    ``try/except``, and remain so via the caller's identical `try` block).
+
+    ``read_only=True`` never writes ``ip_info.yaml`` — the exact same
+    in-memory-only path ``--dry-run`` already used, generalized so
+    ``forge build`` (which must never write) can reuse it unconditionally.
+    ``read_only=False`` preserves ``gen-top``'s real-write behavior
+    exactly. ``emit_progress=False`` suppresses this function's narrative
+    ``print()`` calls (used by ``forge build --json`` so stdout carries
+    only the JSON payload); it does not change what's computed.
+
+    The 3 structured issue lists (topology-group/cardinality/CDC) are
+    always computed here, unlike ``cmd_gen_top``'s own strict-gated calls
+    to the same verify_* functions — those functions are pure, non-raising,
+    side-effect-free (return a plain issue list, same convention as
+    ``contract_verifier``'s other checks), so always computing them costs
+    a little extra CPU but changes no observable behavior for ``gen-top``
+    itself; only ``cmd_gen_top``'s own (unchanged) ``if args.strict:``
+    blocks decide whether to act on them.
+    """
+    c_root = _consumer_root(design_path, getattr(args, "consumer_root", None))
+    ip_root = _resolve_path(args.ip_root, c_root, Path("ips"))
+    build_root = _resolve_path(args.build_dir, c_root, Path("build"))
+    hls_build_root = _resolve_path(
+        getattr(args, "hls_build_root", None), c_root, Path("build_hls")
+    )
+    src_root = (
+        _resolve_path(args.src_root, c_root)
+        if hasattr(args, "src_root") and args.src_root
+        else design_path.parent
+    )
+    xml_stimulus_tool = _resolve_path(
+        getattr(args, "xml_stimulus_tool", None), c_root
+    )
+
+    if args.output:
+        output = _resolve_path(args.output, c_root)
+        output_dir = output.parent
+        if output_dir != Path(".") and not read_only:
+            output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = c_root
+
+    ip_info_file = (
+        _resolve_path(args.ip_info, c_root)
+        if args.ip_info
+        else output_dir / "ip_info.yaml"
+    )
+
+    _modules_yml = getattr(args, "contracts_from", None)
+    _modules_yml_path: Optional[Path] = None
+    contracts = None
+    if _modules_yml:
+        _modules_yml_path = _resolve_path(_modules_yml, c_root)
+        if _modules_yml_path.exists():
+            try:
+                contracts = load_contracts_for_design(_modules_yml_path, c_root)
+                if emit_progress:
+                    print(f"📜 Contracts loaded: {len(contracts)} module(s) covered")
+            except Exception as _ce:
+                if emit_progress:
+                    print(f"⚠️  Contract loading failed (falling back to heuristics): {_ce}")
+        else:
+            if emit_progress:
+                print(f"⚠️  --contracts-from file not found: {_modules_yml_path}")
+
+    ip_info_generated_now = False
+    if ip_info_file.exists():
+        ip_info = load_ip_info(ip_info_file)
+    elif contracts:
+        if emit_progress:
+            print("📋 Projecting ip_info from contracts (not from built IP) …")
+        _mapped = {}
+        for m in cfg.modules:
+            c = contracts.get(m.name) or (
+                m.ip_info_key and contracts.get(m.ip_info_key)
+            )
+            if c:
+                _mapped[m.name] = c
+        ip_info = synthesize_ip_info(_mapped)
+    else:
+        if emit_progress:
+            print("📋 Generating IP summary from build artefacts …")
+        summary = collect_all(
+            build_root=build_root,
+            modules=cfg.modules,
+            ip_root=ip_root,
+            src_root=src_root,
+        )
+        if read_only:
+            # --dry-run / forge build must never create, modify, or delete
+            # project files. Use the in-memory summary directly instead of
+            # writing ip_info.yaml to disk and reading it back.
+            if emit_progress:
+                print(
+                    f"📋 [dry-run] IP summary computed in memory "
+                    f"(would be written to {ip_info_file} on a real run)"
+                )
+            ip_info = summary
+        else:
+            ip_info_file.parent.mkdir(parents=True, exist_ok=True)
+            write_summary(summary, ip_info_file, format="yaml")
+            ip_info = load_ip_info(ip_info_file)
+            ip_info_generated_now = True
+
+    conn_map, global_nets, match_report = auto_match_ports(
+        cfg, ip_info, system_yml=args.system, contracts=contracts,
+    )
+
+    if emit_progress:
+        if match_report.contract_driven_modules:
+            print(f"  Contract-driven : {', '.join(match_report.contract_driven_modules)}")
+        if match_report.compat_mode_modules:
+            print(f"  Compat-mode     : {', '.join(match_report.compat_mode_modules)}")
+        wmc = match_report.wiring_method_counts
+        total_conn = sum(wmc.values())
+        if total_conn:
+            print(
+                f"  Wiring methods  : {total_conn} connections — "
+                f"{wmc['contract_wiring']} contract, "
+                f"{wmc['port_map_ranges']} ranges, "
+                f"{wmc['port_map']} port_map, "
+                f"{wmc['auto_match']} auto"
+            )
+        for _w in match_report.warnings:
+            print(f"  ⚠️  {_w}")
+
+    topology_group_issues: List[Any] = []
+    if contracts and cfg.topology_groups:
+        from forge.topgen.ip.contract_verifier import verify_topology_groups
+        topology_group_issues = verify_topology_groups(cfg, contracts)
+
+    cardinality_issues: List[Any] = []
+    if contracts:
+        from forge.topgen.ip.cardinality import verify_cardinality
+        cardinality_issues = verify_cardinality(cfg, contracts, match_report)
+
+    from forge.topgen.ip.cdc import verify_cdc
+    cdc_issues = verify_cdc(cfg, contracts or {}, match_report, conn_map, global_nets)
+
+    project = assemble_project_ir(
+        cfg, design_path,
+        contracts=contracts or {}, ip_info_data=ip_info,
+        conn_map=conn_map, global_nets=global_nets, match_report=match_report,
+    )
+
+    return GenTopPlanContext(
+        cfg=cfg, design_path=design_path,
+        c_root=c_root, ip_root=ip_root, build_root=build_root,
+        hls_build_root=hls_build_root, src_root=src_root,
+        xml_stimulus_tool=xml_stimulus_tool,
+        output_dir=output_dir, ip_info_file=ip_info_file,
+        contracts_from=_modules_yml, contracts_from_path=_modules_yml_path,
+        contracts=contracts, ip_info=ip_info,
+        ip_info_generated_now=ip_info_generated_now,
+        conn_map=conn_map, global_nets=global_nets, match_report=match_report,
+        project=project,
+        topology_group_issues=topology_group_issues,
+        cardinality_issues=cardinality_issues,
+        cdc_issues=cdc_issues,
+    )
 
 
 def cmd_gen_top(args):
@@ -1082,92 +1391,31 @@ def cmd_gen_top(args):
 
         print("✅ Validation passed!\n")
 
-        c_root = _consumer_root(design_path, getattr(args, "consumer_root", None))
-        ip_root = _resolve_path(args.ip_root, c_root, Path("ips"))
-        build_root = _resolve_path(args.build_dir, c_root, Path("build"))
-        hls_build_root = _resolve_path(
-            getattr(args, "hls_build_root", None), c_root, Path("build_hls")
+        # Migration step 4/Slice 6 (docs/development/release-readiness.md):
+        # compute_gen_top_plan is the shared, sys.exit-free compute phase
+        # also used by `forge build`. Unpacked back into the same local
+        # names the rest of this function (dry-run preview, all 3 mode
+        # branches, unchanged below) already expects — pure code motion.
+        ctx = compute_gen_top_plan(
+            cfg, design_path, args, read_only=getattr(args, "dry_run", False),
         )
-        src_root = (
-            _resolve_path(args.src_root, c_root)
-            if hasattr(args, "src_root") and args.src_root
-            else design_path.parent
-        )
-        xml_stimulus_tool = _resolve_path(
-            getattr(args, "xml_stimulus_tool", None), c_root
-        )
-
-        if args.output:
-            output = _resolve_path(args.output, c_root)
-            output_dir = output.parent
-            if output_dir != Path("."):
-                output_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            output_dir = c_root
-
-        ip_info_file = (
-            _resolve_path(args.ip_info, c_root)
-            if args.ip_info
-            else output_dir / "ip_info.yaml"
-        )
-
-        _modules_yml = getattr(args, "contracts_from", None)
-        _contracts = None
-        if _modules_yml:
-            _modules_yml_path = _resolve_path(_modules_yml, c_root)
-            if _modules_yml_path.exists():
-                try:
-                    _contracts = load_contracts_for_design(_modules_yml_path, c_root)
-                    print(f"📜 Contracts loaded: {len(_contracts)} module(s) covered")
-                except Exception as _ce:
-                    print(f"⚠️  Contract loading failed (falling back to heuristics): {_ce}")
-            else:
-                print(f"⚠️  --contracts-from file not found: {_modules_yml_path}")
-
-        if ip_info_file.exists():
-            ip_info = load_ip_info(ip_info_file)
-        elif _contracts:
-            print("📋 Projecting ip_info from contracts (not from built IP) …")
-            _mapped = {}
-            for m in cfg.modules:
-                c = _contracts.get(m.name) or (
-                    m.ip_info_key and _contracts.get(m.ip_info_key)
-                )
-                if c:
-                    _mapped[m.name] = c
-            ip_info = synthesize_ip_info(_mapped)
-        else:
-            print("📋 Generating IP summary from build artefacts …")
-            summary = collect_all(
-                build_root=build_root,
-                modules=cfg.modules,
-                ip_root=ip_root,
-                src_root=src_root,
-            )
-            ip_info_file.parent.mkdir(parents=True, exist_ok=True)
-            write_summary(summary, ip_info_file, format="yaml")
-            ip_info = load_ip_info(ip_info_file)
-
-        conn_map, global_nets, match_report = auto_match_ports(
-            cfg, ip_info, system_yml=args.system, contracts=_contracts,
-        )
-
-        if match_report.contract_driven_modules:
-            print(f"  Contract-driven : {', '.join(match_report.contract_driven_modules)}")
-        if match_report.compat_mode_modules:
-            print(f"  Compat-mode     : {', '.join(match_report.compat_mode_modules)}")
+        c_root = ctx.c_root
+        ip_root = ctx.ip_root
+        build_root = ctx.build_root
+        hls_build_root = ctx.hls_build_root
+        src_root = ctx.src_root
+        xml_stimulus_tool = ctx.xml_stimulus_tool
+        output_dir = ctx.output_dir
+        ip_info_file = ctx.ip_info_file
+        _modules_yml = ctx.contracts_from
+        _modules_yml_path = ctx.contracts_from_path
+        _contracts = ctx.contracts
+        ip_info = ctx.ip_info
+        _ip_info_generated_now = ctx.ip_info_generated_now
+        conn_map = ctx.conn_map
+        global_nets = ctx.global_nets
+        match_report = ctx.match_report
         wmc = match_report.wiring_method_counts
-        total_conn = sum(wmc.values())
-        if total_conn:
-            print(
-                f"  Wiring methods  : {total_conn} connections — "
-                f"{wmc['contract_wiring']} contract, "
-                f"{wmc['port_map_ranges']} ranges, "
-                f"{wmc['port_map']} port_map, "
-                f"{wmc['auto_match']} auto"
-            )
-        for _w in match_report.warnings:
-            print(f"  ⚠️  {_w}")
 
         if getattr(args, "strict", False) and match_report.has_compat_modules():
             print(
@@ -1198,9 +1446,7 @@ def cmd_gen_top(args):
             sys.exit(1)
 
         if getattr(args, "strict", False) and _contracts and cfg.topology_groups:
-            from forge.topgen.ip.contract_verifier import verify_topology_groups
-            tg_issues = verify_topology_groups(cfg, _contracts)
-            tg_errors = [i for i in tg_issues if i.severity == "error"]
+            tg_errors = [i for i in ctx.topology_group_issues if i.severity == "error"]
             if tg_errors:
                 print(
                     f"\n❌ Strict mode: {len(tg_errors)} topology group "
@@ -1210,15 +1456,97 @@ def cmd_gen_top(args):
                     print(str(_i))
                 sys.exit(1)
 
+        if getattr(args, "strict", False) and _contracts:
+            card_errors = [i for i in ctx.cardinality_issues if i.severity == "error"]
+            if card_errors:
+                print(
+                    f"\n❌ Strict mode: {len(card_errors)} declarative "
+                    "cardinality violation(s):"
+                )
+                for _i in card_errors:
+                    print(str(_i))
+                sys.exit(1)
+
+        if getattr(args, "strict", False):
+            cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
+            if cdc_errors:
+                print(
+                    f"\n❌ Strict mode: {len(cdc_errors)} undeclared clock/reset "
+                    "domain crossing(s):"
+                )
+                for _i in cdc_errors:
+                    print(str(_i))
+                sys.exit(1)
+
+        if getattr(args, "dry_run", False):
+            if args.mode == "vhdl":
+                _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
+            elif args.mode == "verilog":
+                _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
+            else:
+                _preview_output = _resolve_path(args.output, c_root, Path("block_design.tcl"))
+
+            print(f"\n[dry-run] Would write:")
+            print(f"  {_preview_output}")
+            if args.mode in ("vhdl", "verilog"):
+                for _artifact in (
+                    "build_manifest.json", "port_map.yaml", "port_signature.json",
+                    "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
+                    "maturity_report.json",
+                ):
+                    print(f"  {_preview_output.parent / _artifact}")
+                # design.ir.json (canonical IR snapshot) is emitted for both
+                # verilog and vhdl modes — see migration step 5 in
+                # docs/development/release-readiness.md.
+                print(f"  {_preview_output.parent / 'design.ir.json'}")
+                _should_gen_tb = args.mode == "verilog" and (
+                    args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
+                )
+                if _should_gen_tb:
+                    print(f"  {_preview_output.parent}/  (SystemVerilog testbench — exact name set by generate_sv_testbench)")
+            elif args.mode == "bd":
+                # design.ir.json (canonical IR snapshot) is also emitted for
+                # --mode bd — see migration step 5 in
+                # docs/development/release-readiness.md.
+                print(f"  {_preview_output.parent / 'design.ir.json'}")
+
+            assert not _ip_info_generated_now, (
+                "dry-run must never persist ip_info.yaml to disk"
+            )
+            print("\n[dry-run] No files written.")
+            sys.exit(0)
+
         if args.mode == "vhdl":
             output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
             print(f"🔨 Generating structural VHDL: {output}")
 
+            # Migration step 5, extended to vhdl mode (same pattern as
+            # verilog — see docs/development/release-readiness.md): proven
+            # byte-identical to the original direct conn_map/global_nets on
+            # both reference designs (test_generation_ir_equivalence.py)
+            # before this switch was made.
+            project = assemble_project_ir(
+                cfg,
+                design_path,
+                contracts=_contracts or {},
+                ip_info_data=ip_info,
+                conn_map=conn_map,
+                global_nets=global_nets,
+                match_report=match_report,
+                generated_from={
+                    "design": str(design_path),
+                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
+                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
+                    "build_dir": str(build_root),
+                },
+            )
+            conn_map_ir, global_nets_ir = project_to_conn_map(project)
+
             report = write_structural_vhdl(
                 cfg=cfg,
                 ip_info=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
+                conn_map=conn_map_ir,
+                global_nets=global_nets_ir,
                 ip_root=ip_root,
                 out_path=output,
                 top_name=args.top_name,
@@ -1228,30 +1556,81 @@ def cmd_gen_top(args):
             print(f"✓ VHDL top generated: {output}")
             _print_gen_report(report)
 
+            # Attach tie_off connections (release-plan §3.3) — see the
+            # verilog branch's identical comment above.
+            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
+            project.design.connections.sort(key=lambda c: c.id)
+
             if getattr(args, "strict", False):
                 _strict_port_gate(report, cfg)
 
             if args.lint:
                 _run_vhdl_lint(output)
 
+            ir_output = output.parent / "design.ir.json"
+            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
+            print(f"  ✓ Canonical IR snapshot: {ir_output}")
+
         elif args.mode == "verilog":
             output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
             print(f"🔨 Generating structural Verilog: {output}")
 
+            # Migration step 5 (docs/development/release-readiness.md):
+            # generation is now driven by the canonical IR rather than
+            # directly by auto_match_ports's conn_map/global_nets. Proven
+            # byte-for-byte equivalent to the original direct conn_map on
+            # both reference designs (test_generation_ir_equivalence.py)
+            # before this switch was made — project_to_conn_map reproduces
+            # the exact original iteration order via
+            # ResolvedConnection.emission_order, so reg_stage_N/delay_N
+            # instance naming and wire-declaration order are unchanged.
+            project = assemble_project_ir(
+                cfg,
+                design_path,
+                contracts=_contracts or {},
+                ip_info_data=ip_info,
+                conn_map=conn_map,
+                global_nets=global_nets,
+                match_report=match_report,
+                generated_from={
+                    "design": str(design_path),
+                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
+                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
+                    "build_dir": str(build_root),
+                },
+            )
+            conn_map_ir, global_nets_ir = project_to_conn_map(project)
+
             report = write_structural_verilog(
                 cfg=cfg,
                 ip_info=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
+                conn_map=conn_map_ir,
+                global_nets=global_nets_ir,
                 ip_root=ip_root,
                 out_path=output,
                 top_name=args.top_name,
                 system_yml=args.system,
                 contracts=_contracts,
+                match_report=match_report,
             )
 
             print(f"✓ Verilog top generated: {output}")
             _print_gen_report(report)
+
+            # Attach the generator's resolved top-level port list to the IR
+            # object built above (migration step 6) — this is the one place
+            # both pieces of information exist together; `project` is
+            # serialized to design.ir.json further below.
+            project.design.top_ports = [
+                ResolvedTopLevelPort(name=p["name"], direction=p["direction"], width=p["width"])
+                for p in report.get("top_ports", [])
+            ]
+
+            # Attach tie_off connections (release-plan §3.3) — same timing/
+            # asymmetry as top_ports: only known after generation runs, so
+            # absent from forge inspect's pre-generation IR.
+            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
+            project.design.connections.sort(key=lambda c: c.id)
 
             if getattr(args, "strict", False):
                 _strict_port_gate(report, cfg)
@@ -1271,8 +1650,15 @@ def cmd_gen_top(args):
 
             port_map_output = output.parent / "port_map.yaml"
             print(f"\n🗺  Generating port map: {port_map_output}")
+            # Migration step 6: use the generator's own resolved top-level
+            # port list (report["top_ports"]) instead of re-parsing it back
+            # out of the file just written — see
+            # docs/development/release-readiness.md.
+            _top_ports_for_map = {
+                p["name"]: (p["direction"], p["width"]) for p in report.get("top_ports", [])
+            }
             port_map_data, port_sig_hash = generate_port_map(
-                output, port_map_output, cfg.interface_metadata
+                output, port_map_output, cfg.interface_metadata, ports=_top_ports_for_map or None
             )
 
             if port_map_data is not None:
@@ -1368,6 +1754,13 @@ def cmd_gen_top(args):
             maturity_output.write_text(json.dumps(maturity, indent=2) + "\n")
             print(f"  ✓ Maturity report: {maturity_output}")
 
+            # Canonical IR snapshot — `project` was already built above to
+            # drive this generation run (migration step 5); reuse it rather
+            # than building it a second time.
+            ir_output = output.parent / "design.ir.json"
+            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
+            print(f"  ✓ Canonical IR snapshot: {ir_output}")
+
             should_gen_tb = args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
             if should_gen_tb:
                 print("\n🧪 Generating SystemVerilog testbench...")
@@ -1404,17 +1797,43 @@ def cmd_gen_top(args):
             output = _resolve_path(args.output, c_root, Path("block_design.tcl"))
             print(f"🔨 Generating Block Design TCL: {output}")
 
+            # Migration step 5, extended to bd mode (same pattern as
+            # verilog/vhdl — see docs/development/release-readiness.md):
+            # proven byte-identical to the original direct conn_map/
+            # global_nets on both reference designs
+            # (test_generation_ir_equivalence.py) before this switch.
+            project = assemble_project_ir(
+                cfg,
+                design_path,
+                contracts=_contracts or {},
+                ip_info_data=ip_info,
+                conn_map=conn_map,
+                global_nets=global_nets,
+                match_report=match_report,
+                generated_from={
+                    "design": str(design_path),
+                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
+                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
+                    "build_dir": str(build_root),
+                },
+            )
+            conn_map_ir, global_nets_ir = project_to_conn_map(project)
+
             write_bd_tcl(
                 cfg=cfg,
                 ip_info=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
+                conn_map=conn_map_ir,
+                global_nets=global_nets_ir,
                 out_path=output,
                 bd_name=args.bd_name,
                 src_root=design_path.parent,
             )
 
             print(f"✓ Block Design TCL generated: {output}")
+
+            ir_output = output.parent / "design.ir.json"
+            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
+            print(f"  ✓ Canonical IR snapshot: {ir_output}")
 
     except Exception as e:
         print_cli_error(
@@ -1500,6 +1919,354 @@ def _run_verilog_lint(output: Path, top_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# init-plugin command — scaffold the topgen side of a new plugin capsule
+# ---------------------------------------------------------------------------
+# Mirrors forge.verify.__main__._cmd_init_plugin's shape (template-string
+# constants, files_to_create dict, --dry-run lists without writing, skip
+# already-existing files on a real run). This scaffolds the *topgen* half
+# (modules.yml, designs/design.yml, interfaces/*.yaml, an RTL stub);
+# `forge verify init-plugin` scaffolds the verify/ half separately.
+#
+# plugin_id is used as both the module ref/registry name *and* the
+# design.yml instance name, so ip_info_key trivially equals the design
+# instance name from the start — sidestepping the exact ip_info_key
+# mismatch bug found and fixed in plugins/passthrough_demo's own contract
+# (see CHANGELOG.md).
+
+_INIT_MODULES_YML_TEMPLATE = '''\
+# ═══════════════════════════════════════════════════════════════════════════
+# {plugin_id} — Module Registry
+# ═══════════════════════════════════════════════════════════════════════════
+# Scaffolded by `forge topgen init-plugin`. See docs/PLUGIN_AUTHOR_GUIDE.md
+# to register HLS modules, add topology_groups, or grow beyond this single
+# RTL passthrough stub.
+# ═══════════════════════════════════════════════════════════════════════════
+registry_version: '1'
+
+defaults:
+  part: xcvu9p-flga2104-2L-e
+  clock_period: 4.0
+  vendor: {plugin_id}
+  version: '1.0'
+
+modules:
+
+- name: {plugin_id}
+  kind: rtl
+  rtl_lang: verilog
+  top: {plugin_id}
+  latency_hint: 1
+  interface_contract: interfaces/{plugin_id}.interface.yaml
+  src: [../algo/rtl/{plugin_id}.v]
+'''
+
+_INIT_DESIGN_YML_TEMPLATE = '''\
+# ═══════════════════════════════════════════════════════════════════════════
+# {plugin_id} — Design Topology
+# ═══════════════════════════════════════════════════════════════════════════
+# Scaffolded by `forge topgen init-plugin`. Single module, both data ports
+# exposed at the top level — the minimal case. Add `connections:` or
+# `topology_groups:` here as you add more modules.
+# ═══════════════════════════════════════════════════════════════════════════
+
+part: xcvu9p-flga2104-2L-e
+clock_period: 4.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+modules:
+
+- name: {plugin_id}
+  ref: {plugin_id}
+  instances: 1
+  external_in_ports: [data_in, data_in_valid]
+  external_out_ports: [data_out, data_out_valid]
+'''
+
+_INIT_INTERFACE_YAML_TEMPLATE = '''\
+# Integration contract for the {plugin_id} RTL reference module.
+# Scaffolded by `forge topgen init-plugin`.
+
+ip_interface:
+  module_name: {plugin_id}
+  # ip_info_key MUST match the design.yml *instance* name (the `name:`
+  # field under modules: in designs/design.yml), not necessarily the
+  # module's `ref:`. Here they're the same value on purpose. Getting this
+  # wrong is a real, previously-hit bug — `forge core verify-contract`
+  # fails with "ip_info_key '<x>' not found" if it doesn't match.
+  ip_info_key: {plugin_id}
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Minimal single-module reference generated by `forge topgen init-plugin`.
+    Registers an 8-bit data path one clock cycle.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    data_in:
+      raw_port: data_in
+      direction: input
+      width: 8
+
+    data_in_valid:
+      raw_port: data_in_valid
+      direction: input
+      width: 1
+
+    data_out:
+      raw_port: data_out
+      direction: output
+      width: 8
+
+    data_out_valid:
+      raw_port: data_out_valid
+      direction: output
+      width: 1
+'''
+
+_INIT_RTL_STUB_TEMPLATE = '''\
+//==============================================================================
+// {plugin_id}.v
+//==============================================================================
+// Scaffolded by `forge topgen init-plugin`. A minimal registered N-bit
+// passthrough with a valid strobe — replace the body with your real logic.
+// Ports and behavior deliberately match plugins/passthrough_demo's proven
+// reference implementation, so `forge topgen gen-top` succeeds immediately
+// with zero further edits.
+//
+// Parameters:
+//   WIDTH - Bit width of the data path (default: 8)
+//==============================================================================
+
+`timescale 1ns / 1ps
+
+module {plugin_id} #(
+    parameter WIDTH = 8
+)(
+    input  wire             ap_clk,
+    input  wire             ap_rst,
+    input  wire [WIDTH-1:0] data_in,
+    input  wire             data_in_valid,
+    output reg  [WIDTH-1:0] data_out,
+    output reg              data_out_valid
+);
+
+    always @(posedge ap_clk) begin
+        if (ap_rst) begin
+            data_out       <= {{WIDTH{{1'b0}}}};
+            data_out_valid <= 1'b0;
+        end else begin
+            data_out       <= data_in;
+            data_out_valid <= data_in_valid;
+        end
+    end
+
+endmodule
+'''
+
+
+def cmd_init_plugin(args):
+    """Scaffold the topgen side of a new plugin capsule.
+
+    Creates ``<plugins_root>/<plugin_id>/forge/{{modules.yml,designs/design.yml,
+    interfaces/<plugin_id>.interface.yaml}}`` and
+    ``<algo_root>/<plugin_id>/algo/rtl/<plugin_id>.v``.
+    """
+    plugin_id = args.plugin_id
+    plugins_root = Path(args.plugins_root)
+    algo_root = Path(getattr(args, "algo_root", None) or args.plugins_root)
+    forge_root = plugins_root / plugin_id / "forge"
+    algo_dir = algo_root / plugin_id / "algo" / "rtl"
+
+    files_to_create = {
+        forge_root / "modules.yml": _INIT_MODULES_YML_TEMPLATE.format(plugin_id=plugin_id),
+        forge_root / "designs" / "design.yml": _INIT_DESIGN_YML_TEMPLATE.format(plugin_id=plugin_id),
+        forge_root / "interfaces" / f"{plugin_id}.interface.yaml":
+            _INIT_INTERFACE_YAML_TEMPLATE.format(plugin_id=plugin_id),
+        algo_dir / f"{plugin_id}.v": _INIT_RTL_STUB_TEMPLATE.format(plugin_id=plugin_id),
+    }
+
+    if args.dry_run:
+        print(f"[init-plugin] Would create plugin skeleton for {plugin_id!r}:")
+        for path in sorted(files_to_create):
+            print(f"  {path}")
+        return
+
+    created: list[Path] = []
+    skipped: list[Path] = []
+    for dest_path, content in files_to_create.items():
+        if dest_path.exists():
+            skipped.append(dest_path)
+            continue
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        dest_path.write_text(content)
+        created.append(dest_path)
+
+    print(f"[init-plugin] Plugin {plugin_id!r} scaffolded:")
+    for p in created:
+        print(f"  created  {p}")
+    for p in skipped:
+        print(f"  skipped  {p}  (already exists)")
+
+    design_yml = forge_root / "designs" / "design.yml"
+    modules_yml = forge_root / "modules.yml"
+    print("\nNext steps:")
+    print(
+        f"  1. Run: forge topgen gen-top {design_yml} --mode verilog "
+        f"--contracts-from {modules_yml} --output out/algo_top.v"
+    )
+    print(f"  2. Run: forge verify init-plugin {plugin_id}          "
+          "(scaffolds the verify/ half)")
+    print(f"  3. Run: forge verify generate {forge_root / 'verify' / 'design.verification.yml'}")
+    print(f"  4. Run: forge verify doctor   {forge_root / 'verify' / 'design.verification.yml'}")
+
+
+def cmd_migrate(args):
+    """Migration helpers (release-plan §2.8) — see
+    docs/development/MIGRATION_TOOLING.md for the full policy of each kind.
+
+    Every kind computes its change fully in memory, always prints a
+    readable diff/plan, and only writes to disk when ``--dry-run`` is not
+    passed — the same compute-then-write-gated-by-dry-run pattern used by
+    ``cmd_gen_top``/``cmd_clean``/``cmd_init_plugin``.
+    """
+    from forge.topgen.migrate import (
+        apply_legacy_plugin_layout,
+        apply_rename_verify_contract,
+        find_legacy_plugin_layout,
+        find_legacy_verify_contract_name,
+        infer_contract_skeleton,
+        migrate_schema_version,
+        partition_to_coordinates,
+        unified_diff_text,
+    )
+
+    kind = args.kind
+    dry_run = getattr(args, "dry_run", False)
+
+    if kind == "schema-version":
+        if not args.file:
+            print("❌ --file is required for --kind schema-version", file=sys.stderr)
+            sys.exit(2)
+        if not args.file.exists():
+            print(f"❌ file not found: {args.file}", file=sys.stderr)
+            sys.exit(2)
+        try:
+            result = migrate_schema_version(args.file, schema_kind=args.schema_kind)
+        except ValueError as exc:
+            print(f"❌ {exc}", file=sys.stderr)
+            sys.exit(2)
+        print(result.message)
+        if result.diff:
+            print(result.diff)
+        if result.changed and not dry_run:
+            args.file.write_text(result.new_content)
+            print(f"✅ wrote {args.file}")
+        sys.exit(0)
+
+    elif kind == "partition-to-coordinates":
+        if not args.contract or not args.axis:
+            print("❌ --contract and --axis are required for --kind partition-to-coordinates", file=sys.stderr)
+            sys.exit(2)
+        if not args.contract.exists():
+            print(f"❌ file not found: {args.contract}", file=sys.stderr)
+            sys.exit(2)
+        text = args.contract.read_text()
+        try:
+            new_text, changed_roles = partition_to_coordinates(text, axis=args.axis, role=args.role)
+        except ValueError as exc:
+            print(f"❌ {exc}", file=sys.stderr)
+            sys.exit(2)
+        if not changed_roles:
+            print(f"{args.contract.name}: nothing to migrate")
+            sys.exit(0)
+        print(unified_diff_text(text, new_text, args.contract))
+        print(f"Roles migrated: {', '.join(changed_roles)}")
+        if not dry_run:
+            args.contract.write_text(new_text)
+            print(f"✅ wrote {args.contract}")
+        sys.exit(0)
+
+    elif kind == "legacy-plugin-layout":
+        if not args.plugin_root:
+            print("❌ --plugin-root is required for --kind legacy-plugin-layout", file=sys.stderr)
+            sys.exit(2)
+        issue = find_legacy_plugin_layout(args.plugin_root)
+        if issue.is_clean():
+            print("Nothing to migrate — layout already current.")
+            sys.exit(0)
+        if issue.move_needed:
+            print(f"Would move: {issue.old_verify_dir} -> {issue.new_verify_dir}")
+        for f in issue.fw_python_files:
+            print(f"Would remove _FW_PYTHON sys.path block from: {f}")
+        for f in issue.manual_files:
+            print(f"⚠️  {f}: mentions _FW_PYTHON but the block wasn't confidently "
+                  "recognized — remove it manually.")
+        if not dry_run:
+            for action in apply_legacy_plugin_layout(issue):
+                print(f"✅ {action}")
+        sys.exit(0)
+
+    elif kind == "rename-verify-contract":
+        if not args.plugin_root:
+            print("❌ --plugin-root is required for --kind rename-verify-contract", file=sys.stderr)
+            sys.exit(2)
+        legacy = find_legacy_verify_contract_name(args.plugin_root)
+        if legacy is None:
+            print("Nothing to migrate.")
+            sys.exit(0)
+        new_path = legacy.with_name("design.verification.yml")
+        print(f"Would rename: {legacy} -> {new_path}")
+        if not dry_run:
+            apply_rename_verify_contract(legacy)
+            print(f"✅ renamed to {new_path}")
+        sys.exit(0)
+
+    elif kind == "infer-contract":
+        if not args.ip_info or not args.module or not args.output:
+            print("❌ --ip-info, --module, and --output are required for --kind infer-contract", file=sys.stderr)
+            sys.exit(2)
+        if not args.ip_info.exists():
+            print(f"❌ file not found: {args.ip_info}", file=sys.stderr)
+            sys.exit(2)
+        import yaml as _yaml
+        ip_info = _yaml.safe_load(args.ip_info.read_text()) or {}
+        entry = ip_info.get(args.module)
+        if entry is None:
+            print(f"❌ module {args.module!r} not found in {args.ip_info}", file=sys.stderr)
+            sys.exit(2)
+        if args.output.exists():
+            print(f"❌ {args.output} already exists — refusing to overwrite", file=sys.stderr)
+            sys.exit(2)
+        skeleton = infer_contract_skeleton(args.module, entry)
+        print(skeleton)
+        if not dry_run:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(skeleton)
+            print(f"✅ wrote {args.output}")
+        sys.exit(0)
+
+    else:
+        print(f"❌ unknown --kind: {kind!r}", file=sys.stderr)
+        sys.exit(2)
+
+
+# ---------------------------------------------------------------------------
 # Parser registration
 # ---------------------------------------------------------------------------
 
@@ -1555,7 +2322,9 @@ def register(sub) -> None:
         "--strict", action="store_true",
         help=(
             "Fail if any module lacks a contract, any connection uses auto-match or "
-            "port_map_ranges, or topology groups have verification errors"
+            "port_map_ranges, topology groups have verification errors, a "
+            "declared cardinality (producers/consumers/fanout/completeness) is violated, "
+            "or a connection crosses clock/reset domains without a declared 'cdc:' adapter"
         ),
     )
     p_gen.add_argument("--lint", action="store_true", help="Run linter after generation")
@@ -1563,6 +2332,11 @@ def register(sub) -> None:
     p_gen.add_argument(
         "--rtl-resource-root", type=Path,
         help="Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}",
+    )
+    p_gen.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=False,
+        help="Validate, resolve IP info, and match ports, then print what "
+             "would be written without generating any output files.",
     )
     p_gen.set_defaults(func=cmd_gen_top)
 
@@ -1574,6 +2348,10 @@ def register(sub) -> None:
         "--check-stale", action="store_true", default=False,
         help="Also verify that generated artifacts are not older than design.yml.",
     )
+    p_validate.add_argument(
+        "--json", action="store_true", default=False,
+        help="Machine-readable JSON output instead of the human report.",
+    )
     p_validate.set_defaults(func=cmd_validate)
 
     # forge topgen validate-registry
@@ -1582,6 +2360,10 @@ def register(sub) -> None:
     )
     p_val_reg.add_argument("registry", type=Path, help="modules.yml registry file to validate")
     p_val_reg.add_argument("--strict", action="store_true", help="Treat warnings as errors")
+    p_val_reg.add_argument(
+        "--json", action="store_true", default=False,
+        help="Machine-readable JSON output instead of the human report.",
+    )
     p_val_reg.set_defaults(func=cmd_validate_registry)
 
     # forge topgen ip-summary
@@ -1690,3 +2472,85 @@ def register(sub) -> None:
         "--strict", action="store_true", help="Enable strict mode with additional checks",
     )
     p_lint_verilog.set_defaults(func=cmd_lint_verilog)
+
+    # forge topgen init-plugin
+    p_init = tg_sub.add_parser(
+        "init-plugin",
+        help="Scaffold the topgen side of a new plugin (modules.yml, "
+             "design.yml, interface contract, RTL stub)",
+    )
+    p_init.add_argument("plugin_id", help="Plugin identifier (e.g. 'my_algo')")
+    p_init.add_argument(
+        "--plugins-root", default="plugins",
+        help="Root directory under which to create <plugin_id>/forge/ (default: plugins/)",
+    )
+    p_init.add_argument(
+        "--algo-root", default=None,
+        help="Root directory under which to create <plugin_id>/algo/ "
+             "(default: same as --plugins-root)",
+    )
+    p_init.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=False,
+        help="Print what would be created without writing files",
+    )
+    p_init.set_defaults(func=cmd_init_plugin)
+
+    p_migrate = tg_sub.add_parser(
+        "migrate",
+        help="Migration helpers: schema-version insertion, partition->coordinates, "
+             "legacy plugin layout, legacy verify-contract filename, compat-mode "
+             "contract inference (release-plan §2.8)",
+    )
+    p_migrate.add_argument(
+        "--kind", required=True,
+        choices=[
+            "schema-version", "partition-to-coordinates", "legacy-plugin-layout",
+            "rename-verify-contract", "infer-contract",
+        ],
+        help="Which migration to run",
+    )
+    p_migrate.add_argument(
+        "--file", type=Path,
+        help="[schema-version] path to the design.yml/modules.yml/*.interface.yaml/"
+             "design.verification.yml file to migrate",
+    )
+    p_migrate.add_argument(
+        "--schema-kind", dest="schema_kind",
+        choices=["design", "registry", "interface", "verify_contract"],
+        default=None,
+        help="[schema-version] override auto-detection from --file's filename",
+    )
+    p_migrate.add_argument(
+        "--contract", type=Path,
+        help="[partition-to-coordinates] path to the *.interface.yaml file",
+    )
+    p_migrate.add_argument(
+        "--axis", default=None,
+        help="[partition-to-coordinates] axis name to wrap the partition value under",
+    )
+    p_migrate.add_argument(
+        "--role", default=None,
+        help="[partition-to-coordinates] migrate only this role (default: all eligible roles)",
+    )
+    p_migrate.add_argument(
+        "--plugin-root", type=Path,
+        help="[legacy-plugin-layout, rename-verify-contract] plugin root directory "
+             "(the directory containing verify/ or forge/)",
+    )
+    p_migrate.add_argument(
+        "--ip-info", type=Path, dest="ip_info",
+        help="[infer-contract] path to an ip_info.yaml file",
+    )
+    p_migrate.add_argument(
+        "--module", default=None,
+        help="[infer-contract] module/ip_info key to infer a contract skeleton for",
+    )
+    p_migrate.add_argument(
+        "--output", type=Path,
+        help="[infer-contract] path to write the inferred *.interface.yaml to",
+    )
+    p_migrate.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=False,
+        help="Show the planned change/diff without writing anything",
+    )
+    p_migrate.set_defaults(func=cmd_migrate)

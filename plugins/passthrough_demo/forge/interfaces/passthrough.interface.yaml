@@ -2,6 +2,7 @@
 
 ip_interface:
   module_name: passthrough
+  ip_info_key: pt
   source_type: rtl
   normalization_status: ready
   notes: >

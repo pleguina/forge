@@ -31,3 +31,6 @@ xvlog.pb
 out/
 gen-top/
 **/xsim_work/
+
+instructions.md
+docs/plan/

@@ -40,10 +40,10 @@ def load_yaml_safe(path: Path) -> Dict[str, Any]:
     try:
         return yaml.safe_load(path.read_text())
     except yaml.YAMLError as e:
-        from ..core.exceptions import ConfigurationError
+        from ..exceptions import ConfigurationError
         raise ConfigurationError(f"Invalid YAML in {path}: {e}")
     except Exception as e:
-        from ..core.exceptions import FileNotFoundError
+        from ..exceptions import FileNotFoundError
         raise FileNotFoundError(f"Cannot read {path}: {e}")
 
 

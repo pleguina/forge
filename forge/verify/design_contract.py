@@ -40,6 +40,11 @@ from pathlib import Path
 from typing import Any
 
 from forge.verify.exceptions import DesignContractError
+from forge.core.schema_version import check_schema_version
+
+# Schema-version identity for design.verification.yml (release-plan §2.7) —
+# see forge/core/schema_version.py for the shared compatibility policy.
+VERIFY_CONTRACT_SCHEMA_VERSION = "1.0"
 
 
 # ── Field classification ───────────────────────────────────────────────────
@@ -259,6 +264,7 @@ class VerifyDesignContract:
     defaults:   SimulationDefaults
     flows:      tuple[FlowDeclaration, ...]
     source_path: Path | None = None   # path to the loaded YAML file
+    schema_version: str = VERIFY_CONTRACT_SCHEMA_VERSION  # release-plan §2.7
 
     def get_dataset(self, name: str) -> DatasetDeclaration | None:
         """Look up a dataset by name."""
@@ -385,6 +391,23 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
             action="Fix the YAML syntax in design.verification.yml and retry.",
             context={"path": str(path)},
         ) from exc
+
+    # ── Schema version (release-plan §2.7) — only error-severity issues are
+    # acted on here; this loader has no warnings-collection channel (it's
+    # raise-only throughout), so a newer-minor warning is intentionally not
+    # surfaced. See docs/development/SCHEMA_VERSIONING.md.
+    declared_schema_version = raw.get("schema_version")
+    schema_version_errors = [
+        issue for issue in check_schema_version(
+            declared_schema_version, VERIFY_CONTRACT_SCHEMA_VERSION, schema_name="design.verification.yml",
+        )
+        if issue.severity == "error"
+    ]
+    if schema_version_errors:
+        _raise_contract_error(
+            "; ".join(issue.message for issue in schema_version_errors),
+            action=f"Update 'schema_version' to be compatible with {VERIFY_CONTRACT_SCHEMA_VERSION!r}.",
+        )
 
     # ── Plugin identity
     plugin = raw.get("plugin")
@@ -576,6 +599,7 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
         defaults=defaults,
         flows=tuple(flows),
         source_path=path,
+        schema_version=declared_schema_version or VERIFY_CONTRACT_SCHEMA_VERSION,
     )
 
 

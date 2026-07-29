@@ -1,5 +1,14 @@
 # Contributing
 
+FORGE originated as trigger/DAQ firmware tooling at CERN, built for the
+CMS/OMTF collaboration. It's now released as a general-purpose,
+detector- and algorithm-agnostic open-source project (MIT-licensed —
+see `LICENSE`) — CMS/OMTF and CERN remain its origin and one of its
+users, not its scope. `plugins/passthrough_demo/` and
+`plugins/trigger_demo/` are deliberately CMS/OMTF-vocabulary-free
+reference consumers proving the framework itself carries no
+detector-specific assumptions (enforced by `ci/agnosticism_check.sh`).
+
 ## Development setup
 
 ```bash
@@ -18,11 +27,20 @@ There is no separately-published PyPI package, and there won't be one under
 the name `forge` — that name is already taken on public PyPI by an
 unrelated, actively-maintained package. Downstream repos (`ci/plugin-consumer.yml`)
 install directly from this git repo (`pip install git+https://.../arc-framework.git@<ref>#subdirectory=forge`).
-This is the permanent installation story for this project, which is
-private CMS/OMTF-internal tooling, not a general-purpose public release —
-not a placeholder waiting for a PyPI slot. If your org later stands up an
-internal package index and wants to mirror releases there, override
+This is the permanent installation story for this project — not a
+placeholder waiting for a PyPI slot, and not a sign it's meant to stay
+private; it's simply the name collision. If you stand up a package index
+(internal or public) and want to mirror releases there, override
 `FORGE_FORGE_PIP_REF` per the comment in `ci/plugin-consumer.yml`.
+
+### Where this lives
+
+The canonical repo is migrating to a public host
+(`https://github.com/<org>/forge` — placeholder until the destination is
+finalized; the CERN GitLab origin remains authoritative until then). Until
+the migration lands, treat any `gitlab.cern.ch` URL you find in this repo
+(`pyproject.toml` metadata, `README.md`) as provenance, not a claim that
+the project is CERN-only.
 
 ## Running things locally before you push
 

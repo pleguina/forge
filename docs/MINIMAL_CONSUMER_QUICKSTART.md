@@ -25,16 +25,21 @@ If your plugin fits that contract, the framework path below is the supported rou
 
 ## Minimal checklist
 
-1. Create your plugin topology assets:
-   `plugins/<plugin>/modules.yml`, `plugins/<plugin>/interfaces/*.interface.yaml`, `plugins/<plugin>/designs/design.yml`
-2. Create your verification root:
-   `plugins/<plugin>/verify/`
-3. Author `plugins/<plugin>/verify/design.verification.yml`
-4. Author `plugins/<plugin>/verify/tools/bootstrap.py`
-5. Author `plugins/<plugin>/verify/tools/gen_stimulus.py`
-6. Place XML datasets under `plugins/<plugin>/verify/schemas/data/`
+1. Run `forge topgen init-plugin <plugin>` to scaffold your plugin topology
+   assets: `plugins/<plugin>/forge/modules.yml`,
+   `plugins/<plugin>/forge/interfaces/*.interface.yaml`,
+   `plugins/<plugin>/forge/designs/design.yml`, and an RTL stub at
+   `plugins/<plugin>/algo/rtl/<plugin>.v` — `forge topgen gen-top` succeeds
+   against the scaffold immediately, with no hand-editing; then adapt the
+   stub to your real module. Pass `--dry-run` to preview without writing.
+2. Run `forge verify init-plugin <plugin>` to scaffold your verification root:
+   `plugins/<plugin>/forge/verify/`
+3. Author `plugins/<plugin>/forge/verify/design.verification.yml`
+4. Author `plugins/<plugin>/forge/verify/tools/bootstrap.py`
+5. Author `plugins/<plugin>/forge/verify/tools/gen_stimulus.py`
+6. Place XML datasets under `plugins/<plugin>/forge/verify/schemas/data/`
 7. Run `forge topgen gen-top` to generate DUT artifacts
-8. Run `forge verify generate plugins/<plugin>/verify/design.verification.yml`
+8. Run `forge verify generate plugins/<plugin>/forge/verify/design.verification.yml`
 9. Run your plugin stimulus generator so each flow gets `stimulus_current.svh`
 10. Run `forge verify doctor` and then `forge verify run`
 11. (Optional) Run `forge analyze` to measure latency and generate performance reports — see `docs/ANALYSIS_GUIDE.md`
@@ -43,25 +48,25 @@ If your plugin fits that contract, the framework path below is the supported rou
 
 User-authored:
 
-- `plugins/<plugin>/modules.yml`
-- `plugins/<plugin>/interfaces/*.interface.yaml`
-- `plugins/<plugin>/designs/design.yml`
-- `plugins/<plugin>/verify/design.verification.yml`
-- `plugins/<plugin>/verify/tools/bootstrap.py`
-- `plugins/<plugin>/verify/tools/gen_stimulus.py`
-- `plugins/<plugin>/verify/schemas/data/*.xml`
+- `plugins/<plugin>/forge/modules.yml`
+- `plugins/<plugin>/forge/interfaces/*.interface.yaml`
+- `plugins/<plugin>/forge/designs/design.yml`
+- `plugins/<plugin>/forge/verify/design.verification.yml`
+- `plugins/<plugin>/forge/verify/tools/bootstrap.py`
+- `plugins/<plugin>/forge/verify/tools/gen_stimulus.py`
+- `plugins/<plugin>/forge/verify/schemas/data/*.xml`
 - optional plugin checker code
-- `plugins/<plugin>/verify/plot_config.yml` (if using `forge analyze plot-results`)
+- `plugins/<plugin>/forge/verify/plot_config.yml` (if using `forge analyze plot-results`)
 
 Framework-generated:
 
-- `plugins/<plugin>/verify/<flow>/verify.flow.yml`
-- `plugins/<plugin>/verify/<flow>/tb_<module>.sv`
-- `plugins/<plugin>/verify/<flow>/wave.tcl`
+- `plugins/<plugin>/forge/verify/<flow>/verify.flow.yml`
+- `plugins/<plugin>/forge/verify/<flow>/tb_<module>.sv`
+- `plugins/<plugin>/forge/verify/<flow>/wave.tcl`
 
 Plugin-generated but not hand-maintained:
 
-- `plugins/<plugin>/verify/<flow>/stimulus_current.svh`
+- `plugins/<plugin>/forge/verify/<flow>/stimulus_current.svh`
 
 Generated working artifacts:
 
@@ -69,7 +74,7 @@ Generated working artifacts:
 - `build/...`
 - `build_hls/...`
 - `build_targeted/...`
-- `plugins/<plugin>/verify/<flow>/xsim_work/...`
+- `plugins/<plugin>/forge/verify/<flow>/xsim_work/...`
 
 ## Commands
 
@@ -77,30 +82,44 @@ Topology generation:
 
 ```bash
 forge core verify-contract --ip-info ip_info.yaml \
-    --contract plugins/<plugin>/interfaces/<module>.interface.yaml
+    --contract plugins/<plugin>/forge/interfaces/<module>.interface.yaml
 
-forge topgen gen-top plugins/<plugin>/designs/design.yml \
+forge topgen gen-top plugins/<plugin>/forge/designs/design.yml \
     --mode verilog \
     --consumer-root . \
     --build-dir build \
     --hls-build-root build_hls \
     --ip-root ips \
-    --contracts-from plugins/<plugin>/modules.yml \
+    --contracts-from plugins/<plugin>/forge/modules.yml \
     --output out/algorithm/algo_top.v
 ```
 
 Verification generation and health checks:
 
 ```bash
-forge verify generate plugins/<plugin>/verify/design.verification.yml
-forge verify doctor   plugins/<plugin>/verify/design.verification.yml
+forge verify generate plugins/<plugin>/forge/verify/design.verification.yml
+forge verify doctor   plugins/<plugin>/forge/verify/design.verification.yml
 ```
 
 Verification run:
 
 ```bash
-forge verify run plugins/<plugin>/verify/<flow>/verify.flow.yml --plugin <plugin>
+forge verify run plugins/<plugin>/forge/verify/<flow>/verify.flow.yml --plugin <plugin>
 ```
+
+## The `--dry-run` invariant
+
+Every FORGE command that accepts `--dry-run` (`topgen gen-top`, `topgen clean`,
+`verify generate`, `verify prepare`, `topgen init-plugin`, `verify init-plugin`)
+guarantees that **no project file is created, modified, or deleted** — the
+project directory tree must be byte-for-byte identical before and after the
+call, including any file that a real run would auto-generate as a cached
+input (e.g. `ip_info.yaml` when `--contracts-from`/`--ip-info` aren't given).
+`topgen gen-top --dry-run` computes that input in memory instead of writing
+it to disk and reading it back. `forge/tests/test_topgen_cli_commands.py::test_gen_top_dry_run_lists_without_writing`
+snapshots the full directory tree before/after `--dry-run` and asserts no
+diff — treat any change to `cmd_gen_top` that breaks that test as a
+regression against this invariant, not an acceptable side effect.
 
 ## Analysis (optional but recommended)
 
@@ -112,8 +131,8 @@ See `docs/ANALYSIS_GUIDE.md` for the full guide.  Quick reference:
 forge analyze hls-report --hls-build-root build_hls_<plugin> --output out/reports
 
 # Static latency check (requires latency_hint or latency_cycles in modules.yml)
-forge analyze latency-check plugins/<plugin>/designs/design.yml \
-    --contracts-from plugins/<plugin>/modules.yml \
+forge analyze latency-check plugins/<plugin>/forge/designs/design.yml \
+    --contracts-from plugins/<plugin>/forge/modules.yml \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/latency_check.md
 
@@ -126,7 +145,7 @@ forge analyze runtime-latency \
 
 # Result comparison plots (requires plot_config.yml + observed/reference CSVs)
 forge analyze plot-results \
-    --config plugins/<plugin>/verify/plot_config.yml \
+    --config plugins/<plugin>/forge/verify/plot_config.yml \
     --observed out/reports/observed.csv \
     --reference out/reports/reference.csv \
     --output out/reports/plots

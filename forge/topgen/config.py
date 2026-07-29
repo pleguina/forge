@@ -9,6 +9,13 @@ from typing import List, Literal, Optional, Tuple, Dict, Any
 import yaml
 
 
+# Schema-version identity for the two user-authored YAML schemas this
+# module loads (release-plan §2.7) — see forge/core/schema_version.py for
+# the shared compatibility policy these are checked against.
+DESIGN_SCHEMA_VERSION = "1.0"
+MODULE_REGISTRY_SCHEMA_VERSION = "1.0"
+
+
 def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     merged = json.loads(json.dumps(base))
     for key, value in (override or {}).items():
@@ -43,6 +50,10 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
         "name", "kind", "top", "src", "includes", "rtl_lang", "vhdl_library",
         "vhdl_version", "rtl_include_dirs", "verilog_defines", "rtl_packages",
         "cflags", "stages",
+        # Latency annotation fields — recognized pass-through keys, not
+        # identity/equality semantics; converted into a typed ModuleTiming
+        # by _pop_timing() at Module-construction time, not stored flat.
+        "latency_cycles", "latency_hint", "variable_latency",
     }
     result: dict[str, dict] = {}
     for raw_mod in raw.get("modules", []):
@@ -91,6 +102,52 @@ class TestBenchConfig:
     xml_stimulus_path: Optional[str] = None  # Path to XML file (relative to design.yml)
     event_id: int = 1  # Which event to extract from XML
     generate: bool = True  # Whether to generate testbench by default
+
+@dataclass
+class ModuleTiming:
+    """Optional per-module latency/timing metadata from the module
+    registry (modules.yml) or a design-level module entry.
+
+    Absent (``Module.timing is None``) is the default and behaves
+    identically to every existing consumer that predates this field.
+
+    Resolution order used by consumers (forge.analyze.latency_static,
+    the canonical IR): ``latency_cycles`` (explicit, authoritative) >
+    an externally-supplied HLS synthesis report (not modeled here — a
+    runtime overlay, not registry/design data) > ``latency_hint`` (a
+    rough manual estimate) > unknown.
+    """
+    latency_cycles: Optional[int] = None
+    latency_hint: Optional[int] = None
+    variable_latency: bool = False
+
+    def __post_init__(self) -> None:
+        if self.latency_cycles is not None and self.variable_latency:
+            raise ValueError(
+                "ModuleTiming: 'latency_cycles' (a fixed explicit latency) "
+                "and 'variable_latency: true' are contradictory — declare "
+                "only one. (User-facing YAML input should be caught earlier "
+                "by RegistryValidator; this is a defense-in-depth check for "
+                "direct construction.)"
+            )
+
+
+def _pop_timing(raw: dict) -> Optional["ModuleTiming"]:
+    """Pop latency_cycles/latency_hint/variable_latency out of a merged
+    module dict and return a ModuleTiming, or None if none were present —
+    so modules that don't declare timing are completely unaffected."""
+    has_any = any(k in raw for k in ("latency_cycles", "latency_hint", "variable_latency"))
+    lat_cycles = raw.pop("latency_cycles", None)
+    lat_hint = raw.pop("latency_hint", None)
+    variable = raw.pop("variable_latency", False)
+    if not has_any:
+        return None
+    return ModuleTiming(
+        latency_cycles=int(lat_cycles) if lat_cycles is not None else None,
+        latency_hint=int(lat_hint) if lat_hint is not None else None,
+        variable_latency=bool(variable),
+    )
+
 
 @dataclass
 class Module:
@@ -144,6 +201,10 @@ class Module:
     # → canonical ip_key = csp_pack_bx_sync).
     ip_info_key: Optional[str] = None
 
+    # Optional per-module latency/timing metadata (see ModuleTiming) — a
+    # separate typed field, not flattened into identity-field semantics.
+    timing: Optional[ModuleTiming] = None
+
     # Resolved paths (filled by loader)
     abs_src:              List[Path] = field(default_factory=list, init=False)
     abs_tb:               List[Path] = field(default_factory=list, init=False)
@@ -172,11 +233,28 @@ class Connection:
     # A boundary tag requires delay_cycles > 0 or register_stages > 0.
     boundary: Optional[str] = None
 
+    # Declares an approved clock/reset-domain-crossing adapter for this
+    # connection (release-plan §3.2): {"kind": "2ff_sync"|"async_fifo",
+    # "depth": int|None}. Covers both clock- and reset-crossing approval
+    # for the connection — see forge.topgen.ip.cdc.verify_cdc, which is
+    # what actually checks a connection against this declaration.
+    cdc: Optional[Dict[str, Any]] = None
+
 @dataclass
 class InstanceAssign:
-    """Maps a range of producer instances to a consumer partition label."""
+    """Maps a range of producer instances to a consumer coordinate.
+
+    Either the legacy scalar ``partition`` label or the structured
+    ``coordinates`` mapping (or both, if consistent) must be set — see
+    ``forge.topgen.ip.coordinates``.
+    """
     instances: Tuple[int, int]  # [start, end) half-open range
-    partition: str
+    partition: Optional[str] = None
+    coordinates: Optional[Dict[str, Any]] = None
+
+    def coordinate_key(self):
+        from .ip.coordinates import coordinate_key
+        return coordinate_key({"partition": self.partition, "coordinates": self.coordinates})
 
 @dataclass
 class TopologyGroup:
@@ -261,6 +339,22 @@ class DesignConfig:
 
     # Intentionally unconnected ports (glob patterns matched against instance.port).
     allowed_unconnected: AllowedUnconnected = field(default_factory=AllowedUnconnected)
+
+    # Optional schema-version identity (release-plan §2.7). None means the
+    # file doesn't declare one — a fully backward-compatible, silent case,
+    # not an error (see forge/core/schema_version.py). Checked by
+    # DesignValidator.validate_schema_version(), not here.
+    schema_version: Optional[str] = None
+
+    # Optional, purely descriptive domain-relationship declarations
+    # (release-plan §3.2), keyed by the already-resolved net name (e.g.
+    # "ap_clk" — see forge.topgen.ip.domains.resolve_domain_nets). Each
+    # entry: {"derived_from": str|None, "ratio": int|None}. Does NOT
+    # auto-approve crossings between related domains — every crossing
+    # still needs an explicit per-connection `cdc:` declaration; this is
+    # documentation, not an enforcement mechanism.
+    clock_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    reset_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     # ────────────────────────────────────────────────────────
     # Loader (now with validate_sources switch)
@@ -356,6 +450,12 @@ class DesignConfig:
                 # (the instance name in m["name"] may differ from the ip type key)
                 if "ip_info_key" not in m:
                     m["ip_info_key"] = ref
+            # Pop latency fields into a typed ModuleTiming *after* the
+            # ref-merge above, so a design-level inline override of e.g.
+            # latency_hint correctly wins over the registry's value — same
+            # "design-level fields override registry identity" precedence
+            # used for every other field.
+            m["timing"] = _pop_timing(m)
             mod = Module(**m)
             # Default: RTL modules do not run HLS stages unless explicitly set
             if mod.kind == "rtl" and m.get("stages") is None:
@@ -384,6 +484,7 @@ class DesignConfig:
             delay_cycles = c.get("delay_cycles", 0)
             contract_wiring = c.get("contract_wiring", False)
             boundary = c.get("boundary", None)
+            cdc = c.get("cdc", None)
 
             # Validation: a boundary tag without an actual register stage is
             # meaningless — the generator cannot emit a protected crossing delay
@@ -395,6 +496,27 @@ class DesignConfig:
                     "are both zero. A boundary tag must protect an inserted "
                     "register stage."
                 )
+
+            # Validation: cdc: declares an approved clock/reset-domain-
+            # crossing adapter (release-plan §3.2) — see
+            # forge.topgen.ip.cdc.KNOWN_CDC_KINDS.
+            if cdc is not None:
+                if not isinstance(cdc, dict) or "kind" not in cdc:
+                    raise ValueError(
+                        f"Connection {c['from']!r} -> {c.get('to')!r}: 'cdc' must be "
+                        f"a mapping with at least 'kind', got: {cdc!r}"
+                    )
+                if cdc["kind"] not in ("2ff_sync", "async_fifo"):
+                    raise ValueError(
+                        f"Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind "
+                        f"{cdc['kind']!r} must be one of ('2ff_sync', 'async_fifo')"
+                    )
+                depth = cdc.get("depth")
+                if depth is not None and (not isinstance(depth, int) or isinstance(depth, bool) or depth <= 0):
+                    raise ValueError(
+                        f"Connection {c['from']!r} -> {c.get('to')!r}: cdc.depth must "
+                        f"be a positive integer, got: {depth!r}"
+                    )
 
             # Expand fan-out connections (to as list) into individual connections
             to_modules = c["to"] if isinstance(c["to"], list) else [c["to"]]
@@ -409,6 +531,7 @@ class DesignConfig:
                         delay_cycles    = delay_cycles,
                         contract_wiring = contract_wiring,
                         boundary        = boundary,
+                        cdc             = cdc,
                     )
                 )
 
@@ -430,10 +553,17 @@ class DesignConfig:
                 inst_range = ia.get("instances")
                 if not (isinstance(inst_range, list) and len(inst_range) == 2):
                     raise ValueError(f"instance_assign.instances must be [start, end): {ia}")
-                ia_list.append(InstanceAssign(
+                entry = InstanceAssign(
                     instances=(int(inst_range[0]), int(inst_range[1])),
-                    partition=ia["partition"],
-                ))
+                    partition=ia.get("partition"),
+                    coordinates=ia.get("coordinates"),
+                )
+                if entry.coordinate_key() is None:
+                    raise ValueError(
+                        f"instance_assign entry must declare 'partition' or "
+                        f"'coordinates': {ia}"
+                    )
+                ia_list.append(entry)
             raw_rp = tg.get("role_pairs")
             rp: Optional[List[Tuple[str, str]]] = None
             if raw_rp is not None:
@@ -476,6 +606,29 @@ class DesignConfig:
             )
 
         data.pop("bx_counter", None)  # removed; silently ignore if present in YAML
+
+        schema_version = data.pop("schema_version", None)
+
+        def _pop_domain_relationships(top_key: str) -> Dict[str, Dict[str, Any]]:
+            raw = data.pop(top_key, {}) or {}
+            if not isinstance(raw, dict):
+                raise ValueError(f"'{top_key}' must be a mapping keyed by domain (net) name, got: {raw!r}")
+            out: Dict[str, Dict[str, Any]] = {}
+            for domain_name, rel in raw.items():
+                rel = rel or {}
+                if not isinstance(rel, dict):
+                    raise ValueError(f"'{top_key}.{domain_name}' must be a mapping, got: {rel!r}")
+                derived_from = rel.get("derived_from")
+                ratio = rel.get("ratio")
+                if derived_from is not None and not isinstance(derived_from, str):
+                    raise ValueError(f"'{top_key}.{domain_name}.derived_from' must be a string")
+                if ratio is not None and (not isinstance(ratio, int) or isinstance(ratio, bool) or ratio <= 0):
+                    raise ValueError(f"'{top_key}.{domain_name}.ratio' must be a positive integer")
+                out[domain_name] = {"derived_from": derived_from, "ratio": ratio}
+            return out
+
+        clock_domains = _pop_domain_relationships("clock_domains")
+        reset_domains = _pop_domain_relationships("reset_domains")
 
         # ── Testbench Configuration
         raw_tb_config = data.pop("testbench", None)
@@ -522,6 +675,9 @@ class DesignConfig:
             interface_metadata=interface_metadata,
             interface_metadata_file=interface_metadata_file,
             allowed_unconnected=allowed_unconnected,
+            schema_version=schema_version,
+            clock_domains=clock_domains,
+            reset_domains=reset_domains,
             **data
         )
         cfg._source_file = str(yaml_path)

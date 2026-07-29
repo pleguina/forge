@@ -1,7 +1,7 @@
 # Security Policy
 
-FORGE is internal tooling (topology generation, HLS orchestration, and
-verification runtime) used within trigger/DAQ firmware development. It is
+FORGE is a CLI/tooling project (topology generation, HLS orchestration,
+and verification runtime) used in trigger/DAQ firmware development. It is
 not exposed as a public service — most "security" concerns here are about
 trusting inputs (design files, RTL, HLS output) from collaborators, not
 network-facing attack surface.
@@ -10,10 +10,14 @@ network-facing attack surface.
 
 If you find a security-relevant bug (e.g. unsafe deserialization, command
 injection via a design/config file, path traversal in generated artifact
-writing), please report it privately to the repository maintainers rather
-than opening a public GitLab issue, until a fix is available. If you don't
-have a private channel to a maintainer, open a GitLab issue marked
-confidential on this project.
+writing), please report it privately rather than opening a public issue,
+until a fix is available:
+
+- On GitHub, use [private security advisories](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability)
+  (Security tab → "Report a vulnerability") if the repo has them enabled.
+- Otherwise, contact a maintainer listed in `CODEOWNERS` directly.
+
+Don't open a public issue with exploit details before a fix is available.
 
 ## Scope notes
 

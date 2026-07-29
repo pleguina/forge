@@ -17,11 +17,26 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Set
+from typing import Any, Dict, List, Optional, Tuple, Set
 
 import yaml
 from ..config import DesignConfig, Module
 from .topology_deriver import derive_topology_group
+
+
+@dataclass
+class RejectedMatch:
+    """A candidate pairing that was considered and semantically rejected
+    *before* any wire was ever proposed — i.e. no ``ResolvedConnection``
+    exists to hang this evidence on, unlike ``MatchReport.rejected_fanin``
+    (which records losing candidates for a sink pin that *did* get wired
+    to someone else). Release-plan §3.5 "rejected candidates and rejection
+    reasons"."""
+    module_pair: Tuple[str, str]        # (src_module_name, dst_module_name)
+    scope: str                          # 'contract_role' | 'auto_match_group'
+    src_ref: Optional[str] = None       # wiring_kind, or src group base-name
+    dst_ref: Optional[str] = None       # wiring_kind, or dst group base-name (None when nothing on the dst side qualified at all)
+    reason: str = ""
 
 
 @dataclass
@@ -37,6 +52,47 @@ class MatchReport:
     ``warnings``: non-fatal issues (e.g. contract port not found in ip_info).
     ``wiring_method_counts``: per-connection wiring method tally
         (keys: ``contract_wiring``, ``port_map_ranges``, ``port_map``, ``auto_match``).
+    ``connection_evidence``: per-pin-pair wiring method, keyed by
+        ``(src_instance, src_port, dst_instance, dst_port)``. One entry per
+        physical connection actually recorded in the returned ``conn_map``
+        (global-net clock/reset fan-out is not included — it's tracked
+        separately via ``contract_wired_roles``/``compat_mode_modules``).
+        A design-level ``connections:``/``topology_groups:`` entry that
+        expands into several instance pairs and pin pairs attributes the
+        same wiring-method label to every pair it produced — matching the
+        existing per-connection classification in ``wiring_method_counts``,
+        not a finer-grained per-pin classification. This was the first
+        slice of "matching evidence" (canonical-IR audit §7.2 / release-plan
+        §3.5); ``rejected_matches``/``gather_scatter_evidence`` below are a
+        later slice of the same effort.
+    ``rejected_fanin``: sinks for which more than one candidate pin wanted
+        to drive them. Keyed by ``(dst_instance, dst_port)``; the value is
+        the list of ``(src_instance, src_port)`` pairs that lost to the
+        first-match-wins guard (i.e. every candidate *after* the one that
+        was actually wired). Populated by the same first-driver-wins guard
+        that has always silently dropped these — Phase 2.4 (release-plan
+        §2.4) is the first consumer, via
+        ``forge.topgen.ip.contract_verifier.verify_cardinality``.
+    ``rejected_matches``: semantic candidate rejections that never produced
+        any wire at all (so there's no sink pin / ``ResolvedConnection`` to
+        attach ``rejected_fanin``-style evidence to) — an ambiguous
+        ``wiring_kind`` match, a role with no counterpart on the other
+        side, a role-``kind`` mismatch, or an auto-match group with no
+        shape-compatible counterpart. See ``RejectedMatch``. Deliberately
+        does **not** cover geometric slot/offset-alignment mismatches in
+        the instance-replication loops below, nor ``_groupify``'s
+        structural port exclusions (``ap_*``/protocol-suffix/external) —
+        those are positional/structural, not "a candidate that lost a
+        semantic match", and are documented as deferred in
+        ``docs/development/release-readiness.md``.
+    ``gather_scatter_evidence``: per-pin-pair gather/scatter
+        classification for topology-group connections, keyed the same way
+        as ``connection_evidence`` — ``"scatter"`` (one array element
+        targets one specific destination instance) or ``"gather"`` (one
+        scalar source fans into one specific array-element slot). A
+        separate dict (not folded into ``connection_evidence``, whose
+        value type is the wiring-method string) so existing consumers of
+        ``connection_evidence`` are unaffected.
     """
     contract_driven_modules: List[str] = field(default_factory=list)
     compat_mode_modules: List[str] = field(default_factory=list)
@@ -49,6 +105,10 @@ class MatchReport:
         "auto_match": 0,
         "topology_group": 0,
     })
+    connection_evidence: Dict[Tuple[str, str, str, str], str] = field(default_factory=dict)
+    rejected_fanin: Dict[Tuple[str, str], List[Tuple[str, str]]] = field(default_factory=dict)
+    rejected_matches: List[RejectedMatch] = field(default_factory=list)
+    gather_scatter_evidence: Dict[Tuple[str, str, str, str], str] = field(default_factory=dict)
 
     def has_compat_modules(self) -> bool:
         return bool(self.compat_mode_modules)
@@ -268,7 +328,7 @@ def _expand_nd(
 def _derive_from_contracts(
     src_contract: "Any",
     dst_contract: "Any",
-) -> List[Tuple[str, str, None, None]]:
+) -> Tuple[List[Tuple[str, str, None, None]], List[RejectedMatch]]:
     """
     Generate (src_port, dst_port, None, None) pairs for all wiring_kind-matched
     roles between *src_contract* (output roles) and *dst_contract* (input roles).
@@ -278,8 +338,16 @@ def _derive_from_contracts(
     * ``prefix_array``— ``raw_port_prefix`` + ``count``: expands as prefix+index
 
     Only roles that share the same ``wiring_kind`` string are matched.
+
+    Alongside the accepted pairs, returns every ``wiring_kind`` group this
+    function considered and rejected (no counterpart, ambiguous, or a role
+    ``kind`` mismatch) as ``RejectedMatch`` objects — this function has no
+    module-name context, so ``module_pair`` is left ``("", "")``; the
+    caller (which does have the module names) fills it in before recording
+    into ``MatchReport.rejected_matches``.
     """
     pairs: List[Tuple[str, str, None, None]] = []
+    rejections: List[RejectedMatch] = []
 
     # Build per-wiring_kind lists of roles.  We only match wiring_kinds where
     # each side has EXACTLY ONE role — this avoids incorrect cross-matching of
@@ -296,11 +364,29 @@ def _derive_from_contracts(
 
     for sk in src_by_sk:
         if sk not in dst_by_sk:
+            rejections.append(RejectedMatch(
+                module_pair=("", ""),
+                scope="contract_role",
+                src_ref=sk,
+                dst_ref=None,
+                reason=f"no destination role with wiring_kind={sk!r}",
+            ))
             continue
         src_roles = src_by_sk[sk]
         dst_roles = dst_by_sk[sk]
         # Only wire when there's an unambiguous 1-to-1 wiring_kind match.
         if len(src_roles) != 1 or len(dst_roles) != 1:
+            rejections.append(RejectedMatch(
+                module_pair=("", ""),
+                scope="contract_role",
+                src_ref=sk,
+                dst_ref=sk,
+                reason=(
+                    f"ambiguous: {len(src_roles)} src role(s) and "
+                    f"{len(dst_roles)} dst role(s) share wiring_kind={sk!r} "
+                    "— skipped to avoid incorrect cross-matching"
+                ),
+            ))
             continue
         src_role = src_roles[0]
         dst_role = dst_roles[0]
@@ -317,8 +403,19 @@ def _derive_from_contracts(
             pfx_d = dst_role["raw_port_prefix"]
             for i in range(n):
                 pairs.append((f"{pfx_s}{i}", f"{pfx_d}{i}", None, None))
+        else:
+            rejections.append(RejectedMatch(
+                module_pair=("", ""),
+                scope="contract_role",
+                src_ref=sk,
+                dst_ref=sk,
+                reason=(
+                    f"role kind mismatch: src kind={src_role['kind']!r} "
+                    f"vs dst kind={dst_role['kind']!r}"
+                ),
+            ))
 
-    return pairs
+    return pairs, rejections
 
 def auto_match_ports(
     cfg: DesignConfig,
@@ -473,7 +570,7 @@ def auto_match_ports(
             src_grps = _groupify(ip_info[SK]["ports"], src_ext_in, src_ext_out)
             dst_grps = _groupify(ip_info[DK]["ports"], dst_ext_in, dst_ext_out)
 
-            for sg in src_grps.values():
+            for sg_key, sg in src_grps.items():
                 if sg["direction"] != "OUT":  continue
                 if any(n in matched_src for n in sg["names"]):  continue
 
@@ -487,6 +584,18 @@ def auto_match_ports(
                         for i in range(sg["count"]):
                             base_pairs.append((sg["names"][i], dg["names"][i], None, None))
                         break
+                else:
+                    report.rejected_matches.append(RejectedMatch(
+                        module_pair=(S, D),
+                        scope="auto_match_group",
+                        src_ref=sg_key,
+                        dst_ref=None,
+                        reason=(
+                            f"no destination group matched shape "
+                            f"(count={sg['count']}, width={sg['width']}, "
+                            f"type={sg['type']!r})"
+                        ),
+                    ))
 
         # 3b) contract-driven data-path wiring --------------------------------
         # When conn.contract_wiring=True, derive array wiring from contracts.
@@ -506,24 +615,28 @@ def auto_match_ports(
             sc = contracts.get(c_key_s) or contracts.get(S)
             dc = contracts.get(c_key_d) or contracts.get(D)
             if sc and dc:
-                derived = _derive_from_contracts(sc, dc)
+                derived, derive_rejections = _derive_from_contracts(sc, dc)
                 for s_pin, d_pin, _, __ in derived:
                     base_pairs.append((s_pin, d_pin, None, None))
                     matched_src.add(s_pin)
                     matched_dst.add(d_pin)
+                for rej in derive_rejections:
+                    rej.module_pair = (S, D)
+                    report.rejected_matches.append(rej)
 
         # 3) optional hand-shake wiring ---------------------------------------
         proto = cfg.block_protocol.lower()
 
         # ── Classify connection wiring method for reporting ────────────────
         if conn.contract_wiring:
-            report.wiring_method_counts["contract_wiring"] += 1
+            _wiring_method = "contract_wiring"
         elif conn.port_map_ranges:
-            report.wiring_method_counts["port_map_ranges"] += 1
+            _wiring_method = "port_map_ranges"
         elif conn.port_map:
-            report.wiring_method_counts["port_map"] += 1
+            _wiring_method = "port_map"
         else:
-            report.wiring_method_counts["auto_match"] += 1
+            _wiring_method = "auto_match"
+        report.wiring_method_counts[_wiring_method] += 1
         want_src = lambda s: s not in matched_src and \
                              _base_of(s) not in src_ext_in and \
                              _base_of(s) not in src_ext_out
@@ -600,10 +713,12 @@ def auto_match_ports(
                     # first-driver-wins guard (per destination *instance* pin)
                     sink_key = (dst_i, d_pin)
                     if sink_key in used_sinks:
+                        report.rejected_fanin.setdefault(sink_key, []).append((src_i, s_pin))
                         continue
                     used_sinks.add(sink_key)
 
                     lst.append((s_pin, d_pin))
+                    report.connection_evidence[(src_i, s_pin, dst_i, d_pin)] = _wiring_method
 
     # ─────────────────────────────────────────────────────────────────────────
     # Topology group wiring
@@ -664,10 +779,15 @@ def auto_match_ports(
 
                     sink_key = (dst_i, d_pin)
                     if sink_key in used_sinks:
+                        report.rejected_fanin.setdefault(sink_key, []).append((src_i, s_pin))
                         continue
                     used_sinks.add(sink_key)
 
                     lst.append((s_pin, d_pin))
+                    key = (src_i, s_pin, dst_i, d_pin)
+                    report.connection_evidence[key] = "topology_group"
+                    if meta and meta.get("kind") in ("scatter", "gather"):
+                        report.gather_scatter_evidence[key] = meta["kind"]
 
     # ─────────────────────────────────────────────────────────────────────────
     # Global nets (clk / rst)
@@ -681,13 +801,35 @@ def auto_match_ports(
     #   names (ap_clk, clk, …).  A compatibility warning is emitted.
     # ─────────────────────────────────────────────────────────────────────────
 
+    _missing_ip_info_warned: set[str] = set()
+
+    def _mod_port_dicts(m: Module) -> List[_Port]:
+        """Raw port-dict list for *m* from ip_info, or ``[]`` (with a
+        one-time warning) if the module's ip_info entry is unresolved (e.g.
+        missing HLS build artifacts). Never raises — global-net wiring for
+        an unresolved module is simply skipped instead of crashing."""
+        key = _ip_key(m.name)
+        entry = ip_info.get(key)
+        if entry is None:
+            if m.name not in _missing_ip_info_warned:
+                _missing_ip_info_warned.add(m.name)
+                report.warnings.append(
+                    f"[{m.name}] no ip_info entry (ip_info key {key!r}) — "
+                    "skipped for global-net (clock/reset/control-signal) wiring"
+                )
+            return []
+        return entry["ports"]
+
+    def _mod_ports(m: Module) -> Set[str]:
+        return {p["name"] for p in _mod_port_dicts(m)}
+
     def _collect_heuristic(sig: str) -> None:
         """Heuristic scanner: add all module-instances that expose port *sig*."""
         binds: List[Tuple[str, str]] = []
         for m in cfg.modules:
             if sig in m.external_in_ports or sig in m.external_out_ports:
                 continue
-            if sig in {p["name"] for p in ip_info[_ip_key(m.name)]["ports"]}:
+            if sig in _mod_ports(m):
                 for i in range(m.instances):
                     binds.append((_inst(m, i), sig))
         if binds:
@@ -713,7 +855,7 @@ def auto_match_ports(
             # ip_info lookup uses _ip_key (instance name preferred, then ref).
             _contract_key = m.ip_info_key or m.name
             contract = contracts.get(_contract_key)
-            mod_ports = {p["name"] for p in ip_info[_ip_key(m.name)]["ports"]}
+            mod_ports = _mod_ports(m)
 
             if contract is None:
                 # No contract → compatibility mode
@@ -761,7 +903,7 @@ def auto_match_ports(
         _RESET_NAMES = ("ap_rst", "rst", "reset", "rst_n")
 
         for m in modules_needing_compat_clock:
-            mod_ports_set = {p["name"] for p in ip_info[_ip_key(m.name)]["ports"]}
+            mod_ports_set = _mod_ports(m)
             for sig in _CLOCK_NAMES:
                 if sig in mod_ports_set and sig not in m.external_in_ports and sig not in m.external_out_ports:
                     for i in range(m.instances):
@@ -769,7 +911,7 @@ def auto_match_ports(
                     break  # first match wins per module
 
         for m in modules_needing_compat_reset:
-            mod_ports_set = {p["name"] for p in ip_info[_ip_key(m.name)]["ports"]}
+            mod_ports_set = _mod_ports(m)
             for sig in _RESET_NAMES:
                 if sig in mod_ports_set and sig not in m.external_in_ports and sig not in m.external_out_ports:
                     for i in range(m.instances):
@@ -801,7 +943,7 @@ def auto_match_ports(
         has_internal_source = any(
             sig_name in {
                 p["name"]
-                for p in ip_info[_ip_key(m.name)]["ports"]
+                for p in _mod_port_dicts(m)
                 if str(p.get("direction", "")).upper() in ("OUT", "OUTPUT", "INOUT")
             }
             for m in cfg.modules

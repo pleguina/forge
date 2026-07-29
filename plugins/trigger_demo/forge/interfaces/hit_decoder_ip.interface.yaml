@@ -5,6 +5,7 @@
 # Policy: framework/IP_INTERFACE_POLICY.md
 
 ip_interface:
+  schema_version: "1.0"
   module_name: hit_decoder
   ip_info_key: dec
   source_type: hls
@@ -33,6 +34,7 @@ ip_interface:
       direction: input
       width: 32
       wiring_kind: raw_detector_hit
+      protocol: valid-only
       notes: "Packed detector hit from frontend"
 
     raw_valid:
@@ -40,6 +42,7 @@ ip_interface:
       direction: input
       width: 1
       wiring_kind: raw_hit_valid
+      protocol: valid-only
       notes: "Hit valid strobe"
 
     decoded_hit:
@@ -47,6 +50,7 @@ ip_interface:
       direction: output
       width: 32
       wiring_kind: decoded_hit
+      protocol: valid-only
       notes: "Calibrated hit {phi+1, eta}"
 
     decoded_valid:
@@ -54,4 +58,5 @@ ip_interface:
       direction: output
       width: 1
       wiring_kind: decoded_valid
+      protocol: valid-only
       notes: "Decoded hit valid"

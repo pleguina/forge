@@ -34,10 +34,26 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from .coordinates import coordinate_key, coordinate_label
+from .cardinality import CardinalityError, parse_cardinality
+from .contract_loader import INTERFACE_CONTRACT_SCHEMA_VERSION
+from forge.core.schema_version import check_schema_version
+
 _CANONICAL_ROLES_FILE = Path(__file__).parent / "canonical_roles.yaml"
 
 # Roles that are unconditionally required on every IP.
 _ALWAYS_REQUIRED = {"clock_primary", "reset_primary"}
+
+# Documented built-in protocol values a role may declare (release-plan
+# §2.2 / Phase 2.2 — docs/development/release-readiness.md). Optional;
+# absent means unspecified, not a validation failure.
+KNOWN_PROTOCOLS = frozenset({"combinational", "valid-only", "ready-valid", "fixed-frame"})
+
+# Recognized interface-member names (release-plan §2.5). A role opts into
+# member grouping by declaring both `interface:` (the shared group name)
+# and `member:` (its role within that group). See
+# docs/IP_INTERFACE_POLICY.md "Interface members".
+KNOWN_MEMBERS = frozenset({"data", "valid", "ready", "last", "metadata"})
 
 
 @dataclass
@@ -92,6 +108,19 @@ class VerifyResult:
             print("    (no issues)")
 
 
+def load_canonical_role_vocab() -> Dict[str, Any]:
+    """Load the ``roles:`` vocabulary from ``canonical_roles.yaml``.
+
+    Shared by ``ContractVerifier`` and ``forge.ir.build`` (the canonical IR
+    builder) so reserved-role status (e.g. ``clock_secondary``) is looked up
+    from one place.
+    """
+    if _CANONICAL_ROLES_FILE.exists():
+        raw = yaml.safe_load(_CANONICAL_ROLES_FILE.read_text()) or {}
+        return raw.get("roles", {})
+    return {}
+
+
 class ContractVerifier:
     """Verify one ip_interface.yaml contract against ip_info.yaml raw port metadata."""
 
@@ -101,10 +130,7 @@ class ContractVerifier:
 
         self._ip_info: Dict[str, Any] = yaml.safe_load(self.ip_info_path.read_text()) or {}
         self._contract: Dict[str, Any] = yaml.safe_load(self.contract_path.read_text()) or {}
-        self._vocab: Dict[str, Any] = {}
-        if _CANONICAL_ROLES_FILE.exists():
-            raw = yaml.safe_load(_CANONICAL_ROLES_FILE.read_text()) or {}
-            self._vocab = raw.get("roles", {})
+        self._vocab: Dict[str, Any] = load_canonical_role_vocab()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Public API
@@ -129,6 +155,11 @@ class ContractVerifier:
             result.issues.append(ContractIssue("warning", role, msg))
 
         # ── Structural checks ────────────────────────────────────────────────
+
+        for issue in check_schema_version(
+            spec.get("schema_version"), INTERFACE_CONTRACT_SCHEMA_VERSION, schema_name="interface contract",
+        ):
+            (err if issue.severity == "error" else warn)("(meta)", issue.message)
 
         if not ip_key:
             err("(meta)", "Missing 'ip_info_key' in contract")
@@ -177,6 +208,68 @@ class ContractVerifier:
                 self._check_array_role(role_name, role_spec, raw_ports, err, warn)
             else:
                 self._check_scalar_role(role_name, role_spec, raw_ports, err, warn)
+
+            canonical = self._vocab.get(role_name)
+            if canonical and canonical.get("status") == "reserved":
+                warn(
+                    role_name,
+                    f"role '{role_name}' is RESERVED — declared for a future "
+                    "release and has no functional effect in this version of "
+                    "FORGE (no clock-domain model, no CDC validation, no "
+                    "special wiring). See docs/IP_INTERFACE_POLICY.md "
+                    "\"Reserved roles\".",
+                )
+
+            protocol = role_spec.get("protocol")
+            if protocol is not None and protocol not in KNOWN_PROTOCOLS:
+                err(
+                    role_name,
+                    f"role '{role_name}' declares unknown protocol {protocol!r} "
+                    f"— must be one of {sorted(KNOWN_PROTOCOLS)}. See "
+                    "docs/IP_INTERFACE_POLICY.md \"Protocol semantics\".",
+                )
+
+            member = role_spec.get("member")
+            group = role_spec.get("interface")
+            if member is not None and group is None:
+                warn(
+                    role_name,
+                    f"role '{role_name}' declares 'member: {member}' without "
+                    "'interface:' — it has no grouping effect on its own. See "
+                    "docs/IP_INTERFACE_POLICY.md \"Interface members\".",
+                )
+            if member is not None and member not in KNOWN_MEMBERS:
+                err(
+                    role_name,
+                    f"role '{role_name}' declares unknown member {member!r} "
+                    f"— must be one of {sorted(KNOWN_MEMBERS)}. See "
+                    "docs/IP_INTERFACE_POLICY.md \"Interface members\".",
+                )
+
+            try:
+                parse_cardinality(role_spec, direction=role_spec.get("direction", ""))
+            except CardinalityError as exc:
+                err(role_name, f"role '{role_name}' has an invalid cardinality declaration: {exc}")
+
+        # ── Interface-member group checks ───────────────────────────────────
+
+        groups: Dict[str, Dict[str, List[str]]] = {}
+        for role_name, role_spec in roles_in_spec.items():
+            group = role_spec.get("interface")
+            if group is None:
+                continue
+            member = role_spec.get("member", role_name)
+            groups.setdefault(group, {}).setdefault(member, []).append(role_name)
+
+        for group, members in groups.items():
+            for member, role_names in members.items():
+                if len(role_names) > 1:
+                    err(
+                        role_names[0],
+                        f"interface group '{group}' declares member '{member}' "
+                        f"more than once: {sorted(role_names)}. See "
+                        "docs/IP_INTERFACE_POLICY.md \"Interface members\".",
+                    )
 
         return result
 
@@ -507,7 +600,20 @@ def verify_topology_groups(
             wk_filter = tg.wiring_kind
             if wk_filter:
                 dst_roles = [r for r in dst_roles if r.get("wiring_kind") == wk_filter]
-            dst_partitions = {r.get("partition") for r in dst_roles if r.get("partition")}
+
+            dst_coord_keys: set = set()
+            seen_coord_labels: Dict[Any, str] = {}
+            for r in dst_roles:
+                ck = coordinate_key(r)
+                if ck is None:
+                    continue
+                if ck in seen_coord_labels:
+                    err(gn, f"duplicate coordinate '{coordinate_label(ck)}' "
+                            f"declared by consumer roles '{seen_coord_labels[ck]}' "
+                            f"and '{r['role_name']}'")
+                else:
+                    seen_coord_labels[ck] = r["role_name"]
+                dst_coord_keys.add(ck)
 
             for ia in tg.instance_assign:
                 start, end = ia.instances
@@ -522,9 +628,11 @@ def verify_topology_groups(
                 seen_ranges.append((start, end))
                 total_assigned += end - start
 
-                if ia.partition not in dst_partitions:
-                    err(gn, f"partition '{ia.partition}' not found in consumer contract "
-                            f"(available: {sorted(dst_partitions)})")
+                ia_coord = ia.coordinate_key()
+                if ia_coord not in dst_coord_keys:
+                    err(gn, f"coordinate '{coordinate_label(ia_coord)}' not found in "
+                            f"consumer contract (available: "
+                            f"{sorted(coordinate_label(k) for k in dst_coord_keys)})")
 
             if total_assigned != src_mod.instances:
                 warn(gn, f"instance_assign covers {total_assigned} instances "

@@ -1,7 +1,11 @@
 """forge.analyze.latency_static.graph
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Build a directed latency graph from design.yml + modules.yml + optional HLS
-synthesis reports.
+Build a directed latency graph from the canonical resolved design IR
+(migration step 7 — docs/development/release-readiness.md), falling back
+to an independent design.yml/modules.yml re-parse only for the narrow,
+undocumented case of a `modules_yml_path` override that genuinely differs
+from design.yml's own `registry:` field (never observed in real/documented
+usage, but the parameter's public contract allows it).
 
 Each node represents a named module group (one or more instances); its
 ``latency_cycles`` is the number of clock cycles from valid-in to valid-out
@@ -14,7 +18,9 @@ Latency resolution order
 3. ``latency_hint`` field in modules.yml entry (rough manual estimate)
 4. ``None`` — unknown; reported as a warning in the checker
 
-Edges are inferred from ``connections`` and ``topology_groups`` in design.yml.
+Edges are inferred from ``connections`` and ``topology_groups`` in design.yml
+(via the IR's resolved connections in the primary path; via a raw re-parse
+in the fallback path).
 """
 from __future__ import annotations
 
@@ -86,6 +92,24 @@ def _load_registry(design: dict, design_path: Path) -> dict:
     return {}
 
 
+def _resolve_latency(
+    latency_cycles: Optional[int],
+    latency_hint: Optional[int],
+    ref_name: str,
+    hls_reports: Optional[Dict[str, int]],
+) -> Tuple[Optional[int], str]:
+    """Shared explicit > hls_report > hint > unknown precedence — used by
+    both the IR-driven path and the legacy raw-YAML fallback, so the rule
+    is defined in exactly one place."""
+    if latency_cycles is not None:
+        return latency_cycles, "explicit"
+    if hls_reports and ref_name in hls_reports:
+        return hls_reports[ref_name], "hls_report"
+    if latency_hint is not None:
+        return latency_hint, "hint"
+    return None, "unknown"
+
+
 def _build_latency_map(
     registry: dict,
     hls_reports: Optional[Dict[str, int]],
@@ -94,15 +118,21 @@ def _build_latency_map(
     result: Dict[str, Tuple[Optional[int], str]] = {}
     for entry in registry.get("modules", []):
         name = entry.get("name", "")
-        if "latency_cycles" in entry:
-            result[name] = (int(entry["latency_cycles"]), "explicit")
-        elif hls_reports and name in hls_reports:
-            result[name] = (hls_reports[name], "hls_report")
-        elif "latency_hint" in entry:
-            result[name] = (int(entry["latency_hint"]), "hint")
-        else:
-            result[name] = (None, "unknown")
+        lat_cycles = int(entry["latency_cycles"]) if "latency_cycles" in entry else None
+        lat_hint = int(entry["latency_hint"]) if "latency_hint" in entry else None
+        result[name] = _resolve_latency(lat_cycles, lat_hint, name, hls_reports)
     return result
+
+
+def _resolved_registry_path(design_path: Path) -> Optional[Path]:
+    """The registry path design.yml's own `registry:` field resolves to,
+    or None if it doesn't declare one — used to decide whether a caller's
+    `modules_yml_path` override is genuinely different (see build_graph)."""
+    design = _load_yaml(design_path)
+    reg_field = design.get("registry")
+    if not reg_field:
+        return None
+    return (design_path.parent / reg_field).resolve()
 
 
 # ---------------------------------------------------------------------------
@@ -122,11 +152,100 @@ def build_graph(
         Path to the plugin's ``design.yml``.
     modules_yml_path:
         Optional explicit override for the modules registry.  If not given,
-        the ``registry:`` field inside ``design.yml`` is used.
+        the ``registry:`` field inside ``design.yml`` is used. When given
+        and it resolves to the *same* file design.yml's own ``registry:``
+        field already points to (the documented, real-world usage), the IR-
+        driven path is used. When it resolves to a genuinely different
+        file, this falls back to an independent raw-YAML re-parse — a
+        narrow compatibility path for an override never observed in real
+        usage, not the primary implementation.
     hls_reports:
         Optional mapping ``{module_name: worst_case_latency_cycles}`` produced
         by :func:`forge.analyze.hls_reports.extractor.latency_map_from_reports`.
     """
+    design_path = Path(design_path).resolve()
+    modules_yml_path = Path(modules_yml_path).resolve() if modules_yml_path is not None else None
+
+    own_registry_path = _resolved_registry_path(design_path)
+    override_differs = (
+        modules_yml_path is not None
+        and modules_yml_path != own_registry_path
+    )
+
+    if override_differs:
+        return _build_graph_legacy(design_path, modules_yml_path, hls_reports)
+    return _build_graph_from_ir(design_path, hls_reports)
+
+
+def _build_graph_from_ir(
+    design_path: Path,
+    hls_reports: Optional[Dict[str, int]] = None,
+) -> LatencyGraph:
+    """Migration step 7: build the LatencyGraph from ``DesignConfig`` — the
+    same shared loader the canonical IR itself is built from
+    (``forge.topgen.config``) — instead of independently re-parsing
+    design.yml/modules.yml as raw YAML.
+
+    Deliberately stops at ``DesignConfig``/``Module`` rather than going
+    through the full matched IR (``forge.ir.build_project_ir``): latency
+    analysis only ever needed module-level topology (name/kind/instances/
+    timing, and module-to-module connectivity) — it never needed IP/port-
+    level physical matching, and forcing it through the full IR would
+    require ``ip_info``/contracts to resolve successfully, breaking the
+    tool's existing "usable before synthesis" property (a design.yml can be
+    latency-checked long before any IP is built or contract is written).
+    ``Connection``/``TopologyGroup`` already carry singular, fan-out-
+    expanded ``from_``/``to`` module names, so no port matching is needed
+    to build module-to-module edges either.
+    """
+    from forge.topgen.config import DesignConfig
+
+    cfg = DesignConfig.load_relaxed(design_path)
+
+    nodes: Dict[str, LatencyNode] = {}
+    for mod in cfg.modules:
+        ref = mod.ip_info_key or mod.name
+        timing = mod.timing
+        lat_cycles = timing.latency_cycles if timing else None
+        lat_hint = timing.latency_hint if timing else None
+        is_var = timing.variable_latency if timing else False
+        lat, src = _resolve_latency(lat_cycles, lat_hint, ref, hls_reports)
+        nodes[mod.name] = LatencyNode(
+            name=mod.name,
+            ref=ref,
+            instances=mod.instances,
+            kind=mod.kind,
+            latency_cycles=lat,
+            latency_source=src,
+            is_variable=is_var,
+        )
+
+    edges: List[LatencyEdge] = []
+    seen_pairs: set = set()
+
+    def _add_edge(src: str, dst: str) -> None:
+        if src in nodes and dst in nodes and (src, dst) not in seen_pairs:
+            seen_pairs.add((src, dst))
+            edges.append(LatencyEdge(src=src, dst=dst))
+
+    for conn in cfg.connections:
+        _add_edge(conn.from_, conn.to)
+    for tg in cfg.topology_groups:
+        _add_edge(tg.from_, tg.to)
+
+    return LatencyGraph(nodes=nodes, edges=edges)
+
+
+def _build_graph_legacy(
+    design_path: Path,
+    modules_yml_path: Optional[Path] = None,
+    hls_reports: Optional[Dict[str, int]] = None,
+) -> LatencyGraph:
+    """Pre-migration implementation: independently re-parses design.yml/
+    modules.yml as raw YAML. Kept only as a compatibility fallback for a
+    `modules_yml_path` override that genuinely differs from design.yml's
+    own `registry:` field — never observed in real/documented usage, but
+    the public `build_graph` signature has always allowed it."""
     design = _load_yaml(design_path)
 
     if modules_yml_path is not None:

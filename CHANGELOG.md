@@ -7,7 +7,72 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Changed
+- **Open-source policy**: `CONTRIBUTING.md` previously stated this is
+  "private CMS/OMTF-internal tooling, not a general-purpose public
+  release" as the explicit reason git-install (not PyPI) is the
+  permanent distribution story. That framing is now retired — FORGE
+  originated as CMS/OMTF trigger/DAQ firmware tooling at CERN but is
+  released as a general-purpose, detector-agnostic open-source project
+  (MIT-licensed; copyright remains the individual author's, per
+  `LICENSE`). The git-install-not-PyPI decision itself is unchanged
+  (still just the `forge` name collision on public PyPI), just no
+  longer framed as evidence of staying private. Added `CODE_OF_CONDUCT.md`
+  (Contributor Covenant v2.1) and `.github/` issue/PR templates.
+  Updated `SECURITY.md`'s reporting channel from "confidential GitLab
+  issue" to GitHub private security advisories. `README.md`,
+  `CONTRIBUTING.md`, and `forge/pyproject.toml`'s `[project.urls]` now
+  point at a placeholder `github.com/<org>/forge` pending an actual
+  migration decision — the CERN GitLab origin remains authoritative
+  until that lands; `ci/plugin-consumer.yml`'s real install source was
+  deliberately left untouched since it's live CI configuration, not
+  policy documentation.
+
 ### Added
+- `forge topgen init-plugin <plugin_id>`: scaffolds the topgen side of a
+  new plugin (`forge/modules.yml`, `forge/designs/design.yml`,
+  `forge/interfaces/<plugin_id>.interface.yaml`, and an
+  `algo/rtl/<plugin_id>.v` RTL stub) — previously only `forge verify
+  init-plugin` existed, scaffolding the verify/ half; there was nothing
+  for topology generation, so a new user hand-authored 4+ files from
+  scratch. `plugin_id` is used as both the module `ref` and the
+  design.yml instance name, so `ip_info_key` trivially matches the
+  design instance name from the start — sidesteps the exact mismatch bug
+  found and fixed in `passthrough_demo`'s own contract (see below).
+  `forge topgen gen-top` succeeds against the freshly scaffolded files
+  immediately, with zero hand-editing — proven end to end by
+  `tests/test_topgen_init_plugin.py`. Supports `--dry-run`.
+  `docs/MINIMAL_CONSUMER_QUICKSTART.md`'s checklist step 1 now points here.
+- `--dry-run` for `forge topgen gen-top`. It previously only existed on
+  `topgen clean` (which deletes files) — backwards from what most users
+  want, since `gen-top` is the command that writes/overwrites 6-8
+  generated files. Runs validation, IP-info resolution, and port
+  matching (the real, useful signal — warnings, strict-mode failures,
+  wiring method counts) and prints the full list of paths that would be
+  written, without calling any generator. One documented exception:
+  `ip_info.yaml`, if missing, is still generated even in `--dry-run`,
+  since it's a required input to compute the port-matching preview, not
+  a `--dry-run`-skippable output — called out explicitly in the command's
+  own output when it happens.
+- `--json` for `forge topgen validate` and `forge topgen validate-registry`.
+  Previously only `verify doctor`/`verify release-check` supported
+  machine-readable output; every other command was human-text-only, so
+  nothing outside the framework's own GitLab CI could consume validation
+  results programmatically. Serializes the existing `ValidationError`
+  dataclasses (`forge/topgen/validation.py`) directly — no new report
+  type needed.
+- `forge doctor`: a new top-level command (sibling to `core`/`topgen`/
+  `hls`/`verify`/`analyze`/`framework`, not nested under any group) that
+  checks whether the local `forge` install/environment is sane —
+  `forge` version, Python version, `xvlog`/`xelab`/`xsim`/`ghdl`/
+  `verilator` on `PATH`, `pyverilog`/`matplotlib`/`numpy`/`networkx`
+  importability, and the same framework resource paths as `forge core
+  resources`. Previously `forge verify doctor` was the only "doctor"-
+  shaped command, but it checks one plugin's flow artifacts against a
+  specific design — nothing answered "is my `forge` install sane" before
+  a user hit a failure deep inside whatever command needed a missing
+  tool. Every check is an optional extra today, so exit code is always 0
+  unless `--strict` is passed. Supports `--json`.
 - `ci/stale_reference_check.sh` (`forge:stale-reference-check` in CI): a
   standing guard against the exact class of bug this branch kept
   rediscovering by hand — a CLI hint, docstring, or generated-artifact
@@ -17,10 +82,92 @@ for the versioning policy.
   modules: `forge/core/stale_detection.py`, `forge/verify/stimulus_contract.py`,
   `forge/verify/manifest_compile.py`. Raised the coverage floor from 22%
   to 26% to match (measured: 27.09%).
-- (Confirmed dead code, not covered: `forge/topgen/validators.py` and
-  `forge/hls/parse_hls_logs.py` are never imported anywhere in the
-  codebase. Left alone rather than either testing unreachable code or
-  deleting it outside the scope of this pass — worth a follow-up.)
+- `tests/test_cli_help_consistency.py`: a regression guard that walks the
+- `ci/stale_reference_check.sh` (`forge:stale-reference-check` in CI): a
+  standing guard against the exact class of bug this branch kept
+  rediscovering by hand — a CLI hint, docstring, or generated-artifact
+  default quietly referencing `fw_verify`, bare `topgen`, or
+  `framework/verify/python` after they stopped existing.
+- Real test coverage for three previously-0%-covered, actually-used
+  modules: `forge/core/stale_detection.py`, `forge/verify/stimulus_contract.py`,
+  `forge/verify/manifest_compile.py`. Raised the coverage floor from 22%
+  to 26% to match (measured: 27.09%).
+- `tests/test_cli_help_consistency.py`: a regression guard that walks the
+  *live* argparse tree (`forge.core.cli.main.build_parser()`) and
+  cross-checks it against the hand-written `--help` epilog/hint text —
+  every documented group, subcommand, and flag in the top-level epilog is
+  verified to actually exist, and every registered command's `--help`
+  is exercised end-to-end. `stale_reference_check.sh` only greps for
+  known-dead patterns; this catches the class of drift it can't (a new
+  group or renamed flag silently missing from the hints). Immediately
+  caught the `framework` group missing from the top-level epilog and
+  `--group` help text, and one epilog example using a flag
+  (`forge verify run ... --plugin`) — the drift class this test exists
+  to prevent — see Fixed.
+- `tests/test_topgen_cli_commands.py` and
+  `tests/verify/test_verify_cli_commands.py`: real, in-process coverage
+  for `core/cli/groups/topgen.py` (13% → 56%) and `forge/verify/__main__.py`
+  (15% → 39%), driving the actual CLI entry points against
+  `plugins/passthrough_demo` instead of only being exercised indirectly
+  through integration scripts. Raised the coverage floor from 26% to 34%
+  to match (measured: 34.73% in a from-scratch sandbox venv — the
+  pre-existing 27.09% claim above didn't reproduce there either,
+  measuring 13.4% before this change; some fixture or environment
+  difference from whatever produced that number, worth tracking down
+  separately). In-process rather than subprocess: a
+  subprocess child interpreter's line execution is invisible to
+  `--cov=forge` running in the parent pytest process, so the existing
+  subprocess-based CLI tests (e.g. `test_topgen_cli_error_handling.py`)
+  never actually counted towards coverage despite exercising real code.
+- `tests/verify/test_verify_run_xsim.py` (marked `integration`, skipped
+  automatically when xvlog/xelab/xsim aren't on `PATH`): the follow-up to
+  the above that actually exercises `_cmd_run`/`_cmd_generate`/
+  `_cmd_prepare` — the simulation-execution bodies the CLI-level tests
+  deliberately left untested. Copies `plugins/passthrough_demo` into an
+  isolated `tmp_path` "consumer root" (nothing tracked in git is ever
+  touched), runs the real, documented pipeline
+  (`topgen gen-top` → `verify generate` → `verify run`) against it, and
+  drives an actual `xvlog` → `xelab` → `xsim` simulation to completion —
+  plus one negative case (delete the gen-top'd RTL, confirm `run` fails
+  at preflight instead of reporting a false pass). Pushed
+  `forge/verify/__main__.py` 39% → 66%, and pulled in real first-time
+  coverage on the backend modules it drives:
+  `verify/backend_xsim.py` (0% → 60%), `verify/gen_sim.py` (0% → 71%),
+  `verify/preflight.py` (0% → 80%), `verify/subprocess_wrapper.py`
+  (0% → 75%). Raised the coverage floor from 34% to 40% to match
+  (measured: 40.77%).
+- `tests/test_core_utils_common.py`, `tests/test_core_constants_and_exceptions.py`,
+  `tests/verify/test_port_parser.py`: first-time coverage for four small,
+  previously-0%-covered pure-function modules —
+  `forge/core/utils/common.py`, `forge/core/constants.py`,
+  `forge/core/exceptions.py`, `forge/verify/port_parser.py` (a documented
+  backward-compat shim over `rtl_introspection`, not dead code — kept for
+  external plugin callers that haven't migrated their imports). All four
+  now 100%. Includes a direct regression test for the
+  `forge.core.core.exceptions` import-path bug fixed above:
+  `load_yaml_safe()` on a missing/invalid file now raises the intended
+  typed exception instead of `ModuleNotFoundError`. Raised the coverage
+  floor from 40% to 41% to match (measured: ~42%).
+- `tests/test_core_cli_group.py`, `tests/test_framework_cli_group.py`,
+  `tests/test_hls_cli_group.py`, `tests/test_analyze_cli_group.py`: same
+  in-process CLI-driving recipe applied to the remaining four `forge`
+  command groups (`core`/`framework`/`hls`/`analyze`), which had only
+  ever gotten this treatment for `topgen`/`verify` so far:
+  `core/cli/groups/core.py` 24% → 80%, `framework.py` 22% → 77%,
+  `analyze.py` 22% → 71%, `hls.py` 12% → 40% (lower because `hls run`'s
+  actual parallel Vitis HLS job-orchestration body is real synthesis —
+  out of scope here, only its argument-validation/error paths are
+  covered; `hls gen-tcl` is pure Jinja templating and is driven for real
+  against `plugins/trigger_demo`'s HLS module registry).
+  `analyze plot-results` is skipped (needs `matplotlib`, not installed).
+  Raised the coverage floor from 41% to 47% to match (measured: 48.01%).
+### Removed
+- `forge/topgen/validators.py`: dead, superseded duplicate of
+  `forge/topgen/validation.py` (`DesignValidator`), which is the version
+  actually wired into the CLI. Never imported anywhere.
+- `forge/hls/parse_hls_logs.py`: dead standalone script duplicating log
+  parsing already done by `forge/core/cli/groups/hls.py`. Not a registered
+  entry point, not imported anywhere.
 
 ### Changed
 - Closed the open PyPI-vs-git-install question from the `2.0.0` release
@@ -32,6 +179,56 @@ for the versioning policy.
   fixes (implicit-`Optional` defaults, a stray `any`/`Any` typo, missing
   container annotations) plus two genuinely real latent bugs found along
   the way — see Fixed.
+- Further reduced the baseline: deleting the two dead modules (see
+  Removed) and the `structural_verilog.py` variable-collision fix (see
+  Fixed) together account for ~16 fewer errors under
+  `mypy forge/core forge/topgen forge/hls forge/verify forge/framework
+  forge/analyze`. (Note: the exact error count is sensitive to the mypy
+  version — this repo's pinned mypy no longer supports the
+  `python_version = "3.8"` configured in `pyproject.toml`'s `[tool.mypy]`
+  and silently ignores it; pinning a version that still supports it, or
+  bumping the config to 3.9+, would be worth doing so the count is
+  reproducible across environments.)
+
+### Fixed
+- `docs/MINIMAL_CONSUMER_QUICKSTART.md` — the doc's own header calls it
+  "the canonical onboarding entry point" — had every single
+  `plugins/<plugin>/...` path (checklist, authored/generated artifact
+  lists, and every command example) missing the `forge/` capsule
+  directory introduced by the `arc/` → `forge/` rename in `2.0.0`
+  (see `MIGRATION.md`). `docs/PLUGIN_AUTHOR_GUIDE.md` and both real
+  example plugins (`passthrough_demo`, `trigger_demo`) already use the
+  `forge/` capsule layout; this file was never updated after the rename
+  commit (`af18bff`) that introduced it, so a new user following it
+  verbatim would create files in the wrong place and every documented
+  command would fail to find them. Found by cold-dry-running the
+  quickstart end to end against `plugins/passthrough_demo`. Build-
+  artifact paths (`ip_info.yaml`, `build_hls_<plugin>/`, `out/...`),
+  which are correctly consumer-root-relative rather than
+  capsule-relative, were left alone.
+- `plugins/passthrough_demo/forge/interfaces/passthrough.interface.yaml`
+  was missing `ip_info_key`, a required field per the contract schema
+  documented in `PLUGIN_AUTHOR_GUIDE.md` and enforced by
+  `ContractVerifier`. Running the quickstart's own documented
+  `forge core verify-contract` command against this plugin's real,
+  checked-in contract failed with "Missing 'ip_info_key' in contract" —
+  found in the same dry run. Added `ip_info_key: pt`, matching the
+  `ip_info.yaml` key the RTL compat-mode scan actually produces for this
+  design (the design.yml instance name, not the module's `ref:` name).
+- `forge core resources` was a documented public command
+  (`docs/SUPPORT_CLASSIFICATION.md`, `docs/FRAMEWORK_TOOLING_INTERFACE.md`
+  both list it under "Public framework API") whose implementation was a
+  permanent stub — `resources: dict[str, str] = {}`, hardcoded empty
+  since the file was created — so it always printed nothing regardless
+  of `--key`/`--format json`. Now resolves four real framework resource
+  paths (`hls_templates`, `canonical_roles`,
+  `normalized_signal_families`, `docs_root`) and reports whether each
+  actually exists. The resolution logic
+  (`resolve_framework_resources()` in `core/cli/groups/core.py`) is
+  shared with the new `forge doctor` command below.
+- Raised the coverage floor from 41% to 49% to match the CLI/UX work
+  above (measured: 49.39%) — all five items are covered by new
+  in-process CLI tests following this session's established pattern.
 
 ### Fixed
 - `forge/verify/rtl_introspection.py`'s `write_port_signature()` was
@@ -53,6 +250,38 @@ for the versioning policy.
   `"generated_by"` provenance string written into every generated
   `port_signature.json`), `forge/topgen/generators/sv_testbench_generator.py`,
   and `forge/verify/preflight.py`.
+- `forge --help`'s epilog "Groups:" list and the `--group` help string
+  both omitted the `framework` group, even though it's fully registered
+  and functional (`forge framework import/io-resolve/emit`); one epilog
+  example (`forge verify run ... --plugin`) used a flag that only exists
+  once `forge verify run` delegates to `forge.verify.__main__`'s own
+  parser and wasn't checkable against the top-level tree. Both are now
+  covered by `test_cli_help_consistency.py`.
+- `forge/core/utils/common.py`'s `load_yaml_safe()` raised
+  `from ..core.exceptions import ...` from inside `forge.core.utils.common`,
+  which resolves to the non-existent `forge.core.core.exceptions` — any
+  YAML parse or file-read failure crashed with `ModuleNotFoundError`
+  instead of the intended `ConfigurationError`/`FileNotFoundError`. Fixed
+  the relative import.
+- `forge topgen match-ports`'s "Global nets" summary crashed
+  (`sequence item 0: expected str instance, tuple found`) on any design
+  with clock/reset fan-out, because `global_nets` maps each net to a list
+  of `(instance, port)` tuples, not port-name strings, and the CLI tried
+  to `', '.join()` them directly. This is the exact "Module vs. str"
+  class of confusion flagged in `structural_verilog.py` below, just
+  undetected because nothing exercised this branch — reproduced and
+  fixed against `plugins/passthrough_demo`, a design with only two
+  auto-mapped global nets (`ap_clk`, `ap_rst`).
+- Investigated `structural_verilog.py`'s 13 "Module vs. str" mypy errors:
+  not a live bug. `src_mod`/`dst_mod` hold `Module` objects in one early,
+  self-contained loop (register-stage/delay-cycle bookkeeping) and are
+  reused as plain instance-name strings in later, unrelated loops (wire
+  and instance emission) — legal at runtime since each later read follows
+  a fresh string assignment in the same iteration, but mypy unifies a
+  name's type across the whole function since Python has no block
+  scoping. Renamed the first loop's variables (`src_mod_obj`/
+  `dst_mod_obj`) to remove the collision instead of leaving it as a false
+  positive.
 
 ## [2.0.0] - 2026-07-27
 

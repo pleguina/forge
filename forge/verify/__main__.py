@@ -1555,7 +1555,12 @@ def _cmd_release_check(args: argparse.Namespace) -> int:
     return _doctor_emit(result.report, strict=strict, json_mode=json_mode)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Construct the ``forge verify`` argument parser (all sub-commands registered).
+
+    Factored out of `main()` so tests can introspect the real, live command
+    tree instead of duplicating it by hand.
+    """
     parser = argparse.ArgumentParser(
         prog="forge verify",
         description="Framework verification utilities.",
@@ -1849,6 +1854,12 @@ def main() -> None:
             "is violated."
         ),
     )
+
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
 
     # ── Global --debug flag (must be parsed before subcommand dispatch) ──────
     # We do a pre-parse to extract --debug before handing off to subparsers.

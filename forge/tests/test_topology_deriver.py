@@ -47,6 +47,7 @@ def _prefix_role(
     count: int,
     *,
     partition: Optional[str] = None,
+    coordinates: Optional[dict] = None,
     width: int = 32,
 ) -> dict:
     """Build a prefix_array role spec."""
@@ -59,6 +60,8 @@ def _prefix_role(
     }
     if partition is not None:
         d["partition"] = partition
+    if coordinates is not None:
+        d["coordinates"] = coordinates
     return d
 
 
@@ -313,7 +316,7 @@ class TestInstancePartition:
                 InstanceAssign(instances=(0, 5), partition="a"),  # 5 != 3
             ],
         )
-        with pytest.raises(ValueError, match="5 instances but partition 'a' has count=3"):
+        with pytest.raises(ValueError, match="5 instances but coordinate 'a' has count=3"):
             derive_topology_group(tg, src, dst)
 
     def test_missing_partition_label_errors(self):
@@ -330,7 +333,7 @@ class TestInstancePartition:
                 InstanceAssign(instances=(0, 3), partition="a"),
             ],
         )
-        with pytest.raises(ValueError, match="no partition label"):
+        with pytest.raises(ValueError, match="no partition/coordinates label"):
             derive_topology_group(tg, src, dst)
 
     def test_multiple_src_roles_errors(self):
@@ -366,7 +369,73 @@ class TestInstancePartition:
                 InstanceAssign(instances=(0, 3), partition="dup"),
             ],
         )
-        with pytest.raises(ValueError, match="duplicate partition 'dup'"):
+        with pytest.raises(ValueError, match="duplicate coordinate 'dup'"):
+            derive_topology_group(tg, src, dst)
+
+    def test_structured_coordinates_resolve_like_partition(self):
+        """A structured `coordinates:` mapping resolves instance_assign
+        identically to the legacy scalar `partition:` string it's a
+        superset of — this is the additive, backward-compatible path
+        (audit gap #2)."""
+        src = _make_contract({
+            "out": _scalar_role("output", "wk", "data_out"),
+        })
+        dst = _make_contract({
+            "lower": _prefix_role("input", "wk", "lower_", 5,
+                                   coordinates={"sector": 1, "station": 1}),
+            "upper": _prefix_role("input", "wk", "upper_", 5,
+                                   coordinates={"sector": 2, "station": 1}),
+        })
+        tg = _make_tg(
+            wiring_kind="wk",
+            instance_assign=[
+                InstanceAssign(instances=(0, 5), coordinates={"sector": 1, "station": 1}),
+                InstanceAssign(instances=(5, 10), coordinates={"sector": 2, "station": 1}),
+            ],
+        )
+        pairs = derive_topology_group(tg, src, dst)
+        slots = {(dst_pin, meta["src_instance"]) for _, dst_pin, _, meta in pairs}
+        assert ("lower_0", 0) in slots
+        assert ("upper_0", 5) in slots
+        assert len(pairs) == 10
+
+    def test_structured_coordinates_ambiguity_is_rejected(self):
+        """An instance_assign coordinate that doesn't match any consumer
+        role's coordinates raises a clear diagnostic, same as the legacy
+        partition-not-found case."""
+        src = _make_contract({
+            "out": _scalar_role("output", "wk", "data_out"),
+        })
+        dst = _make_contract({
+            "lower": _prefix_role("input", "wk", "lower_", 5,
+                                   coordinates={"sector": 1, "station": 1}),
+        })
+        tg = _make_tg(
+            wiring_kind="wk",
+            instance_assign=[
+                InstanceAssign(instances=(0, 5), coordinates={"sector": 9, "station": 1}),
+            ],
+        )
+        with pytest.raises(ValueError, match="not found in consumer contract"):
+            derive_topology_group(tg, src, dst)
+
+    def test_duplicate_structured_coordinates_errors(self):
+        """Two consumer roles declaring the same structured coordinates
+        are rejected, generalizing the legacy duplicate-partition check."""
+        src = _make_contract({
+            "out": _scalar_role("output", "wk", "data_out"),
+        })
+        dst = _make_contract({
+            "in_a": _prefix_role("input", "wk", "in_a_", 3, coordinates={"sector": 1}),
+            "in_b": _prefix_role("input", "wk", "in_b_", 3, coordinates={"sector": 1}),
+        })
+        tg = _make_tg(
+            wiring_kind="wk",
+            instance_assign=[
+                InstanceAssign(instances=(0, 3), coordinates={"sector": 1}),
+            ],
+        )
+        with pytest.raises(ValueError, match="duplicate coordinate 'sector=1'"):
             derive_topology_group(tg, src, dst)
 
 
@@ -553,7 +622,14 @@ class TestScatterGather:
             assert meta == {"kind": "scatter", "target_instance": i}
 
     def test_gather_scalar_to_array(self):
-        """scalar src → prefix_array dst produces gather pairs with slot."""
+        """scalar src → prefix_array dst produces gather pairs with slot.
+
+        Slice 5 (release-plan §3.5) tags gather pairs' meta symmetrically
+        with scatter's existing {"kind": "scatter", ...} tag — purely
+        additive evidence, doesn't change slot-based instance selection
+        (still the sole determinant of wiring, see matcher.py's
+        replication loop).
+        """
         src = _make_contract({
             "dout": _scalar_role("output", "generic", "dout"),
         })
@@ -568,7 +644,7 @@ class TestScatterGather:
             assert s == "dout"
             assert d == f"in_rpc_{i}"
             assert slot == i
-            assert meta is None
+            assert meta == {"kind": "gather", "target_index": i}
 
     def test_role_pairs_use_all_roles_not_filtered(self):
         """role_pairs look up from ALL roles, not just wiring_kind-filtered."""

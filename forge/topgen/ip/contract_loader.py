@@ -39,6 +39,10 @@ import yaml
 # Generation-authoritative role set (Phase 3 of CONTRACT_DRIVEN_GENERATION_PLAN)
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Schema-version identity for *.interface.yaml (release-plan §2.7) — see
+# forge/core/schema_version.py for the shared compatibility policy.
+INTERFACE_CONTRACT_SCHEMA_VERSION = "1.0"
+
 GENERATION_AUTHORITATIVE_ROLES: frozenset[str] = frozenset({
     "clock_primary",
     "reset_primary",
@@ -86,6 +90,13 @@ class LoadedContract:
     @property
     def source_type(self) -> str:
         return self._iface.get("source_type", "hls")
+
+    @property
+    def schema_version(self) -> Optional[str]:
+        """Declared schema_version (release-plan §2.7), or None if absent —
+        absence is valid, not an error. See docs/IP_INTERFACE_POLICY.md
+        "Schema versioning"."""
+        return self._iface.get("schema_version")
 
     # ── Combinatorial / clock-free flags ──────────────────────────────────────
 
@@ -159,6 +170,26 @@ class LoadedContract:
           - ``count``          : int   (only when kind == 'prefix_array')
           - ``raw_port``       : str   (only when kind == 'scalar')
           - ``width``          : int or None
+          - ``partition``      : str or None (legacy scalar coordinate label)
+          - ``coordinates``    : dict or None (structured coordinates)
+          - ``protocol``       : str or None (one of
+            ``forge.topgen.ip.contract_verifier.KNOWN_PROTOCOLS``; see
+            docs/IP_INTERFACE_POLICY.md "Protocol semantics")
+          - ``direction``      : str (``'input'`` or ``'output'`` — the
+            *direction* argument this role was matched under)
+          - ``interface``      : str (Phase 2.5 — the logical-interface
+            group name this role's ``member`` belongs to; defaults to
+            ``role_name`` when the role doesn't declare ``interface:``,
+            preserving today's 1:1 role-to-interface mapping)
+          - ``member``         : str (Phase 2.5 — the member name within
+            ``interface``, e.g. ``data``/``valid``/``ready``/``last``/
+            ``metadata``; defaults to ``role_name`` when the role doesn't
+            declare ``member:``. See docs/IP_INTERFACE_POLICY.md
+            "Interface members")
+          - ``cardinality``    : dict or None (Phase 2.4 — the role's raw
+            ``cardinality:`` block, if declared; parse with
+            ``forge.topgen.ip.cardinality.parse_cardinality``. See
+            docs/IP_INTERFACE_POLICY.md "Declarative cardinality")
         """
         result = []
         for role_name, spec in self._roles.items():
@@ -168,6 +199,12 @@ class LoadedContract:
             if require_wiring_kind and not sk:
                 continue
             width = spec.get("width")
+            common = {
+                "direction":    direction,
+                "interface":    spec.get("interface", role_name),
+                "member":       spec.get("member", role_name),
+                "cardinality":  spec.get("cardinality"),
+            }
             if "raw_port_tpl" in spec:
                 result.append({
                     "role_name":    role_name,
@@ -177,6 +214,9 @@ class LoadedContract:
                     "dims":         spec["dims"],
                     "width":        width,
                     "partition":    spec.get("partition"),
+                    "coordinates":  spec.get("coordinates"),
+                    "protocol":     spec.get("protocol"),
+                    **common,
                 })
             elif "raw_port_prefix" in spec:
                 result.append({
@@ -187,6 +227,9 @@ class LoadedContract:
                     "count":          spec["count"],
                     "width":          width,
                     "partition":      spec.get("partition"),
+                    "coordinates":    spec.get("coordinates"),
+                    "protocol":       spec.get("protocol"),
+                    **common,
                 })
             elif "raw_port" in spec:
                 result.append({
@@ -196,6 +239,9 @@ class LoadedContract:
                     "raw_port":   spec["raw_port"],
                     "width":      width,
                     "partition":  spec.get("partition"),
+                    "coordinates": spec.get("coordinates"),
+                    "protocol":   spec.get("protocol"),
+                    **common,
                 })
         return result
 
