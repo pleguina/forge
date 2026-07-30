@@ -56,9 +56,29 @@ class TestVerifyCdc:
         issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
         assert any("clock-domain crossing" in i.message for i in issues)
         assert all(i.severity == "error" for i in issues)
+        assert all(i.code == "ATG023" for i in issues)
 
     def test_declared_2ff_sync_suppresses_clock_crossing(self):
         cfg, contracts, report, conn_map, global_nets = _two_module_setup(cdc={"kind": "2ff_sync"})
+        issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
+        assert issues == []
+
+    def test_declared_level_sync_suppresses_clock_crossing(self):
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup(cdc={"kind": "level_sync"})
+        issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
+        assert issues == []
+
+    def test_declared_pulse_sync_suppresses_clock_crossing(self):
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup(
+            cdc={"kind": "pulse_sync", "min_spacing_cycles": 4},
+        )
+        issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
+        assert issues == []
+
+    def test_declared_mailbox_transfer_suppresses_clock_crossing(self):
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup(
+            cdc={"kind": "mailbox_transfer"},
+        )
         issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
         assert issues == []
 
@@ -81,6 +101,7 @@ class TestVerifyCdc:
         issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
         assert len(issues) == 1
         assert "reset-domain crossing" in issues[0].message
+        assert issues[0].code == "ATG024"
 
     def test_clock_free_module_is_never_flagged(self):
         src = Module(name="src", top="src_top", src=["x.v"])

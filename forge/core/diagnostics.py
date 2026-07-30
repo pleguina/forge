@@ -26,6 +26,12 @@ ATG017  Testbench generation warnings (auto-generated TB used as-is)
 ATG018  HLS metrics JSON missing (release maturity data unavailable)
 ATG019  Output format differs from topology A canonical (BD / VHDL only)
 ATG020  General internal / unexpected error
+ATG021  Unknown/unsupported cdc.kind value
+ATG022  Missing or invalid kind-specific cdc field (min_spacing_cycles, depth)
+ATG023  Undeclared clock-domain crossing
+ATG024  Undeclared reset-domain crossing
+ATG025  Invalid reset_domains.*.sync value
+ATG026  async_fifo depth not a power of two
 
 Public API
 ----------

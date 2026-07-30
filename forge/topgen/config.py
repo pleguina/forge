@@ -450,10 +450,16 @@ class DesignConfig:
     # Optional, purely descriptive domain-relationship declarations
     # (release-plan §3.2), keyed by the already-resolved net name (e.g.
     # "ap_clk" — see forge.topgen.ip.domains.resolve_domain_nets). Each
-    # entry: {"derived_from": str|None, "ratio": int|None}. Does NOT
-    # auto-approve crossings between related domains — every crossing
-    # still needs an explicit per-connection `cdc:` declaration; this is
-    # documentation, not an enforcement mechanism.
+    # entry: {"derived_from": str|None, "ratio": int|None, "sync": str|None}.
+    # `derived_from`/`ratio` do NOT auto-approve crossings between related
+    # domains — every data crossing still needs an explicit
+    # per-connection `cdc:` declaration; this is documentation, not an
+    # enforcement mechanism. `sync` (reset_domains only, release-plan
+    # §10.0B, §5 Decision A) is the one exception: `sync: reset_sync`
+    # actually triggers generation of a real reset synchronizer for that
+    # destination reset domain — a reset crossing is a domain property,
+    # not a `connections:`-level data crossing, so it doesn't go through
+    # `cdc:` at all. See forge.topgen.ip.cdc's module docstring.
     clock_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     reset_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -599,25 +605,71 @@ class DesignConfig:
                 )
 
             # Validation: cdc: declares an approved clock/reset-domain-
-            # crossing adapter (release-plan §3.2) — see
-            # forge.topgen.ip.cdc.KNOWN_CDC_KINDS.
+            # crossing adapter (release-plan §3.2, §5 Decision A) — see
+            # forge.topgen.ip.cdc.KNOWN_CDC_KINDS (kept in sync with the
+            # literal tuple below by hand; cdc.py cannot be imported here,
+            # it already imports DesignConfig from this module).
+            # 'reset_sync' is deliberately NOT accepted here — a reset
+            # crossing is a property of a destination reset *domain*, not
+            # a data connection between two modules; it is declared under
+            # reset_domains.<name>.sync instead (see _pop_domain_relationships).
             if cdc is not None:
                 if not isinstance(cdc, dict) or "kind" not in cdc:
                     raise ValueError(
-                        f"Connection {c['from']!r} -> {c.get('to')!r}: 'cdc' must be "
-                        f"a mapping with at least 'kind', got: {cdc!r}"
+                        f"[ATG021] Connection {c['from']!r} -> {c.get('to')!r}: 'cdc' "
+                        f"must be a mapping with at least 'kind', got: {cdc!r}"
                     )
-                if cdc["kind"] not in ("2ff_sync", "async_fifo"):
+                kind = cdc["kind"]
+                if kind not in ("level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
                     raise ValueError(
-                        f"Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind "
-                        f"{cdc['kind']!r} must be one of ('2ff_sync', 'async_fifo')"
+                        f"[ATG021] Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind "
+                        f"{kind!r} must be one of ('level_sync' (alias '2ff_sync'), "
+                        "'pulse_sync', 'mailbox_transfer', 'async_fifo')"
                     )
+                if kind == "2ff_sync":
+                    # Backwards-compatible alias — normalize to the
+                    # canonical name so every downstream consumer (the
+                    # generator, the IR builder, verify_cdc) only ever
+                    # has to recognize one spelling.
+                    kind = "level_sync"
+                    cdc = {**cdc, "kind": "level_sync"}
+
                 depth = cdc.get("depth")
                 if depth is not None and (not isinstance(depth, int) or isinstance(depth, bool) or depth <= 0):
                     raise ValueError(
-                        f"Connection {c['from']!r} -> {c.get('to')!r}: cdc.depth must "
-                        f"be a positive integer, got: {depth!r}"
+                        f"[ATG022] Connection {c['from']!r} -> {c.get('to')!r}: cdc.depth "
+                        f"must be a positive integer, got: {depth!r}"
                     )
+
+                if kind == "async_fifo":
+                    if depth is None:
+                        raise ValueError(
+                            f"[ATG022] Connection {c['from']!r} -> {c.get('to')!r}: "
+                            "cdc.kind='async_fifo' requires an explicit 'depth' — a "
+                            "real hardware FIFO must not get a silent default size."
+                        )
+                    if depth & (depth - 1) != 0:
+                        raise ValueError(
+                            f"[ATG026] Connection {c['from']!r} -> {c.get('to')!r}: "
+                            f"cdc.depth={depth} must be a power of two for "
+                            "kind='async_fifo' (Gray-code pointer comparison requires it)."
+                        )
+
+                if kind == "pulse_sync":
+                    min_spacing = cdc.get("min_spacing_cycles")
+                    if min_spacing is None:
+                        raise ValueError(
+                            f"[ATG022] Connection {c['from']!r} -> {c.get('to')!r}: "
+                            "cdc.kind='pulse_sync' requires 'min_spacing_cycles' — the "
+                            "declared minimum source-event spacing this synchronizer "
+                            "assumes."
+                        )
+                    if not isinstance(min_spacing, int) or isinstance(min_spacing, bool) or min_spacing <= 0:
+                        raise ValueError(
+                            f"[ATG022] Connection {c['from']!r} -> {c.get('to')!r}: "
+                            f"cdc.min_spacing_cycles must be a positive integer, got: "
+                            f"{min_spacing!r}"
+                        )
 
             # Expand fan-out connections (to as list) into individual connections
             to_modules = c["to"] if isinstance(c["to"], list) else [c["to"]]
@@ -710,7 +762,7 @@ class DesignConfig:
 
         schema_version = data.pop("schema_version", None)
 
-        def _pop_domain_relationships(top_key: str) -> Dict[str, Dict[str, Any]]:
+        def _pop_domain_relationships(top_key: str, *, allow_sync: bool = False) -> Dict[str, Dict[str, Any]]:
             raw = data.pop(top_key, {}) or {}
             if not isinstance(raw, dict):
                 raise ValueError(f"'{top_key}' must be a mapping keyed by domain (net) name, got: {raw!r}")
@@ -725,11 +777,39 @@ class DesignConfig:
                     raise ValueError(f"'{top_key}.{domain_name}.derived_from' must be a string")
                 if ratio is not None and (not isinstance(ratio, int) or isinstance(ratio, bool) or ratio <= 0):
                     raise ValueError(f"'{top_key}.{domain_name}.ratio' must be a positive integer")
-                out[domain_name] = {"derived_from": derived_from, "ratio": ratio}
+
+                # 'sync' (release-plan §10.0B, §5 Decision A): declares a
+                # real reset synchronizer for this destination reset
+                # domain — only meaningful on reset_domains (a reset
+                # crossing is a domain property, not a data connection;
+                # see forge.topgen.ip.cdc's module docstring for why this
+                # is NOT a Connection.cdc field). Requires derived_from,
+                # since you can't synchronize a reset with no declared
+                # source domain to synchronize it from.
+                sync = rel.get("sync")
+                if sync is not None:
+                    if not allow_sync:
+                        raise ValueError(
+                            f"[ATG025] '{top_key}.{domain_name}.sync' is not supported — "
+                            "'sync' is only valid under reset_domains."
+                        )
+                    if sync != "reset_sync":
+                        raise ValueError(
+                            f"[ATG025] 'reset_domains.{domain_name}.sync' {sync!r} must "
+                            "be 'reset_sync' (the only supported kind this release)."
+                        )
+                    if derived_from is None:
+                        raise ValueError(
+                            f"[ATG025] 'reset_domains.{domain_name}.sync' requires "
+                            "'derived_from' — a reset can't be synchronized without a "
+                            "declared source domain."
+                        )
+
+                out[domain_name] = {"derived_from": derived_from, "ratio": ratio, "sync": sync}
             return out
 
         clock_domains = _pop_domain_relationships("clock_domains")
-        reset_domains = _pop_domain_relationships("reset_domains")
+        reset_domains = _pop_domain_relationships("reset_domains", allow_sync=True)
 
         # ── Testbench Configuration
         raw_tb_config = data.pop("testbench", None)

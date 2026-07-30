@@ -1,14 +1,28 @@
 """
-Clock-domain-crossing (CDC) structural validation (release-plan §3.2).
+Clock-domain-crossing (CDC) structural validation (release-plan §3.2,
+expanded to the full 5-kind primitive family in §10.0B).
 
-A ``design.yml`` ``connections:`` entry may declare an approved adapter:
+A ``design.yml`` ``connections:`` entry may declare an approved adapter
+for a *data* crossing:
 
     connections:
       - from: producer
         to: consumer
         cdc:
-          kind: 2ff_sync   # or async_fifo
-          depth: 2         # optional
+          kind: level_sync   # or pulse_sync, mailbox_transfer, async_fifo
+                             # ('2ff_sync' is a backwards-compatible alias
+                             # for 'level_sync')
+          depth: 2           # required for async_fifo; must be a power of two
+          min_spacing_cycles: 8   # required for pulse_sync
+
+A *reset* crossing is declared differently, since it's a property of a
+destination reset *domain*, not a data connection between two modules —
+see the top-level ``reset_domains:`` block instead:
+
+    reset_domains:
+      rst_slow:
+        derived_from: ap_rst
+        sync: reset_sync
 
 ``verify_cdc`` checks every wired connection between two modules resolved
 to *different*, both-known clock (or reset) domains
@@ -17,16 +31,19 @@ no matching ``cdc:`` declaration on its originating ``Connection`` — an
 undeclared cross-domain wire. Only ``connections:`` entries are checked
 (not ``topology_groups:``), consistent with ``register_stages``/
 ``delay_cycles``/``boundary`` already being ``Connection``-only fields,
-not a new asymmetry.
+not a new asymmetry. It does not itself validate ``reset_domains.*.sync``
+(that's schema-level work done at ``DesignConfig.load`` time in
+``forge.topgen.config``) — reset *synchronization* is a docs/generation
+concern, not a structural crossing to flag as undeclared.
 
 Following the exact existing convention of
 ``forge.topgen.ip.cardinality.verify_cardinality``/
 ``forge.topgen.ip.contract_verifier.verify_topology_groups``: this
 function only ever produces ``"error"``-severity issues (no warning
-tier), and — like those two — is only ever *called* under
-``gen-top --strict`` (see ``forge/core/cli/groups/topgen.py``); a
-non-strict run does not check CDC at all today, matching cardinality/
-topology-group verification's existing behavior exactly.
+tier). It is called both from ``gen-top --strict`` (as an error) and,
+new in release-plan §10.0B, from ``forge topgen validate`` (surfaced as
+a warning, whenever contracts/ip_info are available) — see
+``forge/core/cli/groups/topgen.py``.
 
 A single ``cdc:`` declaration approves *both* clock- and reset-crossing
 for its connection — a real synchronizer/FIFO handles the signal, not two
@@ -42,7 +59,10 @@ from ..config import DesignConfig
 from .contract_loader import LoadedContract
 from .domains import resolve_domain_nets
 
-KNOWN_CDC_KINDS = frozenset({"2ff_sync", "async_fifo"})
+KNOWN_CDC_KINDS = frozenset({"level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo"})
+
+CODE_UNDECLARED_CLOCK_CROSSING = "ATG023"
+CODE_UNDECLARED_RESET_CROSSING = "ATG024"
 
 
 @dataclass
@@ -50,10 +70,12 @@ class CdcIssue:
     severity: str  # 'error' (no warning tier — see module docstring)
     connection: str
     message: str
+    code: str = ""  # 'ATG023'/'ATG024' (release-plan §10.0B) — see forge.core.diagnostics
 
     def __str__(self) -> str:
         icon = "❌" if self.severity == "error" else "⚠️ "
-        return f"  {icon} [{self.connection}] {self.message}"
+        prefix = f"[{self.code}] " if self.code else ""
+        return f"  {icon} [{self.connection}] {prefix}{self.message}"
 
 
 def verify_cdc(
@@ -99,6 +121,7 @@ def verify_cdc(
                 f"undeclared clock-domain crossing: '{clock_a}' -> '{clock_b}' "
                 f"— add a 'cdc:' block ({sorted(KNOWN_CDC_KINDS)}) to this connection "
                 "or remove --strict.",
+                code=CODE_UNDECLARED_CLOCK_CROSSING,
             ))
 
         reset_a, reset_b = reset_of_module.get(src_mod), reset_of_module.get(dst_mod)
@@ -108,6 +131,7 @@ def verify_cdc(
                 f"undeclared reset-domain crossing: '{reset_a}' -> '{reset_b}' "
                 f"— add a 'cdc:' block ({sorted(KNOWN_CDC_KINDS)}) to this connection "
                 "or remove --strict.",
+                code=CODE_UNDECLARED_RESET_CROSSING,
             ))
 
     return issues

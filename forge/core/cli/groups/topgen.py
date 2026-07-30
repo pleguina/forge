@@ -451,12 +451,13 @@ def generate_build_manifest(
         manifest["modules"][module_name] = module_info
 
     # ── Framework support RTL: RegisterStage, signal_delay, slr_crossing_delay,
-    #    cdc_sync2ff ──
+    #    cdc_sync2ff, and the release-plan §10.0B CDC primitive family
+    #    (cdc_pulse_sync, cdc_mailbox, cdc_async_fifo, cdc_reset_sync) ──
     # When any connection uses register_stages or delay_cycles, topgen generates
     # RegisterStage / signal_delay instances in algo_top.v.  Boundary-tagged
     # delay connections use slr_crossing_delay instead of signal_delay.
-    # cdc: {kind: 2ff_sync} connections need cdc_sync2ff (release-plan §3.2).
-    # All must be in the compile list for simulation and synthesis.
+    # cdc: {kind: level_sync|2ff_sync} connections need cdc_sync2ff (release-plan
+    # §3.2). All must be in the compile list for simulation and synthesis.
     needs_register_stage    = any(getattr(conn, "register_stages", 0) > 0 for conn in cfg.connections)
     needs_signal_delay      = any(
         getattr(conn, "delay_cycles", 0) > 0 and not getattr(conn, "boundary", None)
@@ -467,8 +468,23 @@ def generate_build_manifest(
         for conn in cfg.connections
     )
     needs_cdc_sync2ff = any(
-        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "2ff_sync"
+        getattr(conn, "cdc", None) and conn.cdc.get("kind") in ("2ff_sync", "level_sync")
         for conn in cfg.connections
+    )
+    needs_cdc_pulse_sync = any(
+        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "pulse_sync"
+        for conn in cfg.connections
+    )
+    needs_cdc_mailbox = any(
+        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "mailbox_transfer"
+        for conn in cfg.connections
+    )
+    needs_cdc_async_fifo = any(
+        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "async_fifo"
+        for conn in cfg.connections
+    )
+    needs_cdc_reset_sync = any(
+        rel.get("sync") == "reset_sync" for rel in cfg.reset_domains.values()
     )
     _search_roots = [r for r in [project_root, ip_root, manifest_output.parent] if r]
     for target_name, needed in [
@@ -476,6 +492,10 @@ def generate_build_manifest(
         ("signal_delay.v",       needs_signal_delay),
         ("slr_crossing_delay.v", needs_slr_crossing_delay),
         ("cdc_sync2ff.v",        needs_cdc_sync2ff),
+        ("cdc_pulse_sync.v",     needs_cdc_pulse_sync),
+        ("cdc_mailbox.v",        needs_cdc_mailbox),
+        ("cdc_async_fifo.v",     needs_cdc_async_fifo),
+        ("cdc_reset_sync.v",     needs_cdc_reset_sync),
     ]:
         if not needed:
             continue
@@ -1191,6 +1211,55 @@ def cmd_validate(args):
             sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
 
         metrics: Dict[str, Any] = {}
+
+        # ── CDC crossing check (release-plan §10.0B) ────────────────────
+        # verify_cdc used to be gen-top --strict-only (see cmd_gen_top);
+        # authors got no CDC feedback until the final generation step.
+        # Run it here too, as a best-effort, whenever contracts can be
+        # loaded without needing already-built HDL (the same
+        # --contracts-from-style projection cmd_gen_top itself supports) —
+        # skip gracefully (no diagnostic at all) if the registry/contracts
+        # aren't available yet, matching every other optional check in
+        # this command.
+        cdc_diagnostics: List[dict] = []
+        if _registry_ref:
+            try:
+                _cdc_contracts = load_contracts_for_design(registry_path, design_path.parent)
+                _cdc_mapped = {}
+                for m in cfg.modules:
+                    c = _cdc_contracts.get(m.name) or (m.ip_info_key and _cdc_contracts.get(m.ip_info_key))
+                    if c:
+                        _cdc_mapped[m.name] = c
+                if _cdc_mapped:
+                    _cdc_ip_info = synthesize_ip_info(_cdc_mapped)
+                    _conn_map, _global_nets, _match_report = auto_match_ports(
+                        cfg, _cdc_ip_info, contracts=_cdc_contracts,
+                    )
+                    from forge.topgen.ip.cdc import verify_cdc
+                    _cdc_issues = verify_cdc(cfg, _cdc_contracts, _match_report, _conn_map, _global_nets)
+                    cdc_diagnostics = [
+                        {
+                            "severity": "warning", "code": issue.code or "ATG023",
+                            "category": "cdc", "message": f"[{issue.connection}] {issue.message}",
+                            "action": "Add a matching 'cdc:' block, or run gen-top --strict for a hard failure.",
+                        }
+                        for issue in _cdc_issues
+                    ]
+            except Exception:
+                cdc_diagnostics = []
+
+        if cdc_diagnostics:
+            if not json_mode:
+                print("\n🔌 CDC crossing check:")
+                for d in cdc_diagnostics:
+                    print(f"  ⚠️  [{d['code']}] {d['message']}")
+            if strict:
+                if not json_mode:
+                    print(f"\n⛔ Strict mode: treating {len(cdc_diagnostics)} CDC warning(s) as errors")
+                envelope = _validators_to_envelope(*validators)
+                envelope.diagnostics.extend(cdc_diagnostics)
+                sys.exit(emit(envelope, json_mode=json_mode, strict=True))
+
         stale_diagnostic: Optional[dict] = None
         if getattr(args, "check_stale", False):
             if not json_mode:
@@ -1237,6 +1306,11 @@ def cmd_validate(args):
         if stale_diagnostic is not None:
             envelope.diagnostics.append(stale_diagnostic)
             envelope.next_actions.append(stale_diagnostic["action"])
+            if envelope.status == "pass":
+                envelope.status = "warn"
+        if cdc_diagnostics:
+            envelope.diagnostics.extend(cdc_diagnostics)
+            envelope.next_actions.append(cdc_diagnostics[0]["action"])
             if envelope.status == "pass":
                 envelope.status = "warn"
         sys.exit(emit(envelope, json_mode=json_mode, strict=strict))

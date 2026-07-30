@@ -118,6 +118,12 @@ DIAGNOSTICS: "dict[str, DiagnosticDefinition]" = {
         _atg("ATG018", "warning", "HLS metrics JSON missing (release maturity data unavailable)."),
         _atg("ATG019", "warning", "Output format differs from topology A canonical (BD / VHDL only)."),
         _atg("ATG020", "error", "General internal / unexpected error."),
+        _atg("ATG021", "error", "Unknown/unsupported cdc.kind value."),
+        _atg("ATG022", "error", "Missing or invalid kind-specific cdc field (min_spacing_cycles, depth)."),
+        _atg("ATG023", "error", "Undeclared clock-domain crossing."),
+        _atg("ATG024", "error", "Undeclared reset-domain crossing."),
+        _atg("ATG025", "error", "Invalid reset_domains.*.sync value."),
+        _atg("ATG026", "error", "async_fifo depth not a power of two."),
     ]
 }
 
