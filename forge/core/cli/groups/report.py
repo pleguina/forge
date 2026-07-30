@@ -194,6 +194,57 @@ def cmd_report(args) -> None:
         artifacts.append(str(output_dir / "verification_results.md"))
         next_actions.append("No verification results yet — run `forge test run`")
 
+    # ── Throughput (release-plan Phase 10, slice 10.0C) ─────────────────────
+    try:
+        n_throughput = _write_throughput_report(design_path, args, output_dir)
+        if n_throughput:
+            artifacts.append(str(output_dir / "throughput.md"))
+            metrics["throughput_analyses"] = n_throughput
+        else:
+            diagnostics.append({
+                "severity": "note",
+                "message": "no --hls-build-root + --module-width (static) or "
+                           "--probe-csv + --fifo-probe (runtime) given — throughput report omitted",
+            })
+    except Exception as exc:  # noqa: BLE001
+        diagnostics.append({"severity": "warning", "message": f"throughput report failed: {exc}"})
+
+    # ── CDC verification (release-plan Phase 10, slice 10.0C) ───────────────
+    cdc_result_json_path = getattr(args, "cdc_result_json", None)
+    if cdc_result_json_path and Path(cdc_result_json_path).exists():
+        import json
+
+        from forge.verify.cdc_verification_result import render_cdc_verification_markdown
+
+        payload = json.loads(Path(cdc_result_json_path).read_text())
+        (output_dir / "cdc_verification.md").write_text(render_cdc_verification_markdown(payload))
+        artifacts.append(str(output_dir / "cdc_verification.md"))
+        metrics["cdc_crossings"] = len(payload.get("crossings") or [])
+    else:
+        diagnostics.append({
+            "severity": "note",
+            "message": "no --cdc-result-json given (or it doesn't exist) — CDC verification "
+                       "report omitted (see forge topgen validate --cdc-result-json)",
+        })
+
+    # ── Golden-model comparison (release-plan Phase 10, slice 10.0C) ────────
+    golden_comparison_json_path = getattr(args, "golden_comparison_json", None)
+    if golden_comparison_json_path and Path(golden_comparison_json_path).exists():
+        import json
+
+        from forge.verify.golden_comparison_result import render_golden_comparison_markdown
+
+        payload = json.loads(Path(golden_comparison_json_path).read_text())
+        (output_dir / "golden_comparison.md").write_text(render_golden_comparison_markdown(payload))
+        artifacts.append(str(output_dir / "golden_comparison.md"))
+        metrics["golden_comparison_events"] = len(payload.get("events") or [])
+    else:
+        diagnostics.append({
+            "severity": "note",
+            "message": "no --golden-comparison-json given (or it doesn't exist) — golden-model "
+                       "comparison report omitted (see forge test run --golden-comparison-json)",
+        })
+
     # ── Dashboard (aggregates everything just written) ──────────────────────
     from forge.analyze.dashboards.aggregator import collect
     from forge.analyze.dashboards.renderer import render_html, render_markdown_summary
@@ -313,6 +364,74 @@ def _write_runtime_latency(probe_csv: Path, args, output_dir: Path) -> int:
     return len(comparisons)
 
 
+def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
+    """release-plan Phase 10, slice 10.0C — forge.throughput_result.v1.
+
+    Static side reuses --hls-build-root (already an existing flag) plus
+    a new repeatable --module-width name:bits (a port width isn't an HLS-
+    report fact, so it's never guessed). Runtime side reuses the
+    existing --probe-csv/--probe-format flags plus a new repeatable
+    --fifo-probe object_id:full:empty[:occupancy[:overflow]].
+    """
+    import json
+
+    from forge.verify.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
+    from forge.verify.throughput_result import render_throughput_markdown
+
+    static_analyses = []
+    bottleneck = None
+    predicted_rate = None
+    hls_build_root = getattr(args, "hls_build_root", None)
+    if hls_build_root and Path(hls_build_root).exists():
+        from forge.analyze.hls_reports.extractor import collect_reports
+        from forge.analyze.throughput_static.model import build_design_throughput_analysis
+
+        widths: Dict[str, int] = {}
+        for entry in (getattr(args, "module_width", None) or []):
+            parts = entry.split(":")
+            if len(parts) == 2 and parts[1].isdigit():
+                widths[parts[0]] = int(parts[1])
+        if widths:
+            reports = collect_reports(Path(hls_build_root), solution=getattr(args, "solution", "solution1"))
+            static_analyses, bottleneck, predicted_rate = build_design_throughput_analysis(reports, widths)
+
+    runtime_results = []
+    probe_csv = getattr(args, "probe_csv", None)
+    if probe_csv and Path(probe_csv).exists():
+        from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
+
+        for entry in (getattr(args, "fifo_probe", None) or []):
+            parts = entry.split(":")
+            if len(parts) < 3:
+                continue
+            object_id, full_sig, empty_sig = parts[0], parts[1], parts[2]
+            occupancy_sig = parts[3] if len(parts) > 3 and parts[3] else None
+            overflow_sig = parts[4] if len(parts) > 4 and parts[4] else None
+            try:
+                runtime_results.append(build_runtime_throughput_result(
+                    Path(probe_csv), object_id, full_signal=full_sig, empty_signal=empty_sig,
+                    occupancy_signal=occupancy_sig, overflow_signal=overflow_sig,
+                ))
+            except ValueError:
+                continue
+
+    if not static_analyses and not runtime_results:
+        return 0
+
+    from forge.core.utils.content_hash import hash_file
+
+    result = ThroughputResult(
+        schema=THROUGHPUT_RESULT_SCHEMA,
+        design_hash=hash_file(design_path),
+        static=static_analyses, runtime=runtime_results,
+        predicted_rate=predicted_rate, bottleneck=bottleneck,
+    )
+    payload = result.to_dict()
+    (output_dir / "throughput.json").write_text(json.dumps(payload, indent=2) + "\n")
+    (output_dir / "throughput.md").write_text(render_throughput_markdown(payload))
+    return len(static_analyses) + len(runtime_results)
+
+
 def register(sub) -> None:
     """Register the top-level ``forge report`` command."""
     p = sub.add_parser(
@@ -339,6 +458,26 @@ def register(sub) -> None:
         "--results-json",
         help="Existing versioned results JSON (from a prior forge test run --results-json); "
              "preferred over --junit-xml when both are given",
+    )
+    p.add_argument(
+        "--module-width", action="append",
+        help="module_name:bits — repeatable, declared data width for the static "
+             "throughput section (a port width isn't an HLS-report fact, never guessed)",
+    )
+    p.add_argument(
+        "--fifo-probe", action="append",
+        help="object_id:full_signal:empty_signal[:occupancy_signal[:overflow_signal]] — "
+             "repeatable, for the runtime throughput section (uses --probe-csv/--probe-format)",
+    )
+    p.add_argument(
+        "--cdc-result-json",
+        help="Existing forge.cdc_verification_result.v1 JSON (from a prior "
+             "forge topgen validate --cdc-result-json)",
+    )
+    p.add_argument(
+        "--golden-comparison-json",
+        help="Existing forge.golden_comparison_result.v1 JSON (from a prior "
+             "forge test run --golden-comparison-json)",
     )
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p.set_defaults(func=cmd_report)

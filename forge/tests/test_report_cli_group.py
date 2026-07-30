@@ -27,6 +27,10 @@ PASSTHROUGH_DESIGN = REPO_ROOT / "plugins/passthrough_demo/forge/designs/design.
 PASSTHROUGH_MODULES = REPO_ROOT / "plugins/passthrough_demo/forge/modules.yml"
 TRIGGER_DESIGN = REPO_ROOT / "plugins/trigger_demo/forge/designs/design.yml"
 TRIGGER_MODULES = REPO_ROOT / "plugins/trigger_demo/forge/modules.yml"
+VPD_DESIGN = REPO_ROOT / "plugins/vision_pipeline_demo/forge/designs/design.yml"
+VPD_MODULES = REPO_ROOT / "plugins/vision_pipeline_demo/forge/modules.yml"
+VPD_DESIGN_VERIFICATION = REPO_ROOT / "plugins/vision_pipeline_demo/forge/verify/design.verification.yml"
+VPD_HLS_BUILD_ROOT = REPO_ROOT / "build_hls_vision_pipeline_demo"
 
 XSIM_AVAILABLE = all(shutil.which(tool) for tool in ("xvlog", "xelab", "xsim"))
 skip_without_xsim = pytest.mark.skipif(
@@ -242,3 +246,81 @@ def test_report_prefers_results_json_over_junit_xml(
     # actually consumed, not just present alongside --junit-xml.
     assert "**backend**: xsim" in verification_md
     assert "PASS" in verification_md
+
+
+@skip_without_xsim
+@pytest.mark.skipif(not VPD_HLS_BUILD_ROOT.exists(), reason="no cached vision_pipeline_demo HLS build")
+def test_report_throughput_cdc_and_golden_comparison_sections(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """release-plan Phase 10, slice 10.0C: end-to-end against
+    vision_pipeline_demo's already-validated quickstart flow (reusing its
+    cached HLS build, no fresh synthesis) — forge topgen validate
+    --cdc-result-json, forge test run --golden-comparison-json, and
+    forge report's three new sections, all together."""
+    cdc_result_path = tmp_path / "cdc_result.json"
+    validate_result = _run(
+        capsys, "topgen", "validate", str(VPD_DESIGN), "--cdc-result-json", str(cdc_result_path),
+    )
+    assert validate_result.returncode == 0, validate_result.stdout + validate_result.stderr
+    assert cdc_result_path.exists()
+
+    golden_comparison_path = tmp_path / "golden_comparison.json"
+    test_run_result = _run(
+        capsys, "test", "run", str(VPD_DESIGN_VERIFICATION),
+        "--flow", "quickstart_pipeline_xsim", "--plugin", "vision_pipeline_demo",
+        "--consumer-root", str(REPO_ROOT), "--event-id", "0",
+        "--golden-comparison-json", str(golden_comparison_path),
+    )
+    assert test_run_result.returncode == 0, test_run_result.stdout + test_run_result.stderr
+    assert golden_comparison_path.exists()
+
+    output_dir = tmp_path / "report"
+    report_result = _run(
+        capsys, "report", str(VPD_DESIGN),
+        "--contracts-from", str(VPD_MODULES),
+        "--hls-build-root", str(VPD_HLS_BUILD_ROOT),
+        "--module-width", "pixel_normalizer:8",
+        "--cdc-result-json", str(cdc_result_path),
+        "--golden-comparison-json", str(golden_comparison_path),
+        "--output", str(output_dir), "--json",
+    )
+
+    assert report_result.returncode == 0, report_result.stdout + report_result.stderr
+    payload = json.loads(report_result.stdout)
+    assert str(output_dir / "throughput.md") in payload["artifacts"]
+    assert str(output_dir / "cdc_verification.md") in payload["artifacts"]
+    assert str(output_dir / "golden_comparison.md") in payload["artifacts"]
+    assert payload["metrics"]["throughput_analyses"] == 1
+    assert payload["metrics"]["cdc_crossings"] == 0
+    assert payload["metrics"]["golden_comparison_events"] == 1
+
+    throughput_md = (output_dir / "throughput.md").read_text()
+    assert "pixel_normalizer" in throughput_md
+    assert "bottleneck" in throughput_md
+
+    cdc_md = (output_dir / "cdc_verification.md").read_text()
+    assert "No clock/reset-domain crossings" in cdc_md
+
+    golden_md = (output_dir / "golden_comparison.md").read_text()
+    assert "vision_pipeline.quickstart_normalizer_threshold" in golden_md
+    assert "1/1 passed" in golden_md
+
+
+def test_report_omits_new_sections_honestly_without_their_flags(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "report"
+    result = _run(
+        capsys, "report", str(PASSTHROUGH_DESIGN),
+        "--contracts-from", str(PASSTHROUGH_MODULES),
+        "--output", str(output_dir), "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert not (output_dir / "throughput.md").exists()
+    assert not (output_dir / "cdc_verification.md").exists()
+    assert not (output_dir / "golden_comparison.md").exists()
+    assert any("throughput report omitted" in d["message"] for d in payload["diagnostics"])
+    assert any("CDC verification" in d["message"] for d in payload["diagnostics"])
+    assert any("golden-model comparison report omitted" in d["message"] for d in payload["diagnostics"])

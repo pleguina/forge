@@ -516,7 +516,9 @@ usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                     [--build-dir BUILD_DIR] [--output OUTPUT] [--hls-build-root HLS_BUILD_ROOT]
                     [--solution SOLUTION] [--probe-csv PROBE_CSV] [--probe-format {long,wide}]
                     [--probe-pairs PROBE_PAIRS] [--provenance PROVENANCE] [--junit-xml JUNIT_XML]
-                    [--results-json RESULTS_JSON] [--json]
+                    [--results-json RESULTS_JSON] [--module-width MODULE_WIDTH]
+                    [--fifo-probe FIFO_PROBE] [--cdc-result-json CDC_RESULT_JSON]
+                    [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--json]
                     design
 
 positional arguments:
@@ -546,6 +548,19 @@ optional arguments:
   --results-json RESULTS_JSON
                         Existing versioned results JSON (from a prior forge test run --results-
                         json); preferred over --junit-xml when both are given
+  --module-width MODULE_WIDTH
+                        module_name:bits — repeatable, declared data width for the static
+                        throughput section (a port width isn't an HLS-report fact, never guessed)
+  --fifo-probe FIFO_PROBE
+                        object_id:full_signal:empty_signal[:occupancy_signal[:overflow_signal]] —
+                        repeatable, for the runtime throughput section (uses --probe-csv/--probe-
+                        format)
+  --cdc-result-json CDC_RESULT_JSON
+                        Existing forge.cdc_verification_result.v1 JSON (from a prior forge topgen
+                        validate --cdc-result-json)
+  --golden-comparison-json GOLDEN_COMPARISON_JSON
+                        Existing forge.golden_comparison_result.v1 JSON (from a prior forge test
+                        run --golden-comparison-json)
   --json                Machine-readable JSON output
 ```
 
@@ -611,7 +626,8 @@ usage: forge test run [-h] --flow FLOW [--consumer-root CONSUMER_ROOT] [--plugin
                       [--event-id EVENT_ID] [--all-events] [--event-list EVENT_LIST]
                       [--xml-input XML_INPUT] [--all-dataset-parts]
                       [--dataset-parts-glob DATASET_PARTS_GLOB] [--probe-log]
-                      [--junit-xml JUNIT_XML] [--results-json RESULTS_JSON] [--strict] [--json]
+                      [--junit-xml JUNIT_XML] [--results-json RESULTS_JSON]
+                      [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--strict] [--json]
                       design_file
 
 positional arguments:
@@ -640,6 +656,10 @@ optional arguments:
   --results-json RESULTS_JSON
                         Write the full versioned FlowResult (schema, per-event backend id,
                         duration, artifacts, diagnostics) as JSON to this path
+  --golden-comparison-json GOLDEN_COMPARISON_JSON
+                        Write a forge.golden_comparison_result.v1 artifact to this path (only when
+                        the plugin's gen_stimulus.py wrote a golden_model_provenance.json sidecar
+                        next to this flow)
   --strict              Also enforce canonical layout (same as forge verify run --strict)
   --json                Machine-readable JSON output
 ```
@@ -898,16 +918,21 @@ optional arguments:
 #### `forge topgen validate`
 
 ```text
-usage: forge topgen validate [-h] [--strict] [--check-stale] [--json] design
+usage: forge topgen validate [-h] [--strict] [--check-stale] [--cdc-result-json CDC_RESULT_JSON]
+                             [--json]
+                             design
 
 positional arguments:
-  design         design.yaml file to validate
+  design                design.yaml file to validate
 
 optional arguments:
-  -h, --help     show this help message and exit
-  --strict       Treat warnings as errors
-  --check-stale  Also verify that generated artifacts are not older than design.yml.
-  --json         Machine-readable JSON output instead of the human report.
+  -h, --help            show this help message and exit
+  --strict              Treat warnings as errors
+  --check-stale         Also verify that generated artifacts are not older than design.yml.
+  --cdc-result-json CDC_RESULT_JSON
+                        Write a forge.cdc_verification_result.v1 artifact to this path (only when
+                        the registry/contracts needed for the CDC check are available)
+  --json                Machine-readable JSON output instead of the human report.
 ```
 
 #### `forge topgen validate-registry`
