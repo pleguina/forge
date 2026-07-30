@@ -7,7 +7,8 @@
 The framework was renamed from **ARC** ("Algorithm Runtime & Contract") to
 **FORGE** ("Framework for Orchestrated RTL Generation & Evaluation") to avoid
 a naming collision with existing CMS/WLCG grid-computing usage of "ARC"
-(Advanced Resource Connector). This was a breaking rename with **no
+(Advanced Resource Connector) as well as internal usage of "ARC" for the
+Analysis Review Comitee. This was a breaking rename with **no
 compatibility shim** — the old `arc` command/package/paths do not work
 anymore and will not be restored.
 
