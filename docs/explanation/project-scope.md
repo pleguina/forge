@@ -8,20 +8,24 @@ been closed.
 
 A complete, domain-neutral streaming reference project — something with
 no CMS/OMTF provenance in its naming or shape at all, exercising RTL, HLS,
-scalar interfaces, and array/prefix wiring together — is **planned for a
-later release phase, not built yet**. `docs/plan/FORGE_release_plan.md`'s
-Phase 10 records the intended shape (an `image_pipeline_demo`-style
-pipeline: pixel source → normalization RTL → parallel HLS filters → edge
-detection → threshold → metadata path → latency-aligned merge → output
-packetizer) as the recommended project for that phase. Nothing on this
-page should be read as a preview of that project's actual implementation
-— it doesn't exist yet, and this page deliberately doesn't get more
-specific than the plan does.
+scalar interfaces, and array/prefix wiring together — is under construction
+as `vision_pipeline_demo`, in progressive-complexity slices
+(`docs/internal/phase10/preflight.md` and
+`docs/internal/phase10/vision_pipeline_reference_project.md` record the
+frozen design decisions; `docs/plan/FORGE_release_plan.md`'s Phase 10
+tracks the slice sequencing). Only the first slice — the **quickstart
+tier** — is built and CI-real today: pixel source → normalization (HLS) →
+threshold (RTL) → output, one clock domain, a real golden-model-driven
+comparison, no hand-typed expected values. The fuller design the preflight
+freezes (parallel HLS filters, edge detection, tile statistics, CDC,
+multi-clock throughput/backpressure, a latency-aligned merge, an output
+packetizer) is **later slices, not built yet** — nothing on this page or
+in the quickstart tutorial should be read as a preview of that later
+work's actual implementation.
 
-## What today's tutorials use instead
+## What today's tutorials use
 
-Until that reference project exists, FORGE's tutorials use the two real
-plugins currently in the repository as the closest available examples:
+FORGE's tutorials use three real plugins currently in the repository:
 
 - [`passthrough_demo`](../tutorials/rtl-example.md) — RTL-only, a single
   trivial registered passthrough module, with no algorithm-specific
@@ -29,15 +33,19 @@ plugins currently in the repository as the closest available examples:
 - [`trigger_demo`](../tutorials/mixed-hls-rtl-example.md) — mixed HLS/RTL,
   a realistic 7-module trigger pipeline exercising every supported
   topology-wiring pattern.
+- [`vision_pipeline_demo`](../tutorials/vision-pipeline-quickstart.md) —
+  mixed HLS/RTL, domain-neutral, golden-model-driven (quickstart tier
+  only so far; see above).
 
-Both are real, maintained, CI-exercised plugins — not placeholders — and
-both are good teaching examples for their respective purpose (simplest
-possible plugin, and richest realistic plugin). Neither is a
-genuinely-unrelated-domain example, though: `trigger_demo` is explicitly
-CMS/OMTF-flavored in its module names and pipeline shape (hit decoding,
-trigger logic, φ coordinates), and even `passthrough_demo`'s home
-directory sits alongside `trigger_demo` in a repository whose origin is
-CMS/OMTF trigger/DAQ firmware.
+All three are real, maintained, CI-exercised plugins — not placeholders —
+and each is a good teaching example for its respective purpose (simplest
+possible plugin, richest realistic plugin, and the domain-neutral/golden-model
+example). `trigger_demo` is still explicitly CMS/OMTF-flavored in its
+module names and pipeline shape (hit decoding, trigger logic, φ
+coordinates), and even `passthrough_demo`'s home directory sits alongside
+`trigger_demo` in a repository whose origin is CMS/OMTF trigger/DAQ
+firmware — `vision_pipeline_demo` is the first example plugin with no such
+provenance in its naming or shape.
 
 ## The framework itself is still enforced domain-agnostic
 

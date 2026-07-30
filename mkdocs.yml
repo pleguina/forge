@@ -77,6 +77,7 @@ nav:
       - Golden-Path Tutorial: tutorials/golden-path.md
       - RTL Example (passthrough_demo): tutorials/rtl-example.md
       - Mixed HLS/RTL Example (trigger_demo): tutorials/mixed-hls-rtl-example.md
+      - Vision Pipeline Quickstart (vision_pipeline_demo): tutorials/vision-pipeline-quickstart.md
   - How-To Guides:
       - Author Topology Contracts: how-to/author-topology-contracts.md
       - Integrate Verification: how-to/integrate-verification.md
