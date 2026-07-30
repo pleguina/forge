@@ -549,16 +549,30 @@ def write_structural_verilog(
                     alias_out[(ilab, a)] = b
         return alias_in, alias_out
 
-    def _is_user_external(mod: Module, pname: str) -> str | None:
+    def _is_user_external(mod: Module, pname: str, pdir: str) -> str | None:
         """
-        Check user-declared external_in_ports / external_out_ports on a *name or prefix* basis.
+        Check user-declared external_in_ports / external_out_ports on a
+        *name or prefix* basis — cross-checked against *pname*'s own real
+        direction, so an unrelated, oppositely-directioned port whose
+        name happens to share a prefix with a declared external can never
+        match (e.g. a real output port ``x_out`` must never match a
+        declared external *input* ``x``, even though
+        ``"x_out".startswith("x_")`` is true). Found via real testing —
+        release-plan Phase 10, slice 10.1's vision_pipeline_demo
+        quickstart declared ``external_in_ports: [x, y, ...]`` for its
+        real scalar pixel-stream inputs, and the prefix match (with no
+        direction check) silently misrouted the module's real, unrelated
+        ``x_out``/``y_out``/etc. *output* pins to a bogus, wrong-direction
+        top-level port instead of the internal net wire the consuming
+        instance actually reads from — no existing test exercised this
+        interaction.
         Returns 'input' / 'output' / None.
         """
         user_in  = tuple(mod.external_in_ports or [])
         user_out = tuple(mod.external_out_ports or [])
-        if any(pname == x or pname.startswith(x + "_") for x in user_in):
+        if pdir == "input" and any(pname == x or pname.startswith(x + "_") for x in user_in):
             return "input"
-        if any(pname == x or pname.startswith(x + "_") for x in user_out):
+        if pdir == "output" and any(pname == x or pname.startswith(x + "_") for x in user_out):
             return "output"
         return None
 
@@ -698,7 +712,7 @@ def write_structural_verilog(
                     top_port_name = alias_out[(ilabel, pname)]
                 else:
                     # fall back to user-declared externals
-                    ext_dir = _is_user_external(mod, pname)
+                    ext_dir = _is_user_external(mod, pname, pdir)
                     if ext_dir:
                         top_port_name = f"{ilabel}_{pname}"
 
@@ -909,7 +923,7 @@ def write_structural_verilog(
                 if (ilabel, pname) in alias_out:
                     pm.append(f"    .{pname}({_verilog_ident(f'net_{ilabel}_{pname}')})")
                     continue
-                user_ext_dir = _is_user_external(mod, pname)
+                user_ext_dir = _is_user_external(mod, pname, pdir)
                 if user_ext_dir:
                     if user_ext_dir == "output":
                         pm.append(f"    .{pname}({_verilog_ident(f'net_{ilabel}_{pname}')})")

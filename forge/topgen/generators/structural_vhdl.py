@@ -335,16 +335,22 @@ def write_structural_vhdl(
                     alias_out[(ilab, a)] = b
         return alias_in, alias_out
 
-    def _is_user_external(mod: Module, pname: str) -> str | None:
+    def _is_user_external(mod: Module, pname: str, pdir: str) -> str | None:
         """
-        Check user-declared external_in_ports / external_out_ports on a *name or prefix* basis.
+        Check user-declared external_in_ports / external_out_ports on a
+        *name or prefix* basis — cross-checked against *pname*'s own real
+        direction (see the identical fix + rationale in
+        forge/topgen/generators/structural_verilog.py's own
+        ``_is_user_external``, release-plan Phase 10 slice 10.1 — this
+        VHDL generator carries the same bug, unexercised by any existing
+        test).
         Returns 'in' / 'out' / None.
         """
         user_in  = tuple(mod.external_in_ports or [])
         user_out = tuple(mod.external_out_ports or [])
-        if any(pname == x or pname.startswith(x + "_") for x in user_in):
+        if pdir == "in" and any(pname == x or pname.startswith(x + "_") for x in user_in):
             return "in"
-        if any(pname == x or pname.startswith(x + "_") for x in user_out):
+        if pdir == "out" and any(pname == x or pname.startswith(x + "_") for x in user_out):
             return "out"
         return None
 
@@ -407,7 +413,7 @@ def write_structural_vhdl(
     # If (inst,pin) has an alias from system.yml, use the framework name; otherwise use <inst>_<pin>.
     for mod in cfg.modules:
         for p in ports_by_mod[mod.name]:
-            pname, w = p["name"], int(p["width"])
+            pname, pdir, w = p["name"], p["dir"], int(p["width"])
 
             # skip any clock/reset-ish externals if top provides global clk/rst
             if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
@@ -431,7 +437,7 @@ def write_structural_vhdl(
                     top_port_name = alias_out[(ilabel, pname)]
                 else:
                     # fall back to user-declared externals
-                    ext_dir = _is_user_external(mod, pname)
+                    ext_dir = _is_user_external(mod, pname, pdir)
                     if ext_dir:
                         top_port_name = f"{ilabel}_{pname}"
 
@@ -596,7 +602,7 @@ def write_structural_vhdl(
                 if (ilabel, pname) in alias_out:
                     pm.append(f"      {pname} => {alias_out[(ilabel, pname)]}")
                     continue
-                user_ext_dir = _is_user_external(mod, pname)
+                user_ext_dir = _is_user_external(mod, pname, pdir)
                 if user_ext_dir:
                     pm.append(f"      {pname} => {ilabel}_{pname}")
                     continue
