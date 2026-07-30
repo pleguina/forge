@@ -176,6 +176,22 @@ class TestCdcSync2ffEmission:
         # Destination instance consumes the FIFO's dout, not the raw net.
         assert ".din(sync_net_src_dst_dout)" in text
 
+    def test_async_fifo_emits_occupancy_and_high_water_telemetry(self, tmp_path):
+        """release-plan §10.0C: real occupancy/high_water instrumentation
+        signals (Decision B), not just full/empty/overflow/underflow."""
+        cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
+            cdc={"kind": "async_fifo", "depth": 8},
+        )
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        assert ".occupancy(sync_net_src_dst_dout_occupancy)," in text
+        assert ".high_water(sync_net_src_dst_dout_high_water)," in text
+        assert "wire [3:0] sync_net_src_dst_dout_occupancy, sync_net_src_dst_dout_high_water;" in text
+
     def test_cdc_declared_without_match_report_raises(self, tmp_path):
         cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
             cdc={"kind": "2ff_sync"},

@@ -1208,15 +1208,22 @@ def write_structural_verilog(
                     emit("")
                 elif kind == "async_fifo":
                     depth = cdc.get("depth")
+                    # $clog2(depth) — depth is validated as a positive power of
+                    # two at design.yml load time (forge.topgen.config).
+                    addr_width = (depth - 1).bit_length() if depth else 0
                     full_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_full")
                     empty_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_empty")
                     ovf_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_overflow")
                     unf_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_underflow")
+                    occ_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_occupancy")
+                    hw_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_high_water")
                     emit(
-                        f"  // Occupancy/backpressure telemetry — generated but not yet "
-                        "wired into any report/schema (release-plan §5 Decision B / slice 10.0C)."
+                        f"  // Occupancy/backpressure telemetry (release-plan §5 Decision B / "
+                        "slice 10.0C) — generated but not yet wired into any report/schema by "
+                        "this generator; consume via a Tier 2 probe declaration."
                     )
                     emit(f"  wire {full_net}, {empty_net}, {ovf_net}, {unf_net};")
+                    emit(f"  wire [{addr_width}:0] {occ_net}, {hw_net};")
                     emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (async_fifo, depth={depth})")
                     emit(f"  cdc_async_fifo #(")
                     emit(f"    .WIDTH({w}),")
@@ -1227,6 +1234,8 @@ def write_structural_verilog(
                     emit(f"    .din({src_net}),")
                     emit(f"    .full({full_net}),")
                     emit(f"    .overflow_attempt({ovf_net}),")
+                    emit(f"    .occupancy({occ_net}),")
+                    emit(f"    .high_water({hw_net}),")
                     emit(f"    .rd_clk({dst_clk_net}),")
                     emit(f"    .rd_rst({dst_rst_net}),")
                     emit(f"    .dout({sync_net}),")

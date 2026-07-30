@@ -50,11 +50,17 @@ module cdc_mailbox #(
     output wire             dout_valid
 );
 
-    // ── Source domain ──────────────────────────────────────────────
+    // All registers declared up front, before either always block, so
+    // neither domain's block ever references the other's register
+    // before its declaration (xvlog enforces declare-before-use
+    // strictly even for this simulation-only cross-referencing).
     reg [WIDTH-1:0] data_src;
     reg             req_toggle;
     reg             ack_sync0, ack_sync1;
+    reg             req_sync0, req_sync1, req_sync1_d;
+    reg             ack_toggle;
 
+    // ── Source domain ──────────────────────────────────────────────
     wire src_busy = (req_toggle != ack_sync1);
 
     always @(posedge src_clk) begin
@@ -78,9 +84,6 @@ module cdc_mailbox #(
     end
 
     // ── Destination domain ─────────────────────────────────────────
-    reg req_sync0, req_sync1, req_sync1_d;
-    reg ack_toggle;
-
     always @(posedge dst_clk) begin
         if (dst_rst) begin
             req_sync0   <= 1'b0;
