@@ -18,6 +18,7 @@ from forge.verify.golden_model import (
     list_registered_golden_model_providers,
     register_golden_model_provider,
     run_golden_model,
+    write_provider_provenance,
 )
 
 
@@ -111,3 +112,29 @@ def test_expected_dataset_to_dict_round_trips_schema():
     payload = expected.to_dict()
     assert payload["schema"] == {"name": "forge.expected_dataset", "version": "1.0"}
     assert payload["provider_id"] == "test.doubling"
+
+
+def test_write_provider_provenance_writes_real_identity_and_hashes(tmp_path):
+    import json
+
+    dataset = _make_canonical_dataset([{"value": 1}])
+    expected = run_golden_model("test.doubling", dataset, {})
+    sidecar = tmp_path / "golden_model_provenance.json"
+
+    write_provider_provenance(expected, sidecar)
+
+    payload = json.loads(sidecar.read_text())
+    assert payload["provider_id"] == "test.doubling"
+    assert payload["provider_version"] == expected.provider_version
+    assert payload["input_dataset_hash"] == expected.input_dataset_hash
+    assert payload["output_hash"] == expected.output_hash
+
+
+def test_write_provider_provenance_accepts_string_path(tmp_path):
+    dataset = _make_canonical_dataset([{"value": 1}])
+    expected = run_golden_model("test.doubling", dataset, {})
+    sidecar = str(tmp_path / "golden_model_provenance.json")
+
+    write_provider_provenance(expected, sidecar)
+
+    assert (tmp_path / "golden_model_provenance.json").exists()

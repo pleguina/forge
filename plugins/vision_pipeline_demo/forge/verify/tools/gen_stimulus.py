@@ -23,7 +23,7 @@ from typing import Any, Dict
 
 from forge.verify.dataset_adapter import DatasetSource
 from forge.verify.dataset_service import DatasetService
-from forge.verify.golden_model import run_golden_model
+from forge.verify.golden_model import run_golden_model, write_provider_provenance
 from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
 _DATASET_XML = Path(__file__).resolve().parents[1] / "schemas/data/vision_pipeline_quickstart_golden.xml"
@@ -130,6 +130,15 @@ def generate_for_flow(
 
     write_run_stimulus_svh(em, out_path, header_comment=f"flow={flow_name} event={event_id}")
     print(f"  wrote {out_path}")
+
+    # release-plan §10.0C: persist the golden-model provider's identity
+    # and hashes next to the stimulus it drove — otherwise this only
+    # ever lived in this process's memory. Consumed later by
+    # forge.verify.golden_comparison_result.build_golden_comparison_result
+    # to join with a real simulation's per-event checks.
+    provenance_path = out_path.parent / "golden_model_provenance.json"
+    write_provider_provenance(expected, provenance_path)
+    print(f"  wrote {provenance_path}")
 
 
 def main() -> None:

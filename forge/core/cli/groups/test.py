@@ -509,6 +509,25 @@ def cmd_run(args) -> None:
         results_path.write_text(json.dumps(flow_result.to_dict(), indent=2) + "\n")
         artifacts.append(str(results_path))
 
+    # release-plan §10.0C: forge.golden_comparison_result.v1 — only when
+    # the plugin's gen_stimulus.py actually wrote a provider-provenance
+    # sidecar next to this flow (e.g. passthrough_demo's still-hand-typed
+    # golden XML has no real GoldenModelProvider, so no sidecar exists;
+    # honest absence, not an error).
+    golden_comparison_json_path = getattr(args, "golden_comparison_json", None)
+    if golden_comparison_json_path:
+        import json
+
+        sidecar_path = flow_dir / "golden_model_provenance.json"
+        if sidecar_path.exists():
+            from forge.verify.golden_comparison_result import build_golden_comparison_result
+
+            comparison = build_golden_comparison_result(flow_result, sidecar_path)
+            comparison_path = Path(golden_comparison_json_path).expanduser().resolve()
+            comparison_path.parent.mkdir(parents=True, exist_ok=True)
+            comparison_path.write_text(json.dumps(comparison.to_dict(), indent=2) + "\n")
+            artifacts.append(str(comparison_path))
+
     artifacts.extend(a.path for a in flow_result.artifacts)
 
     diagnostics = [d.to_dict() for e in event_results for d in e.diagnostics]
@@ -615,6 +634,12 @@ def register(sub) -> None:
         "--results-json", dest="results_json", default=None,
         help="Write the full versioned FlowResult (schema, per-event backend id, "
              "duration, artifacts, diagnostics) as JSON to this path",
+    )
+    p_run.add_argument(
+        "--golden-comparison-json", dest="golden_comparison_json", default=None,
+        help="Write a forge.golden_comparison_result.v1 artifact to this path "
+             "(only when the plugin's gen_stimulus.py wrote a "
+             "golden_model_provenance.json sidecar next to this flow)",
     )
     p_run.add_argument(
         "--strict", action="store_true", default=False,

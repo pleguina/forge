@@ -21,16 +21,21 @@ self-reported by the provider.
 
 Scoped strictly to what slice 10.0A/10.1 need: deterministic invocation
 plus real hashing. Comparison-result artifacts
-(``forge.golden_comparison_result.v1``) are a separate, later concern
-(slice 10.0C) and are deliberately not introduced here — a quickstart
-tier's "exact comparison" is realized as real per-cycle SV-testbench
-assertions computed from a provider's live output, not a new structured
-artifact.
+(``forge.golden_comparison_result.v1``) were a separate, later concern
+at that time; :func:`write_provider_provenance` (slice 10.0C) is the
+concrete follow-through — a small JSON sidecar written next to a
+plugin's generated stimulus, since a provider's identity/hashes
+otherwise live only in the Python process running ``gen_stimulus.py``
+and are never persisted. See
+:mod:`forge.verify.golden_comparison_result` for the artifact that
+joins this sidecar with a real simulation's per-event checks.
 """
 from __future__ import annotations
 
 import dataclasses
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from forge.core.artifact_schema import ArtifactSchema
@@ -147,3 +152,23 @@ def run_golden_model(
     return dataclasses.replace(
         expected, input_dataset_hash=input_hash, output_hash=output_hash,
     )
+
+
+# ── Provider provenance sidecar (release-plan Phase 10, slice 10.0C) ─────
+
+def write_provider_provenance(expected: ExpectedDataset, path: "str | Path") -> None:
+    """Write *expected*'s provider identity/hashes to a small JSON sidecar
+    at *path*, so a later real simulation's results can be joined with
+    them into a :class:`~forge.verify.golden_comparison_result.GoldenComparisonResult`
+    (see :func:`~forge.verify.golden_comparison_result.build_golden_comparison_result`).
+
+    Call this once per stimulus generation, right after :func:`run_golden_model`
+    — the sidecar always reflects the exact ``ExpectedDataset`` the
+    generated stimulus was built from, not a later or different run.
+    """
+    Path(path).write_text(json.dumps({
+        "provider_id": expected.provider_id,
+        "provider_version": expected.provider_version,
+        "input_dataset_hash": expected.input_dataset_hash,
+        "output_hash": expected.output_hash,
+    }, indent=2) + "\n")
