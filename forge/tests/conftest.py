@@ -16,6 +16,26 @@ plugin's ``gen_stimulus.py``, generating the wrong DUT signal names).
 This autouse fixture clears both the module cache and the plugin
 registry's bootstrap-declaration state around every test, so each test's
 tmp_path-scoped plugin tooling is always loaded fresh.
+
+``sys.path`` itself needs the same treatment (release-plan Phase 10,
+slice 10.0C): ``forge/verify/__main__.py``'s ``_bootstrap()`` does
+``sys.path.insert(0, tools_dir)`` per test but this fixture never undid
+it, so a real plugin's real (not tmp_path-copied) ``tools/`` directory —
+e.g. ``plugins/vision_pipeline_demo/forge/verify/tools`` — stays in
+``sys.path`` forever once any test bootstraps it. A later test that
+bootstraps a *different* real plugin inserts its own ``tools/`` dir
+*ahead* of the earlier one, which is harmless on its own — but once a
+*third* test clears ``sys.modules["bootstrap"]`` (via this very fixture)
+and tries to re-bootstrap the *first* plugin again, Python's import
+search walks ``sys.path`` in order and can resolve the bare ``bootstrap``
+name to whichever plugin's ``tools/`` dir now sits first, silently
+bootstrapping the wrong plugin instead of raising ImportError — found for
+real running ``test_report_cli_group.py`` and
+``test_golden_comparison_integration.py`` (both bootstrap
+``vision_pipeline_demo`` for real, not from a tmp_path copy) in the same
+session as any test that bootstraps another real plugin in between.
+Snapshotting and restoring ``sys.path`` around every test closes this the
+same way the module-cache clearing already does.
 """
 
 from __future__ import annotations
@@ -55,6 +75,8 @@ def _clear_plugin_bootstrap_state() -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_plugin_bootstrap_state():
+    original_sys_path = list(sys.path)
     _clear_plugin_bootstrap_state()
     yield
+    sys.path[:] = original_sys_path
     _clear_plugin_bootstrap_state()
