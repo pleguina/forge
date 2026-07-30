@@ -22,8 +22,8 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict
 
-from forge.verify.dataset_adapter import DatasetSource, get_dataset_adapter
-from forge.verify.dataset_format import get_format_loader
+from forge.verify.dataset_adapter import DatasetSource
+from forge.verify.dataset_service import DatasetService
 from forge.verify.readmemh_stimulus import write_event_memory_file
 from forge.verify.stimulus_helpers import (
     StimulusEmitter,
@@ -34,6 +34,18 @@ from forge.verify.stimulus_helpers import (
 )
 
 _DATASET_XML = Path(__file__).resolve().parents[1] / "schemas/data/passthrough_demo_golden.xml"
+
+
+def _ensure_bootstrapped() -> None:
+    """Register `passthrough.identity-xml` before touching the adapter
+    registry.  `forge test run` bootstraps the plugin itself before
+    calling into this module, but a standalone `python3 gen_stimulus.py`
+    invocation (e.g. from `run_trigger_demo.sh`-style scripts) does not
+    go through that path, so this module must be able to bootstrap
+    itself too."""
+    import bootstrap as _bootstrap_mod
+    _bootstrap_mod.bootstrap()
+
 
 # ── readmemh-mode bit layout (Phase 7, slice 7.5) ──────────────────────
 # One fixed-width word per event: data_in(8) | data_in_valid(1) |
@@ -55,13 +67,21 @@ def _pack_event_word(ev: "Dict[str, Any]") -> str:
 def _load_events(dataset_path: Path = _DATASET_XML) -> "Dict[str, Dict[str, Any]]":
     """Load the real golden dataset, keyed by its real string event id.
 
-    Dispatches by *dataset_path*'s suffix (``.xml``/``.json``) via the
-    layer-A format-loader registry — never hardcodes one format, so this
-    same function drives both the real committed XML dataset and its real
-    JSON sibling identically.
+    Routed through :class:`~forge.verify.dataset_service.DatasetService`
+    (release-plan Phase 10, slice 10.0A) — the same layer-A (format
+    loading, dispatched by *dataset_path*'s suffix, ``.xml``/``.json``)
+    plus layer-B (`passthrough.identity-xml` adapter) path
+    ``generate_readmemh_stimulus`` below already uses, so the
+    `svh_include` and `readmemh` stimulus modes now agree on how a
+    dataset is loaded, not only on what it contains.
     """
-    dataset = get_format_loader(dataset_path).load(dataset_path)
-    return dict(zip(dataset.metadata.event_ids, dataset.events))
+    _ensure_bootstrapped()
+    service = DatasetService()
+    serialized = service.load(DatasetSource(raw_path=dataset_path))
+    canonical = service.materialize(
+        DatasetSource(serialized=serialized), "passthrough.identity-xml", {},
+    )
+    return dict(zip(canonical.metadata.event_ids, canonical.events))
 
 
 def generate_for_flow(
@@ -127,9 +147,12 @@ def generate_readmemh_stimulus(
 
     Returns the real ``event_index → event_id`` mapping.
     """
-    serialized = get_format_loader(dataset_path).load(dataset_path)
-    adapter = get_dataset_adapter("passthrough.identity-xml")
-    canonical = adapter.materialize(DatasetSource(serialized=serialized), {})
+    _ensure_bootstrapped()
+    service = DatasetService()
+    serialized = service.load(DatasetSource(raw_path=dataset_path))
+    canonical = service.materialize(
+        DatasetSource(serialized=serialized), "passthrough.identity-xml", {},
+    )
 
     mem_path = flow_dir / _MEM_FILE_NAME
     index_to_id = write_event_memory_file(canonical, _pack_event_word, mem_path)

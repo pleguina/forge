@@ -30,7 +30,6 @@ import argparse
 import contextlib
 import io
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -115,16 +114,19 @@ def _parse_event_list(event_list: str) -> List[int]:
 
 
 def _enumerate_xml_event_ids(xml_path: Path) -> List[int]:
-    """Every ``<event id="...">`` in *xml_path*, tag-name-agnostic on the
-    root element (passthrough_demo's root is `<passthrough_events>`,
-    trigger_demo's is `<trigger_events>` — both real reference plugins
-    use plain `<event id="N">` children, confirmed by inspection)."""
-    tree = ET.parse(xml_path)
-    ids = {
-        int(elem.get("id")) for elem in tree.getroot().iter("event")
-        if elem.get("id") is not None
-    }
-    return sorted(ids)
+    """Every event id in *xml_path*, routed through
+    :class:`~forge.verify.dataset_service.DatasetService` (release-plan
+    Phase 10, slice 10.0A) instead of parsing the XML directly — the
+    real `XmlDatasetLoader` this now goes through was itself written to
+    be tag-name-agnostic on the root element (passthrough_demo's root is
+    `<passthrough_events>`, trigger_demo's is `<trigger_events>` — both
+    real reference plugins use plain `<event id="N">` children), so this
+    is a same-output substitution, not a behavior change."""
+    from forge.verify.dataset_adapter import DatasetSource
+    from forge.verify.dataset_service import DatasetService
+
+    serialized = DatasetService().load(DatasetSource(raw_path=xml_path))
+    return sorted(int(eid) for eid in serialized.metadata.event_ids)
 
 
 def _resolve_event_ids(selection) -> List[int]:

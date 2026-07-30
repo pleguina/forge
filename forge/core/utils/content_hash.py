@@ -19,8 +19,9 @@ parsed YAML with sorted keys), not rely on this module to do it.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 
 def hash_bytes(data: bytes) -> str:
@@ -54,3 +55,24 @@ def hash_files(paths: Iterable["str | Path"]) -> str:
     )
     combined_input = "\n".join(f"{path}:{digest}" for path, digest in entries)
     return hash_bytes(combined_input.encode("utf-8"))
+
+
+def compute_preprocessing_hash(config: "Mapping[str, object]") -> str:
+    """A deterministic hash over a dataset-materialization preprocessing
+    configuration (release-plan Phase 10, slice 10.0A).
+
+    *config* should carry only what actually determines the preprocessed
+    output — adapter id/version, resize/rounding/saturation/tiling
+    parameters, source-content hashes — never a local filesystem path,
+    timestamp, or hostname; the caller is responsible for that exclusion,
+    since this function has no way to distinguish a meaningful key from
+    an environmental one.
+
+    Canonicalized the same way ``forge.verify.dataset_format``'s
+    ``compute_events_content_hash`` canonicalizes events (sorted-key,
+    separator-normalized JSON) before hashing via :func:`hash_bytes` — no
+    new hashing scheme, same "canonicalize, then hash" shape as
+    :func:`hash_files` above, just over a mapping instead of a file list.
+    """
+    canonical = json.dumps(dict(config), sort_keys=True, separators=(",", ":"), default=str)
+    return hash_bytes(canonical.encode("utf-8"))

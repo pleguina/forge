@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import time
 
-from forge.core.utils.content_hash import hash_bytes, hash_file, hash_files
+from forge.core.utils.content_hash import (
+    compute_preprocessing_hash,
+    hash_bytes,
+    hash_file,
+    hash_files,
+)
 
 
 def test_hash_bytes_deterministic():
@@ -62,3 +67,34 @@ def test_hash_files_changes_on_content_edit(tmp_path):
     h_after = hash_files([a])
 
     assert h_before != h_after
+
+
+def test_compute_preprocessing_hash_deterministic():
+    config = {"adapter_id": "vision.identity", "resize": "nearest", "scale": 1.0}
+    assert compute_preprocessing_hash(config) == compute_preprocessing_hash(config)
+
+
+def test_compute_preprocessing_hash_key_order_independent():
+    a = {"adapter_id": "vision.identity", "resize": "nearest", "scale": 1.0}
+    b = {"scale": 1.0, "resize": "nearest", "adapter_id": "vision.identity"}
+    assert compute_preprocessing_hash(a) == compute_preprocessing_hash(b)
+
+
+def test_compute_preprocessing_hash_changes_on_value_change():
+    base = {"adapter_id": "vision.identity", "resize": "nearest"}
+    changed = {"adapter_id": "vision.identity", "resize": "bilinear"}
+    assert compute_preprocessing_hash(base) != compute_preprocessing_hash(changed)
+
+
+def test_compute_preprocessing_hash_changes_on_new_key():
+    base = {"adapter_id": "vision.identity"}
+    with_extra = {"adapter_id": "vision.identity", "tiling": "8x8"}
+    assert compute_preprocessing_hash(base) != compute_preprocessing_hash(with_extra)
+
+
+def test_compute_preprocessing_hash_accepts_mapping_view():
+    """Real callers (DatasetService.materialize) pass a Mapping, not
+    necessarily a plain dict — must not require dict-specific behavior."""
+    from types import MappingProxyType
+    proxy = MappingProxyType({"adapter_id": "vision.identity"})
+    assert compute_preprocessing_hash(proxy) == compute_preprocessing_hash({"adapter_id": "vision.identity"})
