@@ -1,0 +1,69 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Verification Design Contract (quickstart tier)
+# ═══════════════════════════════════════════════════════════════════════
+#
+#   forge topgen gen-top   plugins/vision_pipeline_demo/forge/designs/design.yml --mode verilog ...
+#   forge verify generate  plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+#   forge verify doctor    plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+#   forge verify run       plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml --plugin vision_pipeline_demo
+#
+# Two flows, deliberately not three: a standalone `single_module_rtl` flow
+# for pixel_normalizer was scoped out for this slice — its generated
+# testbench would drive the raw Vitis-synthesized RTL's port names
+# directly (via a hand-authored stimulus_current.svh), which isn't known
+# until real HLS synthesis has actually run once; the full_chip_rtl flow
+# below exercises the same module through FORGE's own generator, which
+# handles that raw-port translation via the interface contract instead of
+# a hand-driven TB guessing it. See docs/internal/phase10/preflight.md /
+# the quickstart tutorial for the full reasoning.
+# ───────────────────────────────────────────────────────────────────────
+schema_version: "1.0"
+plugin: vision_pipeline_demo
+
+# ─── Datasets ─────────────────────────────────────────────────────────
+datasets:
+  vision_pipeline_quickstart_golden:
+    xml: schemas/data/vision_pipeline_quickstart_golden.xml
+    description: >
+      8x8 synthetic ramp frame (64 events). Carries only <in> values —
+      expected outputs are computed live by a real GoldenModelProvider
+      (release-plan Phase 10, slice 10.0A/10.1 Decision C), not
+      hand-typed and never cross-checked.
+    adapter: vision_pipeline.pixel-stream-xml
+
+# ─── Simulation Defaults ──────────────────────────────────────────────
+defaults:
+  clk_period_ns:              4.0
+  reset_cycles:               4
+  idle_cycles_after_reset:    0
+  post_stimulus_drain_cycles: 6   # 3 HLS LATENCY + 2 RTL threshold latency + 1 margin
+
+# ─── Flows ────────────────────────────────────────────────────────────
+flows:
+
+  - name:             pixel_normalizer_csim
+    kind:             hls_csim
+    backend:          csim
+    top_module:       pixel_normalizer
+    tb_module:        tb_pixel_normalizer
+    dut_rtl_source:   build_hls_vision_pipeline_demo/pixel_normalizer/solution1/syn/verilog
+    dataset:          vision_pipeline_quickstart_golden
+    default_event_id: 0
+    coverage_intent:  functional
+
+  - name:             quickstart_pipeline_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_quickstart
+    dataset:          vision_pipeline_quickstart_golden
+    default_event_id: 0
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 6
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration

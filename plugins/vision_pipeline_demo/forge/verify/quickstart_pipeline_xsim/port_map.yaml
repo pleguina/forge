@@ -1,0 +1,77 @@
+format_version: '1'
+generated_by: forge gen-top --mode verilog
+source_file: /data3/home/pleguina/work/omtf-integration-test/workspace/arc-framework/gen-top/design_vision_pipeline_quickstart/algo_top.v
+top_module: algo_top
+port_signature_hash: f9ea05410484a10b
+port_groups:
+  clock_reset: []
+  bx0: []
+  outputs:
+  - name: thresh_out_end_of_frame
+    direction: output
+    width: 1
+    group: other
+  - name: thresh_out_end_of_line
+    direction: output
+    width: 1
+    group: other
+  - name: thresh_out_frame_id
+    direction: output
+    width: 16
+    group: other
+  - name: thresh_out_pixel
+    direction: output
+    width: 8
+    group: other
+  - name: thresh_out_tile_id
+    direction: output
+    width: 16
+    group: other
+  - name: thresh_out_valid
+    direction: output
+    width: 1
+    group: other
+  - name: thresh_out_x
+    direction: output
+    width: 12
+    group: other
+  - name: thresh_out_y
+    direction: output
+    width: 12
+    group: other
+  - name: thresh_threshold_mask
+    direction: output
+    width: 1
+    group: other
+  unclassified:
+  - name: ap_clk
+    direction: input
+    width: 1
+  - name: ap_rst
+    direction: input
+    width: 1
+  - name: norm_end_of_frame
+    direction: input
+    width: 1
+  - name: norm_end_of_line
+    direction: input
+    width: 1
+  - name: norm_frame_id
+    direction: input
+    width: 16
+  - name: norm_pixel
+    direction: input
+    width: 8
+  - name: norm_pixel_valid
+    direction: input
+    width: 1
+  - name: norm_tile_id
+    direction: input
+    width: 16
+  - name: norm_x
+    direction: input
+    width: 12
+  - name: norm_y
+    direction: input
+    width: 12
+tier2_probes: []

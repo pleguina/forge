@@ -21,6 +21,7 @@ plugins/*_local/
 
 # HLS build outputs
 build_hls_trigger_demo/
+build_hls_vision_pipeline_demo/
 
 # Testbench run artifacts
 tb_*.csv

@@ -1,0 +1,60 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Module Registry (quickstart tier)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Release-plan Phase 10, slice 10.1 — the first, smallest rung of the
+# vision_pipeline_demo ladder (docs/internal/phase10/preflight.md /
+# vision_pipeline_reference_project.md). One HLS module, one RTL module:
+#
+#   pixel_normalizer (HLS) -> threshold_rtl (RTL) -> external result stream
+#
+# The fuller design (Sobel, tile statistics, CDC, throughput) is later
+# slices (10.2-10.7); this registers only what the quickstart tier needs.
+# ═══════════════════════════════════════════════════════════════════════════
+registry_version: '1'
+
+defaults:
+  part: xcvu9p-flga2104-2L-e
+  clock_period: 4.0
+  vendor: vision_pipeline_demo
+  version: '1.0'
+
+modules:
+
+# ─── Pixel Normalizer (HLS) ────────────────────────────────────────────────
+- name: pixel_normalizer
+  kind: hls
+  top: pixel_normalizer
+  # HLS LATENCY min=3 max=3 — a real fixed latency, not a rough estimate
+  # (same structured latency: {kind: fixed, ...} spelling
+  # plugins/trigger_demo/forge/modules.yml's trigger_logic entry uses).
+  latency:
+    kind: fixed
+    cycles: 3
+  interface_contract: interfaces/pixel_normalizer_ip.interface.yaml
+  src: [../algo/normalizer/pixel_normalizer.cpp]
+  includes: [../algo/normalizer, verify/include, verify/src]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+  verify:
+    tb_src:
+      - ../algo/normalizer/pixel_normalizer.cpp
+      - verify/src/logging.cpp
+      - verify/tests/tb_pixel_normalizer.cpp
+    tb_args: verify/schemas/data/vision_pipeline_quickstart_golden.xml
+    testbench_target: tb_pixel_normalizer
+
+# ─── Threshold Comparator (RTL) ────────────────────────────────────────────
+- name: threshold_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: threshold_rtl
+  # Fixed 2-cycle registered latency (see algo/rtl/threshold_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 2
+  interface_contract: interfaces/threshold_rtl.interface.yaml
+  src: [../algo/rtl/threshold_rtl.v]
