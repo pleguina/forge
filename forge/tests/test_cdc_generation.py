@@ -107,7 +107,55 @@ class TestCdcSync2ffEmission:
         assert "input clk_b" in text
         assert ".dst_clk(clk_b)" in text
 
-    def test_async_fifo_wires_directly_with_a_visible_note(self, tmp_path):
+    def test_2ff_sync_alias_normalizes_to_level_sync(self, tmp_path):
+        """The '2ff_sync' spelling (constructed directly, bypassing
+        DesignConfig.load's own normalization) must still emit the real
+        cdc_sync2ff instance, identically to 'level_sync'."""
+        cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
+            cdc={"kind": "level_sync"},
+        )
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        assert "cdc_sync2ff #(" in out.read_text()
+
+    def test_pulse_sync_emits_toggle_synchronizer(self, tmp_path):
+        cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
+            cdc={"kind": "pulse_sync", "min_spacing_cycles": 8},
+        )
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        assert "cdc_pulse_sync" in text
+        assert ".src_clk(clk_a)," in text
+        assert ".dst_clk(clk_b)," in text
+        assert ".pulse_in(net_src_dout)," in text
+        assert ".pulse_out(sync_net_src_dst_dout)" in text
+
+    def test_mailbox_transfer_emits_handshake_synchronizer(self, tmp_path):
+        cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
+            cdc={"kind": "mailbox_transfer"},
+        )
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        assert "cdc_mailbox #(" in text
+        assert ".WIDTH(8)" in text
+        assert ".din(net_src_dout)," in text
+        assert ".dout(sync_net_src_dst_dout)," in text
+
+    def test_async_fifo_emits_real_fifo_rtl(self, tmp_path):
+        """release-plan §10.0B closes the previously-documented gap:
+        async_fifo now emits a real dual-clock FIFO instance, not a
+        placeholder comment."""
         cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
             cdc={"kind": "async_fifo", "depth": 8},
         )
@@ -118,9 +166,15 @@ class TestCdcSync2ffEmission:
         )
         text = out.read_text()
         assert "cdc_sync2ff" not in text
-        assert "async_fifo" in text  # visible NOTE comment
-        assert "not implemented yet" in text
-        assert ".din(net_src_dout)" in text  # wired directly, no intermediate net
+        assert "not implemented yet" not in text
+        assert "cdc_async_fifo #(" in text
+        assert ".WIDTH(8)," in text
+        assert ".DEPTH(8)" in text
+        assert ".wr_clk(clk_a)," in text
+        assert ".rd_clk(clk_b)," in text
+        assert ".dout(sync_net_src_dst_dout)," in text
+        # Destination instance consumes the FIFO's dout, not the raw net.
+        assert ".din(sync_net_src_dst_dout)" in text
 
     def test_cdc_declared_without_match_report_raises(self, tmp_path):
         cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
@@ -156,6 +210,60 @@ class TestCdcSync2ffEmission:
         )
         assert out.exists()
         assert "cdc_sync2ff" not in out.read_text()
+
+
+class TestResetSyncEmission:
+    def test_reset_domains_sync_emits_reset_synchronizer(self, tmp_path):
+        """reset_domains.<name>.sync: reset_sync (release-plan §10.0B) emits
+        a real cdc_reset_sync instance clocked by the domain's own resolved
+        clock — a reset crossing is a domain property, not a Connection.cdc
+        declaration, so this is driven by cfg.reset_domains directly."""
+        mod = Module(name="mod", top="mod_top", src=["x.v"])
+        cfg = DesignConfig(
+            part="xcvu13p", clock_period=4.0, modules=[mod],
+            connections=[],
+        )
+        cfg.reset_domains = {
+            "rst_slow": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"},
+        }
+        ip_info = {
+            "mod": {"ports": [_port("clk_b", "IN", 1), _port("rst_slow", "IN", 1)]},
+        }
+        contracts = {"mod": _contract("mod", "clk_b", "rst_slow")}
+        conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
+
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        assert "cdc_reset_sync" in text
+        assert ".dst_clk(clk_b)," in text
+        assert ".async_rst_in(ap_rst)," in text
+
+    def test_no_reset_domains_sync_emits_nothing(self, tmp_path):
+        src = Module(name="src", top="src_top", src=["x.v"])
+        dst = Module(name="dst", top="dst_top", src=["x.v"])
+        cfg = DesignConfig(
+            part="xcvu13p", clock_period=4.0, modules=[src, dst],
+            connections=[Connection(from_="src", to="dst", port_map=[("dout", "din")])],
+        )
+        ip_info = {
+            "src": {"ports": [_port("ap_clk", "IN", 1), _port("ap_rst", "IN", 1), _port("dout", "OUT")]},
+            "dst": {"ports": [_port("ap_clk", "IN", 1), _port("ap_rst", "IN", 1), _port("din", "IN")]},
+        }
+        conn_map = {("src", "dst"): [("dout", "din")]}
+        global_nets = {
+            "ap_clk": [("src", "ap_clk"), ("dst", "ap_clk")],
+            "ap_rst": [("src", "ap_rst"), ("dst", "ap_rst")],
+        }
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out,
+        )
+        assert "cdc_reset_sync" not in out.read_text()
 
 
 def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
@@ -200,6 +308,90 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     )
     manifest2 = json.loads(manifest_path.read_text())
     assert not any(f.endswith("cdc_sync2ff.v") for f in manifest2["verilog_files"])
+
+
+@pytest.mark.parametrize("kind,cdc,filename", [
+    ("pulse_sync", {"kind": "pulse_sync", "min_spacing_cycles": 4}, "cdc_pulse_sync.v"),
+    ("mailbox_transfer", {"kind": "mailbox_transfer"}, "cdc_mailbox.v"),
+    ("async_fifo", {"kind": "async_fifo", "depth": 8}, "cdc_async_fifo.v"),
+])
+def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind, cdc, filename):
+    """release-plan §10.0B: the 3 new CDC kinds' RTL files must be found
+    and included the same way cdc_sync2ff.v already is, and must NOT be
+    included when nothing declares that kind."""
+    from forge.core.cli.groups.topgen import generate_build_manifest
+
+    src = Module(name="src", top="src_top", src=["src.v"])
+    dst = Module(name="dst", top="dst_top", src=["dst.v"])
+    (tmp_path / "src.v").write_text("module src_top(); endmodule\n")
+    (tmp_path / "dst.v").write_text("module dst_top(); endmodule\n")
+    (tmp_path / filename).write_text(f"module {filename[:-2]}(); endmodule\n")
+    src.abs_src = [tmp_path / "src.v"]
+    dst.abs_src = [tmp_path / "dst.v"]
+
+    import json
+
+    manifest_path = tmp_path / "build_manifest.json"
+
+    cfg_with_cdc = DesignConfig(
+        part="xcvu13p", clock_period=4.0, modules=[src, dst],
+        connections=[Connection(from_="src", to="dst", cdc=cdc)],
+    )
+    generate_build_manifest(
+        cfg_with_cdc, ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    manifest = json.loads(manifest_path.read_text())
+    assert any(f.endswith(filename) for f in manifest["verilog_files"])
+
+    cfg_without_cdc = DesignConfig(
+        part="xcvu13p", clock_period=4.0, modules=[src, dst],
+        connections=[Connection(from_="src", to="dst")],
+    )
+    generate_build_manifest(
+        cfg_without_cdc, ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    manifest2 = json.loads(manifest_path.read_text())
+    assert not any(f.endswith(filename) for f in manifest2["verilog_files"])
+
+
+def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
+    """release-plan §10.0B: cdc_reset_sync.v is needed based on
+    reset_domains.*.sync, not a Connection.cdc declaration."""
+    from forge.core.cli.groups.topgen import generate_build_manifest
+
+    mod = Module(name="mod", top="mod_top", src=["mod.v"])
+    (tmp_path / "mod.v").write_text("module mod_top(); endmodule\n")
+    (tmp_path / "cdc_reset_sync.v").write_text("module cdc_reset_sync(); endmodule\n")
+    mod.abs_src = [tmp_path / "mod.v"]
+
+    import json
+
+    manifest_path = tmp_path / "build_manifest.json"
+
+    cfg_with_sync = DesignConfig(part="xcvu13p", clock_period=4.0, modules=[mod], connections=[])
+    cfg_with_sync.reset_domains = {
+        "rst_slow": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"},
+    }
+    generate_build_manifest(
+        cfg_with_sync, ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    manifest = json.loads(manifest_path.read_text())
+    assert any(f.endswith("cdc_reset_sync.v") for f in manifest["verilog_files"])
+
+    cfg_without_sync = DesignConfig(part="xcvu13p", clock_period=4.0, modules=[mod], connections=[])
+    generate_build_manifest(
+        cfg_without_sync, ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    manifest2 = json.loads(manifest_path.read_text())
+    assert not any(f.endswith("cdc_reset_sync.v") for f in manifest2["verilog_files"])
 
 
 def test_trigger_demo_generation_is_unaffected_by_cdc_support(tmp_path):

@@ -497,12 +497,26 @@ def write_structural_verilog(
                 if conn.boundary:
                     boundary_map[(src_inst, dst_inst)] = conn.boundary
                 if conn.cdc:
-                    cdc_map[(src_inst, dst_inst)] = conn.cdc
+                    # Normalize the '2ff_sync' backwards-compatible alias to
+                    # 'level_sync' here, once, so every dispatch site below
+                    # only ever has to recognize one spelling — callers may
+                    # construct Connection objects directly (bypassing
+                    # DesignConfig.load's own normalization, e.g. in tests),
+                    # so this generator cannot assume the alias was already
+                    # resolved upstream.
+                    cdc = conn.cdc
+                    if cdc.get("kind") == "2ff_sync":
+                        cdc = {**cdc, "kind": "level_sync"}
+                    cdc_map[(src_inst, dst_inst)] = cdc
 
-    if cdc_map and match_report is None:
+    _reset_sync_declared = any(
+        rel.get("sync") == "reset_sync" for rel in cfg.reset_domains.values()
+    )
+    if (cdc_map or _reset_sync_declared) and match_report is None:
         raise ValueError(
-            "one or more connections declare 'cdc:' but write_structural_verilog "
-            "was not given a match_report — pass the MatchReport auto_match_ports "
+            "one or more connections declare 'cdc:' (or a reset_domains.*.sync: "
+            "reset_sync entry is present) but write_structural_verilog was not "
+            "given a match_report — pass the MatchReport auto_match_ports "
             "returned so the destination instance's real clock/reset net can be "
             "resolved (forge.topgen.ip.domains.resolve_domain_nets)."
         )
@@ -609,7 +623,7 @@ def write_structural_verilog(
     # by the *destination* domain, not always assumed to be ap_clk/ap_rst.
     clock_of_module: Dict[str, Optional[str]] = {}
     reset_of_module: Dict[str, Optional[str]] = {}
-    if cdc_map:
+    if cdc_map or _reset_sync_declared:
         clock_of_module, reset_of_module, _unresolved = resolve_domain_nets(
             cfg, contracts or {}, match_report, global_nets, inst_to_mod,
         )
@@ -817,10 +831,11 @@ def write_structural_verilog(
                         emit(f"  wire [{w-1}:0] {delay_net};")
                     delay_nets.add(delay_net)
 
-            # cdc: {kind: 2ff_sync} — intermediate wire for the synchronizer
-            # output. async_fifo emits no RTL this release (see this
-            # function's docstring) so it needs no intermediate net.
-            if cdc_kind == "2ff_sync":
+            # cdc: {kind: ...} — intermediate wire for the synchronizer/
+            # FIFO output (release-plan §10.0B: every kind now emits real
+            # RTL and therefore a real intermediate net, including
+            # async_fifo, which used to be wired straight through).
+            if cdc_kind in ("level_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
                 sync_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}")
                 if sync_net not in sync_nets:
                     if w == 1:
@@ -960,8 +975,8 @@ def write_structural_verilog(
                         cdc_kind = cdc_map.get((src_i, ilabel), {}).get("kind")
                         num_delays = delay_cycles_map.get((src_i, ilabel), 0)
                         num_stages = reg_stages_map.get((src_i, ilabel), 0)
-                        if cdc_kind == "2ff_sync":
-                            # Connect to the synchronized output
+                        if cdc_kind in ("level_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
+                            # Connect to the synchronized/buffered output
                             sync_net = _verilog_ident(f"sync_net_{src_i}_{ilabel}_{src_pin}")
                             pm.append(f"    .{pname}({sync_net})")
                         elif num_delays > 0:
@@ -1108,13 +1123,14 @@ def write_structural_verilog(
 
                     delay_counter += 1
 
-    # ====== CDC Synchronizer Instances (release-plan §3.2, slice 3) =======
-    # A real 2-flop synchronizer is emitted for cdc: {kind: 2ff_sync}
-    # connections, clocked/reset by the *destination* instance's own
-    # resolved clock/reset net (which may differ from ap_clk/ap_rst in a
-    # multi-domain design). async_fifo is structurally approved (see
-    # forge.topgen.ip.cdc.verify_cdc) but emits no FIFO body this
-    # release — documented limitation, not a silent gap.
+    # ====== CDC Synchronizer Instances (release-plan §3.2, slice 3; =======
+    # ====== expanded to the full 5-kind primitive family, §10.0B) ========
+    # A real synchronizer/FIFO is emitted for every declared cdc: {kind: ...}
+    # connection, clocked/reset by each side's own resolved clock/reset net
+    # (which may differ from ap_clk/ap_rst in a multi-domain design —
+    # though no plugin in this repo declares a real second domain yet, see
+    # forge.topgen.ip.domains; the physical top-level port is still always
+    # a single ap_clk/ap_rst pair this release, deferred to slice 10.4).
     if cdc_map:
         emit("  // CDC synchronizers for declared clock-domain-crossing connections")
         cdc_sync_counter = 0
@@ -1122,21 +1138,9 @@ def write_structural_verilog(
             cdc = cdc_map.get((src_i, dst_i))
             if not cdc:
                 continue
+            kind = cdc.get("kind")
             src_mod = inst_to_mod[src_i]
             dst_mod = inst_to_mod[dst_i]
-
-            if cdc.get("kind") == "async_fifo":
-                emit(
-                    f"  // NOTE: connection {src_i}->{dst_i} declares "
-                    f"cdc: {{kind: async_fifo}} — FIFO RTL generation is not "
-                    "implemented yet (release-plan Phase 3 slice 3 limitation); "
-                    "wired directly, no crossing protection applied."
-                )
-                emit("")
-                continue
-
-            if cdc.get("kind") != "2ff_sync":
-                continue
 
             # resolve_domain_nets's domain identity is the raw port name
             # verbatim (e.g. "rst") — but this generator's own clock/reset
@@ -1145,8 +1149,12 @@ def write_structural_verilog(
             # which variant a given module's contract used. Translate
             # through the same rule here, or the synchronizer would
             # reference a top-level net that doesn't exist.
+            src_clk_domain = clock_of_module.get(src_mod)
+            src_rst_domain = reset_of_module.get(src_mod)
             dst_clk_domain = clock_of_module.get(dst_mod)
             dst_rst_domain = reset_of_module.get(dst_mod)
+            src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True) if src_clk_domain else "ap_clk"
+            src_rst_net = _domain_to_top_level_net(src_rst_domain, is_clock=False) if src_rst_domain else "ap_rst"
             dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
             dst_rst_net = _domain_to_top_level_net(dst_rst_domain, is_clock=False) if dst_rst_domain else "ap_rst"
 
@@ -1159,18 +1167,118 @@ def write_structural_verilog(
                 sync_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}")
                 inst_name = f"cdc_sync_{cdc_sync_counter}"
 
-                emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (2ff_sync)")
-                emit(f"  cdc_sync2ff #(")
-                emit(f"    .WIDTH({w})")
-                emit(f"  ) {inst_name} (")
-                emit(f"    .dst_clk({dst_clk_net}),")
-                emit(f"    .dst_rst({dst_rst_net}),")
-                emit(f"    .din({src_net}),")
-                emit(f"    .dout({sync_net})")
-                emit(f"  );")
-                emit("")
+                if kind == "level_sync":
+                    emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (level_sync)")
+                    emit(f"  cdc_sync2ff #(")
+                    emit(f"    .WIDTH({w})")
+                    emit(f"  ) {inst_name} (")
+                    emit(f"    .dst_clk({dst_clk_net}),")
+                    emit(f"    .dst_rst({dst_rst_net}),")
+                    emit(f"    .din({src_net}),")
+                    emit(f"    .dout({sync_net})")
+                    emit(f"  );")
+                    emit("")
+                elif kind == "pulse_sync":
+                    emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (pulse_sync, "
+                         f"min_spacing_cycles={cdc.get('min_spacing_cycles')})")
+                    emit(f"  cdc_pulse_sync {inst_name} (")
+                    emit(f"    .src_clk({src_clk_net}),")
+                    emit(f"    .src_rst({src_rst_net}),")
+                    emit(f"    .pulse_in({src_net}),")
+                    emit(f"    .dst_clk({dst_clk_net}),")
+                    emit(f"    .dst_rst({dst_rst_net}),")
+                    emit(f"    .pulse_out({sync_net})")
+                    emit(f"  );")
+                    emit("")
+                elif kind == "mailbox_transfer":
+                    valid_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_valid")
+                    emit(f"  wire {valid_net};  // unused: mailbox dout_valid, no downstream valid concept yet")
+                    emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (mailbox_transfer)")
+                    emit(f"  cdc_mailbox #(")
+                    emit(f"    .WIDTH({w})")
+                    emit(f"  ) {inst_name} (")
+                    emit(f"    .src_clk({src_clk_net}),")
+                    emit(f"    .src_rst({src_rst_net}),")
+                    emit(f"    .din({src_net}),")
+                    emit(f"    .dst_clk({dst_clk_net}),")
+                    emit(f"    .dst_rst({dst_rst_net}),")
+                    emit(f"    .dout({sync_net}),")
+                    emit(f"    .dout_valid({valid_net})")
+                    emit(f"  );")
+                    emit("")
+                elif kind == "async_fifo":
+                    depth = cdc.get("depth")
+                    full_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_full")
+                    empty_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_empty")
+                    ovf_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_overflow")
+                    unf_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_underflow")
+                    emit(
+                        f"  // Occupancy/backpressure telemetry — generated but not yet "
+                        "wired into any report/schema (release-plan §5 Decision B / slice 10.0C)."
+                    )
+                    emit(f"  wire {full_net}, {empty_net}, {ovf_net}, {unf_net};")
+                    emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (async_fifo, depth={depth})")
+                    emit(f"  cdc_async_fifo #(")
+                    emit(f"    .WIDTH({w}),")
+                    emit(f"    .DEPTH({depth})")
+                    emit(f"  ) {inst_name} (")
+                    emit(f"    .wr_clk({src_clk_net}),")
+                    emit(f"    .wr_rst({src_rst_net}),")
+                    emit(f"    .din({src_net}),")
+                    emit(f"    .full({full_net}),")
+                    emit(f"    .overflow_attempt({ovf_net}),")
+                    emit(f"    .rd_clk({dst_clk_net}),")
+                    emit(f"    .rd_rst({dst_rst_net}),")
+                    emit(f"    .dout({sync_net}),")
+                    emit(f"    .empty({empty_net}),")
+                    emit(f"    .underflow_attempt({unf_net})")
+                    emit(f"  );")
+                    emit("")
+                else:
+                    continue
 
                 cdc_sync_counter += 1
+
+    # ====== Reset Synchronizer Instances (release-plan §10.0B, §5 =========
+    # ====== Decision A) — reset_domains.<name>.sync: reset_sync =========
+    # A reset crossing is a property of a destination reset *domain*, not
+    # a connections:-level data crossing (see forge.topgen.ip.cdc's module
+    # docstring), so this is driven directly off cfg.reset_domains rather
+    # than cdc_map. NOTE: the synchronized reset net produced here is not
+    # yet threaded into any instance's actual reset pin binding — every
+    # instance's reset pin is still bound to the literal ap_rst
+    # unconditionally elsewhere in this generator (the same single-
+    # top-level-clock/reset-port limitation the CDC data synchronizers
+    # above already have, deferred to slice 10.4). This block makes the
+    # primitive itself real and generatable now; wiring it into real
+    # instance reset pins is 10.4's job, once a real multi-domain plugin
+    # exists to drive that design.
+    reset_sync_domains = {
+        name: rel for name, rel in cfg.reset_domains.items() if rel.get("sync") == "reset_sync"
+    }
+    if reset_sync_domains:
+        emit("  // Reset synchronizers for reset_domains.*.sync: reset_sync declarations")
+        for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
+            derived_from = rel.get("derived_from")
+            async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False)
+
+            # The synchronizer's own destination clock: whichever clock
+            # domain this reset domain's member instances actually use
+            # (a reset domain and its instances are assumed to share one
+            # clock domain). Falls back to ap_clk if unresolvable.
+            member_mods = [m for m, dom in reset_of_module.items() if dom == name]
+            dst_clk_domain = clock_of_module.get(member_mods[0]) if member_mods else None
+            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
+
+            rst_sync_net = _verilog_ident(f"rst_sync_{name}")
+            emit(f"  // Reset domain {name!r}: sync_rst_out not yet wired into instance reset pins (slice 10.4)")
+            emit(f"  wire {rst_sync_net};")
+            emit(f"  cdc_reset_sync rst_sync_{rst_sync_counter} (")
+            emit(f"    .dst_clk({dst_clk_net}),")
+            emit(f"    .async_rst_in({async_rst_net}),")
+            emit(f"    .sync_rst_out({rst_sync_net})")
+            emit(f"  );")
+            emit("")
 
     # ====== Control Signal Distribution (NEW) =============================
     emit("  // Control signal distribution with delays")
