@@ -480,7 +480,8 @@ usage: forge inspect [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                      [--build-dir BUILD_DIR] [--ip-root IP_ROOT] [--src-root SRC_ROOT] [--json]
                      [--emit-ir EMIT_IR] [--diff DIFF] [--provenance PROVENANCE]
                      [--explain-staleness EXPLAIN_STALENESS] [--dot DOT] [--svg SVG]
-                     [--explorer EXPLORER]
+                     [--explorer EXPLORER] [--verify-design VERIFY_DESIGN]
+                     [--results-json RESULTS_JSON]
                      design
 
 positional arguments:
@@ -507,6 +508,12 @@ optional arguments:
                         `dot`)
   --svg SVG             Write an SVG rendering of the design (requires the `dot` binary on PATH)
   --explorer EXPLORER   Write a self-contained, offline, interactive HTML design explorer
+  --verify-design VERIFY_DESIGN
+                        Path to design.verification.yml, for --dot/--svg/--explorer's
+                        verification-flow-entry-point overlay (used together with --results-json)
+  --results-json RESULTS_JSON
+                        Existing versioned results JSON (from a prior forge test run --results-
+                        json), for --dot/--svg/--explorer's verification-flow-entry-point overlay
 ```
 
 ### `forge report`
@@ -516,8 +523,9 @@ usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                     [--build-dir BUILD_DIR] [--output OUTPUT] [--hls-build-root HLS_BUILD_ROOT]
                     [--solution SOLUTION] [--probe-csv PROBE_CSV] [--probe-format {long,wide}]
                     [--probe-pairs PROBE_PAIRS] [--provenance PROVENANCE] [--junit-xml JUNIT_XML]
-                    [--results-json RESULTS_JSON] [--module-width MODULE_WIDTH]
-                    [--fifo-probe FIFO_PROBE] [--cdc-result-json CDC_RESULT_JSON]
+                    [--verify-design VERIFY_DESIGN] [--results-json RESULTS_JSON]
+                    [--module-width MODULE_WIDTH] [--fifo-probe FIFO_PROBE]
+                    [--cdc-result-json CDC_RESULT_JSON]
                     [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--json]
                     design
 
@@ -545,6 +553,9 @@ optional arguments:
                         Existing provenance.json (from forge build/inspect --provenance)
   --junit-xml JUNIT_XML
                         Existing JUnit XML (from a prior forge test run --junit-xml)
+  --verify-design VERIFY_DESIGN
+                        Path to design.verification.yml, for the topology explorer's verification-
+                        flow-entry-point overlay (used together with --results-json)
   --results-json RESULTS_JSON
                         Existing versioned results JSON (from a prior forge test run --results-
                         json); preferred over --junit-xml when both are given

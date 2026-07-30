@@ -408,3 +408,49 @@ def test_inspect_next_actions_flags_errors(capsys: pytest.CaptureFixture[str], t
         for d in payload["diagnostics"]
     )
     assert "Fix the errors above before generating" in payload["next_actions"]
+
+
+def test_inspect_explorer_overlays_absent_without_the_new_flags(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Regression guard (release-plan Phase 10, slice 10.0D): --explorer
+    without --verify-design/--results-json must be unaffected."""
+    explorer_path = tmp_path / "explorer.html"
+    result = _run_inspect(
+        capsys, str(TRIGGER_DESIGN_YML), "--contracts-from", str(TRIGGER_MODULES_YML),
+        "--explorer", str(explorer_path),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    explorer_html = explorer_path.read_text()
+    assert '"verification_flow_entry_points":["hit_decoder_xsim"]' not in explorer_html
+
+
+def test_inspect_explorer_carries_real_latency_and_verification_overlays(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """release-plan Phase 10, slice 10.0D: forge inspect --verify-design
+    --results-json --explorer/--dot must carry real latency values
+    (trigger_logic's real declared `latency: {kind: fixed, cycles: 3}`)
+    and a real verification-flow-entry-point join (hit_decoder_xsim's
+    declared entry point, module 'dec') — not just exit 0. results.json
+    is a minimal, directly-constructed {flow_name, backend_id} payload,
+    the same convention test_design_explorer_overlays.py's own
+    join_flow_entry_points tests already use."""
+    results_json = tmp_path / "results.json"
+    results_json.write_text(json.dumps({"flow_name": "hit_decoder_xsim", "backend_id": "xsim"}))
+    verify_design = TRIGGER_DESIGN_YML.parent.parent / "verify/design.verification.yml"
+    dot_path = tmp_path / "topo.dot"
+    explorer_path = tmp_path / "explorer.html"
+
+    result = _run_inspect(
+        capsys, str(TRIGGER_DESIGN_YML), "--contracts-from", str(TRIGGER_MODULES_YML),
+        "--verify-design", str(verify_design), "--results-json", str(results_json),
+        "--dot", str(dot_path), "--explorer", str(explorer_path),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    dot_text = dot_path.read_text()
+    assert 'label="trig clk: ap_clk maturity: mixed latency: 3c"' in dot_text
+
+    explorer_html = explorer_path.read_text()
+    assert '"verification_flow_entry_points":["hit_decoder_xsim"]' in explorer_html

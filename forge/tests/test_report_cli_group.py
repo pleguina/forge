@@ -324,3 +324,54 @@ def test_report_omits_new_sections_honestly_without_their_flags(
     assert any("throughput report omitted" in d["message"] for d in payload["diagnostics"])
     assert any("CDC verification" in d["message"] for d in payload["diagnostics"])
     assert any("golden-model comparison report omitted" in d["message"] for d in payload["diagnostics"])
+
+
+def test_report_topology_overlays_are_absent_without_the_new_flags(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Regression guard (release-plan Phase 10, slice 10.0D): topology
+    rendering without --verify-design/--results-json must be unaffected —
+    build_design_graph's own `or {}` overlay defaults already guarantee
+    this, this confirms it holds through the new call sites too."""
+    output_dir = tmp_path / "report"
+    result = _run(
+        capsys, "report", str(TRIGGER_DESIGN),
+        "--contracts-from", str(TRIGGER_MODULES),
+        "--output", str(output_dir), "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    explorer_html = (output_dir / "topology_explorer.html").read_text()
+    assert '"verification_flow_entry_points":["hit_decoder_xsim"]' not in explorer_html
+
+
+def test_report_topology_carries_real_latency_and_verification_overlays(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """release-plan Phase 10, slice 10.0D: forge report --verify-design
+    --results-json must make the topology explorer/DOT carry real
+    latency values (trigger_logic's real declared `latency: {kind:
+    fixed, cycles: 3}`) and a real verification-flow-entry-point join
+    (hit_decoder_xsim's declared entry point, module 'dec') — not just
+    exit 0. results.json is a minimal, directly-constructed
+    {flow_name, backend_id} payload, the same convention
+    test_design_explorer_overlays.py's own join_flow_entry_points tests
+    already use — the join only reads flow_name, no real simulation run
+    is needed to exercise it for real."""
+    results_json = tmp_path / "results.json"
+    results_json.write_text(json.dumps({"flow_name": "hit_decoder_xsim", "backend_id": "xsim"}))
+
+    output_dir = tmp_path / "report"
+    result = _run(
+        capsys, "report", str(TRIGGER_DESIGN),
+        "--contracts-from", str(TRIGGER_MODULES),
+        "--verify-design", str(TRIGGER_DESIGN.parent.parent / "verify/design.verification.yml"),
+        "--results-json", str(results_json),
+        "--output", str(output_dir), "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    dot_text = (output_dir / "topology.dot").read_text()
+    assert 'label="trig clk: ap_clk maturity: mixed latency: 3c"' in dot_text
+
+    explorer_html = (output_dir / "topology_explorer.html").read_text()
+    assert '"verification_flow_entry_points":["hit_decoder_xsim"]' in explorer_html

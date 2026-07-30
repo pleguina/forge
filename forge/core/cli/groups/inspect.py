@@ -146,8 +146,17 @@ def cmd_inspect(args):
     if getattr(args, "dot", None) or getattr(args, "svg", None) or getattr(args, "explorer", None):
         from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
         from forge.analyze.design_explorer.graph_model import build_design_graph
+        from forge.core.cli._shared import build_explorer_overlay_data
 
-        graph = build_design_graph(project, source_roots=[design_path.parent])
+        latency_by_instance, verification_flow_entry_points = build_explorer_overlay_data(
+            design_path, project, args,
+        )
+        graph = build_design_graph(
+            project,
+            latency_by_instance=latency_by_instance,
+            verification_flow_entry_points=verification_flow_entry_points,
+            source_roots=[design_path.parent],
+        )
         dot_text = render_dot(graph)
 
         if getattr(args, "explorer", None):
@@ -431,4 +440,14 @@ def register(sub) -> None:
     p.add_argument("--dot", help="Write a deterministic Graphviz DOT rendering of the design (never requires `dot`)")
     p.add_argument("--svg", help="Write an SVG rendering of the design (requires the `dot` binary on PATH)")
     p.add_argument("--explorer", help="Write a self-contained, offline, interactive HTML design explorer")
+    p.add_argument(
+        "--verify-design",
+        help="Path to design.verification.yml, for --dot/--svg/--explorer's "
+             "verification-flow-entry-point overlay (used together with --results-json)",
+    )
+    p.add_argument(
+        "--results-json",
+        help="Existing versioned results JSON (from a prior forge test run --results-json), "
+             "for --dot/--svg/--explorer's verification-flow-entry-point overlay",
+    )
     p.set_defaults(func=cmd_inspect)

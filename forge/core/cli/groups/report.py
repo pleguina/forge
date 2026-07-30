@@ -273,6 +273,7 @@ def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
     from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
     from forge.analyze.design_explorer.graph_model import build_design_graph
     from forge.analyze.design_explorer.html_renderer import render_explorer_html
+    from forge.core.cli._shared import build_explorer_overlay_data
     from forge.ir import build_project_ir_with_match_report
 
     project, _cfg, _match_report = build_project_ir_with_match_report(
@@ -281,7 +282,15 @@ def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
         ip_info=getattr(args, "ip_info", None),
         build_dir=getattr(args, "build_dir", None),
     )
-    graph = build_design_graph(project, source_roots=[design_path.parent])
+    latency_by_instance, verification_flow_entry_points = build_explorer_overlay_data(
+        design_path, project, args,
+    )
+    graph = build_design_graph(
+        project,
+        latency_by_instance=latency_by_instance,
+        verification_flow_entry_points=verification_flow_entry_points,
+        source_roots=[design_path.parent],
+    )
     dot_text = render_dot(graph)
     (output_dir / "topology.dot").write_text(dot_text)
     if dot_available():
@@ -454,6 +463,11 @@ def register(sub) -> None:
     )
     p.add_argument("--provenance", help="Existing provenance.json (from forge build/inspect --provenance)")
     p.add_argument("--junit-xml", help="Existing JUnit XML (from a prior forge test run --junit-xml)")
+    p.add_argument(
+        "--verify-design",
+        help="Path to design.verification.yml, for the topology explorer's "
+             "verification-flow-entry-point overlay (used together with --results-json)",
+    )
     p.add_argument(
         "--results-json",
         help="Existing versioned results JSON (from a prior forge test run --results-json); "

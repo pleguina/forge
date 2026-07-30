@@ -126,3 +126,67 @@ def load_verify_flow_entries(verify_design_path: Path) -> list[tuple[str, str | 
         flow_kind = flow.get("kind")
         entries.append((str(flow_name), str(flow_kind) if flow_kind else None))
     return entries
+
+
+# ---------------------------------------------------------------------------
+# Design-explorer overlay data (release-plan Phase 10, slice 10.0D)
+# ---------------------------------------------------------------------------
+
+def build_explorer_overlay_data(design_path: Path, project, args):
+    """Compute the two overlays ``build_design_graph``
+    (``forge.analyze.design_explorer.graph_model``) has always accepted
+    but that neither ``forge report`` nor ``forge inspect`` ever
+    populated with real data before this slice (preflight §2/§4):
+    ``latency_by_instance`` and ``verification_flow_entry_points``.
+
+    Shared by both commands' topology/explorer call sites so they can
+    never drift on how these overlays are derived. Both are best-effort:
+    a broken/missing registry, a missing ``--verify-design``/
+    ``--results-json``, or a flow whose entry point doesn't resolve all
+    degrade to an honestly empty overlay — never a hard failure of
+    topology/explorer rendering, which must keep working with zero
+    overlay data exactly as it always has.
+
+    Args:
+        design_path: the design.yml path (for the latency-graph rebuild
+            — ``forge.analyze.latency_static.graph.build_graph`` takes a
+            path, not an already-resolved ``ResolvedProject``).
+        project: the already-built ``ResolvedProject`` the caller's own
+            ``build_design_graph`` call will use — reused here for the
+            verification join, not rebuilt a second time.
+        args: the command's parsed argparse namespace — reads
+            ``contracts_from``, ``verify_design``, ``results_json``.
+
+    Returns:
+        ``(latency_by_instance, verification_flow_entry_points)``.
+    """
+    latency_by_instance: dict = {}
+    try:
+        from forge.analyze.latency_static.graph import build_graph as build_latency_graph
+
+        contracts_from = getattr(args, "contracts_from", None)
+        modules_yml = Path(contracts_from) if contracts_from else None
+        lg = build_latency_graph(design_path, modules_yml_path=modules_yml)
+        latency_by_instance = {
+            n.instance_id: n.latency for n in lg.nodes.values() if n.latency is not None
+        }
+    except Exception:  # noqa: BLE001
+        latency_by_instance = {}
+
+    verification_flow_entry_points: dict = {}
+    verify_design_path = getattr(args, "verify_design", None)
+    results_json_path = getattr(args, "results_json", None)
+    if verify_design_path and results_json_path and Path(results_json_path).exists():
+        try:
+            import json
+
+            from forge.analyze.design_explorer.verification_join import join_flow_entry_points
+
+            results_payload = json.loads(Path(results_json_path).read_text())
+            verification_flow_entry_points = join_flow_entry_points(
+                project, verify_design_path=verify_design_path, results_payload=results_payload,
+            )
+        except Exception:  # noqa: BLE001
+            verification_flow_entry_points = {}
+
+    return latency_by_instance, verification_flow_entry_points
