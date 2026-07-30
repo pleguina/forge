@@ -1245,6 +1245,27 @@ def cmd_validate(args):
                         }
                         for issue in _cdc_issues
                     ]
+
+                    # release-plan §10.0C: forge.cdc_verification_result.v1
+                    # — written from the exact same crossing data the
+                    # warnings above were derived from, no recomputation.
+                    _cdc_result_json = getattr(args, "cdc_result_json", None)
+                    if _cdc_result_json:
+                        import json as _json
+
+                        from forge.core.utils.content_hash import hash_file
+                        from forge.topgen.ip.cdc import report_all_crossings
+                        from forge.verify.cdc_verification_result import build_cdc_verification_result
+
+                        _crossings = report_all_crossings(
+                            cfg, _cdc_contracts, _match_report, _conn_map, _global_nets,
+                        )
+                        _cdc_result = build_cdc_verification_result(_crossings, hash_file(design_path))
+                        _cdc_result_path = Path(_cdc_result_json).expanduser().resolve()
+                        _cdc_result_path.parent.mkdir(parents=True, exist_ok=True)
+                        _cdc_result_path.write_text(_json.dumps(_cdc_result.to_dict(), indent=2) + "\n")
+                        if not json_mode:
+                            print(f"  wrote {_cdc_result_path}")
             except Exception:
                 cdc_diagnostics = []
 
@@ -2614,6 +2635,11 @@ def register(sub) -> None:
     p_validate.add_argument(
         "--check-stale", action="store_true", default=False,
         help="Also verify that generated artifacts are not older than design.yml.",
+    )
+    p_validate.add_argument(
+        "--cdc-result-json", dest="cdc_result_json", default=None,
+        help="Write a forge.cdc_verification_result.v1 artifact to this path "
+             "(only when the registry/contracts needed for the CDC check are available)",
     )
     p_validate.add_argument(
         "--json", action="store_true", default=False,

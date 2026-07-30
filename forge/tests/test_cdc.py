@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from forge.topgen.config import Connection, DesignConfig, Module
-from forge.topgen.ip.cdc import verify_cdc
+from forge.topgen.ip.cdc import report_all_crossings, verify_cdc
 from forge.topgen.ip.contract_loader import LoadedContract
 from forge.topgen.ip.matcher import auto_match_ports
 
@@ -128,3 +128,47 @@ class TestVerifyCdc:
         conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
         issues = verify_cdc(cfg, contracts, report, conn_map, global_nets)
         assert issues == []
+
+
+class TestReportAllCrossings:
+    """release-plan §10.0C: report_all_crossings returns one entry per
+    real crossing — passing (declared+approved) and failing (undeclared)
+    alike, not just verify_cdc's failures."""
+
+    def test_undeclared_crossing_is_a_failing_entry(self):
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup()
+        crossings = report_all_crossings(cfg, contracts, report, conn_map, global_nets)
+        assert len(crossings) == 1
+        c = crossings[0]
+        assert c["connection"] == "src->dst"
+        assert c["passed"] is False
+        assert c["kind"] is None
+        assert "undeclared crossing" in c["message"]
+
+    def test_declared_level_sync_is_a_passing_entry(self):
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup(cdc={"kind": "level_sync"})
+        crossings = report_all_crossings(cfg, contracts, report, conn_map, global_nets)
+        assert len(crossings) == 1
+        c = crossings[0]
+        assert c["passed"] is True
+        assert c["kind"] == "level_sync"
+        assert "approved" in c["message"]
+
+    def test_same_clock_domain_with_no_cdc_is_skipped_entirely(self):
+        """A same-domain pair has nothing to verify — report_all_crossings
+        emits no entry for it at all (not a spurious 'passed' one)."""
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup(clock_a="ap_clk", clock_b="ap_clk")
+        crossings = report_all_crossings(cfg, contracts, report, conn_map, global_nets)
+        assert crossings == []
+
+    def test_reset_only_crossing_is_a_failing_entry_with_reset_domains_set(self):
+        cfg, contracts, report, conn_map, global_nets = _two_module_setup(
+            clock_a="ap_clk", clock_b="ap_clk", reset_a="rst_a", reset_b="rst_b",
+        )
+        crossings = report_all_crossings(cfg, contracts, report, conn_map, global_nets)
+        assert len(crossings) == 1
+        c = crossings[0]
+        assert c["passed"] is False
+        assert c["source_reset_domain"] == "rst_a"
+        assert c["destination_reset_domain"] == "rst_b"
+        assert c["source_clock_domain"] == c["destination_clock_domain"] == "ap_clk"
