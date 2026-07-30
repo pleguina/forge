@@ -37,10 +37,11 @@ def test_transformation_registry_currently_matches_source() -> None:
     assert check_transformation_registry_matches_source() == []
 
 
-def test_real_transformation_kinds_match_expected_eight() -> None:
+def test_real_transformation_kinds_match_expected_eleven() -> None:
     assert real_transformation_kinds_in_source() == {
         "pipeline_register", "latency_delay", "slr_crossing", "fanout",
         "cdc_synchronizer", "async_fifo", "tie_off", "gather_scatter",
+        "pulse_sync", "mailbox_transfer", "reset_synchronizer",
     }
 
 

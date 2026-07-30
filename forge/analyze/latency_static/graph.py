@@ -198,10 +198,17 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
     (``generated_transformation`` provenance) — this FORGE-inserted RTL
     has a real, known cycle depth that was previously discarded before
     reaching the checker (``LatencyEdge`` carried no latency at all).
-    ``async_fifo`` declarations are deliberately NOT folded in — no RTL
-    body is generated for them (documented limitation,
-    ``forge.topgen.ip.cdc``), so no depth is knowable; such an edge
-    honestly stays ``latency=None``, not a fabricated 0.
+
+    release-plan §10.0B expands this to the full 5-kind CDC primitive
+    family: ``level_sync``/``2ff_sync`` (alias) is a fixed +2 destination-
+    domain cycles (unchanged), ``pulse_sync`` is a fixed +3 (2 toggle-sync
+    stages + 1 edge-detect stage, ``cdc_pulse_sync.v``). ``mailbox_transfer``
+    and ``async_fifo`` are deliberately NOT folded in, same honest
+    treatment as before this slice — a request/acknowledge handshake's
+    round-trip timing depends on relative clock phase, and a FIFO's
+    fill/drain timing depends on relative write/read rates; neither is
+    statically knowable, so such an edge stays ``latency=None``, not a
+    fabricated cycle count.
     """
     cycles = 0
     details: List[str] = []
@@ -214,9 +221,12 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
         if conn.boundary:
             tag += f" (boundary={conn.boundary})"
         details.append(tag)
-    if conn.cdc and conn.cdc.get("kind") == "2ff_sync":
+    if conn.cdc and conn.cdc.get("kind") in ("level_sync", "2ff_sync"):
         cycles += 2
-        details.append("cdc:2ff_sync (cdc_sync2ff.v, fixed depth)")
+        details.append("cdc:level_sync (cdc_sync2ff.v, fixed depth)")
+    if conn.cdc and conn.cdc.get("kind") == "pulse_sync":
+        cycles += 3
+        details.append("cdc:pulse_sync (cdc_pulse_sync.v, fixed depth)")
     if not details:
         return None
     return LatencyValue(

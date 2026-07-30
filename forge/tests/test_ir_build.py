@@ -470,13 +470,13 @@ def test_unresolvable_domain_produces_a_diagnostic():
 # Phase 3.2 — named domain relationships, CDC-crossing IR fields
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _domain_contract(name, clock_port):
+def _domain_contract(name, clock_port, reset_port="rst"):
     spec = {
         "ip_interface": {
             "module_name": name, "ip_info_key": name, "source_type": "rtl",
             "roles": {
                 "clock_primary": {"raw_port": clock_port, "direction": "input", "width": 1},
-                "reset_primary": {"raw_port": "rst", "direction": "input", "width": 1},
+                "reset_primary": {"raw_port": reset_port, "direction": "input", "width": 1},
             },
         }
     }
@@ -617,6 +617,56 @@ def test_cdc_declaration_produces_cdc_synchronizer_or_async_fifo_kind():
     )
     conn = next(c for c in project.design.connections if c.producer.instance_id == "src")
     assert [x.kind for x in conn.transformations] == ["async_fifo"]
+
+    # release-plan §10.0B: 'level_sync' (the canonical spelling) maps to
+    # the same 'cdc_synchronizer' kind as its '2ff_sync' alias.
+    cfg.connections[0].cdc = {"kind": "level_sync"}
+    conn_map, global_nets, report = auto_match_ports(cfg, ip_info)
+    project = assemble_project_ir(
+        cfg, "/tmp/design.yml", contracts={}, ip_info_data=ip_info,
+        conn_map=conn_map, global_nets=global_nets, match_report=report,
+    )
+    conn = next(c for c in project.design.connections if c.producer.instance_id == "src")
+    assert [x.kind for x in conn.transformations] == ["cdc_synchronizer"]
+
+    cfg.connections[0].cdc = {"kind": "pulse_sync", "min_spacing_cycles": 8}
+    conn_map, global_nets, report = auto_match_ports(cfg, ip_info)
+    project = assemble_project_ir(
+        cfg, "/tmp/design.yml", contracts={}, ip_info_data=ip_info,
+        conn_map=conn_map, global_nets=global_nets, match_report=report,
+    )
+    conn = next(c for c in project.design.connections if c.producer.instance_id == "src")
+    assert [x.kind for x in conn.transformations] == ["pulse_sync"]
+
+    cfg.connections[0].cdc = {"kind": "mailbox_transfer"}
+    conn_map, global_nets, report = auto_match_ports(cfg, ip_info)
+    project = assemble_project_ir(
+        cfg, "/tmp/design.yml", contracts={}, ip_info_data=ip_info,
+        conn_map=conn_map, global_nets=global_nets, match_report=report,
+    )
+    conn = next(c for c in project.design.connections if c.producer.instance_id == "src")
+    assert [x.kind for x in conn.transformations] == ["mailbox_transfer"]
+
+
+def test_reset_domains_sync_produces_reset_synchronizer_kind():
+    """release-plan §10.0B: reset_domains.<name>.sync: reset_sync is a
+    domain-keyed transformation (ResolvedResetDomain.transformations),
+    not a connection-keyed one."""
+    # A custom-named reset domain needs a contract declaring its
+    # reset_primary role — resolve_domain_nets' no-contract heuristic
+    # only recognizes the fixed names ap_rst/rst/reset/rst_n.
+    mod = Module(name="mod", top="mod_top", src=["x.v"])
+    cfg = DesignConfig(part="xcvu13p", clock_period=4.0, modules=[mod], connections=[])
+    cfg.reset_domains = {"slow_rst": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"}}
+    ip_info = {"mod": _ip_info_entry([_port("ap_clk", "IN"), _port("slow_rst", "IN")])}
+    contracts = {"mod": _domain_contract("mod", "ap_clk", "slow_rst")}
+    conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
+    project = assemble_project_ir(
+        cfg, "/tmp/design.yml", contracts=contracts, ip_info_data=ip_info,
+        conn_map=conn_map, global_nets=global_nets, match_report=report,
+    )
+    domain = next(d for d in project.design.reset_domains if d.name == "slow_rst")
+    assert [x.kind for x in domain.transformations] == ["reset_synchronizer"]
 
 
 def test_fanout_synthetic_one_producer_two_consumers():

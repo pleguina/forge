@@ -15,12 +15,15 @@ docstring copy could.
 
 | Kind | Description |
 |---|---|
-| `async_fifo` | From `Connection.cdc: {kind: async_fifo}`. The declaration is real and structurally approved; FIFO RTL generation itself is a documented limitation, not yet implemented. |
-| `cdc_synchronizer` | A two-flop synchronizer, from `Connection.cdc: {kind: 2ff_sync}` (real generated RTL — `cdc_sync2ff`). |
+| `async_fifo` | From `Connection.cdc: {kind: async_fifo, depth: N}`. Real generated dual-clock FIFO RTL (release-plan §10.0B — `cdc_async_fifo`, Gray-code pointer synchronization). |
+| `cdc_synchronizer` | A two-flop synchronizer, from `Connection.cdc: {kind: level_sync}` (`2ff_sync` is a backwards-compatible alias, real generated RTL — `cdc_sync2ff`). |
 | `fanout` | Computed generically whenever a producer pin drives more than one connection; excludes clock/reset global-net fan-out. |
 | `gather_scatter` | Scatter/gather classification surfaced via `MatchReport.gather_scatter_evidence`; `tag` carries `"scatter"` or `"gather"`. |
 | `latency_delay` | A fixed-cycle latency delay element, from `Connection.delay_cycles` with no `boundary` tag. |
+| `mailbox_transfer` | A request/acknowledge handshake synchronizer for a coherent multi-bit payload, from `Connection.cdc: {kind: mailbox_transfer}` (release-plan §10.0B, real generated RTL — `cdc_mailbox`). |
 | `pipeline_register` | A pipeline register stage inserted on a connection, from `Connection.register_stages`. |
+| `pulse_sync` | A toggle + double-flop-sync + edge-detect pulse synchronizer, from `Connection.cdc: {kind: pulse_sync, min_spacing_cycles: N}` (release-plan §10.0B, real generated RTL — `cdc_pulse_sync`). |
+| `reset_synchronizer` | An async-assert/sync-deassert reset synchronizer, from `reset_domains.<name>.sync: reset_sync` (release-plan §10.0B, real generated RTL — `cdc_reset_sync`). Domain-keyed, not connection-keyed — see `ResolvedResetDomain.transformations`. |
 | `slr_crossing` | An SLR-crossing delay register — `Connection.delay_cycles` *with* a `boundary` tag; `tag` carries the boundary string. |
 | `tie_off` | Synthesized post-generation from the generator's `tied_to_zero` report (a `"$tie_off"` producer sentinel). |
 

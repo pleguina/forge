@@ -147,14 +147,34 @@ TRANSFORMATION_KINDS: "dict[str, TransformationKindDefinition]" = {
     ),
     "cdc_synchronizer": TransformationKindDefinition(
         "cdc_synchronizer", "real",
-        "A two-flop synchronizer, from `Connection.cdc: {kind: 2ff_sync}` "
-        "(real generated RTL — `cdc_sync2ff`).",
+        "A two-flop synchronizer, from `Connection.cdc: {kind: level_sync}` "
+        "(`2ff_sync` is a backwards-compatible alias, real generated RTL — "
+        "`cdc_sync2ff`).",
+    ),
+    "pulse_sync": TransformationKindDefinition(
+        "pulse_sync", "real",
+        "A toggle + double-flop-sync + edge-detect pulse synchronizer, from "
+        "`Connection.cdc: {kind: pulse_sync, min_spacing_cycles: N}` "
+        "(release-plan §10.0B, real generated RTL — `cdc_pulse_sync`).",
+    ),
+    "mailbox_transfer": TransformationKindDefinition(
+        "mailbox_transfer", "real",
+        "A request/acknowledge handshake synchronizer for a coherent "
+        "multi-bit payload, from `Connection.cdc: {kind: mailbox_transfer}` "
+        "(release-plan §10.0B, real generated RTL — `cdc_mailbox`).",
     ),
     "async_fifo": TransformationKindDefinition(
         "async_fifo", "real",
-        "From `Connection.cdc: {kind: async_fifo}`. The declaration is real "
-        "and structurally approved; FIFO RTL generation itself is a "
-        "documented limitation, not yet implemented.",
+        "From `Connection.cdc: {kind: async_fifo, depth: N}`. Real "
+        "generated dual-clock FIFO RTL (release-plan §10.0B — "
+        "`cdc_async_fifo`, Gray-code pointer synchronization).",
+    ),
+    "reset_synchronizer": TransformationKindDefinition(
+        "reset_synchronizer", "real",
+        "An async-assert/sync-deassert reset synchronizer, from "
+        "`reset_domains.<name>.sync: reset_sync` (release-plan §10.0B, "
+        "real generated RTL — `cdc_reset_sync`). Domain-keyed, not "
+        "connection-keyed — see `ResolvedResetDomain.transformations`.",
     ),
     "tie_off": TransformationKindDefinition(
         "tie_off", "real",

@@ -650,12 +650,22 @@ Top-level IR object returned by ``forge.ir.build.build_project_ir``.
 
 A named reset domain — see ``ResolvedClockDomain``.
 
+    Slice 10.0B: ``sync`` is populated from ``reset_domains.<name>.sync``
+    (currently only ``"reset_sync"`` is supported) — unlike
+    ``derived_from``/``ratio``, this field DOES trigger real RTL
+    generation: a ``cdc_reset_sync`` instance is emitted for this domain
+    by the structural generator. See ``forge.topgen.ip.cdc``'s module
+    docstring for why reset synchronization is a domain property, not a
+    ``Connection.cdc`` declaration.
+
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `name` | `str` | optional | `'default'` |
 | `instances` | `list[str]` | optional | `[]` |
 | `derived_from` | `Optional[str]` | optional | `None` |
 | `ratio` | `Optional[int]` | optional | `None` |
+| `sync` | `Optional[str]` | optional | `None` |
+| `transformations` | `list[ResolvedTransformation]` | optional | `[]` |
 
 ### `ResolvedTopLevelPort`
 
@@ -704,13 +714,27 @@ A generated (or declared-and-approved) element sitting on a
     - ``fanout`` — computed generically (no new schema) whenever a
       producer pin drives more than one connection; excludes clock/reset
       global-net fan-out (universal, not a meaningful signal there).
-    - ``cdc_synchronizer`` — from ``Connection.cdc: {kind: 2ff_sync}``
-      (Phase 3.2/3, real RTL — ``cdc_sync2ff``).
-    - ``async_fifo`` — from ``Connection.cdc: {kind: async_fifo}``. The
-      *declaration* is real and structurally approved
-      (``forge.topgen.ip.cdc.verify_cdc``); FIFO RTL generation is a
-      documented limitation, not yet implemented — this kind can appear
-      with no corresponding generated instance.
+    - ``cdc_synchronizer`` — from ``Connection.cdc: {kind: level_sync}``
+      (``2ff_sync`` is a backwards-compatible alias for ``level_sync`` —
+      both map to this same kind) (Phase 3.2/3, real RTL —
+      ``cdc_sync2ff``).
+    - ``pulse_sync`` — from ``Connection.cdc: {kind: pulse_sync,
+      min_spacing_cycles: N}`` (release-plan §10.0B, real RTL —
+      ``cdc_pulse_sync``, a toggle + double-flop + edge-detect
+      synchronizer for a one-cycle source-domain pulse).
+    - ``mailbox_transfer`` — from ``Connection.cdc: {kind:
+      mailbox_transfer}`` (release-plan §10.0B, real RTL — ``cdc_mailbox``,
+      a request/acknowledge handshake for a coherent multi-bit payload;
+      one outstanding transaction at a time).
+    - ``async_fifo`` — from ``Connection.cdc: {kind: async_fifo, depth:
+      N}``. Real dual-clock FIFO RTL (release-plan §10.0B —
+      ``cdc_async_fifo``, Gray-code pointer synchronization); before
+      10.0B this kind could appear with no corresponding generated
+      instance (a documented limitation), which is no longer the case.
+    - ``reset_synchronizer`` — from ``reset_domains.<name>.sync:
+      reset_sync`` (release-plan §10.0B, real RTL — ``cdc_reset_sync``,
+      async-assert/sync-deassert). Domain-keyed, not connection-keyed —
+      see ``ResolvedResetDomain.transformations``, not this list.
     - ``tie_off`` — synthesized post-generation from the generator's
       ``tied_to_zero`` report (a ``"$tie_off"`` producer sentinel, mirrors
       ``"$external"``) — see ``forge.ir.build.build_tie_off_connections``.

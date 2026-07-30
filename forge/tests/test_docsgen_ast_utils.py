@@ -80,4 +80,5 @@ def test_real_repo_transformation_construction_sites() -> None:
     assert found == {
         "pipeline_register", "latency_delay", "slr_crossing", "fanout",
         "cdc_synchronizer", "async_fifo", "tie_off", "gather_scatter",
+        "pulse_sync", "mailbox_transfer", "reset_synchronizer",
     }

@@ -635,7 +635,24 @@ def assemble_project_ir(
                     kind="latency_delay", cycles=c.delay_cycles,
                 ))
         if c.cdc:
-            cdc_kind = "cdc_synchronizer" if c.cdc.get("kind") == "2ff_sync" else "async_fifo"
+            # release-plan §10.0B: the 5-kind CDC primitive family.
+            # 'level_sync'/'2ff_sync' (alias) both map to the existing
+            # 'cdc_synchronizer' transformation kind; the other 3 declared
+            # kinds map to their own same-named kind. Written as literal
+            # assignments per branch (not a variable-valued ternary) so
+            # forge.docsgen.vocab_reference's AST scan of this function
+            # can still resolve every real kind cdc_kind might hold —
+            # see find_call_kwarg_string_values's own docstring for
+            # exactly which local-dataflow shapes it recognizes.
+            _declared_kind = c.cdc.get("kind")
+            if _declared_kind in ("level_sync", "2ff_sync"):
+                cdc_kind = "cdc_synchronizer"
+            elif _declared_kind == "pulse_sync":
+                cdc_kind = "pulse_sync"
+            elif _declared_kind == "mailbox_transfer":
+                cdc_kind = "mailbox_transfer"
+            else:
+                cdc_kind = "async_fifo"
             xforms.append(ResolvedTransformation(
                 id=f"xform:{c.from_}->{c.to}:{cdc_kind}",
                 kind=cdc_kind,
@@ -791,14 +808,24 @@ def assemble_project_ir(
         )
         for name, members in sorted(_grouped_domains("clock_domain").items())
     ]
-    reset_domains = [
-        ResolvedResetDomain(
-            name=name, instances=members,
-            derived_from=cfg.reset_domains.get(name, {}).get("derived_from"),
-            ratio=cfg.reset_domains.get(name, {}).get("ratio"),
+    reset_domains = []
+    for name, members in sorted(_grouped_domains("reset_domain").items()):
+        _rel = cfg.reset_domains.get(name, {})
+        _sync = _rel.get("sync")
+        # release-plan §10.0B: a real reset_synchronizer transformation,
+        # domain-keyed rather than connection-keyed (see
+        # ResolvedResetDomain.transformations' own docstring for why).
+        _xforms = (
+            [ResolvedTransformation(id=f"xform:reset_domain:{name}:reset_synchronizer", kind="reset_synchronizer")]
+            if _sync == "reset_sync" else []
         )
-        for name, members in sorted(_grouped_domains("reset_domain").items())
-    ]
+        reset_domains.append(ResolvedResetDomain(
+            name=name, instances=members,
+            derived_from=_rel.get("derived_from"),
+            ratio=_rel.get("ratio"),
+            sync=_sync,
+            transformations=_xforms,
+        ))
 
     design = ResolvedDesign(
         name=design_path.stem,

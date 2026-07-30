@@ -10,9 +10,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analyze.latency_static.graph import build_graph, _build_graph_legacy, _build_graph_from_ir
+from analyze.latency_static.graph import (
+    build_graph, _build_graph_legacy, _build_graph_from_ir, _edge_latency_from_connection,
+)
 from analyze.latency_static.checker import check_merge_points
 from analyze.latency_static.reporter import render_markdown
+from forge.topgen.config import Connection
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRIGGER_DESIGN = REPO_ROOT / "plugins/trigger_demo/forge/designs/design.yml"
@@ -57,6 +60,44 @@ def test_trigger_demo_real_edge_latency_is_folded_in():
 
 def test_passthrough_demo_nodes_and_edges_equivalent():
     _assert_equivalent(PASSTHROUGH_DESIGN)
+
+
+class TestEdgeLatencyFromCdcConnection:
+    """release-plan §10.0B: _edge_latency_from_connection's CDC-kind
+    treatment, extended from the single 2ff_sync case above to the full
+    5-kind primitive family."""
+
+    def _conn(self, cdc):
+        return Connection(from_="src", to="dst", cdc=cdc)
+
+    def test_level_sync_folds_in_fixed_two_cycles(self):
+        latency = _edge_latency_from_connection(self._conn({"kind": "level_sync"}))
+        assert latency is not None
+        assert latency.cycles == 2
+        assert latency.provenance.source == "generated_transformation"
+
+    def test_2ff_sync_alias_folds_in_the_same_two_cycles(self):
+        latency = _edge_latency_from_connection(self._conn({"kind": "2ff_sync"}))
+        assert latency is not None
+        assert latency.cycles == 2
+
+    def test_pulse_sync_folds_in_fixed_three_cycles(self):
+        latency = _edge_latency_from_connection(
+            self._conn({"kind": "pulse_sync", "min_spacing_cycles": 8}),
+        )
+        assert latency is not None
+        assert latency.cycles == 3
+        assert latency.provenance.source == "generated_transformation"
+
+    def test_mailbox_transfer_stays_unknown(self):
+        """Round-trip handshake timing depends on relative clock phase —
+        not statically knowable, same honest treatment as async_fifo."""
+        assert _edge_latency_from_connection(self._conn({"kind": "mailbox_transfer"})) is None
+
+    def test_async_fifo_stays_unknown(self):
+        assert _edge_latency_from_connection(
+            self._conn({"kind": "async_fifo", "depth": 8}),
+        ) is None
 
 
 def test_trigger_demo_report_is_byte_identical(tmp_path):
