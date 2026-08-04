@@ -89,3 +89,25 @@ flows:
       top_lib: xil_defaultlib
       use_sv_flag: false
     coverage_intent:  integration
+
+  # Slice 10.3 (release-plan Phase 10, preflight.md §6.2): tile-statistics
+  # path -- tile_stats_hls (bounded->fixed, see modules.yml) +
+  # tile_boundary_rtl -> tile_summary_join_rtl. Pixels are driven 2
+  # iterations apart (tile_stats_hls is genuinely II=2) -- see
+  # gen_stimulus_tile_stats.py.
+  - name:             tile_stats_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_tile_stats
+    dataset:          vision_pipeline_quickstart_golden
+    default_event_id: 0
+    simulation:
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 12
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration

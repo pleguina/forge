@@ -168,3 +168,90 @@ class PixelResultProvider:
 PIXEL_RESULT_PROVIDER = PixelResultProvider()
 
 register_golden_model_provider(PIXEL_RESULT_PROVIDER.provider_id, PIXEL_RESULT_PROVIDER)
+
+
+# ── Slice 10.3: tile-statistics path ──────────────────────────────────────
+
+TILE_STATS_PROVIDER_ID = "vision_pipeline.tile_stats"
+TILE_STATS_PROVIDER_VERSION = "1.0"
+
+
+class TileStatsProvider:
+    """Golden model for slice 10.3's tile-statistics path
+    (preflight.md §6.2/§9.1): one {minimum, maximum, mean, variance}
+    record per tile, computed over the *normalized* pixel stream
+    (tile_stats_hls's real input) -- the same normalize() formula
+    QuickstartNormalizerThresholdProvider/PixelResultProvider already
+    use.
+
+    ``minimum``/``maximum`` are a plain running min/max; ``mean``/
+    ``variance`` use the exact power-of-two-shift population formula
+    frozen in preflight.md §9.1: ``mean = sum >> 6``,
+    ``variance = max(0, (sum_of_squares >> 6) - mean**2)`` -- identical
+    to plain integer floor-division by 64 for the non-negative values
+    involved, so this reproduces tile_stats_hls's own arithmetic
+    exactly, not just approximately.
+
+    Only correct at this slice's single-tile-per-frame scope
+    (dataset.events is exactly one 8x8 tile's 64 samples) -- multiple
+    tiles per dataset is explicit future work alongside the
+    concurrent-tile-accumulation RTL/HLS work itself (see
+    tile_stats_hls.h's header).
+    """
+
+    provider_id = TILE_STATS_PROVIDER_ID
+    provider_version = TILE_STATS_PROVIDER_VERSION
+
+    def evaluate(
+        self,
+        dataset: CanonicalDataset,
+        config: "Mapping[str, object]",
+    ) -> ExpectedDataset:
+        scale_num = config.get("scale_num", DEFAULT_SCALE_NUM)
+        scale_den = config.get("scale_den", DEFAULT_SCALE_DEN)
+        offset = config.get("offset", DEFAULT_OFFSET)
+
+        def normalize(pixel: int) -> int:
+            scaled = (pixel * scale_num) // scale_den + offset
+            return max(0, min(255, scaled))
+
+        normalized: "list[int]" = []
+        tile_id = frame_id = 0
+        for ev in dataset.events:
+            pixel = int(ev["in"]["pixel"], 0)
+            normalized.append(normalize(pixel))
+            tile_id = int(ev["in"]["tile_id"], 0)
+            frame_id = int(ev["in"]["frame_id"], 0)
+
+        n = len(normalized)
+        total = sum(normalized)
+        total_sq = sum(v * v for v in normalized)
+        mean = total // n
+        variance = max(0, (total_sq // n) - mean * mean)
+
+        expected_record = {
+            "tile_id": tile_id,
+            "frame_id": frame_id,
+            "minimum": min(normalized),
+            "maximum": max(normalized),
+            "mean": mean,
+            "variance": variance,
+        }
+        # event_ids/events length mirrors CanonicalDataset (ExpectedDataset's
+        # own convention, see golden_model.py) even though every entry here
+        # is the same single tile-summary record -- there is only one real
+        # value at this slice's one-tile-per-dataset scope.
+        events: "list[dict[str, Any]]" = [{"expected": expected_record} for _ in dataset.events]
+
+        return ExpectedDataset(
+            schema=EXPECTED_DATASET_SCHEMA,
+            event_ids=list(dataset.metadata.event_ids),
+            events=events,
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+        )
+
+
+TILE_STATS_PROVIDER = TileStatsProvider()
+
+register_golden_model_provider(TILE_STATS_PROVIDER.provider_id, TILE_STATS_PROVIDER)
