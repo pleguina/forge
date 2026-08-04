@@ -1,0 +1,80 @@
+# Integration contract for the pixel_sink_rtl module
+#
+# IP: pixel_sink_rtl
+# ip_info_key: pxsink
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: pixel_sink_rtl
+  ip_info_key: pxsink
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A): the
+    `pixel` domain's consumer of control_src_rtl's three source
+    crossings, and the source of the pixel -> output async_fifo
+    crossing. clock_primary/reset_primary use genuinely non-standard
+    names (clk_pixel/rst_pixel) so this design's clock/reset auto-map
+    resolves them to their own real top-level nets, not the literal
+    ap_clk/ap_rst every single-domain design in this repo reuses -- see
+    forge.topgen.ip.domains.resolve_domain_nets. rst_pixel is a real
+    reset_domains.rst_pixel.sync: reset_sync destination (design_cdc.yml),
+    not a raw external reset.
+
+  roles:
+
+    clock_primary:
+      raw_port: clk_pixel
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: rst_pixel
+      direction: input
+      width: 1
+      active_level: high
+
+    level_in:
+      raw_port: level_in
+      direction: input
+      width: 1
+      notes: "Already synchronized -- destination of the control -> pixel cdc: {kind: level_sync} connection"
+
+    pulse_in:
+      raw_port: pulse_in
+      direction: input
+      width: 1
+      notes: "Already synchronized pulse -- destination of the control -> pixel cdc: {kind: pulse_sync} connection"
+
+    mailbox_in:
+      raw_port: mailbox_in
+      direction: input
+      width: 26
+      notes: "Already synchronized -- destination of the control -> pixel cdc: {kind: mailbox_transfer} connection"
+
+    result_data_in:
+      raw_port: result_data_in
+      direction: input
+      width: 26
+      notes: "Testbench-driven value pushed into the pixel -> output async_fifo"
+
+    enable_status:
+      raw_port: enable_status
+      direction: output
+      width: 1
+
+    apply_count:
+      raw_port: apply_count
+      direction: output
+      width: 8
+
+    mailbox_status:
+      raw_port: mailbox_status
+      direction: output
+      width: 26
+
+    result_out:
+      raw_port: result_out
+      direction: output
+      width: 26
+      notes: "cdc: {kind: async_fifo} source -> output"

@@ -163,3 +163,81 @@ modules:
     kind: elastic
   interface_contract: interfaces/tile_summary_join_rtl.interface.yaml
   src: [../algo/rtl/tile_summary_join_rtl.v]
+
+# ─── Control Level (RTL) — slice 10.4 ──────────────────────────────────────
+- name: ctrl_level_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_level_rtl
+  # Fixed 1-cycle latency (see algo/rtl/ctrl_level_rtl.v). A dedicated
+  # module per crossing kind, not one bigger control-domain register
+  # bank -- see that file's header for why (ATG027, forge.topgen.config).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_level_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_level_rtl.v]
+
+# ─── Control Pulse (RTL) — slice 10.4 ──────────────────────────────────────
+- name: ctrl_pulse_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_pulse_rtl
+  # Fixed 1-cycle latency (see algo/rtl/ctrl_pulse_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_pulse_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_pulse_rtl.v]
+
+# ─── Control Mailbox (RTL) — slice 10.4 ────────────────────────────────────
+- name: ctrl_mailbox_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_mailbox_rtl
+  # Fixed 1-cycle latency (see algo/rtl/ctrl_mailbox_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_mailbox_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_mailbox_rtl.v]
+
+# ─── Pixel Sink (RTL) — slice 10.4 ──────────────────────────────────────────
+- name: pixel_sink_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: pixel_sink_rtl
+  # Fixed 1-cycle latency (see algo/rtl/pixel_sink_rtl.v). Receives from
+  # three distinct source instances (ctrl_level_rtl/ctrl_pulse_rtl/
+  # ctrl_mailbox_rtl) -- no cdc_map collision risk on the destination
+  # side (only same-(src,dst)-pair collisions are a hazard, see
+  # ctrl_level_rtl.v), so this stays one module.
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/pixel_sink_rtl.interface.yaml
+  src: [../algo/rtl/pixel_sink_rtl.v]
+
+# ─── Output Level (RTL) — slice 10.4 ───────────────────────────────────────
+- name: outsink_level_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: outsink_level_rtl
+  # Fixed 1-cycle latency (see algo/rtl/outsink_level_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/outsink_level_rtl.interface.yaml
+  src: [../algo/rtl/outsink_level_rtl.v]
+
+# ─── Output Pulse (RTL) — slice 10.4 ───────────────────────────────────────
+- name: outsink_pulse_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: outsink_pulse_rtl
+  # Fixed 1-cycle latency (see algo/rtl/outsink_pulse_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/outsink_pulse_rtl.interface.yaml
+  src: [../algo/rtl/outsink_pulse_rtl.v]

@@ -1,0 +1,50 @@
+# Integration contract for the ctrl_mailbox_rtl module
+#
+# IP: ctrl_mailbox_rtl
+# ip_info_key: ctrlmbx
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: ctrl_mailbox_rtl
+  ip_info_key: ctrlmbx
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A): the
+    `control` domain's mailbox_transfer source. Literal ap_clk/ap_rst
+    (control is this design's primary domain) -- see
+    ctrl_mailbox_rtl.v for why this is a dedicated module.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    threshold_in:
+      raw_port: threshold_in
+      direction: input
+      width: 8
+
+    kernel_mode_in:
+      raw_port: kernel_mode_in
+      direction: input
+      width: 2
+
+    frame_limit_in:
+      raw_port: frame_limit_in
+      direction: input
+      width: 16
+
+    mailbox_out:
+      raw_port: mailbox_out
+      direction: output
+      width: 26
+      notes: "{threshold[7:0], kernel_mode[1:0], frame_limit[15:0]} -- cdc: {kind: mailbox_transfer} source -> pixel"
