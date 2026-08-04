@@ -687,7 +687,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
         # Resolve timing (flow overrides contract defaults)
         defaults = contract.defaults
-        clk   = getattr(defaults, "clk_period_ns", 4.0)
+        clk   = getattr(flow_decl, "clk_period_ns", None) or getattr(defaults, "clk_period_ns", 4.0)
         rst   = flow_decl.reset_cycles               or getattr(defaults, "reset_cycles", 4)
         idle  = flow_decl.idle_cycles_after_reset    or getattr(defaults, "idle_cycles_after_reset", 0)
         drain = flow_decl.post_stimulus_drain_cycles or getattr(defaults, "post_stimulus_drain_cycles", 8)

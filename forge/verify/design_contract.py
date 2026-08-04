@@ -246,6 +246,14 @@ class FlowDeclaration:
     reset_cycles:               int | None = None
     idle_cycles_after_reset:    int | None = None
     post_stimulus_drain_cycles: int | None = None
+    # release-plan Phase 10, slice 10.4: the primary ap_clk period had no
+    # per-flow override at all before this (every flow silently shared
+    # SimulationDefaults.clk_period_ns) -- found wiring a design whose own
+    # primary domain is genuinely 50MHz (20ns) while every other flow in
+    # this plugin is 4.0ns. Simulated clock period is independent of any
+    # design's own HLS/RTL-synthesis clock_period (design.yml) -- this
+    # only paces the xsim testbench.
+    clk_period_ns:               float | None = None
 
     checker: CheckerDeclaration | None = None
     xsim: XsimDeclaration | None = None
@@ -601,6 +609,9 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
                                                               sim_raw.get("idle_cycles_after_reset"))),
             post_stimulus_drain_cycles=_int_or_none(
                 sim_raw.get("post_stimulus_drain_cycles")),
+            clk_period_ns=(
+                float(sim_raw["clk_period_ns"]) if sim_raw.get("clk_period_ns") is not None else None
+            ),
             extra_clocks={str(k): float(v) for k, v in (sim_raw.get("extra_clocks") or {}).items()},
             extra_resets={str(k): str(v) for k, v in (sim_raw.get("extra_resets") or {}).items()},
             checker=checker,

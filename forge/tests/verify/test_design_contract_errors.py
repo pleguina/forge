@@ -95,3 +95,48 @@ def test_different_major_schema_version_raises_typed_error(tmp_path: Path) -> No
         load_verify_design(design)
 
     assert "incompatible" in str(exc_info.value)
+
+
+def test_flow_level_clk_period_ns_overrides_defaults(tmp_path: Path) -> None:
+    """release-plan Phase 10, slice 10.4: the primary ap_clk period had no
+    per-flow override before this — every flow silently shared
+    SimulationDefaults.clk_period_ns. A flow whose own design's primary
+    domain runs at a genuinely different rate than every other flow in
+    the same plugin needs its own override."""
+    design = tmp_path / "design.verification.yml"
+    design.write_text(textwrap.dedent("""\
+        plugin: demo_plugin
+        datasets:
+          demo:
+            xml: data/demo.xml
+        defaults:
+          clk_period_ns: 4.0
+        flows:
+          - name: demo_flow
+            kind: single_module_rtl
+            backend: xsim
+            top_module: demo_top
+            tb_module: tb_demo_top
+            dut_rtl_source: build_hls/demo
+            dataset: demo
+            simulation:
+              clk_period_ns: 20.0
+              extra_clocks:
+                clk_pixel: 5.0
+              extra_resets:
+                rst_pixel: clk_pixel
+        """))
+    contract = load_verify_design(design)
+    flow = contract.get_flow("demo_flow")
+    assert flow.clk_period_ns == 20.0
+    assert contract.defaults.clk_period_ns == 4.0  # defaults themselves unaffected
+    assert flow.extra_clocks == {"clk_pixel": 5.0}
+    assert flow.extra_resets == {"rst_pixel": "clk_pixel"}
+
+
+def test_no_clk_period_ns_override_leaves_it_none(tmp_path: Path) -> None:
+    contract = load_verify_design(_write_contract(tmp_path))
+    flow = contract.get_flow("demo_flow")
+    assert flow.clk_period_ns is None
+    assert flow.extra_clocks == {}
+    assert flow.extra_resets == {}
