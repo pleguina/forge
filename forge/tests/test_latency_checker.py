@@ -130,6 +130,93 @@ def test_real_reference_designs_report_zero_false_mismatches():
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Release-plan Phase 10, slice 10.2 — multi-hop chain latency (found while
+# wiring window_builder_rtl -> sobel_hls -> merge into a real merge point:
+# the checker only ever summed the *direct* predecessor's own node latency,
+# silently dropping window_builder_rtl's 10 cycles entirely since it sits
+# one hop further back. Every merge point in both existing reference
+# designs is single-hop, so this gap had no test surface until now.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_multi_hop_chain_latency_is_folded_into_the_path_total():
+    """source -> mid -> merge (2 hops) must accumulate source+mid's own
+    latencies, not just mid's -- the bug this slice found and fixed."""
+    graph = LatencyGraph(
+        nodes={
+            "source": _node("source", 3),
+            "mid": _node("mid", 10),
+            "direct": _node("direct", 5),
+            "merge": _node("merge", 1),
+        },
+        edges=[
+            LatencyEdge(src="source", dst="mid", latency=None),
+            LatencyEdge(src="mid", dst="merge", latency=None),
+            LatencyEdge(src="direct", dst="merge", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    assert len(reports) == 1
+    r = reports[0]
+    totals = {p.path[0]: p.total_cycles for p in r.paths}
+    # "mid"'s path must include "source"'s 3 cycles too (3+10=13), not just
+    # mid's own 10 -- and "direct" has no chain behind it, so it's just 5.
+    assert totals == {"mid": 13, "direct": 5}
+    assert r.is_mismatch
+    assert r.delta == 8
+
+
+def test_multi_hop_chain_stops_at_a_bounded_or_elastic_node():
+    """A bounded/elastic node mid-chain isn't a fixed scalar to begin
+    with -- the chain-walk must stop there (treat it as an opaque,
+    unknown boundary) rather than silently summing through it."""
+    graph = LatencyGraph(
+        nodes={
+            "source": _node("source", 3),
+            "mid": _node_with_kind("mid", "elastic", is_variable=True),
+            "merge": _node("merge", 1),
+            "other": _node("other", 5),
+        },
+        edges=[
+            LatencyEdge(src="source", dst="mid", latency=None),
+            LatencyEdge(src="mid", dst="merge", latency=None),
+            LatencyEdge(src="other", dst="merge", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    assert len(reports) == 1
+    assert reports[0].alignment == "elastic_buffer"
+    assert not reports[0].is_mismatch  # elastic predecessor is always tolerant
+
+
+def test_vision_pipeline_demo_pixel_result_design_has_zero_merge_skew():
+    """Real-design proof (release-plan Phase 10, slice 10.2): the Sobel
+    branch (window_builder_rtl 10 cycles + sobel_hls 4 cycles, 2 hops
+    into `merge`) and the threshold branch (threshold_rtl 2 cycles + a
+    12-cycle Connection.delay_cycles alignment delay) must land on
+    edge_mask_merge_rtl at the exact same cycle -- the whole point of
+    slice 10.2's design. Before this slice's chain-walk fix, the Sobel
+    path would have been silently under-reported as 4 cycles (just
+    sobel_hls's own latency), producing a false "balanced" or a bogus
+    delta depending on what the threshold branch happened to total."""
+    from pathlib import Path
+    from analyze.latency_static.graph import build_graph
+
+    repo_root = Path(__file__).resolve().parents[2]
+    g = build_graph(
+        repo_root / "plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml"
+    )
+    reports = check_merge_points(g)
+    assert len(reports) == 1
+    r = reports[0]
+    assert r.merge_node == "merge"
+    assert r.alignment == "exact_cycle"
+    assert not r.is_mismatch
+    assert r.delta == 0
+    totals = {p.path[0]: p.total_cycles for p in r.paths}
+    assert totals["sobel"] == totals["thresh"] == 17  # norm(3) common to both
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Phase 4 slice 3 — per-instance graph granularity (release-plan §4.3)
 # ─────────────────────────────────────────────────────────────────────────
 

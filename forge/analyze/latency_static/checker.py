@@ -111,6 +111,51 @@ class MismatchReport:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[int], bool]":
+    """Cumulative (cycles, is_unknown) from *name* back through any
+    straight (single-predecessor) chain of fixed-ish nodes above it —
+    release-plan Phase 10, slice 10.2 finding.
+
+    Before this, a path's latency was just its *immediate* predecessor's
+    own node latency + connecting edge — correct for a direct producer,
+    silently wrong for a multi-hop branch (e.g. vision_pipeline_demo's
+    ``window_builder_rtl -> sobel_hls -> merge``: the merge point only
+    ever saw ``sobel_hls``'s own 4 cycles, never ``window_builder_rtl``'s
+    10, understating that branch's real total by exactly the missing
+    hop). Found by wiring a genuine 2-hop branch into a real merge point
+    for the first time — every existing test/reference-design merge
+    point is single-hop, so this gap had no test surface before.
+
+    Walks backward only through nodes with a single predecessor whose own
+    ``kind`` is fixed-ish (``None``/``fixed``/``hint``/``hls_report`` —
+    never ``bounded``/``elastic``, whose latency isn't a fixed scalar to
+    begin with, and stopping there is conservative, not a regression:
+    neither reference design uses those kinds mid-chain today). Stops
+    (returns just *name*'s own contribution) at a true source (no
+    predecessors) or a fan-in node (>=2 predecessors) — the latter is
+    itself a merge point, independently checked by the caller's own loop,
+    not something to fold through as if its alignment were already
+    verified.
+    """
+    node = graph.nodes[name]
+    own_cycles = node.latency_cycles
+    own_unknown = (own_cycles is None) or node.is_variable
+    own_kind = node.latency.kind if node.latency else None
+
+    preds = graph.predecessors(name)
+    if len(preds) != 1 or own_unknown or own_kind in ("bounded", "elastic"):
+        return (None if own_unknown else own_cycles, own_unknown)
+
+    pred = preds[0]
+    edge = next((e for e in graph.edges if e.src == pred and e.dst == name), None)
+    edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
+
+    upstream_cycles, upstream_unknown = _upstream_chain_latency(graph, pred)
+    if upstream_unknown:
+        return (None, True)
+    return (upstream_cycles + edge_cycles + own_cycles, False)
+
+
 def check_merge_points(
     graph: LatencyGraph,
     *,
@@ -142,8 +187,7 @@ def check_merge_points(
         kinds: Set[str] = set()
         for src in sorted(preds):
             src_node = graph.nodes[src]
-            node_cycles = src_node.latency_cycles
-            unknown = (node_cycles is None) or src_node.is_variable
+            node_cycles, unknown = _upstream_chain_latency(graph, src)
 
             edge = edge_by_pair.get((src, node_name))
             edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
