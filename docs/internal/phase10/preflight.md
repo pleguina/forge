@@ -581,7 +581,7 @@ dataset contract, not left implicit**:
 | 10.1 | One-clock quickstart: normalizer HLS → threshold RTL → sink, synthetic 8×8 data, exact comparison |
 | 10.2 | **DONE.** `window_builder_rtl`, Sobel, threshold, alignment delay, exact-cycle merge (pixel-result path only, §6.2) |
 | 10.3 | **DONE.** `tile_stats_hls`, `tile_boundary_rtl`, tagged bounded/elastic join (tile-statistics path, §6.2) |
-| 10.4 | Multiple domains and all five CDC kinds (§5 Decision A), reset synchronizers, negative CDC fixtures |
+| 10.4 | **DONE.** Multiple domains, all five CDC kinds, reset synchronizers, negative CDC fixture (§5 Decision A) |
 | 10.5 | Packetizer (multiplexing both record kinds, §6.1/§6.2), async FIFO, throughput, backpressure, occupancy, invalid rate/depth fixtures |
 | 10.6 | Synthetic, image-folder, and NumPy adapters (via `DatasetService`), manifests, staleness tests |
 | 10.7 | Platform wrapper, provenance, plan hashes, visual explorer (incl. the 10.0D CLI wiring), documentation, clean-user workflow, full CI |
@@ -722,6 +722,85 @@ latency-check` against the real design confirms zero mismatches at the
 unchanged and still pass, confirming no regression from the shared
 `modules.yml`/`golden_model_provider.py`/`design.verification.yml`
 edits this slice made.
+
+**10.4 scope note**: unlike every prior slice, 10.4's own core-framework
+prerequisite (Decision A originally framed CDC work as "real, multi-day
+core-framework engineering") turned out to be *mostly already done*:
+slice 10.0B (framework history predating this session) already gave all
+five CDC kinds real RTL-generating primitives
+(`cdc_sync2ff`/`cdc_pulse_sync`/`cdc_mailbox`/`cdc_async_fifo`/
+`cdc_reset_sync`), unit-tested in isolation. What 10.4 actually needed,
+and what genuinely was still missing, only surfaced by trying to wire a
+real multi-domain design end-to-end for the first time:
+
+- **Real multi-clock xsim support** — `forge.verify.gen_sim`'s
+  testbench generator only ever drove one clock (`ap_clk`) into the
+  DUT. Added `SimulationDefaults`/`FlowDeclaration.extra_clocks`
+  (`{net_name: period_ns}`) and `.extra_resets`, rendered as independent
+  free-running clock generators; `StimulusEmitter.tick(clock=...)` for
+  cross-domain-paced stimulus; and a per-flow `clk_period_ns` override
+  (the primary clock's period had no per-flow override at all before
+  this — every flow in a plugin silently shared one global value).
+- **Two real reset_sync miscompiles**, both invisible to every existing
+  text-only unit test and found only by actually simulating a design
+  with genuinely independent domains: a `wire rst_sync_<name>`
+  declared *after* its first use (Xilinx xvlog silently creates a
+  separate, permanently-undriven implicit net for the earlier
+  reference); and a CDC data synchronizer's own `src_rst`/`dst_rst`
+  binding to the raw, unsynchronized domain net instead of the real
+  `cdc_reset_sync` output. Both fixed with real regression tests, see
+  the "Fix two real reset_sync miscompiles" commit.
+- **ATG027**: `forge.topgen.generators.structural_verilog`'s `cdc_map`
+  is keyed by `(src_module, dst_module)` alone, not per-pin — this
+  design's own natural architecture (control sourcing three *different*
+  CDC kinds to pixel on three different pins) is the first thing in
+  this repo to ever attempt that, and the second declaration silently
+  overwrote the first for every pin between that module pair, with zero
+  diagnostic. `DesignConfig.load` now raises a real ATG027 error
+  instead; `design_cdc.yml` itself is restructured (one small module
+  per crossing kind on the *source* side — `ctrl_level_rtl`/
+  `ctrl_pulse_rtl`/`ctrl_mailbox_rtl`, `outsink_level_rtl`/
+  `outsink_pulse_rtl` — rather than one bigger register bank per
+  domain) to route around the constraint; a genuinely per-pin `cdc_map`
+  is a larger, separate refactor this slice does not attempt.
+
+`design_cdc.yml` itself: three domains at genuinely different real
+rates (control 50MHz/ap_clk, pixel 200MHz/`clk_pixel`, output
+125MHz/`clk_output`, not same-period stand-ins), all five CDC kinds
+(level_sync/pulse_sync twice each — both control→pixel and, spec
+§8.1/§8.2's own named crossings, output→control — plus one
+mailbox_transfer and one async_fifo), and two real
+`reset_domains.*.sync: reset_sync` destinations synchronized from the
+same external `ap_rst` (spec §7). Standalone design, same "demonstrate
+one slice's capability set in isolation" precedent 10.2/10.3 already
+established.
+
+**10.4 completion evidence**: `design_cdc.yml` (real design, 6
+instances, 6 CDC-declared connections), `ctrl_level_rtl`/
+`ctrl_pulse_rtl`/`ctrl_mailbox_rtl`/`pixel_sink_rtl`/`outsink_level_rtl`/
+`outsink_pulse_rtl` (real RTL), and the `cdc_xsim` verify flow — a real
+Vivado xsim run with three genuinely independent free-running clocks,
+checked directly (no golden-model provider — see `gen_stimulus_cdc.py`'s
+own header for why a scalar control-plane test doesn't fit that mold):
+6/6 checks pass (`error_level_status`/`frame_done_count`/
+`enable_status`/`apply_count`/`mailbox_status`/`result_status`),
+confirming every one of the five CDC kinds actually carries a value
+correctly across a real clock-domain boundary, not just that the
+generator emits the right instance name. The three pre-existing xsim
+flows (`quickstart_pipeline_xsim`/`pixel_result_xsim`/`tile_stats_xsim`)
+were re-run unchanged and still pass. `invalid_direct_bus_cdc.yml`
+(spec §8.5) is a real negative fixture: `forge topgen validate` reports
+both ATG023 and ATG024 as warnings, and `forge topgen gen-top --strict`
+hard-fails (exit code 1, no RTL generated) — confirmed via the real
+commands, not assumed. Spec §8.5's other two invalid-design cases are
+explicitly not built, for real reasons documented in that fixture's own
+commit: `invalid_missing_reset_sync` is intentionally not something
+`verify_cdc` flags (a single `cdc:` declaration approves both clock-
+and reset-crossing for its connection, by that module's own design);
+`invalid_bus_scalar_sync` has no sound enforcement path at all (the
+framework cannot structurally distinguish a bus that genuinely needs
+atomic coherence from legitimate independent per-bit signals like
+one-hot, from width alone).
 
 Negative fixtures land incrementally alongside each capability (the
 spec's own 10-item invalid-design matrix), not batched at the end —
