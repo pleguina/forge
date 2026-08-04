@@ -2,21 +2,17 @@
 """vision_pipeline_demo stimulus generator for slice 10.3's
 tile-statistics-path flow (release-plan Phase 10, preflight.md §6.2).
 
-Unlike gen_stimulus_pixel_result.py (which drives one pixel every cycle,
-since every module on that path is II=1), tile_stats_hls is genuinely
-II=2 (a real HLS scheduling consequence of its own static-accumulator
-read-modify-write dependency, confirmed against the real csynth report --
-see modules.yml's tile_stats_hls entry): it can only correctly accept a
-*new* valid input every other cycle. So this flow drives pixel k at
-iteration 2*k, deasserting norm_pixel_valid on the interleaved odd
-iterations -- pixel_normalizer's own fixed, stateless pass-through
-latency means those idle cycles surface as real in_valid=0 gaps at
-tile_stats_hls's input too, matching its II=2 contract exactly.
+tile_stats_hls is real II=1 (release-plan Phase 10, slice 10.5
+follow-up -- was II=2 at this flow's own original writing; see
+modules.yml's tile_stats_hls entry and that module's own source header
+for the real csynth-confirmed fix), so pixels are driven back-to-back,
+same as gen_stimulus_pixel_result.py's own pixel-result path -- no
+interleaved idle cycles needed.
 
 One 8x8 frame (64 pixels) -> exactly one tile-statistics record, checked
 once after the full frame has drained through
-norm(3) + tstats(6) + tjoin(1) = 10 cycles from the last pixel's drive
-iteration (2*63 = 126) -- so the check lands at iteration 136.
+norm(3) + tstats(1) + tjoin(1) = 5 cycles from the last pixel's drive
+iteration (63) -- so the check lands at iteration 68.
 
 Usage::
 
@@ -38,12 +34,12 @@ _DATASET_XML = Path(__file__).resolve().parents[1] / "schemas/data/vision_pipeli
 _ADAPTER_ID = "vision_pipeline.pixel-stream-xml"
 _PROVIDER_ID = "vision_pipeline.tile_stats"
 
-# norm(3) + tstats(6) + tjoin(1) = 10, measured from the drive iteration
-# of the tile's *last* pixel (pixel 63, driven at iteration 2*63=126,
-# since pixels are spaced 2 iterations apart -- see module docstring).
-_PIXEL_TO_JOIN_LATENCY = 10
+# norm(3) + tstats(1) + tjoin(1) = 5, measured from the drive iteration
+# of the tile's *last* pixel (pixel 63, driven at iteration 63, since
+# pixels are now back-to-back -- see module docstring).
+_PIXEL_TO_JOIN_LATENCY = 5
 _N_PIXELS = 64
-_PIXEL_SPACING = 2  # tile_stats_hls is II=2
+_PIXEL_SPACING = 1  # tile_stats_hls is real II=1
 
 
 def _ensure_bootstrapped() -> None:
@@ -136,7 +132,7 @@ def generate_for_flow(
                     label="tile_join_mismatch_check", event_id=_N_PIXELS - 1,
                 )
 
-    write_run_stimulus_svh(em, out_path, header_comment=f"flow={flow_name} (streamed full frame, II=2-spaced)")
+    write_run_stimulus_svh(em, out_path, header_comment=f"flow={flow_name} (streamed full frame, back-to-back)")
     print(f"  wrote {out_path}")
 
     provenance_path = out_path.parent / "golden_model_provenance.json"

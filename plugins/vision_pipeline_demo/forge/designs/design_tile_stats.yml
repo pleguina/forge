@@ -5,8 +5,8 @@
 # Pipeline (release-plan Phase 10, docs/internal/phase10/preflight.md §6.2):
 #
 #   external pixel stream -> pixel_normalizer (HLS)
-#     -> tile_stats_hls (HLS, bounded latency)      ─┐
-#     -> tile_boundary_rtl (RTL, bounded hold)        ┴-> tile_summary_join_rtl (RTL)
+#     -> tile_stats_hls (HLS, fixed 1-cycle latency, real II=1)  ─┐
+#     -> tile_boundary_rtl (RTL, bounded hold)                    ┴-> tile_summary_join_rtl (RTL)
 #     -> external forge.tile_statistics.v1 record
 #
 # One clock domain still (no CDC -- that's 10.4). This is the per-tile
@@ -23,9 +23,13 @@
 # tile_stats_hls and tile_boundary_rtl are both direct fan-out siblings
 # of pixel_normalizer -- not chained after each other -- so they see the
 # tile-last sample on the exact same input cycle. tile_stats_hls's
-# declared latency is bounded [6,10] (spec §11/§15.2); tile_boundary_rtl
+# declared latency is a real, csynth-confirmed fixed 1 cycle
+# (release-plan Phase 10, slice 10.5 follow-up -- was fixed 6 cycles at
+# real II=2 when this file was first written, see modules.yml's
+# tile_stats_hls entry for the full derivation of both); tile_boundary_rtl
 # holds its independently-derived tag valid for a declared [1,17]
-# window, comfortably covering that bound (algo/rtl/tile_boundary_rtl.v).
+# window, comfortably covering that bound either way
+# (algo/rtl/tile_boundary_rtl.v).
 # tile_summary_join_rtl matches the two branches by tile_id/frame_id, not
 # cycle position -- forge.analyze.latency_static's check_merge_points
 # classifies this merge point `bounded_skew` (both predecessors declare

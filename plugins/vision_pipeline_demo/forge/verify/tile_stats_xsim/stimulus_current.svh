@@ -7,7 +7,7 @@
 //   * The task is called once after reset + idle cycles.
 //   * Signals ap_clk, ap_rst (and all DUT ports) are in scope.
 
-// flow=tile_stats_xsim (streamed full frame, II=2-spaced)
+// flow=tile_stats_xsim (streamed full frame, back-to-back)
 
 task automatic run_stimulus();
 
@@ -36,14 +36,21 @@ task automatic run_stimulus();
 
 
     // ── cycle_1 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h04;
+    norm_x <= 12'h001;
+    norm_y <= 12'h000;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_1 ──
 
 
     // ── cycle_2 ──
-    norm_pixel <= 8'h04;
-    norm_x <= 12'h001;
+    norm_pixel <= 8'h08;
+    norm_x <= 12'h002;
     norm_y <= 12'h000;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
@@ -55,14 +62,21 @@ task automatic run_stimulus();
 
 
     // ── cycle_3 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h0C;
+    norm_x <= 12'h003;
+    norm_y <= 12'h000;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_3 ──
 
 
     // ── cycle_4 ──
-    norm_pixel <= 8'h08;
-    norm_x <= 12'h002;
+    norm_pixel <= 8'h10;
+    norm_x <= 12'h004;
     norm_y <= 12'h000;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
@@ -74,14 +88,21 @@ task automatic run_stimulus();
 
 
     // ── cycle_5 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h14;
+    norm_x <= 12'h005;
+    norm_y <= 12'h000;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_5 ──
 
 
     // ── cycle_6 ──
-    norm_pixel <= 8'h0C;
-    norm_x <= 12'h003;
+    norm_pixel <= 8'h18;
+    norm_x <= 12'h006;
     norm_y <= 12'h000;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
@@ -93,15 +114,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_7 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h1C;
+    norm_x <= 12'h007;
+    norm_y <= 12'h000;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_7 ──
 
 
     // ── cycle_8 ──
-    norm_pixel <= 8'h10;
-    norm_x <= 12'h004;
-    norm_y <= 12'h000;
+    norm_pixel <= 8'h20;
+    norm_x <= 12'h000;
+    norm_y <= 12'h001;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -112,15 +140,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_9 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h24;
+    norm_x <= 12'h001;
+    norm_y <= 12'h001;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_9 ──
 
 
     // ── cycle_10 ──
-    norm_pixel <= 8'h14;
-    norm_x <= 12'h005;
-    norm_y <= 12'h000;
+    norm_pixel <= 8'h28;
+    norm_x <= 12'h002;
+    norm_y <= 12'h001;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -131,15 +166,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_11 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h2C;
+    norm_x <= 12'h003;
+    norm_y <= 12'h001;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_11 ──
 
 
     // ── cycle_12 ──
-    norm_pixel <= 8'h18;
-    norm_x <= 12'h006;
-    norm_y <= 12'h000;
+    norm_pixel <= 8'h30;
+    norm_x <= 12'h004;
+    norm_y <= 12'h001;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -150,18 +192,25 @@ task automatic run_stimulus();
 
 
     // ── cycle_13 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h34;
+    norm_x <= 12'h005;
+    norm_y <= 12'h001;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_13 ──
 
 
     // ── cycle_14 ──
-    norm_pixel <= 8'h1C;
-    norm_x <= 12'h007;
-    norm_y <= 12'h000;
+    norm_pixel <= 8'h38;
+    norm_x <= 12'h006;
+    norm_y <= 12'h001;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
+    norm_end_of_line <= 1'b0;
     norm_end_of_frame <= 1'b0;
     norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
@@ -169,15 +218,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_15 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h3C;
+    norm_x <= 12'h007;
+    norm_y <= 12'h001;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_15 ──
 
 
     // ── cycle_16 ──
-    norm_pixel <= 8'h20;
+    norm_pixel <= 8'h40;
     norm_x <= 12'h000;
-    norm_y <= 12'h001;
+    norm_y <= 12'h002;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -188,15 +244,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_17 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h44;
+    norm_x <= 12'h001;
+    norm_y <= 12'h002;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_17 ──
 
 
     // ── cycle_18 ──
-    norm_pixel <= 8'h24;
-    norm_x <= 12'h001;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h48;
+    norm_x <= 12'h002;
+    norm_y <= 12'h002;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -207,15 +270,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_19 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h4C;
+    norm_x <= 12'h003;
+    norm_y <= 12'h002;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_19 ──
 
 
     // ── cycle_20 ──
-    norm_pixel <= 8'h28;
-    norm_x <= 12'h002;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h50;
+    norm_x <= 12'h004;
+    norm_y <= 12'h002;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -226,15 +296,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_21 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h54;
+    norm_x <= 12'h005;
+    norm_y <= 12'h002;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_21 ──
 
 
     // ── cycle_22 ──
-    norm_pixel <= 8'h2C;
-    norm_x <= 12'h003;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h58;
+    norm_x <= 12'h006;
+    norm_y <= 12'h002;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -245,15 +322,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_23 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h5C;
+    norm_x <= 12'h007;
+    norm_y <= 12'h002;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_23 ──
 
 
     // ── cycle_24 ──
-    norm_pixel <= 8'h30;
-    norm_x <= 12'h004;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h60;
+    norm_x <= 12'h000;
+    norm_y <= 12'h003;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -264,15 +348,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_25 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h64;
+    norm_x <= 12'h001;
+    norm_y <= 12'h003;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_25 ──
 
 
     // ── cycle_26 ──
-    norm_pixel <= 8'h34;
-    norm_x <= 12'h005;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h68;
+    norm_x <= 12'h002;
+    norm_y <= 12'h003;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -283,15 +374,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_27 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h6C;
+    norm_x <= 12'h003;
+    norm_y <= 12'h003;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_27 ──
 
 
     // ── cycle_28 ──
-    norm_pixel <= 8'h38;
-    norm_x <= 12'h006;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h70;
+    norm_x <= 12'h004;
+    norm_y <= 12'h003;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -302,18 +400,25 @@ task automatic run_stimulus();
 
 
     // ── cycle_29 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h74;
+    norm_x <= 12'h005;
+    norm_y <= 12'h003;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_29 ──
 
 
     // ── cycle_30 ──
-    norm_pixel <= 8'h3C;
-    norm_x <= 12'h007;
-    norm_y <= 12'h001;
+    norm_pixel <= 8'h78;
+    norm_x <= 12'h006;
+    norm_y <= 12'h003;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
+    norm_end_of_line <= 1'b0;
     norm_end_of_frame <= 1'b0;
     norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
@@ -321,15 +426,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_31 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h7C;
+    norm_x <= 12'h007;
+    norm_y <= 12'h003;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_31 ──
 
 
     // ── cycle_32 ──
-    norm_pixel <= 8'h40;
+    norm_pixel <= 8'h80;
     norm_x <= 12'h000;
-    norm_y <= 12'h002;
+    norm_y <= 12'h004;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -340,15 +452,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_33 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h84;
+    norm_x <= 12'h001;
+    norm_y <= 12'h004;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_33 ──
 
 
     // ── cycle_34 ──
-    norm_pixel <= 8'h44;
-    norm_x <= 12'h001;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'h88;
+    norm_x <= 12'h002;
+    norm_y <= 12'h004;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -359,15 +478,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_35 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h8C;
+    norm_x <= 12'h003;
+    norm_y <= 12'h004;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_35 ──
 
 
     // ── cycle_36 ──
-    norm_pixel <= 8'h48;
-    norm_x <= 12'h002;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'h90;
+    norm_x <= 12'h004;
+    norm_y <= 12'h004;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -378,15 +504,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_37 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h94;
+    norm_x <= 12'h005;
+    norm_y <= 12'h004;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_37 ──
 
 
     // ── cycle_38 ──
-    norm_pixel <= 8'h4C;
-    norm_x <= 12'h003;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'h98;
+    norm_x <= 12'h006;
+    norm_y <= 12'h004;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -397,15 +530,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_39 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'h9C;
+    norm_x <= 12'h007;
+    norm_y <= 12'h004;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_39 ──
 
 
     // ── cycle_40 ──
-    norm_pixel <= 8'h50;
-    norm_x <= 12'h004;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'hA0;
+    norm_x <= 12'h000;
+    norm_y <= 12'h005;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -416,15 +556,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_41 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hA4;
+    norm_x <= 12'h001;
+    norm_y <= 12'h005;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_41 ──
 
 
     // ── cycle_42 ──
-    norm_pixel <= 8'h54;
-    norm_x <= 12'h005;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'hA8;
+    norm_x <= 12'h002;
+    norm_y <= 12'h005;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -435,15 +582,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_43 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hAC;
+    norm_x <= 12'h003;
+    norm_y <= 12'h005;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_43 ──
 
 
     // ── cycle_44 ──
-    norm_pixel <= 8'h58;
-    norm_x <= 12'h006;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'hB0;
+    norm_x <= 12'h004;
+    norm_y <= 12'h005;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -454,18 +608,25 @@ task automatic run_stimulus();
 
 
     // ── cycle_45 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hB4;
+    norm_x <= 12'h005;
+    norm_y <= 12'h005;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_45 ──
 
 
     // ── cycle_46 ──
-    norm_pixel <= 8'h5C;
-    norm_x <= 12'h007;
-    norm_y <= 12'h002;
+    norm_pixel <= 8'hB8;
+    norm_x <= 12'h006;
+    norm_y <= 12'h005;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
+    norm_end_of_line <= 1'b0;
     norm_end_of_frame <= 1'b0;
     norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
@@ -473,15 +634,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_47 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hBC;
+    norm_x <= 12'h007;
+    norm_y <= 12'h005;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_47 ──
 
 
     // ── cycle_48 ──
-    norm_pixel <= 8'h60;
+    norm_pixel <= 8'hC0;
     norm_x <= 12'h000;
-    norm_y <= 12'h003;
+    norm_y <= 12'h006;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -492,15 +660,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_49 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hC4;
+    norm_x <= 12'h001;
+    norm_y <= 12'h006;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_49 ──
 
 
     // ── cycle_50 ──
-    norm_pixel <= 8'h64;
-    norm_x <= 12'h001;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hC8;
+    norm_x <= 12'h002;
+    norm_y <= 12'h006;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -511,15 +686,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_51 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hCC;
+    norm_x <= 12'h003;
+    norm_y <= 12'h006;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_51 ──
 
 
     // ── cycle_52 ──
-    norm_pixel <= 8'h68;
-    norm_x <= 12'h002;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hD0;
+    norm_x <= 12'h004;
+    norm_y <= 12'h006;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -530,15 +712,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_53 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hD4;
+    norm_x <= 12'h005;
+    norm_y <= 12'h006;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_53 ──
 
 
     // ── cycle_54 ──
-    norm_pixel <= 8'h6C;
-    norm_x <= 12'h003;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hD8;
+    norm_x <= 12'h006;
+    norm_y <= 12'h006;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -549,15 +738,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_55 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hDC;
+    norm_x <= 12'h007;
+    norm_y <= 12'h006;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_55 ──
 
 
     // ── cycle_56 ──
-    norm_pixel <= 8'h70;
-    norm_x <= 12'h004;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hE0;
+    norm_x <= 12'h000;
+    norm_y <= 12'h007;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -568,15 +764,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_57 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hE4;
+    norm_x <= 12'h001;
+    norm_y <= 12'h007;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_57 ──
 
 
     // ── cycle_58 ──
-    norm_pixel <= 8'h74;
-    norm_x <= 12'h005;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hE8;
+    norm_x <= 12'h002;
+    norm_y <= 12'h007;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -587,15 +790,22 @@ task automatic run_stimulus();
 
 
     // ── cycle_59 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hEC;
+    norm_x <= 12'h003;
+    norm_y <= 12'h007;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_59 ──
 
 
     // ── cycle_60 ──
-    norm_pixel <= 8'h78;
-    norm_x <= 12'h006;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hF0;
+    norm_x <= 12'h004;
+    norm_y <= 12'h007;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
     norm_end_of_line <= 1'b0;
@@ -606,18 +816,25 @@ task automatic run_stimulus();
 
 
     // ── cycle_61 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hF4;
+    norm_x <= 12'h005;
+    norm_y <= 12'h007;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b0;
+    norm_end_of_frame <= 1'b0;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_61 ──
 
 
     // ── cycle_62 ──
-    norm_pixel <= 8'h7C;
-    norm_x <= 12'h007;
-    norm_y <= 12'h003;
+    norm_pixel <= 8'hF8;
+    norm_x <= 12'h006;
+    norm_y <= 12'h007;
     norm_frame_id <= 16'h0000;
     norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
+    norm_end_of_line <= 1'b0;
     norm_end_of_frame <= 1'b0;
     norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
@@ -625,20 +842,20 @@ task automatic run_stimulus();
 
 
     // ── cycle_63 ──
-    norm_pixel_valid <= 1'b0;
+    norm_pixel <= 8'hFC;
+    norm_x <= 12'h007;
+    norm_y <= 12'h007;
+    norm_frame_id <= 16'h0000;
+    norm_tile_id <= 16'h0000;
+    norm_end_of_line <= 1'b1;
+    norm_end_of_frame <= 1'b1;
+    norm_pixel_valid <= 1'b1;
     @(posedge ap_clk);
     // ── end: cycle_63 ──
 
 
     // ── cycle_64 ──
-    norm_pixel <= 8'h80;
-    norm_x <= 12'h000;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
+    norm_pixel_valid <= 1'b0;
     @(posedge ap_clk);
     // ── end: cycle_64 ──
 
@@ -650,14 +867,7 @@ task automatic run_stimulus();
 
 
     // ── cycle_66 ──
-    norm_pixel <= 8'h84;
-    norm_x <= 12'h001;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
+    norm_pixel_valid <= 1'b0;
     @(posedge ap_clk);
     // ── end: cycle_66 ──
 
@@ -669,624 +879,6 @@ task automatic run_stimulus();
 
 
     // ── cycle_68 ──
-    norm_pixel <= 8'h88;
-    norm_x <= 12'h002;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_68 ──
-
-
-    // ── cycle_69 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_69 ──
-
-
-    // ── cycle_70 ──
-    norm_pixel <= 8'h8C;
-    norm_x <= 12'h003;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_70 ──
-
-
-    // ── cycle_71 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_71 ──
-
-
-    // ── cycle_72 ──
-    norm_pixel <= 8'h90;
-    norm_x <= 12'h004;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_72 ──
-
-
-    // ── cycle_73 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_73 ──
-
-
-    // ── cycle_74 ──
-    norm_pixel <= 8'h94;
-    norm_x <= 12'h005;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_74 ──
-
-
-    // ── cycle_75 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_75 ──
-
-
-    // ── cycle_76 ──
-    norm_pixel <= 8'h98;
-    norm_x <= 12'h006;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_76 ──
-
-
-    // ── cycle_77 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_77 ──
-
-
-    // ── cycle_78 ──
-    norm_pixel <= 8'h9C;
-    norm_x <= 12'h007;
-    norm_y <= 12'h004;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_78 ──
-
-
-    // ── cycle_79 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_79 ──
-
-
-    // ── cycle_80 ──
-    norm_pixel <= 8'hA0;
-    norm_x <= 12'h000;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_80 ──
-
-
-    // ── cycle_81 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_81 ──
-
-
-    // ── cycle_82 ──
-    norm_pixel <= 8'hA4;
-    norm_x <= 12'h001;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_82 ──
-
-
-    // ── cycle_83 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_83 ──
-
-
-    // ── cycle_84 ──
-    norm_pixel <= 8'hA8;
-    norm_x <= 12'h002;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_84 ──
-
-
-    // ── cycle_85 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_85 ──
-
-
-    // ── cycle_86 ──
-    norm_pixel <= 8'hAC;
-    norm_x <= 12'h003;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_86 ──
-
-
-    // ── cycle_87 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_87 ──
-
-
-    // ── cycle_88 ──
-    norm_pixel <= 8'hB0;
-    norm_x <= 12'h004;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_88 ──
-
-
-    // ── cycle_89 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_89 ──
-
-
-    // ── cycle_90 ──
-    norm_pixel <= 8'hB4;
-    norm_x <= 12'h005;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_90 ──
-
-
-    // ── cycle_91 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_91 ──
-
-
-    // ── cycle_92 ──
-    norm_pixel <= 8'hB8;
-    norm_x <= 12'h006;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_92 ──
-
-
-    // ── cycle_93 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_93 ──
-
-
-    // ── cycle_94 ──
-    norm_pixel <= 8'hBC;
-    norm_x <= 12'h007;
-    norm_y <= 12'h005;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_94 ──
-
-
-    // ── cycle_95 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_95 ──
-
-
-    // ── cycle_96 ──
-    norm_pixel <= 8'hC0;
-    norm_x <= 12'h000;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_96 ──
-
-
-    // ── cycle_97 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_97 ──
-
-
-    // ── cycle_98 ──
-    norm_pixel <= 8'hC4;
-    norm_x <= 12'h001;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_98 ──
-
-
-    // ── cycle_99 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_99 ──
-
-
-    // ── cycle_100 ──
-    norm_pixel <= 8'hC8;
-    norm_x <= 12'h002;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_100 ──
-
-
-    // ── cycle_101 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_101 ──
-
-
-    // ── cycle_102 ──
-    norm_pixel <= 8'hCC;
-    norm_x <= 12'h003;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_102 ──
-
-
-    // ── cycle_103 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_103 ──
-
-
-    // ── cycle_104 ──
-    norm_pixel <= 8'hD0;
-    norm_x <= 12'h004;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_104 ──
-
-
-    // ── cycle_105 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_105 ──
-
-
-    // ── cycle_106 ──
-    norm_pixel <= 8'hD4;
-    norm_x <= 12'h005;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_106 ──
-
-
-    // ── cycle_107 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_107 ──
-
-
-    // ── cycle_108 ──
-    norm_pixel <= 8'hD8;
-    norm_x <= 12'h006;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_108 ──
-
-
-    // ── cycle_109 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_109 ──
-
-
-    // ── cycle_110 ──
-    norm_pixel <= 8'hDC;
-    norm_x <= 12'h007;
-    norm_y <= 12'h006;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_110 ──
-
-
-    // ── cycle_111 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_111 ──
-
-
-    // ── cycle_112 ──
-    norm_pixel <= 8'hE0;
-    norm_x <= 12'h000;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_112 ──
-
-
-    // ── cycle_113 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_113 ──
-
-
-    // ── cycle_114 ──
-    norm_pixel <= 8'hE4;
-    norm_x <= 12'h001;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_114 ──
-
-
-    // ── cycle_115 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_115 ──
-
-
-    // ── cycle_116 ──
-    norm_pixel <= 8'hE8;
-    norm_x <= 12'h002;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_116 ──
-
-
-    // ── cycle_117 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_117 ──
-
-
-    // ── cycle_118 ──
-    norm_pixel <= 8'hEC;
-    norm_x <= 12'h003;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_118 ──
-
-
-    // ── cycle_119 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_119 ──
-
-
-    // ── cycle_120 ──
-    norm_pixel <= 8'hF0;
-    norm_x <= 12'h004;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_120 ──
-
-
-    // ── cycle_121 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_121 ──
-
-
-    // ── cycle_122 ──
-    norm_pixel <= 8'hF4;
-    norm_x <= 12'h005;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_122 ──
-
-
-    // ── cycle_123 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_123 ──
-
-
-    // ── cycle_124 ──
-    norm_pixel <= 8'hF8;
-    norm_x <= 12'h006;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b0;
-    norm_end_of_frame <= 1'b0;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_124 ──
-
-
-    // ── cycle_125 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_125 ──
-
-
-    // ── cycle_126 ──
-    norm_pixel <= 8'hFC;
-    norm_x <= 12'h007;
-    norm_y <= 12'h007;
-    norm_frame_id <= 16'h0000;
-    norm_tile_id <= 16'h0000;
-    norm_end_of_line <= 1'b1;
-    norm_end_of_frame <= 1'b1;
-    norm_pixel_valid <= 1'b1;
-    @(posedge ap_clk);
-    // ── end: cycle_126 ──
-
-
-    // ── cycle_127 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_127 ──
-
-
-    // ── cycle_128 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_128 ──
-
-
-    // ── cycle_129 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_129 ──
-
-
-    // ── cycle_130 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_130 ──
-
-
-    // ── cycle_131 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_131 ──
-
-
-    // ── cycle_132 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_132 ──
-
-
-    // ── cycle_133 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_133 ──
-
-
-    // ── cycle_134 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_134 ──
-
-
-    // ── cycle_135 ──
-    norm_pixel_valid <= 1'b0;
-    @(posedge ap_clk);
-    // ── end: cycle_135 ──
-
-
-    // ── cycle_136 ──
     norm_pixel_valid <= 1'b0;
     @(posedge ap_clk);
     $display("FORGE_CHECK|check_id=63:tile_minimum_check|label=tile_minimum_check|signal=tjoin_out_minimum|expected=0x00|observed=0x%h|width=8|passed=%0d", tjoin_out_minimum, (tjoin_out_minimum === 8'h00));
@@ -1329,6 +921,6 @@ task automatic run_stimulus();
       $display("FAIL: tile_join_mismatch_check — expected 1'b0, got %0h", tjoin_join_mismatch);
       $fatal(1, "Check failed: tile_join_mismatch_check");
     end
-    // ── end: cycle_136 ──
+    // ── end: cycle_68 ──
 
 endtask : run_stimulus
