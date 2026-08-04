@@ -1,0 +1,10 @@
+# ImageFolderAdapter config for a 32x32 user-image-folder import
+# (release-plan Phase 10, slice 10.6 -- preflight.md §18.1 Tier B).
+#
+# Usage:
+#   python3 datasets/cli.py import-images --output forge/verify/generated/my_images \
+#     --dataset-id my_images_32x32 --source ./my_images --width 32 --height 32
+width: 32
+height: 32
+extensions: [".png", ".pgm", ".jpg", ".jpeg", ".bmp"]
+max_events: null

@@ -1,0 +1,21 @@
+# SyntheticPatternAdapter config for the mandatory Tier-A acceptance set
+# (release-plan Phase 10, slice 10.6 -- preflight.md §10/§18.1).
+#
+# Usage:
+#   python3 datasets/cli.py generate-synthetic --output forge/verify/generated/synthetic \
+#     --dataset-id synthetic_acceptance_8x8 --width 8 --height 8 \
+#     --pattern constant --pattern horizontal_edge --pattern vertical_edge \
+#     --pattern corner --pattern checkerboard --pattern ramp --pattern noise \
+#     --event-count 7 --seed 0
+width: 8
+height: 8
+patterns:
+  - constant
+  - horizontal_edge
+  - vertical_edge
+  - corner
+  - checkerboard
+  - ramp
+  - noise
+seed: 0
+event_count: 7
