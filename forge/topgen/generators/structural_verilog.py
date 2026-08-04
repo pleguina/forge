@@ -93,6 +93,30 @@ def _domain_to_top_level_net(domain_name: str, *, is_clock: bool) -> str:
             return "ap_rst"
     return domain_name
 
+def _reset_net_for_domain(
+    domain_name: "str | None",
+    reset_sync_domains: Dict[str, Dict[str, Any]],
+) -> str:
+    """Resolve a module's reset domain to the net that actually carries a
+    real, synchronized reset (release-plan Phase 10, slice 10.4).
+
+    A `reset_domains.<name>.sync: reset_sync` domain's real reset signal
+    is `rst_sync_<name>` — the cdc_reset_sync instance's own output — not
+    the raw top-level `<name>` port (which is never driven by anything
+    once a real synchronizer exists for it; see design_cdc.yml's own
+    header for why that top-level port is intentionally left
+    unconnected/dangling). Every OTHER consumer of a resolved reset
+    domain (a CDC synchronizer's own src_rst/dst_rst, and a member
+    instance's own reset pin) must resolve through this same rule, not
+    just `_domain_to_top_level_net` alone — using the raw domain net
+    instead is a real, silent miscompile (a module/synchronizer reads a
+    permanently-unasserted reset and its registers stay X forever),
+    found empirically wiring vision_pipeline_demo's design_cdc.yml.
+    """
+    if domain_name and domain_name in reset_sync_domains:
+        return _verilog_ident(f"rst_sync_{domain_name}")
+    return _domain_to_top_level_net(domain_name, is_clock=False) if domain_name else "ap_rst"
+
 def _vtype(width: int) -> str:
     """Return Verilog type string: wire for 1-bit, wire [N-1:0] for multi-bit."""
     return "wire" if width == 1 else f"wire [{width-1}:0]"
@@ -865,6 +889,23 @@ def write_structural_verilog(
         else:
             emit(f"  wire [{w-1}:0] {net};")
         driver_net_set.add(net)
+
+    # release-plan Phase 10, slice 10.4: pre-declare each reset_sync
+    # domain's own sync_rst_out net here too, up front, alongside every
+    # other intermediate net this function pre-declares (sync_net_* for
+    # CDC data crossings, above) — a member instance's reset pin
+    # (the "Instances" loop just below) references this net by name, and
+    # if it's only declared later (in the "Reset Synchronizer Instances"
+    # section, after every module instance), Xilinx xvlog implicitly
+    # declares a *separate*, undriven 1-bit net for the earlier reference
+    # ("already implicitly declared" warning) — an instance's reset pin
+    # then reads that phantom net (permanently X) instead of the real
+    # synchronizer output. Found empirically: the second reset_sync
+    # domain wired this way (rst_output) silently stayed X for an entire
+    # xsim run while the first (rst_pixel) happened to still resolve
+    # correctly — a real, order-dependent miscompile, not a hypothetical.
+    for _name in sorted(reset_sync_domains):
+        emit(f"  wire {_verilog_ident(f'rst_sync_{_name}')};")
     emit("")
 
     # ====== Instances =====================================================
@@ -1183,9 +1224,9 @@ def write_structural_verilog(
             dst_clk_domain = clock_of_module.get(dst_mod)
             dst_rst_domain = reset_of_module.get(dst_mod)
             src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True) if src_clk_domain else "ap_clk"
-            src_rst_net = _domain_to_top_level_net(src_rst_domain, is_clock=False) if src_rst_domain else "ap_rst"
+            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains)
             dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
-            dst_rst_net = _domain_to_top_level_net(dst_rst_domain, is_clock=False) if dst_rst_domain else "ap_rst"
+            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains)
 
             for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
@@ -1306,8 +1347,8 @@ def write_structural_verilog(
             dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
 
             rst_sync_net = _verilog_ident(f"rst_sync_{name}")
-            emit(f"  // Reset domain {name!r}: real member instances bound to sync_rst_out below")
-            emit(f"  wire {rst_sync_net};")
+            emit(f"  // Reset domain {name!r}: real member instances bound to sync_rst_out")
+            emit(f"  // (net pre-declared earlier, alongside every other intermediate net)")
             emit(f"  cdc_reset_sync rst_sync_{rst_sync_counter} (")
             emit(f"    .dst_clk({dst_clk_net}),")
             emit(f"    .async_rst_in({async_rst_net}),")

@@ -290,6 +290,89 @@ class TestResetSyncEmission:
         # The raw domain net must never reach the instance directly.
         assert ".rst_slow(rst_slow)" not in text
 
+    def test_reset_sync_net_is_declared_before_first_use(self, tmp_path):
+        """release-plan Phase 10, slice 10.4: rst_sync_<name> must be
+        declared (pre-declared, alongside every other intermediate net)
+        before the member instance that references it — declaring it
+        only later (in the cdc_reset_sync emission section, after every
+        module instance) makes Xilinx xvlog implicitly declare a
+        *separate*, permanently-undriven net for the earlier reference
+        ("already implicitly declared" warning), leaving the instance's
+        reset pin permanently X. Regression guard for a real bug found
+        empirically via a full xsim run (not just a unit-test check),
+        that the previous test alone did not catch."""
+        mod = Module(name="mod", top="mod_top", src=["x.v"])
+        cfg = DesignConfig(
+            part="xcvu13p", clock_period=4.0, modules=[mod],
+            connections=[],
+        )
+        cfg.reset_domains = {
+            "rst_slow": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"},
+        }
+        ip_info = {
+            "mod": {"ports": [_port("clk_b", "IN", 1), _port("rst_slow", "IN", 1)]},
+        }
+        contracts = {"mod": _contract("mod", "clk_b", "rst_slow")}
+        conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
+
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        declare_idx = text.index("wire rst_sync_rst_slow;")
+        instance_use_idx = text.index(".rst_slow(rst_sync_rst_slow)")
+        assert declare_idx < instance_use_idx
+        # Declared exactly once — not re-declared later alongside the
+        # cdc_reset_sync instance itself.
+        assert text.count("wire rst_sync_rst_slow;") == 1
+
+    def test_cdc_synchronizer_between_reset_sync_domains_uses_synchronizer_output(self, tmp_path):
+        """release-plan Phase 10, slice 10.4: a CDC data synchronizer
+        (cdc_pulse_sync/cdc_mailbox/cdc_async_fifo/cdc_sync2ff) whose
+        src or dst module belongs to a reset_sync domain must bind that
+        side's src_rst/dst_rst to the real synchronizer output
+        (rst_sync_<name>), not the raw domain net — the same class of
+        bug as the member-instance reset pin (see
+        test_member_instance_reset_pin_binds_to_synchronizer_output),
+        just in the CDC synchronizer's own src_rst/dst_rst wiring
+        instead. Found empirically: cdc_async_fifo's rd_rst and
+        cdc_pulse_sync's src_rst both bound to a permanently-unasserted
+        raw domain net, leaving their registers X forever in a real
+        xsim run even though the member-instance fix above already
+        worked correctly."""
+        src = Module(name="src", top="src_top", src=["x.v"])
+        dst = Module(name="dst", top="dst_top", src=["x.v"])
+        cfg = DesignConfig(
+            part="xcvu13p", clock_period=4.0, modules=[src, dst],
+            connections=[Connection(
+                from_="src", to="dst", port_map=[("pulse_out", "pulse_in")],
+                cdc={"kind": "pulse_sync", "min_spacing_cycles": 8},
+            )],
+        )
+        cfg.reset_domains = {
+            "rst_out": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"},
+        }
+        ip_info = {
+            "src": {"ports": [_port("clk_out", "IN", 1), _port("rst_out", "IN", 1), _port("pulse_out", "OUT")]},
+            "dst": {"ports": [_port("ap_clk", "IN", 1), _port("ap_rst", "IN", 1), _port("pulse_in", "IN")]},
+        }
+        contracts = {
+            "src": _contract("src", "clk_out", "rst_out"),
+            "dst": _contract("dst", "ap_clk", "ap_rst"),
+        }
+        conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
+
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        assert ".src_rst(rst_sync_rst_out)," in text
+        assert ".src_rst(rst_out)," not in text
+
     def test_no_reset_domains_sync_emits_nothing(self, tmp_path):
         src = Module(name="src", top="src_top", src=["x.v"])
         dst = Module(name="dst", top="dst_top", src=["x.v"])
