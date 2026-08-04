@@ -592,7 +592,7 @@ cycles, spec §11) and "exact-cycle merge" (`edge_mask_merge_rtl`, spec
 §11) are not new framework capabilities to build — both are already
 real, tested FORGE machinery, confirmed by reading `forge/ir/model.py`
 and `forge/analyze/latency_static/checker.py` directly rather than
-assumed: a plain `Connection.delay_cycles: 6` (no `boundary` tag)
+assumed: a plain `Connection.delay_cycles: N` (no `boundary` tag)
 resolves to the existing `latency_delay` transformation kind, generating
 a real `signal_delay` register chain; and `check_merge_points` already
 classifies a merge point `exact_cycle` whenever every predecessor
@@ -601,6 +601,19 @@ exact overlap (`delta == 0`) with no per-example-project code involved.
 10.2 is therefore project-level work only — three new
 `vision_pipeline_demo` modules and their design-level wiring — not
 core-framework engineering, unlike 10.0B/10.0C.
+
+The spec's own "+6" figure assumed its *original* single monolithic
+`sobel_hls` (spec §11, latency 8, predating this document's §6.3
+correction). Once that's split into `window_builder_rtl` + `sobel_hls`,
+the real total differs: `window_builder_rtl`'s own latency is
+`FRAME_WIDTH+2` (10 for this slice's FRAME_WIDTH=8 — not `FRAME_WIDTH+1`,
+an initial hand-derivation that a standalone xsim check against an
+independent numpy zero-pad model caught and corrected; see
+`algo/rtl/window_builder_rtl.v`'s header), plus `sobel_hls`'s own 4-cycle
+compute latency, for a sobel-branch total of 14. The threshold branch's
+`delay_cycles` is therefore set to 12 (2 + 12 = 14), not the spec's
+original 6 — computed from the actual built modules' real declared
+latencies, not copied from the spec's now-superseded module split.
 
 Negative fixtures land incrementally alongside each capability (the
 spec's own 10-item invalid-design matrix), not batched at the end —
