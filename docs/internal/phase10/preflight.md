@@ -384,26 +384,154 @@ saturation.
 
 **Remaining freezes required before RTL/HLS/dataset/golden-model
 implementation** (checklist — each needs an explicit answer at Slice 10.0
-time, not a default assumed silently):
+time, not a default assumed silently). **Resolved below in §9.1**:
 
-- [ ] Sobel gradient-magnitude equation: `abs(Gx) + abs(Gy)` vs.
+- [x] Sobel gradient-magnitude equation: `abs(Gx) + abs(Gy)` vs.
   approximate/true Euclidean magnitude.
-- [ ] Saturation policy on `gradient_magnitude`/`normalized_pixel`.
-- [ ] Threshold comparison operator: `>=` vs. `>`.
-- [ ] Tile traversal order (row-major vs. other).
-- [ ] Tile-ID formula (the spec's own skeleton code uses
+- [x] Saturation policy on `gradient_magnitude`/`normalized_pixel`.
+- [x] Threshold comparison operator: `>=` vs. `>`.
+- [x] Tile traversal order (row-major vs. other).
+- [x] Tile-ID formula (the spec's own skeleton code uses
   `(y // tile_height) * 1024 + (x // tile_width)` — confirm or replace).
-- [ ] Border-handling policy for Sobel's edge tiles (via `window_builder_rtl`, §6.3).
-- [ ] Mean/variance rounding policy.
-- [ ] Population vs. sample variance.
-- [ ] Packet record-kind values and packing order within a 256-bit beat
+- [x] Border-handling policy for Sobel's edge tiles (via `window_builder_rtl`, §6.3).
+- [x] Mean/variance rounding policy.
+- [x] Population vs. sample variance.
+- [x] Packet record-kind values and packing order within a 256-bit beat
   (§6.1/§6.2 — two kinds now, `record_kind` disambiguates).
-- [ ] Configuration-update timing: applied immediately vs. at the next
+- [x] Configuration-update timing: applied immediately vs. at the next
   frame boundary.
 
 These directly affect bit-exact datasets and golden-model output —
 changing any of them after RTL/HLS/datasets exist causes exactly the
 churn the original spec warned about.
+
+### 9.1 Checklist resolutions — frozen
+
+Each item below is decided against evidence already in this repo — real
+10.1 code, the spec's own fixture/flow names, or arithmetic forced by
+already-frozen bit widths — not a fresh, ungrounded preference. Nothing
+here is provisional; slice 10.2 implementation must match these exactly.
+
+**Sobel gradient-magnitude equation: `abs(Gx) + abs(Gy)`.** True or
+approximate Euclidean magnitude requires a square root with no
+integer-exact definition reproducible identically bit-for-bit across
+HLS, RTL, and the Python `GoldenModelProvider` — which would break the
+same "bit-deterministic" requirement the spec already states for dataset
+preprocessing (§18.14) and that `pixel_normalizer.cpp` already honors
+with pure integer/clamp arithmetic (no floating point anywhere in the
+quickstart tier). `abs(Gx) + abs(Gy)` is closed-form integer arithmetic
+and the standard hardware-friendly Sobel approximation.
+
+**Saturation policy: clamp to the field's full range, same shape as the
+already-shipped `normalized_pixel` policy.** `pixel_normalizer.cpp`
+(10.1, real and tested) already establishes the pattern: signed internal
+intermediate, clamp to `[0, 255]`, unsigned saturated result on the
+interface. `gradient_magnitude` (12 bits, unsigned per §9's signedness
+freeze) gets the identical treatment: clamp to `[0, 4095]`. With the
+standard Sobel kernel (`[-1,0,1;-2,0,2;-1,0,1]` and its transpose) on
+8-bit pixels, `abs(Gx)+abs(Gy)` is bounded by 2040 — the clamp is a
+safety net that's specified explicitly rather than an implicit "can't
+happen," matching why the normalizer's clamp exists at all (it also
+can't structurally overflow with the frozen `NORMALIZER_SCALE_NUM`/
+`_DEN`, and is clamped anyway).
+
+**Threshold comparison operator: `>=`.** Not actually an open decision —
+`threshold_rtl.v` (10.1, real, shipped, and explicitly documented as
+"reused unmodified when later slices assemble the fuller pipeline") already
+implements `(s1_pixel >= THRESHOLD[WIDTH-1:0])`. This item is retroactively
+confirmed by existing code, not decided fresh.
+
+**Tile traversal order: row-major (raster) — left-to-right within a row,
+top-to-bottom across rows.** This is the only order consistent with
+`forge.pixel_stream.v1`'s own `end_of_line`/`end_of_frame` flags (frozen,
+§9) — there is no other traversal those flags could describe — and it
+matches the tile-ID formula's own row-major structure (row term is the
+more-significant multiplicand), confirmed next.
+
+**Tile-ID formula: confirmed as-is** —
+`(y // tile_height) * 1024 + (x // tile_width)`. With `tile_height =
+tile_width = 8` (frozen, §10) and every mandatory frame size in the
+dataset strategy (8×8 through 32×32), the largest tile-row/tile-col index
+is 3, giving a maximum `tile_id` of 3075 — nowhere near overflowing the
+16-bit field. The `1024` constant reserves headroom to 1023 tile-columns
+and 63 tile-rows before any overflow, comfortably covering the mandatory
+scope with no replacement needed.
+
+**Border-handling policy (`window_builder_rtl`, §6.3): zero-padding** —
+out-of-frame taps in the 3×3 window read as 0. `window_builder_rtl` is
+already frozen (§6.3) to "emit one 3×3 window per accepted output pixel,"
+i.e. a 1:1 input:output pixel correspondence, matching the normalizer and
+threshold stages before it. A drop-border policy would break that 1:1
+count and would also break `tile_stats_hls`'s fixed-64-sample-per-tile
+assumption (next item) — note this is a distinct concern from the
+dataset-preprocessing `tiling.border: drop` convention at spec §18.5,
+which governs the project-owned image adapter cropping a variable-size
+*source image* to a tileable shape before it ever becomes a pixel
+stream, not this RTL module's per-window behavior on a stream already
+inside the mandatory fixed-shape contract (§10). Zero-padding is also the
+only one of the standard three policies (zero-pad / edge-replicate /
+drop) that needs no extra state beyond the line buffers
+`window_builder_rtl` already owns, and reproduces identically in the
+Python golden model with a trivial `numpy.pad`.
+
+**Mean/variance rounding policy: exact power-of-two shift, no rounding
+mode.** `mean = sum_of_64_pixels >> 6` (64 = 2^6, so this is a plain,
+exact right-shift — no remainder-handling logic needed in HLS, RTL, or
+Python). `variance = max(0, (sum_of_squares >> 6) - mean**2)` — the
+standard single-pass streaming formula, using the *same* shifted `mean`.
+The two independent floor operations can, in rare rounding-boundary
+cases, undershoot the true non-negative population variance by 1; the
+explicit `max(0, ...)` clamp handles that case cheaply, and is simpler
+than a two-pass sum-of-squared-deviations alternative that would need a
+second walk over the tile. One formula, no separate parameter — must
+match identically in `tile_stats_hls`, the Python golden model, and any
+documentation.
+
+**Population variance, not sample variance** (divide by N=64, not
+N-1). Each tile is the entire population being described — there is no
+larger population it's a sample of — so Bessel's correction doesn't
+apply semantically, and it would also break the exact divide-by-64 shift
+above, forcing a real division by 63.
+
+**Packet record-kind values and packing order (256-bit beat, §6.1/§6.2):**
+`record_kind` values: `0 = pixel-result`, `1 = tile-statistics`, `2`/`3`
+reserved — a beat carrying a reserved `record_kind` is a diagnostic
+failure, not silently ignored, matching this document's own "dedicated
+diagnostic code per failure mode" pattern (§5, Decision A). Packing:
+bits `[127:0]` carry whichever record the packetizer's arbiter accepts
+first that beat (from either upstream path — pixel-result or
+tile-statistics), bits `[255:128]` carry the second; either kind may
+occupy either half and a beat may carry two records of the same kind or
+one of each, since `record_kind` alone disambiguates — slot position
+carries no kind meaning. If only one record is ready when a beat must
+flush (e.g. an end-of-frame drain), it is packed into bits `[127:0]`
+alone, with `keep[15:0] = 16'hFFFF` and `keep[31:16] = 16'h0000`. Within
+each 128-bit record, the field order already frozen in §6.1's field
+lists is MSB-first — the first-listed field (`record_kind`) occupies the
+highest bits of its record. No prior convention exists elsewhere in the
+framework to conflict with this, since no code implements these
+interface types yet (confirmed: no hits for `packet_stream`,
+`edge_mask_stream`, or `tile_statistics` anywhere under `forge/` or
+`plugins/`).
+
+**Configuration-update timing: applied at the next frame boundary, not
+immediately.** Three independent pieces of evidence converge on this: (1)
+the spec's own mandatory dataset tier names a fixture
+`config_update_between_frames.xml` (§18/§19) — a name that only makes
+sense if configuration changes are defined relative to frame boundaries;
+(2) `cdc_mailbox` is specified as providing "atomic configuration
+updates" (§20) — for a per-pixel streaming design, the only instant at
+which changing `threshold`/`kernel_mode` is unambiguously atomic with
+respect to in-flight computation is between frames, since mid-frame the
+Sobel and threshold branches run at different pipeline depths (8 cycles
+vs. 2, §6.2/spec §11) and would otherwise observe the new config at
+different pixels; (3) it composes with the border/tile decisions above —
+a mid-frame config change would need to be attributed to a specific pixel
+inside a tile whose statistics are still accumulating, which has no clean
+semantics. The `mailbox_transfer` CDC primitive (§5, Decision A) still
+updates its destination-side register atomically on its own schedule;
+the pipeline itself only samples that register at each frame's
+`end_of_frame`/next-frame-start boundary, not every cycle.
 
 ## 10. Dataset strategy, including the fixed-shape mandatory contract
 
