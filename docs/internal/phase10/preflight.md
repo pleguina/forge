@@ -579,7 +579,7 @@ dataset contract, not left implicit**:
 | 10.0C | Static throughput model, runtime occupancy/backpressure results, the three structured result schemas (§8, §5 Decision B) |
 | 10.0D | Wire `latency_by_instance`/`verification_flow_entry_points` overlays into real `forge inspect`/`forge report` CLI calls (§4) |
 | 10.1 | One-clock quickstart: normalizer HLS → threshold RTL → sink, synthetic 8×8 data, exact comparison |
-| 10.2 | `window_builder_rtl`, Sobel, threshold, alignment delay, exact-cycle merge (pixel-result path only, §6.2) |
+| 10.2 | **DONE.** `window_builder_rtl`, Sobel, threshold, alignment delay, exact-cycle merge (pixel-result path only, §6.2) |
 | 10.3 | Per-tile bounded statistics (`tile_stats_hls`) and elastic tile-summary join (tile-statistics path, §6.2) |
 | 10.4 | Multiple domains and all five CDC kinds (§5 Decision A), reset synchronizers, negative CDC fixtures |
 | 10.5 | Packetizer (multiplexing both record kinds, §6.1/§6.2), async FIFO, throughput, backpressure, occupancy, invalid rate/depth fixtures |
@@ -600,7 +600,19 @@ declares fixed/hint/hls_report latency, checking their cycle counts for
 exact overlap (`delta == 0`) with no per-example-project code involved.
 10.2 is therefore project-level work only — three new
 `vision_pipeline_demo` modules and their design-level wiring — not
-core-framework engineering, unlike 10.0B/10.0C.
+core-framework engineering, unlike 10.0B/10.0C. **One correction found
+during implementation**: `check_merge_points` turned out to only sum a
+merge point's *immediate* predecessor's own latency, never walking back
+further through a straight producer chain — invisible until this slice
+wired a genuine 2-hop branch (`window_builder_rtl -> sobel_hls`) into a
+real merge point for the first time (every existing merge point in both
+reference designs is single-hop). Fixed in
+`forge/analyze/latency_static/checker.py` (`_upstream_chain_latency`),
+with three new tests including a real-design regression proof against
+this exact design — see that commit. So 10.2 *did* end up touching core
+framework code, just not the part anticipated above; the anticipated
+parts (`Connection.delay_cycles`, `exact_cycle` classification itself)
+needed no changes.
 
 The spec's own "+6" figure assumed its *original* single monolithic
 `sobel_hls` (spec §11, latency 8, predating this document's §6.3
@@ -614,6 +626,19 @@ compute latency, for a sobel-branch total of 14. The threshold branch's
 `delay_cycles` is therefore set to 12 (2 + 12 = 14), not the spec's
 original 6 — computed from the actual built modules' real declared
 latencies, not copied from the spec's now-superseded module split.
+
+**10.2 completion evidence**: `design_pixel_result.yml` (real design),
+`window_builder_rtl`/`sobel_hls`/`edge_mask_merge_rtl` (real RTL/HLS,
+real Vitis HLS synthesis for `sobel_hls`), `PixelResultProvider` (real
+golden model, reconstructing each frame's zero-padded window from the
+dataset itself), and the `pixel_result_xsim` verify flow — a real Vivado
+xsim run streaming the full 64-pixel 8×8 quickstart-scale frame through
+every module, checked against the golden model: 448/448 checks pass
+(64 pixels × normalized_pixel/gradient_magnitude/threshold_mask/out_x/
+out_y/out_valid/tag_mismatch), including all 64 `tag_mismatch` checks
+confirming the Sobel and threshold branches land on
+`edge_mask_merge_rtl` on the exact same cycle for every pixel in the
+frame, not just in the static `delta==0` check.
 
 Negative fixtures land incrementally alongside each capability (the
 spec's own 10-item invalid-design matrix), not batched at the end —
