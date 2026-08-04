@@ -111,3 +111,38 @@ flows:
       top_lib: xil_defaultlib
       use_sv_flag: false
     coverage_intent:  integration
+
+  # Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A):
+  # multi-domain CDC path -- ctrl_level_rtl/ctrl_pulse_rtl/ctrl_mailbox_rtl
+  # (control, ap_clk) -> pixel_sink_rtl (pixel, clk_pixel) -> outsink_level_rtl
+  # (output, clk_output) -> back to control. extra_clocks is this slice's
+  # own new framework capability (forge.verify.gen_sim) -- clk_pixel/
+  # clk_output are genuinely 200MHz/125MHz, independent of and faster than
+  # control's 50MHz ap_clk. No extra_resets: rst_pixel/rst_output are real
+  # reset_domains.*.sync: reset_sync destinations (design_cdc.yml) --
+  # internally synchronized from ap_rst by a real cdc_reset_sync instance,
+  # not driven by the testbench directly (their own top-level ports are
+  # unused/dangling by design -- see design_cdc.yml's header). Dataset
+  # reference is a required-schema formality, not a real dependency: this
+  # flow's gen_stimulus_cdc.py drives fixed constants directly, not a
+  # per-event dataset (see that script's own header for why).
+  - name:             cdc_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_cdc
+    dataset:          vision_pipeline_quickstart_golden
+    default_event_id: 0
+    simulation:
+      clk_period_ns:              20.0   # control domain (ap_clk): 50MHz, matching design_cdc.yml
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 8
+      extra_clocks:
+        clk_pixel:  5.0
+        clk_output: 8.0
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration

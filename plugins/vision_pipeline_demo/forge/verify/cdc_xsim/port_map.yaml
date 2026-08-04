@@ -1,0 +1,77 @@
+format_version: '1'
+generated_by: forge gen-top --mode verilog
+source_file: /data3/home/pleguina/work/omtf-integration-test/workspace/arc-framework/gen-top/design_vision_pipeline_cdc/algo_top.v
+top_module: algo_top
+port_signature_hash: c9d7426ad38a06dc
+port_groups:
+  clock_reset: []
+  bx0: []
+  outputs:
+  - name: ctrl_level_error_level_status
+    direction: output
+    width: 1
+    group: other
+  - name: ctrl_pulse_frame_done_count
+    direction: output
+    width: 8
+    group: other
+  - name: outsink_level_result_status
+    direction: output
+    width: 26
+    group: other
+  - name: pxsink_apply_count
+    direction: output
+    width: 8
+    group: other
+  - name: pxsink_enable_status
+    direction: output
+    width: 1
+    group: other
+  - name: pxsink_mailbox_status
+    direction: output
+    width: 26
+    group: other
+  unclassified:
+  - name: ap_clk
+    direction: input
+    width: 1
+  - name: ap_rst
+    direction: input
+    width: 1
+  - name: clk_output
+    direction: input
+    width: 1
+  - name: clk_pixel
+    direction: input
+    width: 1
+  - name: ctrl_level_enable_in
+    direction: input
+    width: 1
+  - name: ctrl_mailbox_frame_limit_in
+    direction: input
+    width: 16
+  - name: ctrl_mailbox_kernel_mode_in
+    direction: input
+    width: 2
+  - name: ctrl_mailbox_threshold_in
+    direction: input
+    width: 8
+  - name: ctrl_pulse_apply_in
+    direction: input
+    width: 1
+  - name: outsink_level_error_in
+    direction: input
+    width: 1
+  - name: outsink_pulse_frame_done_pulse_in
+    direction: input
+    width: 1
+  - name: pxsink_result_data_in
+    direction: input
+    width: 26
+  - name: rst_output
+    direction: input
+    width: 1
+  - name: rst_pixel
+    direction: input
+    width: 1
+tier2_probes: []
