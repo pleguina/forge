@@ -1,0 +1,6 @@
+{
+  "provider_id": "vision_pipeline.pixel_result",
+  "provider_version": "1.0",
+  "input_dataset_hash": "aff2655e64f4e948522d9cababed91356d7a8f530a92a2c0f961498a3c4de550",
+  "output_hash": "55c12dd972c5bfe3bfdafb7d97393048b22a1449c1f560588752c4a43c35e87c"
+}

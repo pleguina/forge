@@ -58,3 +58,44 @@ modules:
     cycles: 2
   interface_contract: interfaces/threshold_rtl.interface.yaml
   src: [../algo/rtl/threshold_rtl.v]
+
+# ─── Window Builder (RTL) — slice 10.2 ─────────────────────────────────────
+- name: window_builder_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: window_builder_rtl
+  # Fixed FRAME_WIDTH+2 cycle latency (FRAME_WIDTH=8 here) -- empirically
+  # verified, not just derived; see algo/rtl/window_builder_rtl.v's header.
+  latency:
+    kind: fixed
+    cycles: 10
+  interface_contract: interfaces/window_builder_rtl.interface.yaml
+  src: [../algo/rtl/window_builder_rtl.v]
+
+# ─── Sobel Gradient (HLS) — slice 10.2 ─────────────────────────────────────
+- name: sobel_hls
+  kind: hls
+  top: sobel_hls
+  # Fixed 4-cycle latency (see algo/sobel/sobel_hls.cpp's LATENCY pragma).
+  latency:
+    kind: fixed
+    cycles: 4
+  interface_contract: interfaces/sobel_hls.interface.yaml
+  src: [../algo/sobel/sobel_hls.cpp]
+  includes: [../algo/sobel]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+# ─── Edge/Mask Merge (RTL) — slice 10.2 ────────────────────────────────────
+- name: edge_mask_merge_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: edge_mask_merge_rtl
+  # Fixed 1-cycle latency (see algo/rtl/edge_mask_merge_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/edge_mask_merge_rtl.interface.yaml
+  src: [../algo/rtl/edge_mask_merge_rtl.v]

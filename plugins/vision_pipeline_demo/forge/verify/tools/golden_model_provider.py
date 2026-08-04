@@ -73,3 +73,98 @@ class QuickstartNormalizerThresholdProvider:
 PROVIDER = QuickstartNormalizerThresholdProvider()
 
 register_golden_model_provider(PROVIDER.provider_id, PROVIDER)
+
+
+# ── Slice 10.2: pixel-result path (adds gradient_magnitude) ──────────────
+
+PIXEL_RESULT_PROVIDER_ID = "vision_pipeline.pixel_result"
+PIXEL_RESULT_PROVIDER_VERSION = "1.0"
+
+
+class PixelResultProvider:
+    """Golden model for slice 10.2's pixel-result path: everything
+    QuickstartNormalizerThresholdProvider computes, plus
+    ``gradient_magnitude`` from the same Sobel kernel ``sobel_hls.cpp``
+    implements (preflight.md §9.1, frozen):
+
+        Gx = -r0c0 + r0c2 - 2*r1c0 + 2*r1c2 - r2c0 + r2c2
+        Gy = -r0c0 - 2*r0c1 - r0c2 + r2c0 + 2*r2c1 + r2c2
+        gradient_magnitude = clamp(abs(Gx) + abs(Gy), 0, 4095)
+
+    Unlike the per-event, neighbor-blind quickstart provider, this one
+    needs each pixel's 3x3 neighborhood -- so it first reconstructs each
+    frame as a normalized-pixel grid from every event sharing a
+    frame_id (using x/y as coordinates, exactly as window_builder_rtl's
+    line buffers do), zero-pads it (preflight.md §9.1's frozen border
+    policy), then re-walks the dataset in its original event order.
+    """
+
+    provider_id = PIXEL_RESULT_PROVIDER_ID
+    provider_version = PIXEL_RESULT_PROVIDER_VERSION
+
+    def evaluate(
+        self,
+        dataset: CanonicalDataset,
+        config: "Mapping[str, object]",
+    ) -> ExpectedDataset:
+        scale_num = config.get("scale_num", DEFAULT_SCALE_NUM)
+        scale_den = config.get("scale_den", DEFAULT_SCALE_DEN)
+        offset = config.get("offset", DEFAULT_OFFSET)
+        threshold = config.get("threshold", DEFAULT_THRESHOLD)
+
+        def normalize(pixel: int) -> int:
+            scaled = (pixel * scale_num) // scale_den + offset
+            return max(0, min(255, scaled))
+
+        # Pass 1: reconstruct each frame's normalized-pixel grid.
+        frames: "dict[int, dict[tuple[int, int], int]]" = {}
+        for ev in dataset.events:
+            x = int(ev["in"]["x"], 0)
+            y = int(ev["in"]["y"], 0)
+            frame_id = int(ev["in"]["frame_id"], 0)
+            pixel = int(ev["in"]["pixel"], 0)
+            frames.setdefault(frame_id, {})[(x, y)] = normalize(pixel)
+
+        def tap(frame: "dict[tuple[int, int], int]", x: int, y: int) -> int:
+            return frame.get((x, y), 0)  # zero-padding, preflight.md §9.1
+
+        # Pass 2: per-event, using the reconstructed grid for the window.
+        events: "list[dict[str, Any]]" = []
+        for ev in dataset.events:
+            x = int(ev["in"]["x"], 0)
+            y = int(ev["in"]["y"], 0)
+            frame_id = int(ev["in"]["frame_id"], 0)
+            pixel = int(ev["in"]["pixel"], 0)
+            frame = frames[frame_id]
+
+            normalized = normalize(pixel)
+            mask = 1 if normalized >= threshold else 0
+
+            r0c0, r0c1, r0c2 = tap(frame, x - 1, y - 1), tap(frame, x, y - 1), tap(frame, x + 1, y - 1)
+            r1c0,        r1c2 = tap(frame, x - 1, y),                          tap(frame, x + 1, y)
+            r2c0, r2c1, r2c2 = tap(frame, x - 1, y + 1), tap(frame, x, y + 1), tap(frame, x + 1, y + 1)
+
+            gx = -r0c0 + r0c2 - 2 * r1c0 + 2 * r1c2 - r2c0 + r2c2
+            gy = -r0c0 - 2 * r0c1 - r0c2 + r2c0 + 2 * r2c1 + r2c2
+            magnitude = min(4095, abs(gx) + abs(gy))
+
+            events.append({
+                "expected": {
+                    "normalized_pixel": normalized,
+                    "threshold_mask": mask,
+                    "gradient_magnitude": magnitude,
+                },
+            })
+
+        return ExpectedDataset(
+            schema=EXPECTED_DATASET_SCHEMA,
+            event_ids=list(dataset.metadata.event_ids),
+            events=events,
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+        )
+
+
+PIXEL_RESULT_PROVIDER = PixelResultProvider()
+
+register_golden_model_provider(PIXEL_RESULT_PROVIDER.provider_id, PIXEL_RESULT_PROVIDER)
