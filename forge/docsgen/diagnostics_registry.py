@@ -124,6 +124,7 @@ DIAGNOSTICS: "dict[str, DiagnosticDefinition]" = {
         _atg("ATG024", "error", "Undeclared reset-domain crossing."),
         _atg("ATG025", "error", "Invalid reset_domains.*.sync value."),
         _atg("ATG026", "error", "async_fifo depth not a power of two."),
+        _atg("ATG027", "error", "Conflicting cdc kinds declared between the same module pair."),
     ]
 }
 

@@ -70,3 +70,4 @@ never actually emitted).
 | `ATG024` | error | Undeclared reset-domain crossing. | — |
 | `ATG025` | error | Invalid reset_domains.*.sync value. | — |
 | `ATG026` | error | async_fifo depth not a power of two. | — |
+| `ATG027` | error | Conflicting cdc kinds declared between the same module pair. | — |

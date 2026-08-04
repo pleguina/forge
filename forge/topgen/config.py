@@ -688,6 +688,40 @@ class DesignConfig:
                     )
                 )
 
+        # release-plan Phase 10, slice 10.4: forge.topgen.generators.
+        # structural_verilog's cdc_map (and conn_map's own per-instance-pair
+        # grouping) is keyed by (src_module, dst_module) alone, not per-pin —
+        # a real limitation discovered wiring a genuine multi-crossing design
+        # for the first time (design_cdc.yml, vision_pipeline_demo), not
+        # something any existing design/test ever exercised. Declaring two
+        # `cdc:` connections between the same module pair with *different*
+        # kinds previously merged silently (last-declared kind wins for
+        # every pin between that pair — a real risk of generating the wrong
+        # synchronizer for a real signal with zero diagnostic). Turned into
+        # a real, actionable load-time error instead: route each distinct
+        # cdc kind between the same two modules through its own dedicated
+        # module pair (see design_cdc.yml's per-crossing-kind module split
+        # for the pattern). A genuinely per-pin cdc_map is a larger,
+        # separate refactor this slice does not attempt.
+        _cdc_kind_by_pair: Dict[Tuple[str, str], str] = {}
+        for conn in connections:
+            if not conn.cdc:
+                continue
+            pair = (conn.from_, conn.to)
+            kind = conn.cdc.get("kind")
+            prior_kind = _cdc_kind_by_pair.get(pair)
+            if prior_kind is not None and prior_kind != kind:
+                raise ValueError(
+                    f"[ATG027] Multiple connections from {conn.from_!r} to {conn.to!r} "
+                    f"declare different cdc kinds ({prior_kind!r} and {kind!r}) — "
+                    "forge.topgen.generators.structural_verilog's cdc_map is keyed by "
+                    "(src_module, dst_module) only, not per-pin, so the second "
+                    "declaration would silently overwrite the first for every pin "
+                    "between this module pair. Route each distinct cdc kind between "
+                    "the same two modules through its own dedicated module pair."
+                )
+            _cdc_kind_by_pair[pair] = kind
+
         # ── Topology Groups
         topo_group_dicts = data.pop("topology_groups", []) or []
         topology_groups: List[TopologyGroup] = []
