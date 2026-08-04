@@ -1,0 +1,158 @@
+# Integration contract for the sobel_hls HLS module
+#
+# IP: sobel_hls
+# ip_info_key: sobel
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: sobel_hls
+  ip_info_key: sobel
+  source_type: hls
+  normalization_status: ready
+  # clock_free not set: sobel_hls uses HLS LATENCY min=4 max=4, so
+  # ap_clk IS present in the synthesized RTL (same convention as
+  # pixel_normalizer_ip.interface.yaml).
+  notes: >
+    Slice 10.2 (release-plan Phase 10, preflight.md §6.3): small,
+    stateless 3x3-compute module. window_builder_rtl (upstream, RTL)
+    already owns the line buffers/border zero-padding/N-dimensional
+    physical binding; this only computes gradient_magnitude =
+    clamp(abs(Gx)+abs(Gy), 0, 4095) from the 9 window taps it's handed
+    (preflight.md §9.1). Pipelined at II=1, fixed latency 4 cycles.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    win_r0c0:
+      raw_port: win_r0c0
+      direction: input
+      width: 8
+
+    win_r0c1:
+      raw_port: win_r0c1
+      direction: input
+      width: 8
+
+    win_r0c2:
+      raw_port: win_r0c2
+      direction: input
+      width: 8
+
+    win_r1c0:
+      raw_port: win_r1c0
+      direction: input
+      width: 8
+
+    win_r1c1:
+      raw_port: win_r1c1
+      direction: input
+      width: 8
+      notes: "Unused by the Sobel kernel (coefficient 0 in Gx and Gy); wired for interface symmetry"
+
+    win_r1c2:
+      raw_port: win_r1c2
+      direction: input
+      width: 8
+
+    win_r2c0:
+      raw_port: win_r2c0
+      direction: input
+      width: 8
+
+    win_r2c1:
+      raw_port: win_r2c1
+      direction: input
+      width: 8
+
+    win_r2c2:
+      raw_port: win_r2c2
+      direction: input
+      width: 8
+
+    x:
+      raw_port: x
+      direction: input
+      width: 12
+
+    y:
+      raw_port: y
+      direction: input
+      width: 12
+
+    frame_id:
+      raw_port: frame_id
+      direction: input
+      width: 16
+
+    tile_id:
+      raw_port: tile_id
+      direction: input
+      width: 16
+
+    end_of_line:
+      raw_port: end_of_line
+      direction: input
+      width: 1
+
+    end_of_frame:
+      raw_port: end_of_frame
+      direction: input
+      width: 1
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+      notes: "Input valid strobe (driven from window_builder_rtl's out_valid)"
+
+    gradient_magnitude:
+      raw_port: gradient_magnitude
+      direction: output
+      width: 12
+      notes: "clamp(abs(Gx)+abs(Gy), 0, 4095)"
+
+    x_out:
+      raw_port: x_out
+      direction: output
+      width: 12
+
+    y_out:
+      raw_port: y_out
+      direction: output
+      width: 12
+
+    frame_id_out:
+      raw_port: frame_id_out
+      direction: output
+      width: 16
+
+    tile_id_out:
+      raw_port: tile_id_out
+      direction: output
+      width: 16
+
+    end_of_line_out:
+      raw_port: end_of_line_out
+      direction: output
+      width: 1
+
+    end_of_frame_out:
+      raw_port: end_of_frame_out
+      direction: output
+      width: 1
+
+    out_valid:
+      raw_port: out_valid
+      direction: output
+      width: 1
+      notes: "Output valid strobe"
