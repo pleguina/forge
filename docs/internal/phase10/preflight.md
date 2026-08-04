@@ -545,8 +545,20 @@ explicitly fixed-shape only, v1 §2 item 8) is written into the mandatory
 dataset contract, not left implicit**:
 
 - Quickstart acceptance frames: normalized to **8×8**.
-- Full-functional acceptance frames: normalized to **16×16** (or 32×32 —
-  confirm at Slice 10.1/10.2 implementation time, not here).
+- Full-functional acceptance frames: normalized to **16×16 — frozen at
+  Slice 10.2 implementation time** (see §15's former deferral, now
+  resolved). 32×32 was the alternative; 16×16 wins because it's the
+  smallest size that still exercises multiple full 8×8 tiles in both
+  dimensions (2×2 tiles) — the minimum needed to prove `tile_stats_hls`
+  (10.3) and the tile-ID formula's row/column term both actually vary,
+  not just the column term a single-tile-row 8×16 shape would exercise —
+  while keeping xsim run time down for CI. Slice 10.2 itself does not yet
+  build this dataset: it continues exercising `window_builder_rtl`/
+  `sobel_hls`/`edge_mask_merge_rtl` at the existing 8×8 quickstart scale
+  (extending `vision_pipeline_quickstart_golden.xml`'s infrastructure,
+  not replacing it), since proving the new pixel-result-path modules
+  work is 10.2's job, not assembling the full-functional acceptance
+  suite — that's 10.6/10.7's.
 - Throughput acceptance: a synthetic, fixed-width stream (no image
   decoding in the hot path).
 - Every event within one dataset shares the same record shape and a
@@ -574,6 +586,21 @@ dataset contract, not left implicit**:
 | 10.6 | Synthetic, image-folder, and NumPy adapters (via `DatasetService`), manifests, staleness tests |
 | 10.7 | Platform wrapper, provenance, plan hashes, visual explorer (incl. the 10.0D CLI wiring), documentation, clean-user workflow, full CI |
 | 10.8 | Optional hls4ml, only after the base acceptance gate passes |
+
+**10.2 scope note**: the spec's "alignment delay" (threshold branch, +6
+cycles, spec §11) and "exact-cycle merge" (`edge_mask_merge_rtl`, spec
+§11) are not new framework capabilities to build — both are already
+real, tested FORGE machinery, confirmed by reading `forge/ir/model.py`
+and `forge/analyze/latency_static/checker.py` directly rather than
+assumed: a plain `Connection.delay_cycles: 6` (no `boundary` tag)
+resolves to the existing `latency_delay` transformation kind, generating
+a real `signal_delay` register chain; and `check_merge_points` already
+classifies a merge point `exact_cycle` whenever every predecessor
+declares fixed/hint/hls_report latency, checking their cycle counts for
+exact overlap (`delta == 0`) with no per-example-project code involved.
+10.2 is therefore project-level work only — three new
+`vision_pipeline_demo` modules and their design-level wiring — not
+core-framework engineering, unlike 10.0B/10.0C.
 
 Negative fixtures land incrementally alongside each capability (the
 spec's own 10-item invalid-design matrix), not batched at the end —
@@ -621,5 +648,3 @@ threshold up front.
 - Mailbox-transfer pipelining (more than one outstanding transaction,
   §5 Decision A) — explicitly out of scope for the first `mailbox_transfer`
   implementation.
-- The exact frame size for "full-functional" acceptance (16×16 vs. 32×32,
-  §10) — left to Slice 10.1/10.2 implementation time, not frozen here.
