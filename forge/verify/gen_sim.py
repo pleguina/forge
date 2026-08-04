@@ -63,6 +63,7 @@ module {tb_module};
   initial ap_clk = 1'b0;
   always #(CLK_PERIOD_NS / 2.0) ap_clk = ~ap_clk;
 
+{extra_clocks_and_resets}
     `ifndef PROBE_LOG
     localparam int PROBE_LOG = 0;
     `else
@@ -230,17 +231,28 @@ def _render_csv_fwrite(out_ports: list[dict[str, Any]], bx0_sig: str | None) -> 
 
 # ── Signal & instantiation rendering ──────────────────────────────────────
 
-def _render_signal_declarations(ports: list[dict[str, Any]]) -> str:
-    """Render SV signal declarations from port map entries."""
+def _render_signal_declarations(
+    ports: list[dict[str, Any]],
+    reserved_names: "frozenset[str]" = frozenset(),
+) -> str:
+    """Render SV signal declarations from port map entries.
+
+    ``reserved_names`` (release-plan Phase 10, slice 10.4): extra clock/reset
+    net names already declared by :func:`_render_extra_clocks_and_resets` —
+    skipped here the same way ``ap_clk``/``ap_rst`` always have been, so a
+    multi-clock-domain design's domain clock/reset ports don't get declared
+    twice.
+    """
     if not ports:
         return "  // (no port_map available — declare signals manually)\n"
 
+    skip = {"ap_clk", "ap_rst"} | reserved_names
     lines: list[str] = ["  // ── DUT signals (from port_map) ───────────────────────"]
     for port in ports:
         name = port.get("name", "unknown")
         width = port.get("width", 1)
         direction = port.get("direction", "input")
-        if name in ("ap_clk", "ap_rst"):
+        if name in skip:
             continue  # Already declared
         if width == 1:
             keyword = "wire" if direction == "output" else "logic"
@@ -276,19 +288,74 @@ def _render_dut_instantiation(
     return "\n".join(lines) + "\n"
 
 
-def _render_input_zeroing(ports: list[dict[str, Any]]) -> str:
-    """Render initial zeroing of all input signals."""
+def _render_input_zeroing(
+    ports: list[dict[str, Any]],
+    reserved_names: "frozenset[str]" = frozenset(),
+) -> str:
+    """Render initial zeroing of all input signals.
+
+    ``reserved_names``: extra clock/reset nets (slice 10.4) — these are
+    driven by their own free-running generator / reset sequence
+    (:func:`_render_extra_clocks_and_resets`), not zeroed as plain stimulus.
+    """
     if not ports:
         return "    // (zero inputs manually)\n"
 
+    skip = {"ap_clk", "ap_rst"} | reserved_names
     lines: list[str] = []
     for port in ports:
         name = port.get("name", "unknown")
         direction = port.get("direction", "input")
-        if direction == "output" or name in ("ap_clk", "ap_rst"):
+        if direction == "output" or name in skip:
             continue
         lines.append(f"    {name} = '0;")
     return "\n".join(lines) + "\n" if lines else "    // (no inputs to zero)\n"
+
+
+def _render_extra_clocks_and_resets(
+    extra_clocks: "dict[str, float]",
+    extra_resets: "dict[str, str]",
+) -> str:
+    """Render additional free-running clocks and their own
+    reset-then-synchronously-deassert sequences (release-plan Phase 10,
+    slice 10.4 — real multi-clock-domain xsim support).
+
+    Each extra clock gets its own ``logic``/``always`` toggle pair, exactly
+    like ``ap_clk``'s own generation above, just at its own declared period.
+    Each extra reset gets its own ``initial`` block, asserted for
+    ``RESET_CYCLES`` cycles of *its own* declared clock before deasserting —
+    a reset crossing's whole point (``reset_domains.<name>.sync: reset_sync``,
+    ``cdc_reset_sync``) is a *synchronous-to-its-destination-domain*
+    deassertion, so this must count cycles on that domain's own clock, not
+    ``ap_clk``. A reset with no matching clock name in ``extra_clocks``
+    falls back to ``ap_clk`` — the primary domain's clock is still a valid
+    synchronization reference for an otherwise-undeclared clock name.
+    Runs concurrently with the main ``initial`` block (SystemVerilog allows
+    multiple ``initial`` blocks; simulation time only advances via clock
+    edges/delays, so this is a real, independent reset sequence per domain,
+    not a race).
+    """
+    if not extra_clocks and not extra_resets:
+        return ""
+
+    lines: list[str] = ["  // ── Additional clock domains (release-plan Phase 10, slice 10.4) ──"]
+    for name, period_ns in sorted(extra_clocks.items()):
+        lines.append(f"  logic {name};")
+        lines.append(f"  initial {name} = 1'b0;")
+        lines.append(f"  always #({period_ns} / 2.0) {name} = ~{name};")
+    if extra_resets:
+        lines.append("")
+        lines.append("  // ── Additional reset domains — synchronous deassert per-domain ──")
+        for reset_name, clock_name in sorted(extra_resets.items()):
+            ref_clock = clock_name if clock_name in extra_clocks else "ap_clk"
+            lines.append(f"  logic {reset_name};")
+            lines.append(f"  initial begin")
+            lines.append(f"    {reset_name} = 1'b1;")
+            lines.append(f"    repeat (RESET_CYCLES) @(posedge {ref_clock});")
+            lines.append(f"    {reset_name} = 1'b0;")
+            lines.append(f"  end")
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 def _tier2_probes(raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -356,6 +423,8 @@ def render_tb_sv(
     idle_cycles_after_reset: int,
     post_stimulus_drain_cycles: int,
     port_map_path: Path | None = None,
+    extra_clocks: "dict[str, float] | None" = None,
+    extra_resets: "dict[str, str] | None" = None,
 ) -> str:
     """Render a skeleton SystemVerilog testbench.
 
@@ -366,11 +435,21 @@ def render_tb_sv(
         clk_period_ns, reset_cycles, idle_cycles_after_reset,
         post_stimulus_drain_cycles:  Simulation timing parameters.
         port_map_path:  Optional path to port_map.yaml (gen-top output).
+        extra_clocks, extra_resets:  Multi-clock-domain designs
+            (release-plan Phase 10, slice 10.4) — additional top-level
+            clock/reset nets beyond the primary ap_clk/ap_rst. See
+            forge.verify.design_contract.SimulationDefaults's own
+            extra_clocks/extra_resets fields for the {net_name: value}
+            shape. Empty/None (the default) reproduces the exact
+            single-clock output every pre-existing flow already depends on.
 
     Returns:
         The generated SV source as a string.
     """
     import datetime
+    extra_clocks = extra_clocks or {}
+    extra_resets = extra_resets or {}
+    reserved_names = frozenset(extra_clocks) | frozenset(extra_resets)
     raw = _load_port_map_raw(port_map_path)
     ports = _flatten_ports(raw)
     out_ports = _output_ports(raw)
@@ -388,9 +467,10 @@ def render_tb_sv(
         idle_cycles_after_reset=idle_cycles_after_reset,
         post_stimulus_drain_cycles=post_stimulus_drain_cycles,
         timestamp=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        signal_declarations=_render_signal_declarations(ports),
+        extra_clocks_and_resets=_render_extra_clocks_and_resets(extra_clocks, extra_resets),
+        signal_declarations=_render_signal_declarations(ports, reserved_names),
         dut_instantiation=_render_dut_instantiation(top_module, ports),
-        input_zeroing=_render_input_zeroing(ports),
+        input_zeroing=_render_input_zeroing(ports, reserved_names),
         csv_filename=csv_filename,
         csv_header=csv_header,
         csv_fwrite=csv_fwrite,
@@ -422,12 +502,16 @@ def generate_testbench(
     post_stimulus_drain_cycles: int,
     output_dir: Path,
     port_map_path: Path | None = None,
+    extra_clocks: "dict[str, float] | None" = None,
+    extra_resets: "dict[str, str] | None" = None,
 ) -> dict[str, Path]:
     """Generate testbench files in *output_dir*.
 
     Creates:
       ``<output_dir>/<tb_module>.sv``
       ``<output_dir>/wave.tcl``
+
+    ``extra_clocks``/``extra_resets``: see :func:`render_tb_sv`.
 
     Returns:
         ``{"tb": Path, "wave": Path}`` mapping to the generated files.
@@ -447,6 +531,8 @@ def generate_testbench(
         idle_cycles_after_reset=idle_cycles_after_reset,
         post_stimulus_drain_cycles=post_stimulus_drain_cycles,
         port_map_path=port_map_path,
+        extra_clocks=extra_clocks,
+        extra_resets=extra_resets,
     ))
 
     wave_path.write_text(render_wave_tcl(flow_name, tb_module))

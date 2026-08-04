@@ -628,6 +628,16 @@ def write_structural_verilog(
             cfg, contracts or {}, match_report, global_nets, inst_to_mod,
         )
 
+    # release-plan Phase 10, slice 10.4: which reset_domains declare a real
+    # `sync: reset_sync` synchronizer — hoisted here (not just where the
+    # cdc_reset_sync instances themselves are emitted, later in this
+    # function) so the per-instance port-binding loop below can route a
+    # member instance's own reset pin to that synchronizer's real
+    # `sync_rst_out` net instead of the raw (unsynchronized) domain net.
+    reset_sync_domains = {
+        name: rel for name, rel in cfg.reset_domains.items() if rel.get("sync") == "reset_sync"
+    }
+
     def _pin_width_for_inst(inst: str, pin: str) -> int:
         """
         Return the width of a pin for a given instance, considering module parameters.
@@ -912,6 +922,25 @@ def write_structural_verilog(
                 if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
                     pm.append(f"    .{pname}(ap_rst)")
                     continue
+
+                # release-plan Phase 10, slice 10.4: a non-standard-named
+                # reset pin (doesn't match the pattern above, so it's this
+                # module's own genuine domain-specific reset net) that
+                # belongs to a `reset_domains.<name>.sync: reset_sync`
+                # domain must bind to that synchronizer's real
+                # `sync_rst_out` net, not the raw (unsynchronized) domain
+                # net the "other global nets" fallback below would use —
+                # otherwise the whole point of declaring reset_sync (an
+                # asynchronously-asserted, synchronously-deasserted reset
+                # in *this* destination domain) is silently lost, and the
+                # instance sees whatever raw external signal drives the
+                # domain net directly instead.
+                if cfg.connect_reset and reset_sync_domains and pname == reset_of_module.get(mod.name):
+                    domain_name = reset_of_module[mod.name]
+                    if domain_name in reset_sync_domains:
+                        rst_sync_net = _verilog_ident(f"rst_sync_{domain_name}")
+                        pm.append(f"    .{pname}({rst_sync_net})")
+                        continue
 
                 # other global nets (e.g., new_event) - use delayed version if control signal
                 if pdir != "output" and pname in global_nets:
@@ -1258,13 +1287,10 @@ def write_structural_verilog(
     # instance's reset pin is still bound to the literal ap_rst
     # unconditionally elsewhere in this generator (the same single-
     # top-level-clock/reset-port limitation the CDC data synchronizers
-    # above already have, deferred to slice 10.4). This block makes the
-    # primitive itself real and generatable now; wiring it into real
-    # instance reset pins is 10.4's job, once a real multi-domain plugin
-    # exists to drive that design.
-    reset_sync_domains = {
-        name: rel for name, rel in cfg.reset_domains.items() if rel.get("sync") == "reset_sync"
-    }
+    # above already have). release-plan Phase 10, slice 10.4 closed that
+    # gap (see the per-instance port-binding loop earlier in this
+    # function): a member instance's reset pin is now bound to this
+    # synchronizer's own `sync_rst_out` net below, not the raw domain net.
     if reset_sync_domains:
         emit("  // Reset synchronizers for reset_domains.*.sync: reset_sync declarations")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
@@ -1280,7 +1306,7 @@ def write_structural_verilog(
             dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
 
             rst_sync_net = _verilog_ident(f"rst_sync_{name}")
-            emit(f"  // Reset domain {name!r}: sync_rst_out not yet wired into instance reset pins (slice 10.4)")
+            emit(f"  // Reset domain {name!r}: real member instances bound to sync_rst_out below")
             emit(f"  wire {rst_sync_net};")
             emit(f"  cdc_reset_sync rst_sync_{rst_sync_counter} (")
             emit(f"    .dst_clk({dst_clk_net}),")

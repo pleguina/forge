@@ -691,6 +691,10 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         rst   = flow_decl.reset_cycles               or getattr(defaults, "reset_cycles", 4)
         idle  = flow_decl.idle_cycles_after_reset    or getattr(defaults, "idle_cycles_after_reset", 0)
         drain = flow_decl.post_stimulus_drain_cycles or getattr(defaults, "post_stimulus_drain_cycles", 8)
+        # Multi-clock-domain designs (release-plan Phase 10, slice 10.4) —
+        # empty dict for every pre-existing single-clock flow.
+        extra_clocks = getattr(flow_decl, "extra_clocks", None) or getattr(defaults, "extra_clocks", {}) or {}
+        extra_resets = getattr(flow_decl, "extra_resets", None) or getattr(defaults, "extra_resets", {}) or {}
 
         # Resolve dataset XML path.
         # Paths in design.verification.yml are relative to the file's own
@@ -882,6 +886,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                 post_stimulus_drain_cycles=drain,
                 output_dir=flow_dir,
                 port_map_path=tb_port_map,
+                extra_clocks=extra_clocks,
+                extra_resets=extra_resets,
             )
             generated.append(str(result["tb"]))
             generated.append(str(result["wave"]))

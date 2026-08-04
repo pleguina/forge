@@ -258,6 +258,38 @@ class TestResetSyncEmission:
         assert ".dst_clk(clk_b)," in text
         assert ".async_rst_in(ap_rst)," in text
 
+    def test_member_instance_reset_pin_binds_to_synchronizer_output(self, tmp_path):
+        """release-plan Phase 10, slice 10.4: a real reset_sync domain's
+        member instance must be wired to the synchronizer's own
+        sync_rst_out net — not the raw (unsynchronized) domain net —
+        or the whole point of declaring reset_sync (asynchronous assert,
+        synchronous deassert in the *destination* domain) is silently
+        lost. Regression guard for the exact gap the "not yet wired into
+        instance reset pins" comment used to document."""
+        mod = Module(name="mod", top="mod_top", src=["x.v"])
+        cfg = DesignConfig(
+            part="xcvu13p", clock_period=4.0, modules=[mod],
+            connections=[],
+        )
+        cfg.reset_domains = {
+            "rst_slow": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"},
+        }
+        ip_info = {
+            "mod": {"ports": [_port("clk_b", "IN", 1), _port("rst_slow", "IN", 1)]},
+        }
+        contracts = {"mod": _contract("mod", "clk_b", "rst_slow")}
+        conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
+
+        out = tmp_path / "algo_top.v"
+        write_structural_verilog(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            ip_root=tmp_path, out_path=out, contracts=contracts, match_report=report,
+        )
+        text = out.read_text()
+        assert ".rst_slow(rst_sync_rst_slow)" in text
+        # The raw domain net must never reach the instance directly.
+        assert ".rst_slow(rst_slow)" not in text
+
     def test_no_reset_domains_sync_emits_nothing(self, tmp_path):
         src = Module(name="src", top="src_top", src=["x.v"])
         dst = Module(name="dst", top="dst_top", src=["x.v"])

@@ -174,6 +174,14 @@ class SimulationDefaults:
     idle_cycles_after_reset:    int = 8
     post_stimulus_drain_cycles: int = 160
     extra:                      tuple = ()  # (key, value) pairs — plugin-specific fields passed through verbatim
+    # Multi-clock-domain designs (release-plan Phase 10, slice 10.4): additional
+    # top-level clock/reset nets beyond the primary ap_clk/ap_rst, each free-running
+    # at its own period and reset-then-deasserted against its own clock — see
+    # forge.verify.gen_sim.render_tb_sv. {net_name: period_ns} / {reset_net_name:
+    # clock_net_name it deasserts synchronously against}. Empty by default —
+    # every pre-existing single-clock flow is completely unaffected.
+    extra_clocks:                "dict[str, float]" = field(default_factory=dict)
+    extra_resets:                "dict[str, str]" = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -259,6 +267,12 @@ class FlowDeclaration:
     # ── Experimental opt-in — set true to allow experimental flow kinds ────
     experimental:         bool = False
 
+    # Per-flow multi-clock-domain overrides (empty dict → use contract-level
+    # SimulationDefaults.extra_clocks/extra_resets). See SimulationDefaults's
+    # own docstring comment for the {net_name: value} shape.
+    extra_clocks:          "dict[str, float]" = field(default_factory=dict)
+    extra_resets:          "dict[str, str]" = field(default_factory=dict)
+
 
 @dataclass(frozen=True)
 class VerifyDesignContract:
@@ -328,6 +342,8 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
               reset_cycles: <int>              # overrides default
               idle_cycles_after_reset: <int>
               post_stimulus_drain_cycles: <int>
+              extra_clocks: {<net_name>: <period_ns>}   # multi-clock-domain designs
+              extra_resets: {<net_name>: <clock_net_name>}  # reset deasserts sync'd to this clock
             checker:
                             mode: binary
                             binary: build_targeted/algo_top_xsim_checker
@@ -456,7 +472,10 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
 
     # ── Defaults
     raw_defaults = raw.get("defaults", {}) or {}
-    _STANDARD_DEFAULT_KEYS = {"clk_period_ns", "reset_cycles", "idle_cycles_after_reset", "post_stimulus_drain_cycles"}
+    _STANDARD_DEFAULT_KEYS = {
+        "clk_period_ns", "reset_cycles", "idle_cycles_after_reset", "post_stimulus_drain_cycles",
+        "extra_clocks", "extra_resets",
+    }
     _extra_defaults = tuple(
         (k, v) for k, v in raw_defaults.items() if k not in _STANDARD_DEFAULT_KEYS
     )
@@ -466,6 +485,8 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
         idle_cycles_after_reset=int(raw_defaults.get("idle_cycles_after_reset", 8)),
         post_stimulus_drain_cycles=int(raw_defaults.get("post_stimulus_drain_cycles", 160)),
         extra=_extra_defaults,
+        extra_clocks={str(k): float(v) for k, v in (raw_defaults.get("extra_clocks") or {}).items()},
+        extra_resets={str(k): str(v) for k, v in (raw_defaults.get("extra_resets") or {}).items()},
     )
 
     # ── Flows
@@ -580,6 +601,8 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
                                                               sim_raw.get("idle_cycles_after_reset"))),
             post_stimulus_drain_cycles=_int_or_none(
                 sim_raw.get("post_stimulus_drain_cycles")),
+            extra_clocks={str(k): float(v) for k, v in (sim_raw.get("extra_clocks") or {}).items()},
+            extra_resets={str(k): str(v) for k, v in (sim_raw.get("extra_resets") or {}).items()},
             checker=checker,
             xsim=xsim,
             coverage_intent=str(fl_raw.get("coverage_intent", "functional")),

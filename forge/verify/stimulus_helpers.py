@@ -331,10 +331,19 @@ class StimulusEmitter:
         self._lines.append(emit_clocked_drive(signal, value, width, indent=self.indent))
         return self
 
-    def tick(self, cycles: int = 1) -> "StimulusEmitter":
-        """Append one or more positive-edge clock waits."""
+    def tick(self, cycles: int = 1, clock: str = "ap_clk") -> "StimulusEmitter":
+        """Append one or more positive-edge clock waits.
+
+        ``clock`` (release-plan Phase 10, slice 10.4): defaults to
+        ``ap_clk`` — every pre-existing single-clock-domain stimulus
+        script is unaffected. Pass a different top-level clock net name
+        (matching a ``simulation.extra_clocks`` entry the flow declares —
+        see forge.verify.gen_sim.render_tb_sv) to wait on a *different*
+        domain's own clock, e.g. when driving/checking a signal that
+        lives in that domain rather than the primary one.
+        """
         for _ in range(cycles):
-            self._lines.append(f"{self.indent}@(posedge ap_clk);")
+            self._lines.append(f"{self.indent}@(posedge {clock});")
         return self
 
     def wait(self, cycles: int = 1) -> "StimulusEmitter":
