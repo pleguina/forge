@@ -583,7 +583,7 @@ dataset contract, not left implicit**:
 | 10.3 | **DONE.** `tile_stats_hls`, `tile_boundary_rtl`, tagged bounded/elastic join (tile-statistics path, §6.2) |
 | 10.4 | **DONE.** Multiple domains, all five CDC kinds, reset synchronizers, negative CDC fixture (§5 Decision A) |
 | 10.5 | **DONE.** Packetizer (multiplexing both record kinds, §6.1/§6.2), async FIFO, throughput, backpressure, occupancy, invalid rate/depth fixtures |
-| 10.6 | Synthetic, image-folder, and NumPy adapters (via `DatasetService`), manifests, staleness tests |
+| 10.6 | **DONE.** Synthetic, image-folder, and NumPy adapters (via `DatasetService`), manifests, staleness tests |
 | 10.7 | Platform wrapper, provenance, plan hashes, visual explorer (incl. the 10.0D CLI wiring), documentation, clean-user workflow, full CI |
 | 10.8 | Optional hls4ml, only after the base acceptance gate passes |
 
@@ -1053,6 +1053,124 @@ backpressure acceptance dataset (10.6/10.7). The single-shared-normalizer
 fan-out topology (spec §5's real single-source diagram) and a per-probe
 Tier 2 sampling-clock extension (this slice's own found gap, above) are
 both explicit future work, not attempted here.
+
+**10.6 scope note**: unlike 10.0B/10.0C, this slice's own core-framework
+prerequisite (§7's `DatasetService`/`ProjectDatasetAdapter` protocol) was
+already real (slice 10.0A) — 10.6 is project-level adapter work only:
+three new real `datasets/` package modules
+(`plugins/vision_pipeline_demo/datasets/`, mirroring spec §18.13's own
+layout) plus their thin FORGE-registered wrappers. BSDS500/Fashion-MNIST
+(Tier C, spec §18.4) remain explicitly out of scope (unchanged from
+§15's deferral) — nothing below builds them.
+
+- **`SyntheticPatternAdapter`** (`datasets/adapters/synthetic.py`):
+  constant/horizontal_edge/vertical_edge/corner/checkerboard/ramp/noise
+  patterns, no external dependencies (stdlib `random`, seeded — only
+  `noise` actually consumes the seed, every other pattern is a pure
+  function of (x, y, width, height) and is seed-invariant by
+  construction).
+- **`ImageFolderAdapter`** (`datasets/adapters/image_folder.py`):
+  PNG/PGM/JPEG/BMP via Pillow (decode only — never Pillow's own
+  grayscale/resize, per spec §18.5's "do not rely on library defaults").
+  Grayscale is the frozen integer-luma formula
+  (`(77*R + 150*G + 29*B) >> 8`); resize is a hand-rolled
+  nearest-neighbor (`sx = ox*src_w // dst_w`), not `Image.resize`, so
+  behavior can't shift between Pillow versions. Records both the
+  pre-preprocessing source-image hash and the post-preprocessing
+  converted-image hash per spec §18.4.
+- **`NumpyArrayAdapter`** (`datasets/adapters/numpy_array.py`): `.npy`/
+  `.npz` under an explicit `HW`/`NHW`/`NHWC` layout; rejects any
+  ndim/channel-count mismatch outright rather than guessing the axis
+  mapping (spec §18.4's own explicit requirement). NHWC's 3-channel case
+  reuses the identical frozen luma formula, so an equivalent NumPy source
+  and image-folder source normalize identically.
+- **`serialize_xml.py`**: `flatten_events()` is the single place
+  canonical `DatasetEvent`s become FORGE's existing per-pixel event-dict
+  shape (one `<event>` per pixel, not per frame) — both the on-disk XML
+  writer and the FORGE-registered wrappers below call it, so there is
+  exactly one flattening implementation. Round-trip-verified
+  byte-identical against `forge.verify.dataset_format.XmlDatasetLoader`'s
+  own output.
+- **`manifest.py`**: the real `forge.dataset_manifest` v1 sidecar (spec
+  §18.6) plus `check_staleness()` — a pure content-hash comparison
+  against recorded source-file hashes, never modification-time-based
+  (matching `content_hash.py`'s own already-stated principle). Also adds
+  an `adapter_config` field beyond spec §18.6's representative example —
+  the exact adapter constructor kwargs, needed for `rebuild` to
+  re-materialize a dataset from the manifest alone.
+- **FORGE-registered wrappers** (`forge/verify/tools/dataset_adapter.py`):
+  `vision_pipeline.synthetic` / `vision_pipeline.image-folder` /
+  `vision_pipeline.numpy-array`, each a thin
+  `ProjectDatasetAdapter.materialize()` around the corresponding
+  `datasets/adapters/*.iter_events()` call plus `flatten_events()` — no
+  adapter logic duplicated, per spec §18.9. All three verified reachable
+  through the real `forge.verify.dataset_service.DatasetService`, the
+  same path `gen_stimulus.py`/`forge test run` already use.
+- **`cli.py`**: `generate-synthetic`/`import-images`/`import-numpy`/
+  `inspect`/`validate`/`rebuild` (spec §18.9's example-local command
+  set; `import-bsds500`/`import-fashion-mnist` are not wired up, Tier C
+  out of scope). `rebuild` re-runs the recorded adapter and reports a
+  clear mismatch if the result no longer matches the manifest (source
+  data or adapter behavior drift), rather than silently overwriting.
+
+**Two real bugs found and fixed during implementation** (both confirmed
+empirically, not assumed):
+
+1. **A `forge` package shadowing bug.** The original approach anchored
+   `datasets/`'s absolute imports by adding the plugin root
+   (`plugins/vision_pipeline_demo/`) to `sys.path`. That directory also
+   contains this plugin's own `forge/` asset subtree (`forge/designs/`,
+   `forge/verify/`, no `__init__.py` — verification configs, not a Python
+   package). Once on `sys.path`, Python's `PathFinder` resolves top-level
+   `forge` as a *namespace* package rooted there — `PathFinder` is tried
+   before the real `forge` editable-install's own meta-path finder
+   (registered via `sys.meta_path.append(...)`, i.e. strictly after
+   `PathFinder` in resolution order) — so `import forge.verify.results`
+   failed with `ModuleNotFoundError: No module named 'forge.verify.results'`
+   from a direct `python3 datasets/cli.py ...` invocation, even though the
+   identical import worked fine from every other entry point in this
+   repo. Fixed by loading the `datasets` package via
+   `importlib.util.spec_from_file_location(..., submodule_search_locations=...)`
+   in both `cli.py` and `dataset_adapter.py`'s wrapper module, never
+   touching `sys.path` — the same "avoid a bare-name collision" shape
+   `plugins/trigger_demo/forge/verify/tools/tests/conftest.py`'s own
+   `_load_by_path` already established, extended here to a real package
+   with submodules rather than one flat module.
+2. **A manifest relocation-hash bug.** `manifest.py`'s
+   `compute_canonical_events_hash()` originally hashed each
+   `DatasetEvent`'s full dict representation, including
+   `source_metadata` — which `ImageFolderAdapter` populates with the
+   image's absolute local path. A real test (copying a source image
+   directory to a new path and re-materializing) caught this directly:
+   the hash changed even though every pixel was byte-identical, violating
+   spec §18.6's own explicit requirement ("local absolute source paths
+   must not affect the portable semantic dataset hash"). Fixed by
+   excluding `source_metadata` from the hash input — the same exclusion
+   `forge.verify.dataset_format.SemanticMetadata` already makes for
+   `EnvironmentMetadata`, just applied at this layer too.
+
+**10.6 completion evidence**: 27 new tests
+(`plugins/vision_pipeline_demo/forge/verify/tools/tests/test_dataset_adapters.py`),
+covering every item in spec §18.12's required-test list that applies to
+this slice's scope (determinism, filesystem-order independence, source
+relocation, changed-pixel/changed-preprocessing hash sensitivity,
+corrupt-file/ambiguous-shape rejection, XML round-trip) plus manifest
+round-trip and staleness (content-change detected, mtime-only-touch and
+byte-for-byte restoration both correctly report fresh) — all 27 pass.
+Verified end-to-end outside pytest too: `cli.py generate-synthetic` /
+`import-images` / `import-numpy` each produce a real `.xml` +
+`.manifest.yml` pair; `inspect`/`validate` read them back correctly;
+`validate --source-root` and `rebuild --source-root` both correctly
+detect and report a real source-content change (exit code 1, no silent
+pass) after a source image was directly edited. The three FORGE-registered
+wrappers were exercised through the real `DatasetService.materialize()`
+path (not just unit-tested in isolation). Pre-existing regressions
+re-run clean: `plugins/trigger_demo/forge/verify/tools/tests` and
+`plugins/passthrough_demo/forge/verify/tests` (one pre-existing,
+unrelated failure in the latter — `test_single_flow_declared` — predates
+this branch's Phase 10 work entirely, per `git log`, and is untouched by
+this slice) and the full `forge/tests` suite (1248 passed, 8 skipped,
+0 failed).
 
 ## 12. CI tiers (unchanged from v1)
 
