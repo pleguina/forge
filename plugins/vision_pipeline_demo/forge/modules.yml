@@ -99,3 +99,67 @@ modules:
     cycles: 1
   interface_contract: interfaces/edge_mask_merge_rtl.interface.yaml
   src: [../algo/rtl/edge_mask_merge_rtl.v]
+
+# ─── Tile Statistics (HLS) — slice 10.3 ────────────────────────────────────
+- name: tile_stats_hls
+  kind: hls
+  top: tile_stats_hls
+  # Fixed 6-cycle latency, II=2. The spec's own text (§11/§15.2) frames
+  # this module as "bounded 6..10 cycles" -- first attempted here as a
+  # real `#pragma HLS LATENCY min=6 max=6` -- max=10 -- constraint (see
+  # algo/tile_stats/tile_stats_hls.cpp), but the real Vitis HLS csynth
+  # report came back min==max==6: a plain PIPELINE II=2 function with no
+  # genuinely variable-length execution path schedules to one fixed
+  # depth, not a real per-invocation range. Corrected to `kind: fixed`
+  # here to match the real synthesis report (release-plan Phase 10,
+  # slice 10.3 -- same "verified, not assumed" discipline 10.2's
+  # window_builder_rtl/threshold_rtl figures were checked against).
+  # tile_boundary_rtl/tile_summary_join_rtl's own bounded/elastic
+  # declarations below are unaffected -- forge.analyze.latency_static's
+  # check_merge_points still classifies their shared merge point
+  # `bounded_skew` (tile_boundary_rtl alone still declares `kind:
+  # bounded`) and confirms zero mismatch against this real figure (see
+  # `forge analyze latency-check` output cited in preflight.md's 10.3
+  # completion evidence).
+  latency:
+    kind: fixed
+    cycles: 6
+  interface_contract: interfaces/tile_stats_hls.interface.yaml
+  src: [../algo/tile_stats/tile_stats_hls.cpp]
+  includes: [../algo/tile_stats]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+# ─── Tile Boundary / tile-end summary (RTL) — slice 10.3 ───────────────────
+- name: tile_boundary_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: tile_boundary_rtl
+  # Bounded (see algo/rtl/tile_boundary_rtl.v): the tag latches 1 cycle
+  # after the triggering tile-last sample and stays valid for
+  # HOLD_CYCLES=16 cycles after that -- min_cycles=1/max_cycles=17
+  # declares the real window the held tag is guaranteed available in,
+  # which comfortably covers tile_stats_hls's own declared [6,10]
+  # bound (both branches are triggered by the same input cycle).
+  latency:
+    kind: bounded
+    min_cycles: 1
+    max_cycles: 17
+  interface_contract: interfaces/tile_boundary_rtl.interface.yaml
+  src: [../algo/rtl/tile_boundary_rtl.v]
+
+# ─── Tile Summary Join (RTL) — slice 10.3 ──────────────────────────────────
+- name: tile_summary_join_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: tile_summary_join_rtl
+  # Elastic (spec §15.3: "must not be reported as fixed") -- the join's
+  # real completion time is dominated by whichever of its two
+  # predecessors (one fixed, one bounded) is slower for a given tile,
+  # not this module's own 1-cycle match-and-forward step.
+  latency:
+    kind: elastic
+  interface_contract: interfaces/tile_summary_join_rtl.interface.yaml
+  src: [../algo/rtl/tile_summary_join_rtl.v]
