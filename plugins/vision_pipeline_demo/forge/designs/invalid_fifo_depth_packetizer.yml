@@ -1,0 +1,271 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Negative Fixture (slice 10.5, spec §17.5
+# "Invalid FIFO fixture")
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# "Configure a burst/stall requirement that provably exceeds FIFO
+# capacity" (spec §17.5). Identical to design_packetizer.yml (real,
+# positive design, see that file's own header for the full topology) in
+# every respect except one: the pixel-result path's async_fifo depth is
+# 4 instead of 64. depth=4 is still a valid power of two (passes
+# ATG022/ATG026 at `forge topgen validate` time -- depth *sufficiency*
+# for a given burst pattern isn't and can't be a static topology-validity
+# concern, only a real simulated/measured one, unlike depth's own
+# power-of-two well-formedness). The real, already-measured burst this
+# plugin's own gen_stimulus_packetizer.py drives (64 back-to-back
+# pixel-domain writes at 200MHz, draining into a 125MHz packetizer)
+# provably needs more than 4 buffered entries at once --
+# design_packetizer.yml's own real depth=64 run already measured a real
+# high-water mark of 28 (see preflight.md's 10.5 completion evidence) --
+# so depth=4 is real, measured-insufficient capacity, not a hypothetical.
+#
+# Expected result (spec §17.5): a real release-gate failure, not a
+# topgen-time error -- run through the exact same packetizer_xsim
+# stimulus/checker (gen_stimulus_packetizer.py), this design's real xsim
+# run produces real `overflow_attempt`/`dropped_transactions` events and
+# a genuine functional check mismatch (a dropped record no longer
+# matches its expected value), both of which
+# check_fifo_capacity.py turns into a clear pass/fail with required vs.
+# configured depth shown, per spec §17.5's own requirement.
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 5.0   # pixel domain (ap_clk): 200MHz, spec §6
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+reset_domains:
+  rst_output:
+    derived_from: ap_rst
+    sync: reset_sync
+
+interface_metadata:
+  tier2_probes:
+    - {name: pr_full,        net: "dut.sync_net_prpack_pktz_out_record_full",        width: 1}
+    - {name: pr_empty,       net: "dut.sync_net_prpack_pktz_out_record_empty",       width: 1}
+    - {name: pr_overflow,    net: "dut.sync_net_prpack_pktz_out_record_overflow",    width: 1}
+    - {name: pr_underflow,   net: "dut.sync_net_prpack_pktz_out_record_underflow",   width: 1}
+    - {name: pr_occupancy,   net: "dut.sync_net_prpack_pktz_out_record_occupancy",   width: 3}
+    - {name: pr_high_water,  net: "dut.sync_net_prpack_pktz_out_record_high_water",  width: 3}
+    - {name: ts_full,        net: "dut.sync_net_tspack_pktz_out_record_full",        width: 1}
+    - {name: ts_empty,       net: "dut.sync_net_tspack_pktz_out_record_empty",       width: 1}
+    - {name: ts_overflow,    net: "dut.sync_net_tspack_pktz_out_record_overflow",    width: 1}
+    - {name: ts_underflow,   net: "dut.sync_net_tspack_pktz_out_record_underflow",   width: 1}
+    - {name: ts_occupancy,   net: "dut.sync_net_tspack_pktz_out_record_occupancy",   width: 7}
+    - {name: ts_high_water,  net: "dut.sync_net_tspack_pktz_out_record_high_water",  width: 7}
+
+modules:
+
+- name: norm_px
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+- name: winbld
+  ref: window_builder_rtl
+  instances: 1
+
+- name: sobel
+  ref: sobel_hls
+  instances: 1
+
+- name: thresh
+  ref: threshold_rtl
+  instances: 1
+
+- name: merge
+  ref: edge_mask_merge_rtl
+  instances: 1
+
+- name: prpack
+  ref: pixel_result_packer_rtl
+  instances: 1
+
+- name: norm_tile
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+- name: tstats
+  ref: tile_stats_hls
+  instances: 1
+
+- name: tbnd
+  ref: tile_boundary_rtl
+  instances: 1
+
+- name: tjoin
+  ref: tile_summary_join_rtl
+  instances: 1
+
+- name: tspack
+  ref: tile_stats_packer_rtl
+  instances: 1
+
+- name: pktz
+  ref: packetizer_rtl
+  instances: 1
+  external_out_ports: [packet_data, packet_keep, packet_last, packet_valid]
+
+connections:
+
+- from: norm_px
+  to: winbld
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm_px
+  to: thresh
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: winbld
+  to: sobel
+  port_map:
+    - [win_r0c0, win_r0c0]
+    - [win_r0c1, win_r0c1]
+    - [win_r0c2, win_r0c2]
+    - [win_r1c0, win_r1c0]
+    - [win_r1c1, win_r1c1]
+    - [win_r1c2, win_r1c2]
+    - [win_r2c0, win_r2c0]
+    - [win_r2c1, win_r2c1]
+    - [win_r2c2, win_r2c2]
+    - [out_x, x]
+    - [out_y, y]
+    - [out_frame_id, frame_id]
+    - [out_tile_id, tile_id]
+    - [out_end_of_line, end_of_line]
+    - [out_end_of_frame, end_of_frame]
+    - [out_valid, in_valid]
+
+- from: sobel
+  to: merge
+  port_map:
+    - [gradient_magnitude, sobel_magnitude]
+    - [x_out, sobel_x]
+    - [y_out, sobel_y]
+    - [frame_id_out, sobel_frame_id]
+    - [tile_id_out, sobel_tile_id]
+    - [end_of_line_out, sobel_end_of_line]
+    - [end_of_frame_out, sobel_end_of_frame]
+    - [out_valid, sobel_valid]
+
+- from: thresh
+  to: merge
+  delay_cycles: 12
+  port_map:
+    - [out_pixel, thresh_pixel]
+    - [threshold_mask, thresh_mask]
+    - [out_x, thresh_x]
+    - [out_y, thresh_y]
+    - [out_frame_id, thresh_frame_id]
+    - [out_tile_id, thresh_tile_id]
+    - [out_end_of_line, thresh_end_of_line]
+    - [out_end_of_frame, thresh_end_of_frame]
+    - [out_valid, thresh_valid]
+
+- from: merge
+  to: prpack
+  port_map:
+    - [normalized_pixel, in_normalized_pixel]
+    - [gradient_magnitude, in_gradient_magnitude]
+    - [threshold_mask, in_threshold_mask]
+    - [out_x, in_x]
+    - [out_y, in_y]
+    - [out_frame_id, in_frame_id]
+    - [out_tile_id, in_tile_id]
+    - [out_end_of_line, in_end_of_line]
+    - [out_end_of_frame, in_end_of_frame]
+    - [out_valid, in_valid]
+
+- from: norm_tile
+  to: tstats
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm_tile
+  to: tbnd
+  port_map:
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: tstats
+  to: tjoin
+  port_map:
+    - [minimum, stats_minimum]
+    - [maximum, stats_maximum]
+    - [mean, stats_mean]
+    - [variance, stats_variance]
+    - [tile_id_out, stats_tile_id]
+    - [frame_id_out, stats_frame_id]
+    - [out_valid, stats_valid]
+
+- from: tbnd
+  to: tjoin
+  port_map:
+    - [tag_valid, tag_valid]
+    - [tag_tile_id, tag_tile_id]
+    - [tag_frame_id, tag_frame_id]
+    - [tag_end_of_frame, tag_end_of_frame]
+
+- from: tjoin
+  to: tspack
+  port_map:
+    - [out_tile_id, in_tile_id]
+    - [out_minimum, in_minimum]
+    - [out_maximum, in_maximum]
+    - [out_mean, in_mean]
+    - [out_variance, in_variance]
+    - [out_frame_id, in_frame_id]
+    - [out_valid, in_valid]
+
+# The negative case: depth=4, not 64 -- see this file's own header.
+- from: prpack
+  to: pktz
+  cdc:
+    kind: async_fifo
+    depth: 4
+    write_enable_pin: out_record_valid
+  port_map:
+    - [out_record, pr_record_in]
+
+- from: tspack
+  to: pktz
+  cdc:
+    kind: async_fifo
+    depth: 64
+    write_enable_pin: out_record_valid
+  port_map:
+    - [out_record, ts_record_in]

@@ -255,3 +255,122 @@ class TileStatsProvider:
 TILE_STATS_PROVIDER = TileStatsProvider()
 
 register_golden_model_provider(TILE_STATS_PROVIDER.provider_id, TILE_STATS_PROVIDER)
+
+
+# ── Slice 10.5: packetizer path ───────────────────────────────────────────
+
+PACKETIZER_PROVIDER_ID = "vision_pipeline.packetizer"
+PACKETIZER_PROVIDER_VERSION = "1.0"
+
+RECORD_KIND_PIXEL_RESULT = 0
+RECORD_KIND_TILE_STATISTICS = 1
+
+
+def pack_pixel_result_record(
+    *, normalized_pixel: int, gradient_magnitude: int, threshold_mask: int,
+    x: int, y: int, frame_id: int, tile_id: int, end_of_line: int, end_of_frame: int,
+) -> int:
+    """Pack one pixel-result record into the frozen 128-bit layout
+    (preflight.md §6.1, MSB-first) -- bit-for-bit the same field order/
+    widths as pixel_result_packer_rtl.v's own concatenation.
+    """
+    value = RECORD_KIND_PIXEL_RESULT << 126
+    value |= (normalized_pixel & 0xFF) << 118
+    value |= (gradient_magnitude & 0xFFF) << 106
+    value |= (threshold_mask & 0x1) << 105
+    value |= (x & 0xFFF) << 93
+    value |= (y & 0xFFF) << 81
+    value |= (frame_id & 0xFFFF) << 65
+    value |= (tile_id & 0xFFFF) << 49
+    value |= (end_of_line & 0x1) << 48
+    value |= (end_of_frame & 0x1) << 47
+    return value
+
+
+def pack_tile_statistics_record(
+    *, tile_id: int, minimum: int, maximum: int, mean: int, variance: int, frame_id: int,
+) -> int:
+    """Pack one tile-statistics record into the frozen 128-bit layout
+    (preflight.md §6.1, MSB-first) -- bit-for-bit the same field order/
+    widths as tile_stats_packer_rtl.v's own concatenation.
+    """
+    value = RECORD_KIND_TILE_STATISTICS << 126
+    value |= (tile_id & 0xFFFF) << 110
+    value |= (minimum & 0xFF) << 102
+    value |= (maximum & 0xFF) << 94
+    value |= (mean & 0xFFFF) << 78
+    value |= (variance & 0xFFFFFF) << 54
+    value |= (frame_id & 0xFFFF) << 38
+    return value
+
+
+class PacketizerProvider:
+    """Golden model for slice 10.5's packetizer path (preflight.md
+    §6.1/§6.2/§9.1): reuses ``PixelResultProvider``/``TileStatsProvider``
+    verbatim for the per-domain field math (this module owns only the
+    128-bit packing, not a second copy of the Sobel/threshold/tile-stats
+    arithmetic) and packs each into the frozen record layout so the xsim
+    checker can compare decoded ``packet_data`` slots directly against
+    these hex values, without needing to reproduce real, clock-phase-
+    dependent CDC-crossing cycle timing (see design_packetizer.yml's own
+    header and gen_stimulus_packetizer.py for why this design is checked
+    by content -- every expected record observed exactly once, from
+    whichever beat/slot it lands in -- rather than by exact cycle, the
+    same "no golden-model exact-cycle timing" precedent slice 10.4's
+    cdc_xsim flow already established for a CDC-crossing design).
+    """
+
+    provider_id = PACKETIZER_PROVIDER_ID
+    provider_version = PACKETIZER_PROVIDER_VERSION
+
+    def evaluate(
+        self,
+        dataset: CanonicalDataset,
+        config: "Mapping[str, object]",
+    ) -> ExpectedDataset:
+        pixel_result = PIXEL_RESULT_PROVIDER.evaluate(dataset, config)
+        tile_stats = TILE_STATS_PROVIDER.evaluate(dataset, config)
+        tile_record_hex = pack_tile_statistics_record(
+            tile_id=tile_stats.events[0]["expected"]["tile_id"],
+            minimum=tile_stats.events[0]["expected"]["minimum"],
+            maximum=tile_stats.events[0]["expected"]["maximum"],
+            mean=tile_stats.events[0]["expected"]["mean"],
+            variance=tile_stats.events[0]["expected"]["variance"],
+            frame_id=tile_stats.events[0]["expected"]["frame_id"],
+        )
+
+        events: "list[dict[str, Any]]" = []
+        for ev, pr in zip(dataset.events, pixel_result.events):
+            x = int(ev["in"]["x"], 0)
+            y = int(ev["in"]["y"], 0)
+            frame_id = int(ev["in"]["frame_id"], 0)
+            tile_id = int(ev["in"]["tile_id"], 0)
+            end_of_line = int(ev["in"]["end_of_line"], 0)
+            end_of_frame = int(ev["in"]["end_of_frame"], 0)
+
+            pixel_record_hex = pack_pixel_result_record(
+                normalized_pixel=pr["expected"]["normalized_pixel"],
+                gradient_magnitude=pr["expected"]["gradient_magnitude"],
+                threshold_mask=pr["expected"]["threshold_mask"],
+                x=x, y=y, frame_id=frame_id, tile_id=tile_id,
+                end_of_line=end_of_line, end_of_frame=end_of_frame,
+            )
+            events.append({
+                "expected": {
+                    "pixel_record_hex": pixel_record_hex,
+                    "tile_record_hex": tile_record_hex,
+                },
+            })
+
+        return ExpectedDataset(
+            schema=EXPECTED_DATASET_SCHEMA,
+            event_ids=list(dataset.metadata.event_ids),
+            events=events,
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+        )
+
+
+PACKETIZER_PROVIDER = PacketizerProvider()
+
+register_golden_model_provider(PACKETIZER_PROVIDER.provider_id, PACKETIZER_PROVIDER)

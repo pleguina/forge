@@ -878,6 +878,34 @@ def write_structural_verilog(
                         emit(f"  wire [{w-1}:0] {sync_net};")
                     sync_nets.add(sync_net)
 
+        # cdc.write_enable_pin (release-plan Phase 10, slice 10.5): an
+        # async_fifo connection may name one of the *source* instance's
+        # other own output pins as a real write-enable, gating
+        # cdc_async_fifo's write so it stops writing a fresh FIFO entry
+        # every single write-domain cycle regardless of whether the
+        # payload actually changed (its documented default, "continuously
+        # driven... relying on its own internal full/empty guards" —
+        # accurate for a level-style status value, but it silently floods
+        # a real record-producing FIFO with duplicate entries whenever the
+        # write clock is faster than the read clock, found empirically
+        # wiring this slice's own packetizer design: occupancy/high-water/
+        # overflow telemetry saturated almost immediately even though only
+        # 64 real records were ever produced). Not part of any port_map
+        # pair, so it needs its own pre-declared driver net here, exactly
+        # like a regular driving output pin gets above.
+        if cdc_kind == "async_fifo":
+            we_pin_raw = (cdc_map.get((src_i, dst_i)) or {}).get("write_enable_pin")
+            if we_pin_raw:
+                we_pin = _canon_pin(ip_info, src_mod, we_pin_raw)
+                we_w = _pin_width_for_inst(src_i, we_pin)
+                we_net = _verilog_ident(f"net_{src_i}_{we_pin}")
+                if we_net not in driver_net_set:
+                    if we_w == 1:
+                        emit(f"  wire {we_net};")
+                    else:
+                        emit(f"  wire [{we_w-1}:0] {we_net};")
+                    driver_net_set.add(we_net)
+
     for (ilabel, pname), _top_port_name in external_output_bindings.items():
         raw_net = f"net_{ilabel}_{pname}"
         net = _verilog_ident(raw_net)
@@ -941,13 +969,22 @@ def write_structural_verilog(
 
             # Build a set of driven source pins for this instance
             driven_outs: Set[str] = set()
-            for (src_i, _dst_i), pairs in conn_map.items():
+            for (src_i, dst_i), pairs in conn_map.items():
                 if src_i != ilabel:
                     continue
                 src_mod = mod.name
                 for s_pin_raw, _ in pairs:
                     s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
                     driven_outs.add(s_pin)
+
+                # cdc.write_enable_pin (release-plan Phase 10, slice 10.5):
+                # this instance's own write-enable output pin (see the
+                # matching pre-declaration above) also counts as driven,
+                # even though it's never a port_map pair.
+                if cdc_map.get((src_i, dst_i), {}).get("kind") == "async_fifo":
+                    we_pin_raw = cdc_map.get((src_i, dst_i), {}).get("write_enable_pin")
+                    if we_pin_raw:
+                        driven_outs.add(_canon_pin(ip_info, src_mod, we_pin_raw))
 
             for p in ports_by_mod[mod.name]:
                 pname, pdir, w = p["name"], p["dir"], int(p["width"])
@@ -1287,14 +1324,24 @@ def write_structural_verilog(
                     unf_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_underflow")
                     occ_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_occupancy")
                     hw_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_high_water")
+                    # cdc.write_enable_pin (release-plan Phase 10, slice
+                    # 10.5): real write-enable gating, opt-in per
+                    # connection — see the pre-declaration above for why.
+                    # Defaults to 1'b1 (every prior async_fifo usage's
+                    # unchanged "continuously driven" behavior) when unset.
+                    we_pin_raw = cdc.get("write_enable_pin")
+                    if we_pin_raw:
+                        we_pin = _canon_pin(ip_info, src_mod, we_pin_raw)
+                        wr_en_expr = _verilog_ident(f"net_{src_i}_{we_pin}")
+                    else:
+                        wr_en_expr = "1'b1"
                     emit(
                         f"  // Occupancy/backpressure telemetry (release-plan §5 Decision B / "
-                        "slice 10.0C) — generated but not yet wired into any report/schema by "
-                        "this generator; consume via a Tier 2 probe declaration."
+                        "slice 10.0C) — consume via a Tier 2 probe declaration."
                     )
                     emit(f"  wire {full_net}, {empty_net}, {ovf_net}, {unf_net};")
                     emit(f"  wire [{addr_width}:0] {occ_net}, {hw_net};")
-                    emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (async_fifo, depth={depth})")
+                    emit(f"  // CDC crossing {src_i}.{s_pin} -> {dst_i}.{d_pin} (async_fifo, depth={depth}, wr_en={wr_en_expr})")
                     emit(f"  cdc_async_fifo #(")
                     emit(f"    .WIDTH({w}),")
                     emit(f"    .DEPTH({depth})")
@@ -1302,6 +1349,7 @@ def write_structural_verilog(
                     emit(f"    .wr_clk({src_clk_net}),")
                     emit(f"    .wr_rst({src_rst_net}),")
                     emit(f"    .din({src_net}),")
+                    emit(f"    .wr_en({wr_en_expr}),")
                     emit(f"    .full({full_net}),")
                     emit(f"    .overflow_attempt({ovf_net}),")
                     emit(f"    .occupancy({occ_net}),")

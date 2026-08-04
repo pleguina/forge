@@ -112,6 +112,66 @@ flows:
       use_sv_flag: false
     coverage_intent:  integration
 
+  # Slice 10.5 (release-plan Phase 10, preflight.md §6.1/§6.2/§9.1, §5
+  # Decision B): packetizer path -- two independent record-producing
+  # paths (pixel-result: window_builder_rtl/sobel_hls/threshold_rtl/
+  # edge_mask_merge_rtl/pixel_result_packer_rtl; tile-statistics:
+  # tile_stats_hls/tile_boundary_rtl/tile_summary_join_rtl/
+  # tile_stats_packer_rtl), each crossing pixel -> output via its own
+  # real cdc: {kind: async_fifo, depth: 64}, multiplexed onto the
+  # corrected 256-bit forge.packet_stream.v1 by packetizer_rtl (output
+  # domain). `pixel` is this design's primary domain (ap_clk, genuinely
+  # 200MHz/5ns per spec §6, unlike 10.2/10.3's informal 4.0ns testing
+  # clock) -- extra_clocks below is only the real secondary `output`
+  # domain (125MHz/8ns). See gen_stimulus_packetizer.py for the
+  # fork/join dual-clock-domain drive+check strategy.
+  - name:             packetizer_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_packetizer
+    dataset:          vision_pipeline_quickstart_golden
+    default_event_id: 0
+    simulation:
+      clk_period_ns:              5.0    # pixel domain (ap_clk): 200MHz, matching design_packetizer.yml
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 20
+      extra_clocks:
+        clk_output: 8.0
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration
+
+  # Slice 10.5 negative fixture (spec §17.5 "Invalid FIFO fixture"):
+  # identical to packetizer_xsim except the pixel-result crossing's real
+  # async_fifo depth is 4 instead of 64 -- see
+  # invalid_fifo_depth_packetizer.yml's own header. Real data loss is
+  # expected here (that's the point) -- checker_mode stays log_scan like
+  # every other flow, so this flow's own scoreboard "FAIL" is itself
+  # part of the fixture's evidence, not a broken flow.
+  - name:             invalid_fifo_depth_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_invalid_fifo_depth
+    dataset:          vision_pipeline_quickstart_golden
+    default_event_id: 0
+    simulation:
+      clk_period_ns:              5.0
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 20
+      extra_clocks:
+        clk_output: 8.0
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration
+
   # Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A):
   # multi-domain CDC path -- ctrl_level_rtl/ctrl_pulse_rtl/ctrl_mailbox_rtl
   # (control, ap_clk) -> pixel_sink_rtl (pixel, clk_pixel) -> outsink_level_rtl

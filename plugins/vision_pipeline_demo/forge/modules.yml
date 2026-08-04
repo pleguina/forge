@@ -104,26 +104,31 @@ modules:
 - name: tile_stats_hls
   kind: hls
   top: tile_stats_hls
-  # Fixed 6-cycle latency, II=2. The spec's own text (§11/§15.2) frames
-  # this module as "bounded 6..10 cycles" -- first attempted here as a
-  # real `#pragma HLS LATENCY min=6 max=6` -- max=10 -- constraint (see
-  # algo/tile_stats/tile_stats_hls.cpp), but the real Vitis HLS csynth
-  # report came back min==max==6: a plain PIPELINE II=2 function with no
-  # genuinely variable-length execution path schedules to one fixed
-  # depth, not a real per-invocation range. Corrected to `kind: fixed`
-  # here to match the real synthesis report (release-plan Phase 10,
-  # slice 10.3 -- same "verified, not assumed" discipline 10.2's
-  # window_builder_rtl/threshold_rtl figures were checked against).
-  # tile_boundary_rtl/tile_summary_join_rtl's own bounded/elastic
-  # declarations below are unaffected -- forge.analyze.latency_static's
-  # check_merge_points still classifies their shared merge point
-  # `bounded_skew` (tile_boundary_rtl alone still declares `kind:
-  # bounded`) and confirms zero mismatch against this real figure (see
-  # `forge analyze latency-check` output cited in preflight.md's 10.3
-  # completion evidence).
+  # Fixed 1-cycle latency, real II=1 (release-plan Phase 10, slice 10.5
+  # follow-up -- was `kind: fixed, cycles: 6` at II=2, see git history).
+  # The original II=2 was a real, empirically-confirmed csynth result at
+  # the time (a single loop-carried sum-of-squares accumulator bound to
+  # a 3-cycle-latency DSP48 MACC), not a placeholder -- but it was not
+  # the *only* real constraint, and turned out to be fixable: rewriting
+  # the accumulator as 4 round-robin partial sums (hiding the DSP's own
+  # latency) plus removing the function's `if`/`else` control flow
+  # entirely (pure branch-free select-based dataflow -- Vitis's own
+  # branch-driven basic-block splitting was a second, independent
+  # blocker, only found by testing after the first fix alone still
+  # reported II=2) together closed a real csynth run at II=1, LATENCY=1,
+  # confirmed at both the registry's shared 4.0ns HLS target and the
+  # real 200MHz/5.0ns clock design_packetizer.yml actually runs this
+  # module at (algo/tile_stats/tile_stats_hls.cpp's own header has the
+  # full derivation). tile_boundary_rtl/tile_summary_join_rtl's own
+  # bounded/elastic declarations below are unaffected --
+  # forge.analyze.latency_static's check_merge_points still classifies
+  # their shared merge point `bounded_skew` (tile_boundary_rtl alone
+  # still declares `kind: bounded`) and confirms the real, now much
+  # tighter, 1-cycle figure still lands inside tile_boundary_rtl's own
+  # [1,17] hold window with room to spare.
   latency:
     kind: fixed
-    cycles: 6
+    cycles: 1
   interface_contract: interfaces/tile_stats_hls.interface.yaml
   src: [../algo/tile_stats/tile_stats_hls.cpp]
   includes: [../algo/tile_stats]
@@ -241,3 +246,40 @@ modules:
     cycles: 1
   interface_contract: interfaces/outsink_pulse_rtl.interface.yaml
   src: [../algo/rtl/outsink_pulse_rtl.v]
+
+# ─── Pixel-Result Record Packer (RTL) — slice 10.5 ─────────────────────────
+- name: pixel_result_packer_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: pixel_result_packer_rtl
+  # Fixed 1-cycle latency (see algo/rtl/pixel_result_packer_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/pixel_result_packer_rtl.interface.yaml
+  src: [../algo/rtl/pixel_result_packer_rtl.v]
+
+# ─── Tile-Statistics Record Packer (RTL) — slice 10.5 ──────────────────────
+- name: tile_stats_packer_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: tile_stats_packer_rtl
+  # Fixed 1-cycle latency (see algo/rtl/tile_stats_packer_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/tile_stats_packer_rtl.interface.yaml
+  src: [../algo/rtl/tile_stats_packer_rtl.v]
+
+# ─── Packetizer (RTL) — slice 10.5 ──────────────────────────────────────────
+- name: packetizer_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: packetizer_rtl
+  # Fixed 3-cycle latency, a real 3-stage pipeline (see
+  # algo/rtl/packetizer_rtl.v), matching spec §11's "L=3, II=1".
+  latency:
+    kind: fixed
+    cycles: 3
+  interface_contract: interfaces/packetizer_rtl.interface.yaml
+  src: [../algo/rtl/packetizer_rtl.v]
