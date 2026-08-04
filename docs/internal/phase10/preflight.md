@@ -580,7 +580,7 @@ dataset contract, not left implicit**:
 | 10.0D | Wire `latency_by_instance`/`verification_flow_entry_points` overlays into real `forge inspect`/`forge report` CLI calls (§4) |
 | 10.1 | One-clock quickstart: normalizer HLS → threshold RTL → sink, synthetic 8×8 data, exact comparison |
 | 10.2 | **DONE.** `window_builder_rtl`, Sobel, threshold, alignment delay, exact-cycle merge (pixel-result path only, §6.2) |
-| 10.3 | Per-tile bounded statistics (`tile_stats_hls`) and elastic tile-summary join (tile-statistics path, §6.2) |
+| 10.3 | **DONE.** `tile_stats_hls`, `tile_boundary_rtl`, tagged bounded/elastic join (tile-statistics path, §6.2) |
 | 10.4 | Multiple domains and all five CDC kinds (§5 Decision A), reset synchronizers, negative CDC fixtures |
 | 10.5 | Packetizer (multiplexing both record kinds, §6.1/§6.2), async FIFO, throughput, backpressure, occupancy, invalid rate/depth fixtures |
 | 10.6 | Synthetic, image-folder, and NumPy adapters (via `DatasetService`), manifests, staleness tests |
@@ -639,6 +639,89 @@ out_y/out_valid/tag_mismatch), including all 64 `tag_mismatch` checks
 confirming the Sobel and threshold branches land on
 `edge_mask_merge_rtl` on the exact same cycle for every pixel in the
 frame, not just in the static `delta==0` check.
+
+**10.3 scope note**: builds the tile-statistics path (§6.2) as a
+standalone design, `design_tile_stats.yml` — its own `norm` instance
+fanning out to `tile_stats_hls` and `tile_boundary_rtl`, both feeding
+`tile_summary_join_rtl` — mirroring `design_pixel_result.yml`'s own
+precedent of demonstrating one slice's capability set in isolation
+rather than extending an already-passing design. Three new modules:
+
+- `tile_stats_hls` (HLS): a real per-tile streaming statistics
+  accumulator (running min/max/sum/sum-of-squares over a static-variable
+  accumulator, the standard Vitis HLS idiom for persistent state under
+  `PIPELINE`), emitting the frozen population mean/variance formula
+  (§9.1) on the tile's last accepted sample. **One correction found
+  during implementation**: the spec's own text (§11/§15.2) frames this
+  module as "bounded 6..10 cycles" — first attempted here as a real
+  `#pragma HLS LATENCY min=6 max=10` constraint, on the theory that the
+  tile-final sample's extra mean/variance compute (shift, square,
+  subtract, clamp) would schedule to a genuinely different depth than a
+  plain accumulate-only sample. The real csynth report came back
+  `min==max==6`: a plain `PIPELINE`-scheduled function with no
+  memory-latency-bound stall folds every control path into one static
+  schedule with muxes, not a real per-invocation range — so this is
+  `kind: fixed, cycles: 6` in modules.yml, not `bounded`, matching the
+  real synthesis report rather than the spec's uncorrected placeholder
+  (the same "verified, not assumed" correction 10.2's own
+  window_builder_rtl/threshold_rtl figures went through). Also
+  genuinely `II=2` (a real scheduling consequence of the static
+  accumulator's read-modify-write dependency, not a chosen throughput
+  target) — the stimulus drives pixels 2 cycles apart to respect it
+  (`gen_stimulus_tile_stats.py`), unlike the pixel-result path's
+  back-to-back streaming.
+- `tile_boundary_rtl` (RTL): the "tile-end summary" — an independent
+  re-derivation (not a tap off `tile_stats_hls`'s own output) of the
+  tile-last event from the same fan-out tag stream, verifying at runtime
+  that the accumulator and the geometry actually agree (the same role
+  `edge_mask_merge_rtl`'s `tag_mismatch` established in 10.2). Holds its
+  tag for a declared bounded `[1,17]`-cycle window rather than using an
+  ack handshake back to the join — a real cyclic module-to-module
+  connection has no precedent anywhere in this repo's design-graph
+  tooling, and a self-timed bounded hold gets the same correctness
+  property (provably still valid when `tile_stats_hls`'s own latency
+  arrives) without needing one.
+- `tile_summary_join_rtl` (RTL): the "tagged elastic join" — matches the
+  two branches by **tile_id/frame_id**, not cycle position (spec §15.3:
+  "must not be reported as fixed"), with `join_mismatch` as the real
+  runtime diagnostic. `forge.analyze.latency_static.check_merge_points`
+  classifies this merge point `bounded_skew` (at least one predecessor —
+  `tile_boundary_rtl` — declares `kind: bounded`) and confirms the two
+  declared windows genuinely overlap (`[1,17]` covers the real,
+  chain-folded `9` cycles `tile_stats_hls`'s path accumulates) with zero
+  mismatches — no framework changes were needed to get this real
+  bounded-latency-declaring module wired up (unlike 10.2's
+  `_upstream_chain_latency` fix), though this is also the first time
+  any interface in this repo has actually declared `kind: bounded` or
+  `kind: elastic` in a real module registration, not just a unit test.
+
+Multi-tile-per-frame concurrency (needed once `FRAME_WIDTH >
+TILE_WIDTH`, interleaving more than one tile's samples within a shared
+tile-row band) is explicit future work, deferred alongside the 16×16
+full-functional dataset itself (10.6/10.7) — the same scope boundary
+10.2's own scope note already drew for `window_builder_rtl`/`sobel_hls`
+at the current 8×8 quickstart scale.
+
+**10.3 completion evidence**: `design_tile_stats.yml` (real design),
+`tile_stats_hls`/`tile_boundary_rtl`/`tile_summary_join_rtl` (real
+RTL/HLS, real Vitis HLS synthesis for `tile_stats_hls`),
+`TileStatsProvider` (real golden model, computing population mean/
+variance over the normalized pixel stream with the identical
+power-of-two-shift arithmetic `tile_stats_hls.cpp` implements), and the
+`tile_stats_xsim` verify flow — a real Vivado xsim run streaming the
+full 64-pixel 8×8 quickstart-scale frame (pixels spaced 2 cycles apart
+for `tile_stats_hls`'s real `II=2`) through every module, checked
+against the golden model: 8/8 checks pass (minimum/maximum/mean/
+variance/tile_id/frame_id/out_valid/join_mismatch), including
+`join_mismatch == 0`, confirming `tile_boundary_rtl`'s independently
+re-derived tag and `tile_stats_hls`'s own accumulator agree on both
+`tile_id` and `frame_id` for the real tile. `forge analyze
+latency-check` against the real design confirms zero mismatches at the
+`bounded_skew`-classified merge point. The pre-existing
+`pixel_result_xsim`/`quickstart_pipeline_xsim` flows were re-run
+unchanged and still pass, confirming no regression from the shared
+`modules.yml`/`golden_model_provider.py`/`design.verification.yml`
+edits this slice made.
 
 Negative fixtures land incrementally alongside each capability (the
 spec's own 10-item invalid-design matrix), not batched at the end —
