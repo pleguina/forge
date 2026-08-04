@@ -582,7 +582,7 @@ dataset contract, not left implicit**:
 | 10.2 | **DONE.** `window_builder_rtl`, Sobel, threshold, alignment delay, exact-cycle merge (pixel-result path only, §6.2) |
 | 10.3 | **DONE.** `tile_stats_hls`, `tile_boundary_rtl`, tagged bounded/elastic join (tile-statistics path, §6.2) |
 | 10.4 | **DONE.** Multiple domains, all five CDC kinds, reset synchronizers, negative CDC fixture (§5 Decision A) |
-| 10.5 | Packetizer (multiplexing both record kinds, §6.1/§6.2), async FIFO, throughput, backpressure, occupancy, invalid rate/depth fixtures |
+| 10.5 | **DONE.** Packetizer (multiplexing both record kinds, §6.1/§6.2), async FIFO, throughput, backpressure, occupancy, invalid rate/depth fixtures |
 | 10.6 | Synthetic, image-folder, and NumPy adapters (via `DatasetService`), manifests, staleness tests |
 | 10.7 | Platform wrapper, provenance, plan hashes, visual explorer (incl. the 10.0D CLI wiring), documentation, clean-user workflow, full CI |
 | 10.8 | Optional hls4ml, only after the base acceptance gate passes |
@@ -723,6 +723,45 @@ unchanged and still pass, confirming no regression from the shared
 `modules.yml`/`golden_model_provider.py`/`design.verification.yml`
 edits this slice made.
 
+**10.3 follow-up correction (release-plan Phase 10, slice 10.5
+follow-up)**: `tile_stats_hls`'s II=2 was real and correctly derived at
+the time — a single loop-carried sum-of-squares accumulator genuinely
+bound to a 3-cycle-latency DSP48 MACC — but it was not, in fact, a hard
+limit of the algorithm itself. Requested directly by the user after
+reviewing this document ("can't the module be II=1?"), two real,
+independent obstacles were found and removed together (confirmed
+empirically at each step, not assumed): (1) splitting the single
+accumulator into 4 named-scalar round-robin partial sums (enough slack
+between each partial's own successive updates to hide the DSP's
+latency) plus forcing the accumulate-add itself off the DSP48 (Vitis
+fuses a trailing add into the same MACC by default, which silently
+re-imposes the same bottleneck the split was meant to remove — found by
+testing the split alone first and seeing II=2 persist unchanged); (2)
+even with (1) fixed, II stayed at 2 until the function's own `if`/`else`
+control flow was removed entirely in favor of branch-free, pure-select
+dataflow — the real second obstacle turned out to be Vitis's
+branch-driven basic-block splitting, not any remaining arithmetic (every
+operation involved was already confirmed 0-latency combinational logic
+by the time this was found). The real, csynth-confirmed result: fixed
+1-cycle latency, real II=1, at both the registry's shared 4.0ns HLS
+target and the real 200MHz/5.0ns clock `design_packetizer.yml` actually
+runs this module at. See `algo/tile_stats/tile_stats_hls.cpp`'s own
+header for the full derivation and `modules.yml`'s `tile_stats_hls`
+entry for the corrected latency declaration. Cascaded through:
+`gen_stimulus_tile_stats.py`/`gen_stimulus_packetizer.py` (both paths
+now drive back-to-back, no more II=2-spaced pacing), `design_tile_stats
+.yml`/`design_packetizer.yml`'s own header comments, and a full
+regression re-run — `tile_stats_xsim` (8/8 checks, unchanged pass) and
+`packetizer_xsim` (66/66 checks, unchanged pass) both still pass, real
+`forge/tests/` suite still green (181 passed). One further consequence:
+`render_throughput_result.py`'s real bottleneck for
+`design_packetizer.yml` changed from `tile_stats_hls` to
+`pixel_normalizer` (arbitrary tie-break — all three profiled modules
+now sit at an identical real 200 Mrecord/s, II=1, since nothing in this
+plugin's own module catalogue is II>1 anymore), and the §17.4 negative
+fixture's real II=2 example no longer exists in this codebase — see the
+10.5 section below for how that fixture was revised.
+
 **10.4 scope note**: unlike every prior slice, 10.4's own core-framework
 prerequisite (Decision A originally framed CDC work as "real, multi-day
 core-framework engineering") turned out to be *mostly already done*:
@@ -808,6 +847,212 @@ unchanged from v1's recommendation, now explicitly attached to the slice
 that introduces the corresponding positive capability (e.g. the three
 CDC negative fixtures land in 10.4, throughput/FIFO-depth negative
 fixtures land in 10.5).
+
+**10.5 scope note**: unlike 10.2-10.4, this slice's own core-framework
+prerequisite genuinely was needed, but only two small, targeted additions
+surfaced by actually wiring a real (non-constant-valued) record producer
+through `cdc: {kind: async_fifo}` for the first time — every prior
+async_fifo usage (design_cdc.yml, slice 10.4) held its source value
+constant for the whole test, explicitly deferring "FIFO fill/drain
+dynamics" to this slice (see `pixel_sink_rtl.v`'s own header).
+
+- **Real per-record write-enable** (`cdc.write_enable_pin`,
+  `forge.topgen.config`/`forge.topgen.generators.structural_verilog`):
+  `cdc_async_fifo` previously wrote a fresh entry every write-domain
+  cycle unconditionally (its documented, correct-for-a-level-value
+  behavior) — for a genuine record stream this floods the FIFO with
+  duplicate entries whenever the write clock is faster than the read
+  clock, making occupancy/high-water/overflow telemetry reflect clock
+  speed, not real record production, defeating Decision B's own point.
+  Fixed by an opt-in `write_enable_pin` connection field (defaults to
+  `1'b1`, byte-identical to every existing design's behavior when
+  unset) plus a real `wr_en` port on `cdc_async_fifo` itself. Both
+  `pixel_result_packer_rtl`/`tile_stats_packer_rtl` expose a real
+  `out_record_valid` pulse (their own `in_valid`, registered on the
+  same edge as the record itself) as this write-enable.
+- **Registered, `!empty`-gated `dout`** (`cdc_async_fifo.v`): found
+  immediately after the write-enable fix, via a real, reproducible
+  off-by-one — `dout`'s original combinational `mem[rd_bin]` read can
+  preview an in-flight write's value *before* the Gray-code-synchronized
+  `empty` flag confirms it (`mem[]` itself isn't part of the CDC
+  synchronization path, only the pointer comparison is), so a
+  destination sampling `dout` every cycle with no `empty` of its own
+  (this slice's own toggle-based novelty scheme, below) can silently
+  "catch up" to a toggle transition before the FIFO calls it real,
+  permanently losing that one transition. Registering `dout`, updated
+  only on a real `!empty` read, closes the window — one extra cycle of
+  latency, well within this primitive's own already-documented
+  "fill/drain latency is data-dependent" framing. A second, related
+  robustness fix in the same commit: `do_write` uses case-equality
+  (`wr_en === 1'b1`) rather than a plain logical AND, since a real
+  upstream HLS-generated signal (`tile_stats_hls`, reused unmodified)
+  reads as `X` on cycles it never issues on — harmless everywhere that
+  compares it against a clean 0, but poisonous once it reaches a
+  register with no X-recovery (`wr_bin`), which is exactly what a plain
+  `&&` let happen. Both fixes are additive to the shared primitive
+  (`plugins/trigger_demo/algo/rtl/cdc_async_fifo.v`) with no port
+  removed and identical default behavior — confirmed via a full
+  regression re-run of every pre-existing xsim flow
+  (`quickstart_pipeline_xsim`/`pixel_result_xsim`/`tile_stats_xsim`/
+  `cdc_xsim`, all still pass) plus the full `forge/tests/` topgen/CDC
+  suite (83 passed).
+
+Everything else is real, project-level work, following 10.2/10.3's own
+precedent of a standalone design demonstrating one slice's capability
+set:
+
+- **`pixel_result_packer_rtl`/`tile_stats_packer_rtl`** (new RTL, pixel
+  domain): pack `edge_mask_merge_rtl`/`tile_summary_join_rtl`'s existing
+  fields into the frozen 128-bit record layouts (§6.1), each also
+  emitting a 1-bit toggle appended to the crossed payload (129 bits
+  total) — real novelty detection with no core-framework valid/ready
+  concept needed on the *destination* side of the crossing (FORGE's
+  structural wiring routes no `empty`/valid to a connection's
+  destination instance; a toggle bit embedded in the payload itself
+  survives that, once paired with the registered-`dout` fix above).
+- **`packetizer_rtl`** (new RTL, `output` domain — `clk_output`/
+  `rst_output`, real 125MHz/8ns, spec §6): the real multiplexing point
+  §6.2 describes ("multiplexed AT THE PACKETIZER, not merged before
+  it") — two independent `cdc: {kind: async_fifo, depth: 64}` crossings
+  feed it directly, no shared arbiter/FIFO upstream. 3-stage pipeline,
+  fixed latency 3 / II=1, matching spec §11's module-catalogue entry.
+  `packet_last` (not previously frozen by any decision) is this design's
+  own chosen policy: the pixel-result record's own `end_of_frame` field
+  when one occupies the beat, else 0 — documented in the module's own
+  header, not silently assumed.
+- **`design_packetizer.yml`**: two independent `norm_px`/`norm_tile`
+  instances (not one shared fan-out source) feeding the reused-unmodified
+  10.2 pixel-result subgraph and 10.3 tile-statistics subgraph
+  respectively, `pixel` as the real 200MHz primary domain (unlike
+  10.2/10.3's own informal 4.0ns testing clock — this slice cares about
+  real domain rates for throughput reporting). Originally also a pacing
+  necessity (back-to-back vs. `tile_stats_hls`'s then-real II=2, see the
+  10.3 follow-up correction above); both paths pace identically now, but
+  the two-instance structure is kept anyway as a deliberate scope
+  choice, not an oversight: unifying the spec's real single-normalizer
+  fan-out is the same single-shared-source topology work 10.2/10.3
+  already deferred to the full-acceptance assembly (10.6/10.7, alongside
+  the 16×16 dataset and multi-tile-per-frame concurrency).
+- **Verification strategy**: unlike every dataset-driven flow so far,
+  this design's real CDC-crossing timing is clock-phase-dependent, not
+  statically derivable by hand (the same reason slice 10.4's own
+  `cdc_xsim` flow uses no golden-model provider). `gen_stimulus_packetizer.py`
+  drives `norm_px`/`norm_tile` from one `fork`/`join` process (`ap_clk`)
+  while a second, concurrent process (`clk_output`) polls
+  `pktz_packet_valid` every cycle, decodes whichever 128-bit slot(s) are
+  occupied via `record_kind`, and checks each against the *next* expected
+  record of that kind — both FIFOs are individually order-preserving, so
+  "the k-th received record of a given kind" is unconditionally
+  dataset-order index k, no exact-cycle timing needed. This checks real
+  conservation (§17.3: every accepted record emitted exactly once, none
+  dropped/duplicated) and real content correctness together. A real,
+  reproducible off-by-one was found and fixed this way before the
+  `cdc_async_fifo` fixes above were even identified as the root cause
+  (an initial guess — a fixed output-domain "settle" warmup before
+  polling — was tried and found *not* to be the cause, since removing it
+  entirely reproduced the identical failure; the real fix was the
+  registered-`dout` change).
+- **Throughput/occupancy reporting** (`render_throughput_result.py`,
+  real `forge.throughput_result.v1` artifact): real
+  `StaticThroughputAnalysis` from this plugin's own already-synthesized
+  HLS reports (`pixel_normalizer`/`sobel_hls`/`tile_stats_hls`, all at
+  the real 200MHz pixel-domain rate) plus real `RuntimeThroughputResult`
+  from a real Tier 2 probe CSV of both FIFOs' occupancy/high-water/
+  full/overflow signals. Two honestly-documented, found-not-assumed
+  limitations, both in the script's own docstring: (1) Tier 2 probe CSV
+  sampling is tied to a single clock (`ap_clk`) regardless of a probe's
+  own native domain — accurate for the write-domain signals (share
+  `ap_clk`), an oversampled approximation for the read-domain ones
+  (`*_empty`/`*_underflow`, ~1.6x oversampled at the 8ns/5ns ratio); (2)
+  `forge.analyze.throughput_runtime.probe`'s generic accepted/emitted
+  approximation ("a non-full/non-empty cycle is a real
+  accepted/emitted transaction") assumes continuous per-cycle writes —
+  correct for 10.4's constant-held async_fifo demo, invalidated by this
+  slice's own real write-enable gating (most non-full cycles are now
+  genuinely idle, not real writes). This design's own real record counts
+  are already known exactly from its functional verification (64
+  pixel-result + 1 tile-statistics, zero dropped/duplicated), used
+  directly for `accepted`/`emitted` instead of the generic approximation,
+  while occupancy-derived fields (high-water, full events, dropped)
+  still come from the real probe CSV. Neither limitation is a
+  core-framework fix attempted this slice — both are reporting-quality
+  concerns, orthogonal to the functional correctness already verified
+  exhaustively above.
+- **Negative fixtures** (§17.4/§17.5, landing with this slice per §21's
+  own incremental-attachment convention):
+  - `check_throughput_sustainability.py` (§17.4): compares a real
+    module's already-synthesized `StaticThroughputAnalysis` (this
+    plugin's own `pixel_normalizer`, II=1, real 200 Mrecord/s) against
+    an explicitly-labeled *synthetic* II=2 consumer. Originally a real
+    2:1 mismatch against `tile_stats_hls`; revised after the 10.3
+    follow-up correction above made `tile_stats_hls` real II=1 too —
+    every module in this plugin's own registry is now II=1, so no real
+    production-code pair demonstrates a mismatch anymore. Building a
+    dedicated slow HLS module purely to keep this fixture "real" was
+    considered and rejected per explicit direction: it would need
+    wiring somewhere to stay buildable, risking exactly what it must
+    not do — touch the real architecture or pollute
+    `design_packetizer.yml`'s own real throughput/FIFO measurements
+    below. A synthetic consumer, clearly labeled as such in the
+    script's own docstring, checks the identical real comparison logic
+    against a real producer without that risk. Fails with
+    producer/consumer rate, ratio, and suggested remedies, exactly per
+    spec.
+  - `invalid_fifo_depth_packetizer.yml` + `check_fifo_capacity.py`
+    (§17.5): identical to `design_packetizer.yml` except the
+    pixel-result crossing's depth is 4 instead of 64 — still a valid
+    power of two (passes `forge topgen validate`'s ATG022/ATG026;
+    depth *sufficiency* for a burst pattern is a measured, not a static,
+    property). The real `invalid_fifo_depth_xsim` flow genuinely
+    overflows (real `overflow_attempt` events, real dropped data, a real
+    functional-checker mismatch at `pixel_result_record[4]`) —
+    `check_fifo_capacity.py` turns that into a clear release-gate
+    failure, comparing the configured depth (4) against this exact
+    design's own real, non-saturating measured requirement (28, from
+    `design_packetizer.yml`'s own real depth=64 run).
+
+**10.5 completion evidence**: `design_packetizer.yml` (real design, 12
+instances, two real independent `cdc: {kind: async_fifo, depth: 64}`
+crossings), `pixel_result_packer_rtl`/`tile_stats_packer_rtl`/
+`packetizer_rtl` (real RTL), and the `packetizer_xsim` verify flow — a
+real Vivado xsim run streaming 64 back-to-back pixel-result-path pixels
+and 64 back-to-back tile-statistics-path pixels (both paths pace
+identically since the 10.3 follow-up correction above — see that note)
+through two independent 200MHz-to-125MHz CDC crossings into a real
+multiplexing packetizer: 66/66 checks pass (64 pixel-result records + 1
+tile-statistics record, every field, plus the conservation-invariant
+total), decoded from whichever beat/slot each record actually landed in
+— no exact-cycle assumption anywhere. `--probe-log` captured real
+occupancy telemetry: the pixel-result FIFO reached a real high-water
+mark of 28 (out of depth 64, zero overflow — write rate genuinely
+exceeds read rate for this burst, exactly the real backpressure
+scenario Decision B exists to report on), the tile-statistics FIFO
+peaked at 1 (its own single record). `render_throughput_result.py`
+produced a real `forge.throughput_result.v1` artifact
+(`packetizer_xsim/throughput_result.json`) with real static
+(HLS-report-derived) and runtime (probe-derived) sections,
+`bottleneck='pixel_normalizer'` (an arbitrary tie-break —
+`pixel_normalizer`/`sobel_hls`/`tile_stats_hls` are now all real II=1 at
+an identical 200 Mrecord/s each), `predicted_rate=200,000,000
+records/s`. Both negative fixtures produce real, verified failures with
+the diagnostics spec §17.4/§17.5 require (see above). The four
+pre-existing xsim flows (`quickstart_pipeline_xsim`/`pixel_result_xsim`/
+`tile_stats_xsim`/`cdc_xsim`) were re-run unchanged after the shared
+`cdc_async_fifo.v` fixes and still pass, alongside the full
+`forge/tests/` topgen/CDC/throughput suite (83 + 74 passed).
+
+**Honest deferrals from this slice**: a beat genuinely carrying two
+records (§9.1's "2 records/beat" packing case) was not forced or
+observed at this quickstart scale — both async_fifo crossings are
+independent, so whether their toggle transitions ever land on the same
+`clk_output` cycle depends on real, unengineered CDC-crossing phase
+timing; `packetizer_rtl` handles the case generically (verified by
+inspection, not by a passing test that exercises it), and demonstrating
+it deterministically is left to the higher-sustained-rate throughput/
+backpressure acceptance dataset (10.6/10.7). The single-shared-normalizer
+fan-out topology (spec §5's real single-source diagram) and a per-probe
+Tier 2 sampling-clock extension (this slice's own found gap, above) are
+both explicit future work, not attempted here.
 
 ## 12. CI tiers (unchanged from v1)
 
