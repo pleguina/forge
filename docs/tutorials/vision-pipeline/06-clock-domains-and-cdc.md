@@ -97,9 +97,10 @@ domains, not just different clock domains.
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass (a
-clock-domain map / CDC crossing-kind summary figure). Today, the DOT
-output above is the real, inspectable topology.
+<figure markdown>
+  ![CDC design topology: six module clusters spanning control, pixel, and output clock domains, with edges labeled by CDC kind](../../assets/generated/vision-pipeline/diagrams/cdc.svg){ width=700 }
+  <figcaption>Every node's own label includes its real clock domain (clk: ap_clk/clk_pixel/clk_output) — the closest thing to a domain-grouped view this renderer produces today; a dedicated color-grouped-by-domain figure is a reasonable future FORGE-core rendering enhancement, not yet built.</figcaption>
+</figure>
 
 ## Why the capability matters
 

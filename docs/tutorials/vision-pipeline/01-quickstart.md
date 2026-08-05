@@ -110,10 +110,30 @@ normalized pixel, threshold mask, valid — matched the RTL exactly.
 
 ## Visual result
 
-Figures for this chapter (input/normalized/threshold-mask panels) are
-not generated yet — that's later tutorial work (project-specific
-visualization). Today, inspect the real pass/fail scoreboard output
-shown above; nothing here is a rendered image yet.
+Rendered directly from the real golden dataset and this plugin's own
+`GoldenModelProvider` — not invented pixel values:
+
+<figure markdown>
+  ![Input pixel grid: an 8x8 synthetic ramp frame, darkest at the top-left corner and brightest at the bottom-right](../../assets/generated/vision-pipeline/figures/quickstart-input.png){ width=180 }
+  <figcaption>Input: 8x8 synthetic ramp frame (pixel = (i*4) &amp; 0xFF).</figcaption>
+</figure>
+
+<figure markdown>
+  ![Normalized pixel grid after pixel_normalizer's clamp(scale*pixel + offset, 0, 255)](../../assets/generated/vision-pipeline/figures/quickstart-normalized.png){ width=180 }
+  <figcaption>Normalized: after pixel_normalizer's clamp(scale*pixel + offset, 0, 255).</figcaption>
+</figure>
+
+<figure markdown>
+  ![Threshold mask: black where normalized pixel is below THRESHOLD, white where at or above it](../../assets/generated/vision-pipeline/figures/quickstart-mask.png){ width=180 }
+  <figcaption>Threshold mask: black below THRESHOLD, white at or above it.</figcaption>
+</figure>
+
+Topology (rendered by FORGE core's generic `forge inspect --svg`, not project-specific code):
+
+<figure markdown>
+  ![Quickstart topology: pixel_normalizer feeding threshold_rtl, one clock domain](../../assets/generated/vision-pipeline/diagrams/quickstart.svg){ width=500 }
+  <figcaption>norm → thresh, one clock domain (ap_clk).</figcaption>
+</figure>
 
 ## Why the capability matters
 

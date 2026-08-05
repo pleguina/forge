@@ -90,8 +90,22 @@ Streams the full 8×8 frame (64 pixels) through in one run — every
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass. Today,
-inspect the pass/fail scoreboard shown above.
+<figure markdown>
+  ![Sobel gradient magnitude over the 8x8 ramp frame, rendered from sobel_hls's real Gx/Gy kernel output](../../assets/generated/vision-pipeline/figures/pixel-result-gradient.png){ width=180 }
+  <figcaption>gradient_magnitude = clamp(abs(Gx) + abs(Gy), 0, 4095), rendered at real relative intensity.</figcaption>
+</figure>
+
+Compare against chapter 01's input/normalized panels
+(`quickstart-input.png`/`quickstart-normalized.png`) — same dataset,
+now with a second HLS module computing a genuinely new field alongside
+the original one.
+
+Topology, now with the fan-out and merge point chapter 04 examines:
+
+<figure markdown>
+  ![Pixel-result topology: pixel_normalizer fanning out to window_builder_rtl/sobel_hls and threshold_rtl, merging at edge_mask_merge_rtl](../../assets/generated/vision-pipeline/diagrams/pixel-result.svg){ width=650 }
+  <figcaption>norm fans out to two independent branches, both converging at merge.</figcaption>
+</figure>
 
 ## Why the capability matters
 

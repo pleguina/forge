@@ -35,6 +35,11 @@ external result stream                        └─ tstats → tjoin ← tbnd �
 Every intermediate stage between these two is its own real, runnable
 design — see the chapter list below.
 
+<figure markdown>
+  ![The final platform: control, pixel, and output clock domains assembled into one real design](../../assets/generated/vision-pipeline/diagrams/platform-wrapper.svg){ width=800 }
+  <figcaption>The real, rendered topology of chapter 10's final platform — not a mockup.</figcaption>
+</figure>
+
 ## Ownership legend
 
 Every file and command output in this tutorial belongs to exactly one

@@ -99,9 +99,13 @@ place of a fixed-parameter one.
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass (a platform
-topology figure grouped by control/pixel/output domain). Today, use
-`forge inspect --dot`/`--explorer` from [chapter
+<figure markdown>
+  ![Platform-wrapper topology: control, pixel, and output domains assembled into one design, with the mailbox crossing and both async FIFOs visible](../../assets/generated/vision-pipeline/diagrams/platform-wrapper.svg){ width=800 }
+  <figcaption>Every node's label includes its real clock domain (ap_clk is pixel here, unlike design_cdc.yml's control-primary convention) — see chapter 06's caption for why a dedicated domain-grouped-by-color rendering isn't built yet.</figcaption>
+</figure>
+
+For the interactive, explorable version of this same topology, use
+`forge inspect --explorer` from [chapter
 11](11-inspect-report-and-reproduce.md).
 
 ## Why the capability matters

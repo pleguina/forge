@@ -81,7 +81,17 @@ alignment delay is wrong and both checks catch it.
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass.
+<figure markdown>
+  ![Threshold mask over the same 8x8 ramp frame that reaches edge_mask_merge_rtl on the exact same cycle as the Sobel branch](../../assets/generated/vision-pipeline/figures/pixel-result-mask.png){ width=180 }
+  <figcaption>The threshold branch's own output — reaches merge on the same cycle as chapter 03's gradient panel, by construction.</figcaption>
+</figure>
+
+Reuse chapter 03's `pixel-result.svg` topology figure to see both
+branches feeding the same `merge` node — the alignment delay this
+chapter's `latency-check` run verifies is not visible in the topology
+figure itself (it's a scalar `delay_cycles:` field), which is exactly
+why the static latency-check report, not the picture, is this
+capability's real evidence.
 
 ## Why the capability matters
 

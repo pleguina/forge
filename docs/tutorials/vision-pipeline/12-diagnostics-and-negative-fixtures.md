@@ -92,10 +92,15 @@ directly rather than taking it on faith.
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass (a
-depth-4-vs-depth-64/128 comparison figure, and an error-map figure for a
-mismatched record). Today, the real diagnostic/scoreboard output above
-is the source of truth.
+[Chapter 07](07-throughput-backpressure-and-fifos.md)'s
+`fifo-high-water-mark.png` shows the real, measured high-water mark (28)
+for this same burst at depth 64 — the number `invalid_fifo_depth_xsim`'s
+depth-4 FIFO provably cannot hold. A dedicated depth-4-vs-64 comparison
+figure isn't committed yet: `invalid_fifo_depth_xsim` doesn't currently
+have its own checked-in `throughput_result.json` (that requires a
+`--probe-log` run captured before this document's own reference-asset
+generator can render it) — this is a real, honest gap, not a hidden
+placeholder.
 
 ## Why the capability matters
 

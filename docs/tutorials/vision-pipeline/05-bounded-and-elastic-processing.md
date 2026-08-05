@@ -90,7 +90,15 @@ difference from chapter 04's merge point:
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass.
+<figure markdown>
+  ![Tile-statistics overlay: the 8x8 ramp frame with its single real tile boundary and computed mean value drawn over it](../../assets/generated/vision-pipeline/figures/tile-stats-overlay.png){ width=180 }
+  <figcaption>Real tile boundary (red) and TileStatsProvider's own computed mean=125 for this frame's one tile.</figcaption>
+</figure>
+
+<figure markdown>
+  ![Tile-statistics topology: pixel_normalizer fanning out to tile_stats_hls and tile_boundary_rtl, joining at tile_summary_join_rtl](../../assets/generated/vision-pipeline/diagrams/tile-stats.svg){ width=550 }
+  <figcaption>norm fans out to the bounded (tbnd) and fixed (tstats) branches, joining at the elastic tjoin.</figcaption>
+</figure>
 
 ## Why the capability matters
 

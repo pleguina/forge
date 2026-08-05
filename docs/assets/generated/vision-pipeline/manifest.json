@@ -1,0 +1,74 @@
+{
+  "diagrams": {
+    "cdc": {
+      "design_content_hash": "9b01c45039439d8d0756422d4eb5d2afafb57309a17e568efe00a30422da62ba",
+      "source_design": "forge/designs/design_cdc.yml"
+    },
+    "full-functional": {
+      "design_content_hash": "f1c8af9a9faf5874d1705cb0b768e86f48a11fe9b9745782ff87c18983c8658d",
+      "source_design": "forge/designs/design_full_functional.yml"
+    },
+    "pixel-result": {
+      "design_content_hash": "f1b92e697d389211c31d06a72ac67caa3d38a95e9767e1fb1384aa17e3d206d8",
+      "source_design": "forge/designs/design_pixel_result.yml"
+    },
+    "platform-wrapper": {
+      "design_content_hash": "838eb23894af4645e2df370bdb2d67973c80406b268b095f0dad30b92370610b",
+      "source_design": "forge/designs/design_platform_wrapper.yml"
+    },
+    "quickstart": {
+      "design_content_hash": "4dc4ec56c8ea332d9f2834393185205dd2ad9e01bfa197661d24c952bf4bbf30",
+      "source_design": "forge/designs/design.yml"
+    },
+    "tile-stats": {
+      "design_content_hash": "4f86d6a624d3fd58c2a27928244b68cd61c3ecd973c71d0c3bdc5964fcc498ec",
+      "source_design": "forge/designs/design_tile_stats.yml"
+    }
+  },
+  "figures": {
+    "fifo-high-water-mark": {
+      "dataset_hash": "b9c57f1bfce94ae02e3094212e3251b5d49c6a8ab0370d87ffca6801ca47675e",
+      "source_dataset": [
+        "plugins/vision_pipeline_demo/forge/verify/packetizer_xsim/throughput_result.json",
+        "plugins/vision_pipeline_demo/forge/verify/full_functional_xsim/throughput_result.json"
+      ]
+    },
+    "full-functional-tile-overlay": {
+      "dataset_hash": "ce574301bc792fba4e1cf7dfe5f9a05fd785a7123d184a74d17093cda44310cd",
+      "source_dataset": "full_functional_golden.xml"
+    },
+    "pixel-result-gradient": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "pixel-result-input": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "pixel-result-mask": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "pixel-result-normalized": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "quickstart-input": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "quickstart-mask": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "quickstart-normalized": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    },
+    "tile-stats-overlay": {
+      "dataset_hash": "3fa767ed9a02c33169b6dd9e05dbddbe3e0bd76440e9c9af789423c31672c669",
+      "source_dataset": "quickstart_golden.xml"
+    }
+  },
+  "schema_version": 1
+}

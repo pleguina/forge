@@ -91,10 +91,19 @@ confirms zero merge-point mismatches at the new frame scale.
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass (full
-16×16 input/normalized/gradient/mask/tile panels, and a topology figure
-for this design specifically). Today, the real numbers above are the
-source of truth.
+<figure markdown>
+  ![Tile-statistics overlay over the real 16x16 checkerboard frame, showing all four real tiles and their computed mean values](../../assets/generated/vision-pipeline/figures/full-functional-tile-overlay.png){ width=260 }
+  <figcaption>Real 2x2 tile grid (tile_id 0, 1, 1024, 1025 — the (tile_row*1024 + tile_col) formula, not a plain row-major index), each labeled with its own real computed mean.</figcaption>
+</figure>
+
+<figure markdown>
+  ![Full-functional topology: one shared normalizer fanning out to four downstream consumers](../../assets/generated/vision-pipeline/diagrams/full-functional.svg){ width=750 }
+  <figcaption>norm fans out to winbld/sobel, thresh, and tstats/tbnd — the unified assembly chapters 03/05/07 each built a piece of.</figcaption>
+</figure>
+
+See [chapter 07](07-throughput-backpressure-and-fifos.md)'s FIFO
+high-water figure for this design's own bars (100 and 1) alongside the
+8x8-scale numbers.
 
 ## Why the capability matters
 

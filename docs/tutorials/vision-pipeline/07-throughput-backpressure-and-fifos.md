@@ -94,10 +94,14 @@ crossing detects real novelty — see
 
 ## Visual result
 
-Not generated yet — planned for a future visualization pass (module
-throughput, predicted-vs-observed throughput, FIFO occupancy over time,
-depth-4-vs-depth-128 comparison figures). Today, the real JSON above is
-the source of truth.
+<figure markdown>
+  ![Bar chart of real measured async FIFO high-water marks: packetizer's pixel-result crossing at 28, its tile-statistics crossing at 1](../../assets/generated/vision-pipeline/figures/fifo-high-water-mark.png){ width=500 }
+  <figcaption>Real, measured high-water marks (not predicted) — rendered by FORGE core's generic `forge analyze plot-results` from this design's own checked-in throughput_result.json. The full_functional bars are chapter 09's own larger-scale numbers, shown here for direct comparison.</figcaption>
+</figure>
+
+A dedicated `design_packetizer.yml` topology figure is not committed
+yet — see [chapter 11](11-inspect-report-and-reproduce.md) to render
+this design's own real topology yourself with `forge inspect --dot`.
 
 ## Why the capability matters
 
