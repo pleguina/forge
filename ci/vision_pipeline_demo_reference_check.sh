@@ -36,6 +36,7 @@ cd "$REPO_ROOT"
 # output.
 SCAN_PATHS=(
     plugins/vision_pipeline_demo
+    docs/tutorials/vision-pipeline
     docs/tutorials/vision-pipeline-quickstart.md
     docs/tutorials/vision-pipeline-full-design.md
     run_vision_pipeline_demo.sh
@@ -45,10 +46,13 @@ for p in "${SCAN_PATHS[@]}"; do
     [[ -e "$p" ]] && EXISTING_PATHS+=("$p")
 done
 
-# Matches "Phase 10", "slice 10.7B", "spec §9.1", a bare "§9.1", the
-# literal string "preflight", "release-plan", or "FORGE_release_plan".
-# This is the same pattern the audit itself was built with.
-PATTERN='(Phase[[:space:]]+[0-9]+|phase[[:space:]]+[0-9]+|Slice[[:space:]]+[0-9]+|slice[[:space:]]+[0-9]+|spec[[:space:]]*§|§[0-9]+|preflight|FORGE_release_plan|release-plan)'
+# Matches "Phase 10", "slice 10.7B", "spec §9.1", a bare "§9.1", a bare
+# "10.7A"/"10.5" release-plan sub-slice number even without the word
+# "slice" immediately before it (found missing real instances of exactly
+# this shape during the T3 documentation pass — e.g. "not 10.7A's
+# 16x16"), the literal string "preflight", "release-plan", or
+# "FORGE_release_plan".
+PATTERN='(Phase[[:space:]]+[0-9]+|phase[[:space:]]+[0-9]+|Slice[[:space:]]+[0-9]+|slice[[:space:]-][0-9]+|\b10\.[0-9]+[A-D]?\b|spec[[:space:]]*§|§[0-9]+|preflight|FORGE_release_plan|release-plan)'
 
 hits="$(grep -rnE "$PATTERN" "${EXISTING_PATHS[@]}" \
     2>/dev/null \

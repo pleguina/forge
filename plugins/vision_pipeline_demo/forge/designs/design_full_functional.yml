@@ -7,7 +7,7 @@
 #                          ┌─> winbld -> sobel  ─┐
 #   external pixel stream -> norm (pixel_normalizer, HLS)
 #                          ├─> thresh, +20-cycle delay ┴-> merge -> prpack ─┐
-#                          │                                                │ [async FIFO: pixel -> output, depth 64]
+#                          │                                                │ [async FIFO: pixel -> output, depth 128]
 #                          └─> tstats -> tjoin  ─┐                          ┴-> pktz (output domain) -> external forge.packet_stream.v1
 #                              tbnd    ──────────┴-> tspack ────────────────┘ [async FIFO: pixel -> output, depth 64]
 #
@@ -124,7 +124,7 @@ modules:
   instances: 1
 
 # ── Tile-statistics path (tbnd/tjoin/tspack unmodified; tstats
-#    is the slice-10.7A concurrent-tile-column tile_stats_hls) ─────────────
+#    is the concurrent-tile-column tile_stats_hls) ───────────────────────
 - name: tstats
   ref: tile_stats_hls
   instances: 1
@@ -296,19 +296,18 @@ connections:
   to: pktz
   cdc:
     kind: async_fifo
-    # Real depth requirement, not 10.5's 64 (verified, not assumed --
-    # see this design's own header/completion-evidence note): this
-    # design's own real, sustained 256-pixel back-to-back burst at
-    # 200MHz (pixel) into packetizer_rtl's toggle-CDC novelty detector,
-    # which can drain at most 1 new pixel-result record per clk_output
-    # cycle (125MHz, cdc_async_fifo.v's own free-running
-    # `rd_bin_next = rd_bin + (!empty)` read side) -- a genuine,
-    # structural 200Mrecord/s write vs. ~125Mrecord/s single-path read
-    # ceiling, not a transient burst -- accumulates real backlog for the
-    # whole 1280ns drive window (peak ~96 records, well past 10.5's own
-    # quickstart-scale high-water mark of 28/64), which a 64-deep FIFO
-    # genuinely overflows (real dropped records observed in a real xsim
-    # run before this was raised).
+    # Real depth requirement, not the smaller-scale designs' 64 (verified,
+    # not assumed): this design's own real, sustained 256-pixel
+    # back-to-back burst at 200MHz (pixel) into packetizer_rtl's
+    # toggle-CDC novelty detector, which can drain at most 1 new
+    # pixel-result record per clk_output cycle (125MHz, cdc_async_fifo.v's
+    # own free-running `rd_bin_next = rd_bin + (!empty)` read side) -- a
+    # genuine, structural 200Mrecord/s write vs. ~125Mrecord/s single-path
+    # read ceiling, not a transient burst -- accumulates real backlog for
+    # the whole 1280ns drive window (peak ~96 records, well past the
+    # smaller-scale designs' own quickstart-scale high-water mark of
+    # 28/64), which a 64-deep FIFO genuinely overflows (real dropped
+    # records observed in a real xsim run before this was raised).
     depth: 128
     write_enable_pin: out_record_valid
   port_map:

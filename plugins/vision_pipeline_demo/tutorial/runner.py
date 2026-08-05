@@ -269,10 +269,18 @@ def _verify_run(plan: Plan, hls_build_root: Path) -> list:
 
 # ── Summary ────────────────────────────────────────────────────────────
 
-_NEXT_PAGE_FOR_CHAPTER_PREFIX = {
-    "01": "docs/tutorials/vision-pipeline-quickstart.md",
+_NEXT_PAGE_FOR_STEP = {
+    "quickstart": "docs/tutorials/vision-pipeline/01-quickstart.md",
+    "pixel_result": "docs/tutorials/vision-pipeline/03-mixed-rtl-hls.md",
+    "tile_stats": "docs/tutorials/vision-pipeline/05-bounded-and-elastic-processing.md",
+    "packetizer": "docs/tutorials/vision-pipeline/07-throughput-backpressure-and-fifos.md",
+    "invalid_fifo_depth": "docs/tutorials/vision-pipeline/12-diagnostics-and-negative-fixtures.md",
+    "full_functional": "docs/tutorials/vision-pipeline/09-full-functional-design.md",
+    "platform_wrapper": "docs/tutorials/vision-pipeline/10-platform-integration.md",
+    "cdc": "docs/tutorials/vision-pipeline/06-clock-domains-and-cdc.md",
+    "invalid_direct_bus_cdc": "docs/tutorials/vision-pipeline/12-diagnostics-and-negative-fixtures.md",
 }
-_DEFAULT_NEXT_PAGE = "docs/tutorials/vision-pipeline-full-design.md"
+_DEFAULT_NEXT_PAGE = "docs/tutorials/vision-pipeline/index.md"
 
 
 def _print_summary(plan: Plan, outcomes: list, elapsed_s: float, negative_topgen_ok: list) -> bool:
@@ -286,7 +294,7 @@ def _print_summary(plan: Plan, outcomes: list, elapsed_s: float, negative_topgen
             print(f"    generated (FORGE):   gen-top/{step['gen_top_outdir']}/algo_top.v")
         for flow in step.get("flows", []):
             print(f"    verification (this plugin): plugins/vision_pipeline_demo/forge/verify/{flow['name']}/")
-        page = _NEXT_PAGE_FOR_CHAPTER_PREFIX.get(step["chapter"], _DEFAULT_NEXT_PAGE)
+        page = _NEXT_PAGE_FOR_STEP.get(step["id"], _DEFAULT_NEXT_PAGE)
         print(f"    next: {page}")
 
     all_ok = True

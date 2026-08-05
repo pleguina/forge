@@ -63,17 +63,15 @@
 # OPEN" in every earlier `forge topgen gen-top` report) -- exposed here
 # as real top-level status ports, needing no new RTL.
 #
-# Frame scale: back to the 8x8 quickstart size (not 10.7A's 16x16) --
-# this design's own job is proving genuine three-domain assembly +
-# real runtime configurability, already a real, standalone capability
-# probe; re-proving full-scale multi-tile throughput is 10.7A's job,
-# not this one's (same "one slice, one demonstrated capability set"
-# precedent 10.2/10.3/10.4/10.5/10.7A all already established).
-# `winbld` therefore uses the registry's own default FRAME_WIDTH=8 (no
-# parameter override, unlike design_full_functional.yml's FRAME_WIDTH=16
-# override) and `merge`'s threshold-branch `delay_cycles` is the
-# original 10.2/10.5 value (12 = 2 + 12, matching window_builder(10) +
-# sobel(4) = 14).
+# Frame scale: back to the 8x8 quickstart size, not
+# design_full_functional.yml's 16x16 -- this design's own job is proving
+# genuine three-domain assembly + real runtime configurability, a
+# separate, standalone capability from full-scale multi-tile throughput
+# (already proven by design_full_functional.yml). `winbld` therefore
+# uses the registry's own default FRAME_WIDTH=8 (no parameter override,
+# unlike design_full_functional.yml's FRAME_WIDTH=16 override) and
+# `merge`'s threshold-branch `delay_cycles` is the original 8x8-scale
+# value (12 = 2 + 12, matching window_builder(10) + sobel(4) = 14).
 # ═══════════════════════════════════════════════════════════════════════════
 
 schema_version: "1.0"

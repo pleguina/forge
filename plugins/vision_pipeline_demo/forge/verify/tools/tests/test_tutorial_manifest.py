@@ -190,3 +190,20 @@ def test_missing_tools_reports_nothing_when_everything_is_on_path(manifest, monk
     plan = runner.build_plan(manifest, ["quickstart"])
     monkeypatch.setattr(runner.shutil, "which", lambda _binary: "/usr/bin/" + _binary)
     assert runner.missing_tools(plan) == []
+
+
+# ── Summary "next" page mapping ───────────────────────────────────────────
+
+def test_every_step_has_a_real_next_chapter_page(manifest):
+    """Every step's `next:` summary line must point at a real chapter file
+    under docs/tutorials/vision-pipeline/, not the old redirect stub —
+    this drifted once already when the real chapters were written after
+    the runner's own next-page mapping.
+    """
+    for step in manifest["steps"]:
+        page = runner._NEXT_PAGE_FOR_STEP.get(step["id"], runner._DEFAULT_NEXT_PAGE)
+        assert (_REPO_ROOT / page).is_file(), f"step {step['id']!r}: next page not found: {page}"
+        assert "vision-pipeline/" in page, (
+            f"step {step['id']!r}: next page {page} should point into the chapter "
+            "tree, not a redirect stub"
+        )
