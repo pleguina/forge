@@ -126,14 +126,13 @@ Vivado `xsim` on `PATH`. A passing run means the live golden-model
 output — normalized pixel, threshold mask, valid — matched the RTL
 exactly.
 
-Or the shortcut, which runs all six steps above in order:
-
-```bash
-./run_vision_pipeline_demo.sh
-```
-
-(`--skip-hls` skips steps 2 and the `pixel_normalizer_csim` flow;
-`--no-clean` skips the pre-run artifact cleanup.)
+The six steps above are the quickstart tier specifically. The plugin's
+real shortcut script, `./run_vision_pipeline_demo.sh`, actually goes
+much further: it builds and runs all 8 real designs / 9 flows this
+plugin now has (`--skip-hls` skips the HLS build stage and the
+`pixel_normalizer_csim` flow; `--no-clean` skips the pre-run artifact
+cleanup) — see the [full design tutorial](vision-pipeline-full-design.md)
+for what that covers.
 
 ## Deliberately out of scope this slice
 
@@ -145,13 +144,13 @@ FORGE's own generator instead, which handles that translation via the
 interface contract. See `plugins/vision_pipeline_demo/README.md` and
 `design.verification.yml`'s header comment for the full reasoning.
 
-The fuller design frozen in `docs/internal/phase10/preflight.md` —
-parallel HLS filters, edge detection, tile statistics, CDC, multi-clock
-throughput/backpressure, a latency-aligned merge, an output packetizer —
-is later slices, not attempted here.
-
 ## Next
 
+- [The full design tutorial](vision-pipeline-full-design.md) — parallel
+  HLS filters, edge detection, tile statistics, all five CDC kinds,
+  multi-clock throughput/backpressure, a latency-aligned merge, an
+  output packetizer, and the two negative fixtures — all real and
+  CI-exercised today, not a preview.
 - [Authoring topology contracts](../how-to/author-topology-contracts.md)
   — the general `design.yml`/`modules.yml`/interface-contract reference.
 - [The mixed HLS/RTL example](mixed-hls-rtl-example.md) — `trigger_demo`,

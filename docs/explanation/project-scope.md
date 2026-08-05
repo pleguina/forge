@@ -13,15 +13,16 @@ as `vision_pipeline_demo`, in progressive-complexity slices
 (`docs/internal/phase10/preflight.md` and
 `docs/internal/phase10/vision_pipeline_reference_project.md` record the
 frozen design decisions; `docs/plan/FORGE_release_plan.md`'s Phase 10
-tracks the slice sequencing). Only the first slice — the **quickstart
-tier** — is built and CI-real today: pixel source → normalization (HLS) →
-threshold (RTL) → output, one clock domain, a real golden-model-driven
-comparison, no hand-typed expected values. The fuller design the preflight
-freezes (parallel HLS filters, edge detection, tile statistics, CDC,
-multi-clock throughput/backpressure, a latency-aligned merge, an output
-packetizer) is **later slices, not built yet** — nothing on this page or
-in the quickstart tutorial should be read as a preview of that later
-work's actual implementation.
+tracks the slice sequencing). The full design the preflight freezes is
+now built and CI-real (as of slice 10.7D): pixel source → normalization
+(HLS), parallel HLS filters (Sobel edge detection), fan-out, an
+exact-cycle merge, tile statistics (bounded→elastic tagged join), all
+five CDC kinds across three real clock domains, an output packetizer
+with async-FIFO backpressure, and a 3-domain platform wrapper with a
+runtime-configurable threshold — see the
+[full design tutorial](../tutorials/vision-pipeline-full-design.md) for
+the complete, runnable walkthrough. hls4ml (optional CNN extension,
+slice 10.8) remains not built.
 
 ## What today's tutorials use
 
@@ -34,8 +35,9 @@ FORGE's tutorials use three real plugins currently in the repository:
   a realistic 7-module trigger pipeline exercising every supported
   topology-wiring pattern.
 - [`vision_pipeline_demo`](../tutorials/vision-pipeline-quickstart.md) —
-  mixed HLS/RTL, domain-neutral, golden-model-driven (quickstart tier
-  only so far; see above).
+  mixed HLS/RTL, domain-neutral, golden-model-driven; see the
+  [full design tutorial](../tutorials/vision-pipeline-full-design.md)
+  for everything beyond the quickstart tier (see above).
 
 All three are real, maintained, CI-exercised plugins — not placeholders —
 and each is a good teaching example for its respective purpose (simplest

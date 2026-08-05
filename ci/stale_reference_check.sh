@@ -26,7 +26,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-SCAN_PATHS=(forge plugins docs ci run_trigger_demo.sh validate_framework.sh README.md CONTRIBUTING.md)
+SCAN_PATHS=(forge plugins docs ci run_trigger_demo.sh run_vision_pipeline_demo.sh validate_framework.sh README.md CONTRIBUTING.md)
 # Only scan paths that currently exist (validate_framework.sh was retired
 # but a future revert or copy-paste could reintroduce it).
 EXISTING_PATHS=()

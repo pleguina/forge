@@ -1,13 +1,23 @@
 # vision_pipeline_demo
 
-The **quickstart tier** of FORGE's vision-pipeline reference project
-(release-plan Phase 10, slice 10.1 — see
-`docs/internal/phase10/preflight.md` and
-`docs/internal/phase10/vision_pipeline_reference_project.md` for the full,
-much larger design this is the first rung of). Deliberately small: one
-HLS module, one RTL module, one clock domain, no CDC, no tiling — the
-fuller design (Sobel, tile statistics, CDC, throughput/backpressure) is
-later slices, not attempted here.
+FORGE's domain-neutral vision-pipeline reference project (release-plan
+Phase 10 — see `docs/internal/phase10/preflight.md` and
+`docs/internal/phase10/vision_pipeline_reference_project.md` for the full
+frozen design). As of slice 10.7D, the full design is built: 8 real
+designs sharing one module registry, covering Sobel edge detection, tile
+statistics, all five CDC kinds across three real clock domains, an
+output packetizer with async-FIFO backpressure, a 3-domain platform
+wrapper with a runtime-configurable threshold, and two negative
+fixtures. `./run_vision_pipeline_demo.sh` runs all of it end to end (see
+"Running it" below). Only the optional hls4ml CNN extension (slice 10.8)
+remains unbuilt.
+
+Slice 10.1's own **quickstart tier** — one HLS module, one RTL module,
+one clock domain, no CDC, no tiling — is still the smallest complete
+example and the best place to start; see
+`docs/tutorials/vision-pipeline-quickstart.md` for a full manual
+walkthrough of it, and
+`docs/tutorials/vision-pipeline-full-design.md` for the rest.
 
 What makes this different from `plugins/passthrough_demo/` — beyond
 mixing HLS and RTL — is the golden model: the golden dataset carries only
@@ -21,6 +31,8 @@ cross-checked golden values" pattern every prior reference plugin used.
 
 ## What it does
 
+The quickstart pipeline (slice 10.1) is the simplest complete example:
+
 ```
 external pixel stream
   -> pixel_normalizer (HLS): normalized = clamp(scale*pixel + offset, 0, 255)
@@ -29,42 +41,70 @@ external pixel stream
 ```
 
 Every `forge.pixel_stream.v1`-shaped field (`x`/`y`/`frame_id`/`tile_id`/
-`end_of_line`/`end_of_frame`) is passed through both modules unchanged —
-`tile_id` is fixed at 0 this slice (no real tiling exists until slice
-10.3). See `algo/normalizer/pixel_normalizer.cpp`/`algo/rtl/threshold_rtl.v`.
+`end_of_line`/`end_of_frame`) is passed through both modules unchanged.
+See `algo/normalizer/pixel_normalizer.cpp`/`algo/rtl/threshold_rtl.v`.
+
+The full design (all 8 designs, `docs/tutorials/vision-pipeline-full-design.md`
+has the complete walkthrough) adds: `window_builder_rtl` → `sobel_hls` →
+`edge_mask_merge_rtl` (parallel Sobel edge detection, exact-cycle merge
+against a delayed threshold branch); `tile_stats_hls` →
+`tile_boundary_rtl` → `tile_summary_join_rtl` (per-tile statistics,
+bounded→elastic tagged join); all five CDC kinds
+(`level_sync`/`pulse_sync`/`mailbox_transfer`/`async_fifo`/`reset_sync`)
+across control/pixel/output clock domains; `packetizer_rtl` multiplexing
+both record kinds onto one `forge.packet_stream.v1` with real
+throughput/backpressure; and a 3-domain platform wrapper with a
+runtime-configurable threshold delivered via `mailbox_transfer`.
 
 ## Layout
 
 ```
 plugins/vision_pipeline_demo/
 ├── algo/
-│   ├── normalizer/pixel_normalizer.{cpp,h}   ← authored: HLS module
-│   └── rtl/threshold_rtl.v                    ← authored: RTL module
+│   ├── normalizer/pixel_normalizer.{cpp,h}   ← authored: HLS, quickstart
+│   ├── sobel/sobel_hls.{cpp,h}                ← authored: HLS, edge detection
+│   ├── tile_stats/tile_stats_hls.{cpp,h}      ← authored: HLS, per-tile stats
+│   └── rtl/*.v                                ← authored: 15 RTL modules (threshold,
+│                                                  window builder, merge, CDC primitives,
+│                                                  packers, packetizer, ...)
+├── datasets/                                   ← authored: DatasetService adapters
+│                                                  (synthetic/image-folder/numpy), CLI
 ├── forge/
-│   ├── modules.yml                            ← authored: 2 modules (hls + rtl)
-│   ├── designs/design.yml                     ← authored: 2 instances, 1 connection
+│   ├── modules.yml                            ← authored: 19 modules (3 hls + 16 rtl)
+│   ├── designs/                                ← authored: 8 real designs + 2 negative
+│   │   ├── design.yml                             fixtures (invalid_direct_bus_cdc.yml,
+│   │   ├── design_pixel_result.yml                invalid_fifo_depth_packetizer.yml)
+│   │   ├── design_tile_stats.yml
+│   │   ├── design_cdc.yml
+│   │   ├── design_packetizer.yml
+│   │   ├── design_full_functional.yml
+│   │   └── design_platform_wrapper.yml
 │   ├── interfaces/*.interface.yaml            ← authored: per-module contracts
 │   └── verify/
-│       ├── design.verification.yml            ← authored: 2 flows (hls_csim, full_chip_rtl)
-│       ├── schemas/data/vision_pipeline_quickstart_golden.xml  ← authored: <in>-only dataset
+│       ├── design.verification.yml            ← authored: 9 flows (1 hls_csim, 8 full_chip_rtl)
+│       ├── schemas/data/*.xml                 ← authored: 3 <in>-only golden datasets
 │       ├── include/, src/, tests/, CMakeLists.txt  ← authored: HLS C-sim verif harness
 │       ├── tools/
 │       │   ├── bootstrap.py               ← authored: plugin registration
 │       │   ├── dataset_adapter.py         ← authored: layer-B adapter
 │       │   ├── golden_model_provider.py   ← authored: the real golden model
-│       │   └── gen_stimulus.py            ← authored: xsim stimulus generator
-│       └── quickstart_pipeline_xsim/      ← generated: verify.flow.yml, tb, wave.tcl
+│       │   ├── gen_stimulus*.py           ← authored: one xsim stimulus generator per flow
+│       │   └── tests/test_cli_workflows.py ← authored: forge build/inspect CLI coverage
+│       └── <flow_name>_xsim/, pixel_normalizer_csim/  ← generated: verify.flow.yml, tb, wave.tcl
 └── README.md
 ```
 
-Deliberately **not** included this slice: a standalone `single_module_rtl`
-verify flow for `pixel_normalizer` — its generated testbench would drive
-the raw Vitis-synthesized RTL's port names directly, which aren't known
-until real HLS synthesis has actually run once. The `full_chip_rtl` flow
-exercises the same module through FORGE's own generator instead, which
+Deliberately **not** included: a standalone `single_module_rtl` verify
+flow for `pixel_normalizer` — its generated testbench would drive the
+raw Vitis-synthesized RTL's port names directly, which aren't known
+until real HLS synthesis has actually run once. Every `full_chip_rtl`
+flow exercises HLS modules through FORGE's own generator instead, which
 handles that translation via the interface contract.
 
 ## Running it
+
+The full, real command sequence for the quickstart tier alone (2 module
+instances, 1 clock, 2 flows):
 
 ```bash
 pip install -e forge/
@@ -96,12 +136,34 @@ forge verify run plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_x
   --plugin vision_pipeline_demo --consumer-root .
 ```
 
-Or the shortcut: `./run_vision_pipeline_demo.sh` (mirrors
-`run_trigger_demo.sh` exactly, including its `--skip-hls` escape hatch).
+For everything else — all 8 designs, all 9 flows, both negative
+fixtures — use the real shortcut script from the repo root:
 
-## Golden dataset
+```bash
+./run_vision_pipeline_demo.sh              # full run, all designs/flows
+./run_vision_pipeline_demo.sh --skip-hls   # reuse an existing HLS build
+./run_vision_pipeline_demo.sh --no-clean   # skip the pre-run artifact wipe
+```
 
-`forge/verify/schemas/data/vision_pipeline_quickstart_golden.xml` — 64
-events, one per pixel of a synthetic 8x8 ramp frame
-(`pixel = (i*4) & 0xFF`). No `<golden>` tags — see "What makes this
-different" above.
+It builds all 3 HLS modules, gen-tops all 8 designs, regenerates every
+verification flow, drives each flow's own `gen_stimulus_*.py`, runs
+`forge verify doctor`, then runs all 9 flows — checking the two negative
+fixtures for their *expected* failure rather than treating it as a bug.
+See `docs/tutorials/vision-pipeline-full-design.md` for the full
+walkthrough, including how to run any one design/flow manually.
+
+## Golden datasets
+
+- `forge/verify/schemas/data/vision_pipeline_quickstart_golden.xml` — 64
+  events, one per pixel of a synthetic 8x8 ramp frame
+  (`pixel = (i*4) & 0xFF`). Used by the quickstart, pixel-result,
+  tile-statistics, packetizer, and CDC flows.
+- `forge/verify/schemas/data/vision_pipeline_full_functional_golden.xml`
+  — 256 events, a real 16x16 checkerboard frame (2x2 tile grid).
+- `forge/verify/schemas/data/vision_pipeline_platform_wrapper_golden.xml`
+  — 128 events, two 8x8 frames back to back (ramp then checkerboard),
+  proving a real mailbox-written threshold change actually changes
+  pipeline behavior at the next frame boundary.
+
+No `<golden>` tags in any of them — see "What makes this different"
+above.

@@ -75,10 +75,10 @@ tier2_probes:
   width: 1
 - name: pr_occupancy
   net: dut.sync_net_prpack_pktz_out_record_occupancy
-  width: 7
+  width: 8
 - name: pr_high_water
   net: dut.sync_net_prpack_pktz_out_record_high_water
-  width: 7
+  width: 8
 - name: ts_full
   net: dut.sync_net_tspack_pktz_out_record_full
   width: 1

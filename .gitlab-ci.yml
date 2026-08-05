@@ -104,9 +104,9 @@ forge:type-check:
 # ---------------------------------------------------------------------------
 # forge:schema-validate
 #
-# Validates the trigger_demo design topology and module registry without
-# generating any output. Uses forge topgen --strict so heuristic wiring is a
-# hard error.
+# Validates every reference plugin's design topology and module registry
+# (trigger_demo, passthrough_demo, vision_pipeline_demo — all 7 of its real
+# designs) without generating any output.
 # ---------------------------------------------------------------------------
 forge:schema-validate:
   stage: validate
@@ -136,6 +136,19 @@ forge:schema-validate:
       forge topgen validate-registry \
         plugins/passthrough_demo/forge/modules.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate-registry vision_pipeline_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate-registry \
+        plugins/vision_pipeline_demo/forge/modules.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      for d in design design_pixel_result design_tile_stats design_cdc \
+               design_packetizer design_full_functional design_platform_wrapper; do
+        echo "--- forge topgen validate vision_pipeline_demo/${d}.yml ---" | tee -a ci-logs/schema-validate.log
+        forge topgen validate \
+          "plugins/vision_pipeline_demo/forge/designs/${d}.yml" \
+          2>&1 | tee -a ci-logs/schema-validate.log
+      done
   artifacts:
     name: "forge-schema-validate-${CI_COMMIT_SHORT_SHA}"
     when: always
@@ -251,8 +264,9 @@ forge:docs-build:
 # ---------------------------------------------------------------------------
 # forge:python-unit-tests
 #
-# Runs the forge unit tests plus the trigger_demo verification proof suite.
-# These 110+ tests require only Python — no HLS build or Vivado needed.
+# Runs the forge unit tests plus every reference plugin's own verification
+# proof suite (trigger_demo, passthrough_demo, vision_pipeline_demo). These
+# tests require only Python — no HLS build or Vivado needed.
 # ---------------------------------------------------------------------------
 forge:python-unit-tests:
   stage: test
@@ -280,6 +294,12 @@ forge:python-unit-tests:
         --tb=short -q \
         --junitxml=ci-logs/passthrough-demo-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log
+    - |
+      echo "--- vision_pipeline_demo verify tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/vision_pipeline_demo/forge/verify/tools/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/vision-pipeline-demo-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
   artifacts:
     name: "forge-unit-tests-${CI_COMMIT_SHORT_SHA}"
     when: always
@@ -289,18 +309,22 @@ forge:python-unit-tests:
         - ci-logs/forge-junit.xml
         - ci-logs/trigger-demo-junit.xml
         - ci-logs/passthrough-demo-junit.xml
+        - ci-logs/vision-pipeline-demo-junit.xml
     paths:
       - ci-logs/unit-tests.log
       - ci-logs/forge-junit.xml
       - ci-logs/trigger-demo-junit.xml
       - ci-logs/passthrough-demo-junit.xml
+      - ci-logs/vision-pipeline-demo-junit.xml
 
 # ---------------------------------------------------------------------------
 # forge:verify-smoke
 #
 # Confirms the forge verify CLI is healthy using only Python/config operations:
-#   - generate --dry-run on two trigger_demo flows
-#   - doctor on trigger_demo design.verification.yml
+#   - generate --dry-run on two trigger_demo flows, two vision_pipeline_demo
+#     flows (the quickstart tier — the cheapest real proof, matching spec
+#     §29's Fast MR CI "quickstart generation" bullet)
+#   - doctor on trigger_demo and vision_pipeline_demo design.verification.yml
 #
 # Confirmed pure Python/config path — no simulator or Vivado dependency.
 # ---------------------------------------------------------------------------
@@ -324,8 +348,23 @@ forge:verify-smoke:
         --flow trigger_pipeline_xsim --dry-run \
         2>&1 | tee -a ci-logs/verify-smoke.log
     - |
-      echo "--- forge verify doctor ---" | tee -a ci-logs/verify-smoke.log
+      echo "--- forge verify doctor (trigger_demo) ---" | tee -a ci-logs/verify-smoke.log
       forge verify doctor "${DESIGN_FILE}" \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - VPD_DESIGN_FILE="plugins/vision_pipeline_demo/forge/verify/design.verification.yml"
+    - |
+      echo "--- forge verify generate dry-run (pixel_normalizer_csim) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify generate "${VPD_DESIGN_FILE}" \
+        --flow pixel_normalizer_csim --dry-run \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - |
+      echo "--- forge verify generate dry-run (quickstart_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify generate "${VPD_DESIGN_FILE}" \
+        --flow quickstart_pipeline_xsim --dry-run \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - |
+      echo "--- forge verify doctor (vision_pipeline_demo) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify doctor "${VPD_DESIGN_FILE}" \
         2>&1 | tee -a ci-logs/verify-smoke.log
   artifacts:
     name: "forge-verify-smoke-${CI_COMMIT_SHORT_SHA}"
