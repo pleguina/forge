@@ -1,5 +1,4 @@
-# ImageFolderAdapter config for a 32x32 user-image-folder import
-# (release-plan Phase 10, slice 10.6 -- preflight.md §18.1 Tier B).
+# ImageFolderAdapter config for a 32x32 user-image-folder import.
 #
 # Usage:
 #   python3 datasets/cli.py import-images --output forge/verify/generated/my_images \

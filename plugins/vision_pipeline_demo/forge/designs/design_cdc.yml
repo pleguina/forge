@@ -1,9 +1,8 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Design Topology (slice 10.4, multi-domain CDC path)
+# Vision Pipeline Demo — Design Topology (multi-domain CDC path)
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Three clock domains (release-plan Phase 10, preflight.md §5 Decision A,
-# spec §6-§8), genuinely different rates:
+# Three clock domains, genuinely different rates:
 #
 #   control (ap_clk, 50MHz / 20ns)   --level_sync---->  pixel (clk_pixel, 200MHz / 5ns)
 #     ctrl_level / ctrl_pulse /      --pulse_sync---->
@@ -21,30 +20,26 @@
 # primary domain (literal ap_clk/ap_rst, same convention every existing
 # module in this repo uses); `pixel`/`output` each get a real
 # reset_domains.*.sync: reset_sync destination, synchronized from the
-# same external ap_rst (spec §7: "one external reset ... synchronously
-# released in every destination domain").
+# same external ap_rst -- one external reset, synchronously released in
+# every destination domain (see
+# docs/development/adr/0002-cdc-primitive-semantics.md).
 #
 # One module per crossing kind on the *source* side (ctrl_level_rtl/
 # ctrl_pulse_rtl/ctrl_mailbox_rtl; outsink_level_rtl/outsink_pulse_rtl),
-# not one bigger register bank per domain — a real release-plan Phase
-# 10, slice 10.4 finding: forge.topgen.generators.structural_verilog's
-# cdc_map is keyed by (src_module, dst_module) alone, not per-pin, so
-# sourcing three different cdc kinds from one instance to the same
-# destination instance would silently collapse into one (now a real
-# forge.topgen.config ATG027 load-time error instead of silently wrong
-# hardware). pixel_sink_rtl stays a single module on the *destination*
-# side — receiving from three distinct source instances has no
-# collision risk (see ctrl_level_rtl.v's header for the full reasoning).
+# not one bigger register bank per domain: forge.topgen.generators.
+# structural_verilog's cdc_map is keyed by (src_module, dst_module)
+# alone, not per-pin, so sourcing three different cdc kinds from one
+# instance to the same destination instance would silently collapse into
+# one (now a real forge.topgen.config ATG027 load-time error instead of
+# silently wrong hardware). pixel_sink_rtl stays a single module on the
+# *destination* side — receiving from three distinct source instances has
+# no collision risk (see ctrl_level_rtl.v's header for the full
+# reasoning).
 #
-# This slice is standalone (its own instances, no shared instance with
-# design.yml/design_pixel_result.yml/design_tile_stats.yml) — the same
-# "demonstrate one slice's capability set in isolation" precedent 10.2/
-# 10.3 already established.
-#
-# Multi-clock xsim support (real, not assumed) is release-plan Phase 10,
-# slice 10.4's own framework-core prerequisite — see forge.verify.gen_sim's
-# extra_clocks/extra_resets and forge.topgen.generators.structural_verilog's
-# reset_sync instance-pin wiring fix, both added this slice.
+# This design is standalone (its own instances, no shared instance with
+# design.yml/design_pixel_result.yml/design_tile_stats.yml) — each design
+# in this reference project demonstrates its own capability set in
+# isolation before later designs combine them.
 # ═══════════════════════════════════════════════════════════════════════════
 
 schema_version: "1.0"

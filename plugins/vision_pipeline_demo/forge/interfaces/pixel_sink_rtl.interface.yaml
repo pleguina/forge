@@ -10,8 +10,7 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A): the
-    `pixel` domain's consumer of control_src_rtl's three source
+    This is the `pixel` domain's consumer of control_src_rtl's three source
     crossings, and the source of the pixel -> output async_fifo
     crossing. clock_primary/reset_primary use genuinely non-standard
     names (clk_pixel/rst_pixel) so this design's clock/reset auto-map

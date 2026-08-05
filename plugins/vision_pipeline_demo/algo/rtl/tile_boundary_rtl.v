@@ -1,8 +1,7 @@
 //==============================================================================
 // tile_boundary_rtl.v
 //==============================================================================
-// Slice 10.3 (release-plan Phase 10, docs/internal/phase10/preflight.md
-// §6.2): the "tile-end summary" half of the per-tile path's tagged
+// The "tile-end summary" half of the per-tile path's tagged
 // elastic join. Watches the same normalized-pixel-tagged stream
 // tile_stats_hls accumulates (a fan-out sibling of it, both driven
 // directly from pixel_normalizer -- not downstream of tile_stats_hls),
@@ -14,7 +13,7 @@
 // tile_stats_hls's own tile_id_out/frame_id_out) on purpose -- the same
 // "verify the two branches actually agree at runtime" role
 // edge_mask_merge_rtl's tag_mismatch already established for the
-// pixel-result path (slice 10.2): if tile_stats_hls's accumulator ever
+// pixel-result path: if tile_stats_hls's accumulator ever
 // drifted out of sync with the real tile boundary (e.g. a miscounted
 // sample), tile_summary_join_rtl's join_mismatch is what would catch
 // it -- a self-tapped tag could never detect that class of bug.
@@ -81,7 +80,7 @@ module tile_boundary_rtl #(
             hold_count       <= {HOLD_W{1'b0}};
         end else if (tile_last) begin
             // A fresh boundary always (re)starts the hold window --
-            // correct at this slice's single-tile-in-flight test scale,
+            // correct at single-tile-in-flight scale,
             // where the previous tag's hold window has always already
             // expired by the time the next one arrives.
             tag_valid        <= 1'b1;

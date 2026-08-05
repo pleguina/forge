@@ -1,9 +1,8 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Design Topology (slice 10.5, packetizer path)
+# Vision Pipeline Demo — Design Topology (packetizer path)
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Pipeline (release-plan Phase 10, docs/internal/phase10/preflight.md
-# §6.1/§6.2/§9.1, §11):
+# Pipeline:
 #
 #   external pixel stream -> norm_px (pixel_normalizer, HLS)
 #     -> window_builder_rtl -> sobel_hls  ─┐
@@ -23,48 +22,40 @@
 # Two clock domains: `pixel` is this design's *primary* domain (literal
 # ap_clk/ap_rst, same convention design_pixel_result.yml/
 # design_tile_stats.yml already use for every module reused unmodified
-# below) at the spec's real 200MHz/5ns rate (§6) -- unlike 10.2/10.3's own
-# informal 4.0ns testing clock, this slice cares about real domain rates
-# for throughput reporting (§5 Decision B). `output` is a real secondary
-# domain (clk_output/rst_output, 125MHz/8ns, §6), with a real
+# below) at a real 200MHz/5ns rate -- unlike some earlier designs' own
+# informal 4.0ns testing clock, this design cares about real domain rates
+# for throughput reporting. `output` is a real secondary domain
+# (clk_output/rst_output, 125MHz/8ns), with a real
 # reset_domains.rst_output.sync: reset_sync destination synchronized from
-# the same external ap_rst -- same convention design_cdc.yml (slice 10.4)
-# already established.
+# the same external ap_rst -- same convention design_cdc.yml already
+# established.
 #
-# Reused unmodified from design_pixel_result.yml (slice 10.2) and
-# design_tile_stats.yml (slice 10.3): winbld/sobel/thresh/merge and
-# tstats/tbnd/tjoin respectively, each behind its own `norm` instance
-# (norm_px / norm_tile) -- two independent normalizer instances, not one
-# shared fan-out source. Originally also a pacing necessity (tile_stats_hls
-# was real II=2 when this design was first built, needing its samples 2
-# cycles apart, unlike the pixel-result path's back-to-back cadence);
-# tile_stats_hls is now real II=1 too (release-plan Phase 10, slice 10.5
-# follow-up, see modules.yml's tile_stats_hls entry), so both paths pace
-# identically and that specific reason no longer applies. Kept as two
-# independent instances anyway -- still a deliberate scope choice, not an
-# oversight: the real spec topology (§5) fans a *single* normalizer out to
-# both paths, and unifying that fan-out is the same single-shared-source
-# topology work 10.2/10.3 already deferred to the full-acceptance assembly
-# (10.6/10.7, alongside the 16x16 dataset and multi-tile-per-frame
-# concurrency). This slice's own job is the packetizer/async-FIFO/
-# throughput capability set, demonstrated standalone per the same "one
-# slice, one design" precedent 10.2/10.3/10.4 already established -- not
-# that unification.
+# Reused unmodified from design_pixel_result.yml and design_tile_stats.yml:
+# winbld/sobel/thresh/merge and tstats/tbnd/tjoin respectively, each behind
+# its own `norm` instance (norm_px / norm_tile) -- two independent
+# normalizer instances, not one shared fan-out source. Kept as two
+# independent instances deliberately, not as an oversight: unifying them
+# into a single shared-source fan-out is real topology work, done
+# separately in design_full_functional.yml. This design's own job is the
+# packetizer/async-FIFO/throughput capability set, demonstrated standalone
+# -- not that unification.
 #
-# preflight.md §6.2's own correction ("two independent output paths,
-# multiplexed AT THE PACKETIZER, not merged before it") is realized
-# literally here: pixel_result_packer_rtl and tile_stats_packer_rtl each
-# source their *own* async_fifo crossing directly into packetizer_rtl --
-# there is no shared arbiter/FIFO upstream of it. See packetizer_rtl.v's
-# header for how it detects real novelty on each crossing (a toggle bit
-# embedded in the crossed payload, since FORGE's structural port_map
-# wiring routes no `empty`/valid signal to the destination side of an
-# async_fifo connection) without any core-framework change.
+# The design principle realized literally here -- "two independent output
+# paths, multiplexed AT THE PACKETIZER, not merged before it" -- means
+# pixel_result_packer_rtl and tile_stats_packer_rtl each source their
+# *own* async_fifo crossing directly into packetizer_rtl; there is no
+# shared arbiter/FIFO upstream of it. See packetizer_rtl.v's header for
+# how it detects real novelty on each crossing (a toggle bit embedded in
+# the crossed payload, since FORGE's structural port_map wiring routes no
+# `empty`/valid signal to the destination side of an async_fifo
+# connection) without any core-framework change, and
+# docs/development/adr/0002-cdc-primitive-semantics.md for why that
+# convention exists project-wide.
 # ═══════════════════════════════════════════════════════════════════════════
 
 schema_version: "1.0"
 part: xcvu9p-flga2104-2L-e
-clock_period: 5.0   # pixel domain (ap_clk): 200MHz, spec §6
+clock_period: 5.0   # pixel domain (ap_clk): 200MHz
 
 block_protocol: none
 connect_clock: true
@@ -77,8 +68,7 @@ reset_domains:
     derived_from: ap_rst
     sync: reset_sync
 
-# Tier 2 probes (release-plan Phase 10, preflight.md §5 Decision B / slice
-# 10.0C): real occupancy/backpressure telemetry from both async_fifo
+# Tier 2 probes: real occupancy/backpressure telemetry from both async_fifo
 # crossings, generated but not routed to any module port (see
 # packetizer_rtl's own header for why functional correctness doesn't
 # depend on these) -- bound here via forge.verify.gen_sim's Tier 2 probe
@@ -86,8 +76,8 @@ reset_domains:
 # `dut.<net>` references, real net names confirmed against a real
 # `forge topgen gen-top` run of this exact design), for
 # forge.analyze.throughput_runtime.probe.build_runtime_throughput_result
-# to consume from the resulting wide-format probe CSV (§8's
-# forge.throughput_result.v1).
+# to consume from the resulting wide-format probe CSV
+# (forge.throughput_result.v1).
 interface_metadata:
   tier2_probes:
     - {name: pr_full,        net: "dut.sync_net_prpack_pktz_out_record_full",        width: 1}
@@ -105,7 +95,7 @@ interface_metadata:
 
 modules:
 
-# ── Pixel-result path (slice 10.2, unmodified) ─────────────────────────────
+# ── Pixel-result path (reused unmodified) ───────────────────────────────
 - name: norm_px
   ref: pixel_normalizer
   instances: 1
@@ -131,7 +121,7 @@ modules:
   ref: pixel_result_packer_rtl
   instances: 1
 
-# ── Tile-statistics path (slice 10.3, unmodified) ──────────────────────────
+# ── Tile-statistics path (reused unmodified) ───────────────────────────
 - name: norm_tile
   ref: pixel_normalizer
   instances: 1
@@ -301,11 +291,10 @@ connections:
     - [out_valid, in_valid]
 
 # Packetizer crossings (pixel -> output), each its own async FIFO, each
-# with a real per-record write_enable_pin (release-plan Phase 10, slice
-# 10.5) -- otherwise cdc_async_fifo writes a fresh entry every
-# ap_clk cycle regardless of novelty, flooding the FIFO and making
-# occupancy/high-water telemetry meaningless (see cdc_async_fifo.v's own
-# header for the real gap this closes).
+# with a real per-record write_enable_pin -- otherwise cdc_async_fifo
+# writes a fresh entry every ap_clk cycle regardless of novelty, flooding
+# the FIFO and making occupancy/high-water telemetry meaningless (see
+# cdc_async_fifo.v's own header for the real gap this closes).
 - from: prpack
   to: pktz
   cdc:

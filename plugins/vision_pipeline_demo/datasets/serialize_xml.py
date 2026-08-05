@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Canonical-event -> FORGE-XML serialization (release-plan Phase 10,
-slice 10.6 — preflight.md §18.7).
+"""Canonical-event -> FORGE-XML serialization.
 
 The framework's per-pixel event-dict shape (what
 ``forge.verify.dataset_format.XmlDatasetLoader`` produces, and what
@@ -59,7 +58,7 @@ def event_ids_for(flat_events: "Sequence[dict[str, Any]]") -> "list[str]":
 
 
 def serialize_to_xml(events: "Sequence[DatasetEvent]") -> str:
-    """Render *events* as a FORGE-XML document string (spec §18.7)."""
+    """Render *events* as a FORGE-XML document string."""
     root = ET.Element(ROOT_TAG)
     for idx, flat in enumerate(flatten_events(events)):
         event_elem = ET.SubElement(root, "event", {"id": str(idx)})

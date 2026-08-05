@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator for slice 10.3's
-tile-statistics-path flow (release-plan Phase 10, preflight.md §6.2).
+"""vision_pipeline_demo stimulus generator for the tile-statistics-path
+flow.
 
-tile_stats_hls is real II=1 (release-plan Phase 10, slice 10.5
-follow-up -- was II=2 at this flow's own original writing; see
-modules.yml's tile_stats_hls entry and that module's own source header
-for the real csynth-confirmed fix), so pixels are driven back-to-back,
-same as gen_stimulus_pixel_result.py's own pixel-result path -- no
-interleaved idle cycles needed.
+tile_stats_hls is real II=1 (see modules.yml's tile_stats_hls entry and
+that module's own source header for the csynth-confirmed fix), so pixels
+are driven back-to-back, same as gen_stimulus_pixel_result.py's own
+pixel-result path -- no interleaved idle cycles needed.
 
 One 8x8 frame (64 pixels) -> exactly one tile-statistics record, checked
 once after the full frame has drained through

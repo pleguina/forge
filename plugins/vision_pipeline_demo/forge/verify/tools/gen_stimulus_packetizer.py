@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator for slice 10.5's packetizer
-flow (release-plan Phase 10, preflight.md §6.1/§6.2/§9.1).
+"""vision_pipeline_demo stimulus generator for the packetizer flow.
 
 Unlike every earlier stimulus generator in this plugin (which drive one
 clock domain and check at statically-derivable cycle offsets), this
 design has a *second*, genuinely independent clock domain
 (``clk_output``, 125MHz) downstream of two real async_fifo CDC
-crossings -- exactly the kind of clock-phase-dependent timing slice
-10.4's own cdc_xsim flow already established has no exact-cycle golden
-model (see that flow's gen_stimulus_cdc.py header). So this generator
-does not try to predict which output-domain cycle each record arrives
-on: it emits a SystemVerilog ``fork``/``join`` with two concurrent
-processes inside ``run_stimulus()`` --
+crossings -- exactly the kind of clock-phase-dependent timing
+gen_stimulus_cdc.py's own header already establishes has no exact-cycle
+golden model (see that flow's header, and
+docs/development/adr/0002-cdc-primitive-semantics.md for why). So this
+generator does not try to predict which output-domain cycle each record
+arrives on: it emits a SystemVerilog ``fork``/``join`` with two
+concurrent processes inside ``run_stimulus()`` --
 
   * ``drive_proc`` (``ap_clk``): drives ``norm_px`` and ``norm_tile``
     both back-to-back (64 pixels, one per cycle each, mirroring
     gen_stimulus_pixel_result.py/gen_stimulus_tile_stats.py -- real
-    II=1 on both paths as of release-plan Phase 10, slice 10.5
-    follow-up, see modules.yml's tile_stats_hls entry) in the *same*
-    iteration loop.
+    II=1 on both paths, see modules.yml's tile_stats_hls entry) in the
+    *same* iteration loop.
   * ``check_proc`` (``clk_output``): polls ``pktz_packet_valid`` every
     output-domain cycle: whenever asserted, decodes each occupied
     128-bit slot (``pktz_packet_keep`` says which), reads its
     ``record_kind``, and checks it against the *next* expected record of
     that kind (both FIFOs are individually order-preserving, so "the
     k-th received pixel-result record" is unconditionally dataset-order
-    index k -- no matching/search needed). Every expected record --
-    64 pixel-result + 1 tile-statistics = 65 -- must be observed exactly
+    index k -- no matching/search needed; see
+    docs/development/adr/0003-vision-packet-format.md for the packet
+    layout this decode relies on). Every expected record -- 64
+    pixel-result + 1 tile-statistics = 65 -- must be observed exactly
     once before a generous cycle-count timeout, or the check fails.
 
-This verifies real conservation (preflight.md §17.3: every accepted
-record is emitted exactly once, none dropped/duplicated) and real
-content correctness, without needing to reproduce CDC-crossing timing by
-hand.
+This verifies real conservation (every accepted record is emitted
+exactly once, none dropped/duplicated) and real content correctness,
+without needing to reproduce CDC-crossing timing by hand.
 
 Usage::
 
@@ -105,7 +105,7 @@ def generate_for_flow(
 
     em = StimulusEmitter()
 
-    em.comment("Expected-record arrays (release-plan Phase 10, slice 10.5) --")
+    em.comment("Expected-record arrays --")
     em.comment("declared up front, before any statement (Xilinx xvlog requires")
     em.comment("task-local declarations to precede statements even in SV mode,")
     em.comment("stricter than the bare IEEE 1800 grammar). Both FIFOs are")

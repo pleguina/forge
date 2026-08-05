@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo's layer-B dataset adapters (release-plan Phase 10,
-slice 10.1, extended by slice 10.6).
+"""vision_pipeline_demo's layer-B dataset adapters — the FORGE-facing
+registration shims for this plugin's project-owned dataset logic.
 
-``PixelStreamXmlDatasetAdapter`` (10.1): this dataset genuinely needs no
+``PixelStreamXmlDatasetAdapter``: this dataset genuinely needs no
 domain transformation — its XML file is already FORGE-shaped (layer-A's
 ``XmlDatasetLoader`` reads it directly) and the algorithm is simple
 enough that no real preprocessing happens before the golden model runs.
@@ -10,13 +10,15 @@ An identity ``materialize()`` here is an honest reflection of that, not a
 placeholder standing in for missing work.
 
 ``SyntheticDatasetAdapter``/``ImageFolderDatasetAdapter``/
-``NumpyArrayDatasetAdapter`` (10.6, preflight.md §18.4): thin
+``NumpyArrayDatasetAdapter``: thin
 :class:`~forge.verify.dataset_adapter.ProjectDatasetAdapter` wrappers
 around the real adapter logic in
-``plugins/vision_pipeline_demo/datasets/adapters/`` — per spec §18.9
-("Do not duplicate the adapter implementation when adding the
-wrapper"), each wrapper only calls ``iter_events()`` and flattens the
-result via ``datasets/serialize_xml.py``'s ``flatten_events()``, the same
+``plugins/vision_pipeline_demo/datasets/adapters/`` — see
+docs/development/adr/0001-dataset-ownership-boundary.md for why dataset
+loading is project-owned rather than living in FORGE core. Do not
+duplicate the adapter implementation when adding a wrapper: each wrapper
+here only calls ``iter_events()`` and flattens the result via
+``datasets/serialize_xml.py``'s ``flatten_events()``, the same
 flattening ``datasets/cli.py`` uses to write on-disk XML fixtures. No
 adapter logic is reimplemented here.
 """
@@ -42,7 +44,9 @@ from forge.verify.dataset_format import (
 )
 
 # The `datasets/` package lives at the plugin root (two levels above
-# forge/verify/tools/), mirroring spec §18.13's own repository layout.
+# forge/verify/tools/) -- see docs/development/adr/0001-dataset-ownership-
+# boundary.md for why dataset loading lives at the plugin root rather than
+# under forge/verify/.
 #
 # It is loaded by explicit file path, NOT by adding the plugin root to
 # sys.path -- a real bug found while wiring this up: the plugin root
@@ -118,7 +122,7 @@ ADAPTER = PixelStreamXmlDatasetAdapter()
 register_dataset_adapter(ADAPTER.adapter_id, ADAPTER)
 
 
-# ── Slice 10.6: real dataset adapters (synthetic / image-folder / numpy) ──
+# ── Real dataset adapters (synthetic / image-folder / numpy) ─────────────
 
 def _canonical_dataset_from_events(
     events: "list",
@@ -127,7 +131,7 @@ def _canonical_dataset_from_events(
     adapter_version: str,
     source_path: "str | None",
 ) -> CanonicalDataset:
-    """Shared plumbing every 10.6 wrapper below uses: flatten canonical
+    """Shared plumbing every real-data wrapper below uses: flatten canonical
     ``DatasetEvent``s into FORGE's per-pixel event-dict shape and wrap
     them in a real ``CanonicalDataset`` + ``DatasetMetadata`` -- the exact
     same shape :class:`PixelStreamXmlDatasetAdapter` above hands back,
@@ -154,8 +158,8 @@ SYNTHETIC_ADAPTER_VERSION = "1.0"
 
 
 class SyntheticDatasetAdapter:
-    """Wraps ``datasets.adapters.synthetic.SyntheticPatternAdapter``
-    (spec §18.4). A pure generator -- needs no raw source at all, so
+    """Wraps ``datasets.adapters.synthetic.SyntheticPatternAdapter``.
+    A pure generator -- needs no raw source at all, so
     *source* is accepted but never inspected; every input comes from
     *config* (``width``, ``height``, ``patterns``, ``seed``,
     ``event_count``, optional ``controls``/``sink_ready_schedule``)."""
@@ -188,8 +192,8 @@ IMAGE_FOLDER_ADAPTER_VERSION = "1.0"
 
 
 class ImageFolderDatasetAdapter:
-    """Wraps ``datasets.adapters.image_folder.ImageFolderAdapter``
-    (spec §18.4). Requires ``source.raw_path`` (a directory, or an
+    """Wraps ``datasets.adapters.image_folder.ImageFolderAdapter``.
+    Requires ``source.raw_path`` (a directory, or an
     explicit file list passed via ``config["files"]``)."""
 
     adapter_id = IMAGE_FOLDER_ADAPTER_ID
@@ -226,8 +230,8 @@ NUMPY_ARRAY_ADAPTER_VERSION = "1.0"
 
 
 class NumpyArrayDatasetAdapter:
-    """Wraps ``datasets.adapters.numpy_array.NumpyArrayAdapter``
-    (spec §18.4). Requires ``source.raw_path`` (a ``.npy``/``.npz`` file)."""
+    """Wraps ``datasets.adapters.numpy_array.NumpyArrayAdapter``.
+    Requires ``source.raw_path`` (a ``.npy``/``.npz`` file)."""
 
     adapter_id = NUMPY_ARRAY_ADAPTER_ID
     adapter_version = NUMPY_ARRAY_ADAPTER_VERSION

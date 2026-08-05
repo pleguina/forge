@@ -1,10 +1,9 @@
 //==============================================================================
 // outsink_pulse_rtl.v
 //==============================================================================
-// Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A, spec
-// §8.2): the `output` domain's pulse_sync source -- `frame_done_pulse_in`
-// -> `frame_done_out`, crossing to control (spec §8.2:
-// "frame_done: output -> control"). Its own module (not folded into
+// The `output` domain's pulse_sync source -- `frame_done_pulse_in`
+// -> `frame_done_out`, crossing to control ("frame_done: output ->
+// control"). Its own module (not folded into
 // outsink_level_rtl) so the two output -> control return crossings
 // (level_sync and pulse_sync) don't collide in cdc_map -- see
 // ctrl_level_rtl.v's header for the full reasoning.

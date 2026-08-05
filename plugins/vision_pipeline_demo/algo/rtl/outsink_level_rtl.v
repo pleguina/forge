@@ -1,9 +1,8 @@
 //==============================================================================
 // outsink_level_rtl.v
 //==============================================================================
-// Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A, spec
-// §8.1): the `output` domain's level_sync source (`error_in` ->
-// `error_out`, crossing to control, spec §8.1) and the consumer of the
+// The `output` domain's level_sync source (`error_in` ->
+// `error_out`, crossing to control) and the consumer of the
 // pixel -> output async_fifo crossing (`result_in`). Combining these
 // two is safe (no cdc_map collision, see ctrl_level_rtl.v's header) --
 // they're two *different* (src, dst) module pairs

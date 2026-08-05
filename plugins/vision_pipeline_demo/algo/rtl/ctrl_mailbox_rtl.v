@@ -1,14 +1,14 @@
 //==============================================================================
 // ctrl_mailbox_rtl.v
 //==============================================================================
-// Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A, spec
-// §8.3): the `control` domain's mailbox_transfer source -- packs
+// The `control` domain's mailbox_transfer source -- packs
 // {threshold, kernel_mode, frame_limit} into one coherent bundle for
-// the control -> pixel cdc: {kind: mailbox_transfer} crossing (spec
-// §8.3: "The bundle must update atomically. Independent bit
-// synchronizers are forbidden" -- exactly why this is one
+// the control -> pixel cdc: {kind: mailbox_transfer} crossing. The
+// bundle must update atomically -- independent bit synchronizers per
+// field would let a reader observe a mix of old and new field values
+// mid-update -- exactly why this is one
 // mailbox_transfer connection carrying one packed bus, not three
-// separate level_sync-style crossings). See ctrl_level_rtl.v for why
+// separate level_sync-style crossings. See ctrl_level_rtl.v for why
 // this is its own module.
 //==============================================================================
 

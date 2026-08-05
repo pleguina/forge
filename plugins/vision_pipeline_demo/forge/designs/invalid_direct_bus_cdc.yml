@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Negative fixture (slice 10.4, spec §8.5)
+# Vision Pipeline Demo — Negative fixture: undeclared clock-domain crossing
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # invalid_direct_bus_cdc.yml — a direct (undeclared) wire crossing clock
@@ -10,8 +10,7 @@
 # generated — the same real, code-verified check design_cdc.yml's own
 # six real crossings are approved against, not a hypothetical.
 #
-# Real command run against this file (preflight.md's 10.4 completion
-# evidence has the full captured output):
+# Real command run against this file:
 #   forge topgen validate plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -41,9 +40,9 @@ modules:
 connections:
 
 # INVALID: ctrl_mailbox (ap_clk) -> pxsink (clk_pixel) is a genuine
-# clock-domain crossing with no cdc: declaration at all -- exactly the
-# "32-bit direct wire from pixel to output" pattern spec §8.5 names,
-# just mirrored onto this design's own real control -> pixel crossing.
+# clock-domain crossing with no cdc: declaration at all -- a bare
+# multi-bit wire crossing unrelated clock domains, which FORGE rejects
+# because no approved synchronizer resolves its metastability risk.
 - from: ctrl_mailbox
   to: pxsink
   port_map:

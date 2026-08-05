@@ -10,16 +10,15 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.2 (release-plan Phase 10, docs/internal/phase10/preflight.md
-    §6.3/§9.1): real 3x3 sliding-window generator between
-    pixel_normalizer and sobel_hls. Owns the N-dimensional
-    (raw_port_tpl, dims:[3,3]) physical binding. Zero-padding border
-    policy. Fixed latency FRAME_WIDTH+2 cycles (9 for this design's
-    FRAME_WIDTH=8) -- see algo/rtl/window_builder_rtl.v for the full
-    derivation, empirically verified against an independent numpy
-    zero-pad reference model. Requires at least FRAME_WIDTH+2 idle
-    cycles between frames (video-blanking-style gap) -- real
-    backpressure is slice 10.5's job, not this module's.
+    This is a real 3x3 sliding-window generator between pixel_normalizer
+    and sobel_hls. Owns the N-dimensional (raw_port_tpl, dims:[3,3])
+    physical binding. Zero-padding border policy. Fixed latency
+    FRAME_WIDTH+2 cycles (9 for this design's FRAME_WIDTH=8) -- see
+    algo/rtl/window_builder_rtl.v for the full derivation, empirically
+    verified against an independent numpy zero-pad reference model.
+    Requires at least FRAME_WIDTH+2 idle cycles between frames
+    (video-blanking-style gap) -- real backpressure is handled
+    downstream by the packetizer/async-FIFO stage, not this module.
 
   roles:
 

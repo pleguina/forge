@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""``SyntheticPatternAdapter`` (release-plan Phase 10, slice 10.6 —
-preflight.md §18.4/§18.1 Tier A).
+"""``SyntheticPatternAdapter``.
 
 Generates deterministic pixel-grid patterns with no external
-dependencies (stdlib ``random`` only, seeded — never OS entropy). This
-is a *generator* adapter, not a source-file reader: :class:`DatasetSource`
-carries no meaningful ``raw_path``/``serialized`` for it (see the
-FORGE-registered wrapper in
+dependencies (stdlib ``random`` only, seeded — never OS entropy), so the
+mandatory tutorial and CI paths never require a network fetch or a
+bundled image corpus. This is a *generator* adapter, not a source-file
+reader: :class:`DatasetSource` carries no meaningful
+``raw_path``/``serialized`` for it (see the FORGE-registered wrapper in
 ``forge/verify/tools/dataset_adapter.py`` for how that's reconciled with
 :class:`~forge.verify.dataset_adapter.ProjectDatasetAdapter`'s protocol).
 
-Traversal order is row-major (preflight.md §9.1, frozen) — the only order
-consistent with ``end_of_line``/``end_of_frame`` semantics.
+Traversal order is row-major (frozen) — the only order consistent with
+``end_of_line``/``end_of_frame`` semantics.
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def _pixel_value(pattern: str, x: int, y: int, width: int, height: int, rng: "ra
 
 
 class SyntheticPatternAdapter:
-    """Deterministic generated-pattern adapter (spec §18.4).
+    """Deterministic generated-pattern adapter.
 
     Args:
         width: frame width in pixels.

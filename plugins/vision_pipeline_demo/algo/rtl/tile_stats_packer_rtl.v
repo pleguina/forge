@@ -1,12 +1,12 @@
 //==============================================================================
 // tile_stats_packer_rtl.v
 //==============================================================================
-// Slice 10.5 (release-plan Phase 10, docs/internal/phase10/preflight.md
-// §6.1/§6.2/§9.1): packs tile_summary_join_rtl's tile-statistics fields
-// into the frozen 128-bit tile-statistics packet record --
+// Packs tile_summary_join_rtl's tile-statistics fields
+// into the 128-bit tile-statistics packet record (layout fixed by
+// docs/development/adr/0003-vision-packet-format.md) --
 //
 //   record_kind{2}=2'd1, tile_id{16}, minimum{8}, maximum{8}, mean{16},
-//   variance{24}, frame_id{16}, reserved{38}   (MSB-first, §6.1)
+//   variance{24}, frame_id{16}, reserved{38}   (MSB-first)
 //
 // -- with the same toggle-in-payload novelty scheme as
 // pixel_result_packer_rtl.v (see that file's header for the full
@@ -16,7 +16,7 @@
 // Fixed 1-cycle latency, gated by in_valid (same convention as
 // pixel_result_packer_rtl.v).
 //
-// `out_record_valid` (release-plan Phase 10, slice 10.5): real
+// `out_record_valid`: real
 // per-record write-enable, same convention as
 // pixel_result_packer_rtl.v's own -- see that file's header for the
 // full rationale.

@@ -6,10 +6,11 @@
 #   external pixel stream -> pixel_normalizer (HLS) -> threshold_rtl (RTL)
 #     -> external result stream
 #
-# One clock domain, no CDC, no window-builder/Sobel/tile-stats (those are
-# release-plan Phase 10 slices 10.2+) — see
-# docs/internal/phase10/preflight.md for the frozen full design and why
-# the quickstart tier is deliberately this small.
+# One clock domain, no CDC, no window-builder/Sobel/tile-stats -- those
+# capabilities are demonstrated in the richer designs alongside this one
+# (design_pixel_result.yml, design_tile_stats.yml, design_cdc.yml, and
+# further). This is deliberately the smallest possible mixed HLS/RTL
+# pipeline, meant as the first thing a new reader builds and runs.
 # ═══════════════════════════════════════════════════════════════════════════
 
 schema_version: "1.0"

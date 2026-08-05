@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Build a real ``forge.throughput_result.v1`` artifact for slice 10.7A's
-full-functional design (release-plan Phase 10, preflight.md §5 Decision
-B, §8, §11 10.7A sub-slice) from real HLS synthesis reports plus a real
+"""Build a real ``forge.throughput_result.v1`` artifact for the
+full-functional design from real HLS synthesis reports plus a real
 Tier 2 probe CSV (``algo_top_probe.csv``, produced by ``forge verify run
 --probe-log``).
 
-Structurally identical to render_throughput_result.py (slice 10.5's own
-packetizer_xsim script) -- same limitations apply unchanged (single-clock
+Structurally identical to render_throughput_result.py (its
+packetizer_xsim counterpart) -- same limitations apply unchanged (single-clock
 Tier 2 probe sampling on ap_clk, generic accepted/emitted approximation
 overridden by this design's own real, exactly-known conservation-invariant
 counts, see that script's docstring for the full derivation). Two real
@@ -58,8 +57,8 @@ _DATA_WIDTH_BITS = {
     "sobel_hls": 12,
     "tile_stats_hls": 24,
 }
-# All three modules live in this design's pixel domain (ap_clk, 200MHz,
-# spec §6) -- real declared clock, not each module's own HLS-estimated fmax.
+# All three modules live in this design's pixel domain (ap_clk, 200MHz) --
+# the real declared clock, not each module's own HLS-estimated fmax.
 _CLOCK_MHZ = 200.0
 
 # Probe CSV rows are sampled on ap_clk (200MHz) -- see

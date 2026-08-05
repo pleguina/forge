@@ -10,8 +10,7 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.5 (release-plan Phase 10, preflight.md §6.1/§6.2/§9.1):
-    packs tile_summary_join_rtl's tile-statistics fields into the frozen
+    Packs tile_summary_join_rtl's tile-statistics fields into the
     128-bit tile-statistics packet record plus a 1-bit CDC-novelty
     toggle (129 bits total) -- source of the pixel -> output
     cdc: {kind: async_fifo} connection to packetizer_rtl. Literal

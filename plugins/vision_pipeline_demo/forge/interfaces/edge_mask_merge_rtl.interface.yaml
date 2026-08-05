@@ -10,10 +10,9 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.2 (release-plan Phase 10, preflight.md §6.2): merges the
-    Sobel branch (window_builder_rtl -> sobel_hls) and the delayed
-    threshold branch into one forge.edge_mask_stream.v1 record. Real
-    runtime tag_mismatch diagnostic, not decoration -- see
+    Merges the Sobel branch (window_builder_rtl -> sobel_hls) and the
+    delayed threshold branch into one forge.edge_mask_stream.v1 record.
+    Real runtime tag_mismatch diagnostic, not decoration -- see
     algo/rtl/edge_mask_merge_rtl.v. Fixed latency 1 cycle, II=1.
 
   roles:

@@ -1,46 +1,43 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Design Topology (slice 10.7B, generic platform fixture)
+# Vision Pipeline Demo — Design Topology (platform wrapper)
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Spec §26's "generic platform fixture": control clock/reset, pixel
-# clock/reset, output clock/reset, a real input stream, a real output
-# stream, and a status interface — all three domains genuinely distinct
-# and genuinely used, not relabeled ports (release-plan Phase 10,
-# preflight.md §11's 10.7B sub-slice).
+# A generic platform fixture: control clock/reset, pixel clock/reset,
+# output clock/reset, a real input stream, a real output stream, and a
+# status interface — all three domains genuinely distinct and genuinely
+# used, not relabeled ports.
 #
 #   control (clk_control, 50MHz)  --mailbox_transfer-->  pixel (ap_clk, 200MHz)
 #     ctrl_mailbox (threshold/kernel_mode/frame_limit bundle,
 #     ctrl_mailbox_platform_rtl.v -- the SAME real logic as
-#     ctrl_mailbox_rtl.v/design_cdc.yml's own slice 10.4 module, a
+#     ctrl_mailbox_rtl.v/design_cdc.yml's own module, a
 #     necessarily separate module since Verilog port names can't be
 #     parametrized and this design makes pixel (not control) its
 #     primary ap_clk domain, unlike design_cdc.yml -- see that .v
-#     file's own header for the full reasoning)
+#     file's own header and docs/development/adr/0002-cdc-primitive-semantics.md
+#     for the full reasoning)
 #
 #   pixel (ap_clk) -- this design's primary domain, unlike design_cdc.yml
 #     norm (pixel_normalizer) fans out to:
 #       winbld -> sobel  ─┐
 #       threshcfg (NEW: threshold_configurable_rtl -- takes its threshold
-#         from the mailbox crossing above, latched at frame boundaries
-#         per preflight.md §9.1's frozen configuration-update-timing
-#         decision, not from a compile-time parameter like
+#         from the mailbox crossing above, latched at frame boundaries,
+#         not from a compile-time parameter like
 #         threshold_rtl.v) ┴-> merge -> prpack ─┐
 #       tstats -> tjoin, tbnd -> tjoin -> tspack ┤
 #                                                  │ [async FIFO x2: pixel -> output]
 #   output (clk_output, 125MHz)                   ┴-> pktz -> external forge.packet_stream.v1
 #
-# This IS the spec's own §26 finding from a fresh code audit this
-# session: the Blobfish-specific `forge framework emit-payload` path
-# (payload.v generation) does not apply here -- its generator hardcodes
+# The Blobfish-specific `forge framework emit-payload` path (payload.v
+# generation) does not apply here -- its generator hardcodes
 # GT-transceiver/CSP-framing/single-clock semantics into its own control
 # flow (forge/framework/payload_generator.py), not just its fixture
 # content, and is structurally incompatible with this plugin's real
 # 256-bit packet_stream output and genuine multi-clock-domain topology.
 # `forge topgen gen-top` (the same mechanism already used for every
 # other design in this reference project) is the real, already-generic
-# wrapper-generation path -- this design is the "generic platform
-# fixture" spec §26 asks for, built the same way as every other design
-# here, not a new machinery.
+# wrapper-generation path -- this design is a generic platform fixture
+# built the same way as every other design here, not new machinery.
 #
 # A real, previously-undiscovered framework bug was found and fixed
 # assembling this design: forge.analyze.latency_static.checker's

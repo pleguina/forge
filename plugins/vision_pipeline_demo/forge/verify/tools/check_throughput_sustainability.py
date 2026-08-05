@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
-"""Slice 10.5 negative fixture — spec §17.4 "Invalid throughput fixture"
-(release-plan Phase 10, preflight.md §5 Decision B): "Connect an II=1
-producer to an unbuffered, non-backpressured II=2 consumer" and expect a
-diagnostic naming the producer rate, the consumer rate, the unsustainable
-ratio, and suggested remedies.
+"""Negative fixture: "Connect an II=1 producer to an unbuffered,
+non-backpressured II=2 consumer" and expect a diagnostic naming the
+producer rate, the consumer rate, the unsustainable ratio, and suggested
+remedies. This is a deliberately-failing scenario, exercising the
+diagnostic path a real design would hit if a fast producer were wired
+directly into a slower consumer with no buffering.
 
 No new core-framework diagnostic code is needed for this: FORGE already
 computes real per-module :class:`~forge.verify.throughput_result.StaticThroughputAnalysis`
-records from real HLS synthesis reports (§5 Decision B, slice 10.0C) --
-this script is the release-gate-style *check* that a real design's own
-release-acceptance step (§13) would run over them, comparing an
-unbuffered/non-backpressured producer/consumer pair's nominal capacities.
+records from real HLS synthesis reports -- this script is the same kind
+of release-gate check a real design's own release-acceptance step would
+run over them, comparing an unbuffered/non-backpressured producer/
+consumer pair's nominal capacities.
 
-Consumer side is deliberately synthetic, not a second real HLS module
-(revised after a real II=1 fix to ``tile_stats_hls`` -- release-plan
-Phase 10, slice 10.5 follow-up, see that module's own source header):
-every real module in this plugin's own registry is now II=1, so there is
-no longer a real production-code pair to demonstrate an unsustainable
-rate with. Building a dedicated slow HLS module just to keep this
-fixture "real" was considered and rejected -- it would need wiring
-somewhere (even if only nominally) to stay buildable, risking exactly
-what it must not do: touch the real architecture or pollute
-design_packetizer.yml's own real throughput/FIFO measurements
-(preflight.md's 10.5 completion evidence). A synthetic
-``StaticThroughputAnalysis`` for the consumer side, built directly (not
-via ``build_static_throughput_analysis`` from an HLS report -- there is
-no HLS report to build it from) and clearly labeled as such, checks the
-same real comparison logic (``check_sustainable``'s own body is
-unchanged) against the real producer (``pixel_normalizer``'s own
-already-synthesized report) without inventing a second real module.
+Consumer side is deliberately synthetic, not a second real HLS module:
+every real module in this plugin's own registry is II=1, so there is no
+real production-code pair left to demonstrate an unsustainable rate
+with (an earlier revision of this fixture used a real II=2
+``tile_stats_hls`` before that module was optimized to II=1 -- see that
+module's own source header). Building a dedicated slow HLS module just
+to keep this fixture "real" was considered and rejected -- it would
+need wiring somewhere (even if only nominally) to stay buildable,
+risking exactly what it must not do: touch the real architecture or
+pollute design_packetizer.yml's own real throughput/FIFO measurements.
+A synthetic ``StaticThroughputAnalysis`` for the consumer side, built
+directly (not via ``build_static_throughput_analysis`` from an HLS
+report -- there is no HLS report to build it from) and clearly labeled
+as such, checks the same real comparison logic (``check_sustainable``'s
+own body is unchanged) against the real producer (``pixel_normalizer``'s
+own already-synthesized report) without inventing a second real module.
 
 Usage::
 
@@ -46,7 +46,7 @@ from forge.verify.throughput_result import StaticThroughputAnalysis
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 _HLS_BUILD_ROOT = _REPO_ROOT / "build_hls_vision_pipeline_demo"
-_CLOCK_MHZ = 200.0  # pixel domain, spec §6
+_CLOCK_MHZ = 200.0  # pixel domain's real declared clock frequency
 
 
 def _synthetic_ii2_consumer(name: str) -> StaticThroughputAnalysis:
@@ -74,7 +74,7 @@ def _synthetic_ii2_consumer(name: str) -> StaticThroughputAnalysis:
 def check_sustainable(producer: StaticThroughputAnalysis, consumer: StaticThroughputAnalysis) -> None:
     """Raise ``SystemExit(1)`` with a full diagnostic if *producer*'s real
     nominal capacity exceeds *consumer*'s, when connected directly with
-    no buffering/backpressure (spec §17.4's exact scenario).
+    no buffering/backpressure.
     """
     if producer.nominal_capacity_records_per_sec > consumer.nominal_capacity_records_per_sec:
         ratio = producer.nominal_capacity_records_per_sec / consumer.nominal_capacity_records_per_sec

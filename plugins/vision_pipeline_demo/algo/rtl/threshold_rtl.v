@@ -1,12 +1,12 @@
 //==============================================================================
 // threshold_rtl.v
 //==============================================================================
-// Quickstart-tier RTL module (release-plan Phase 10, slice 10.1):
+// Quickstart-tier RTL module:
 //   threshold_mask <= (normalized_pixel >= THRESHOLD) ? 1 : 0
 // Every other forge.pixel_stream.v1-shaped field is passed through
 // unchanged. Fixed 2-cycle registered latency (matching the full
 // vision_pipeline_demo design's own threshold_rtl latency — this module
-// is reused unmodified when later slices assemble the fuller pipeline,
+// is reused unmodified in the fuller pipeline assembly,
 // not a throwaway quickstart-only variant).
 //
 // Parameters:

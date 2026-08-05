@@ -1,9 +1,8 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Design Topology (slice 10.7A, full-functional path)
+# Vision Pipeline Demo — Design Topology (full-functional path)
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Pipeline (release-plan Phase 10, docs/internal/phase10/preflight.md
-# §6.1/§6.2/§9.1, §10, §11 10.7A sub-slice):
+# Pipeline:
 #
 #                          ┌─> winbld -> sobel  ─┐
 #   external pixel stream -> norm (pixel_normalizer, HLS)
@@ -12,23 +11,21 @@
 #                          └─> tstats -> tjoin  ─┐                          ┴-> pktz (output domain) -> external forge.packet_stream.v1
 #                              tbnd    ──────────┴-> tspack ────────────────┘ [async FIFO: pixel -> output, depth 64]
 #
-# This is the spec's own real topology (§5): ONE normalizer instance fans
-# out to all four downstream consumers, unlike design_packetizer.yml's own
-# deliberate two-instance (`norm_px`/`norm_tile`) scope choice, which that
-# design's own header explicitly deferred unifying to "the full-acceptance
-# assembly (10.6/10.7)" -- this design is that assembly. Fan-out from one
-# producer to multiple consumers is already an established FORGE pattern
+# ONE normalizer instance fans out to all four downstream consumers, unlike
+# design_packetizer.yml's own deliberate two-instance (`norm_px`/
+# `norm_tile`) scope choice -- this design is the unified, full-scale
+# assembly that choice was deferred toward. Fan-out from one producer to
+# multiple consumers is already an established FORGE pattern
 # (design_packetizer.yml's own `norm_px` already fans out to `winbld` and
 # `thresh`); unifying to four consumers needed no framework change.
 #
-# Frame scale: 16x16 (preflight.md §10's frozen full-functional acceptance
-# size), 8x8 tiles -> a real 2x2 tile grid (4 tiles/frame), the smallest
-# size that exercises the tile-ID formula's row AND column terms varying,
-# and forces tile_stats_hls's slice-10.7A concurrent-tile-column extension
-# (tile_stats_hls.h's MAX_TILE_COLS=2) to actually do real work: row-major
-# traversal of a 16-wide frame interleaves tile column 0 (x 0-7) and tile
-# column 1 (x 8-15) within the same 8-row band, unlike every 8x8-frame
-# design before this one.
+# Frame scale: 16x16, 8x8 tiles -> a real 2x2 tile grid (4 tiles/frame),
+# the smallest size that exercises the tile-ID formula's row AND column
+# terms varying, and forces tile_stats_hls's concurrent-tile-column
+# extension (tile_stats_hls.h's MAX_TILE_COLS=2) to actually do real work:
+# row-major traversal of a 16-wide frame interleaves tile column 0 (x 0-7)
+# and tile column 1 (x 8-15) within the same 8-row band, unlike every
+# 8x8-frame design elsewhere in this plugin.
 #
 # `winbld`'s FRAME_WIDTH is overridden to 16 (design-level `parameters:`,
 # a real per-instance Verilog `#(...)` mechanism -- see
@@ -43,13 +40,13 @@
 # `sobel`'s own 4-cycle latency is frame-size-independent (pure 3x3
 # compute, no state) and needs no override. The sobel-branch total is
 # therefore 18+4=22 cycles; `merge`'s threshold-branch `delay_cycles` is
-# recomputed to 20 (thresh's own fixed 2-cycle latency + 20 = 22), from
-# 10.5's 12 (2+12=14, matching FRAME_WIDTH=8's 10+4=14 total) -- both
-# figures are re-verified against a real `forge analyze latency-check` run
-# and a real xsim run, not assumed from the formula alone (matching this
-# document's own "verified, not assumed" discipline; 10.2's own
-# window_builder latency figure had exactly this kind of hand-derivation
-# corrected once already).
+# recomputed to 20 (thresh's own fixed 2-cycle latency + 20 = 22), scaled
+# up from the smaller FRAME_WIDTH=8 designs' 12 (2+12=14, matching
+# FRAME_WIDTH=8's 10+4=14 total) -- both figures are re-verified against a
+# real `forge analyze latency-check` run and a real xsim run, not assumed
+# from the formula alone: a hand-derived latency figure is only trustworthy
+# once confirmed against a real tool run, not derived from the formula in
+# isolation.
 #
 # Two clock domains, same convention as design_packetizer.yml: `pixel`
 # (ap_clk/ap_rst) is primary, real 200MHz/5ns; `output` (clk_output/
@@ -59,7 +56,7 @@
 
 schema_version: "1.0"
 part: xcvu9p-flga2104-2L-e
-clock_period: 5.0   # pixel domain (ap_clk): 200MHz, spec §6
+clock_period: 5.0   # pixel domain (ap_clk): 200MHz
 
 block_protocol: none
 connect_clock: true
@@ -72,9 +69,8 @@ reset_domains:
     derived_from: ap_rst
     sync: reset_sync
 
-# Tier 2 probes (release-plan Phase 10, preflight.md §5 Decision B / slice
-# 10.0C) -- same mechanism/convention as design_packetizer.yml, bound to
-# this design's own real net names (confirmed against a real
+# Tier 2 probes: same mechanism/convention as design_packetizer.yml,
+# bound to this design's own real net names (confirmed against a real
 # `forge topgen gen-top` run of this exact design).
 interface_metadata:
   tier2_probes:
@@ -93,14 +89,14 @@ interface_metadata:
 
 modules:
 
-# ── Single shared normalizer (slice 10.7A: unifies design_packetizer.yml's
-#    norm_px/norm_tile into the spec's real single-source fan-out) ────────
+# ── Single shared normalizer (unifies design_packetizer.yml's
+#    norm_px/norm_tile into one real single-source fan-out) ─────────────
 - name: norm
   ref: pixel_normalizer
   instances: 1
   external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
 
-# ── Pixel-result path (slice 10.2, unmodified modules; winbld gets a real
+# ── Pixel-result path (unmodified modules; winbld gets a real
 #    FRAME_WIDTH=16 override, see header) ──────────────────────────────────
 - name: winbld
   ref: window_builder_rtl
@@ -127,7 +123,7 @@ modules:
   ref: pixel_result_packer_rtl
   instances: 1
 
-# ── Tile-statistics path (slice 10.3 tbnd/tjoin/tspack unmodified; tstats
+# ── Tile-statistics path (tbnd/tjoin/tspack unmodified; tstats
 #    is the slice-10.7A concurrent-tile-column tile_stats_hls) ─────────────
 - name: tstats
   ref: tile_stats_hls
@@ -145,7 +141,7 @@ modules:
   ref: tile_stats_packer_rtl
   instances: 1
 
-# ── Packetizer (output domain, slice 10.5, unmodified) ─────────────────────
+# ── Packetizer (output domain, unmodified) ───────────────────────────────
 - name: pktz
   ref: packetizer_rtl
   instances: 1
@@ -295,7 +291,7 @@ connections:
 
 # Packetizer crossings (pixel -> output), each its own async FIFO with a
 # real per-record write_enable_pin -- identical shape to
-# design_packetizer.yml (slice 10.5).
+# design_packetizer.yml.
 - from: prpack
   to: pktz
   cdc:

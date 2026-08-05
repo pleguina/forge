@@ -201,6 +201,29 @@ forge:stale-reference-check:
       - ci-logs/stale-reference-check.log
 
 # ---------------------------------------------------------------------------
+# forge:vision-pipeline-reference-check
+#
+# Guard against internal phase/slice/spec-section planning references
+# creeping back into vision_pipeline_demo's production files or its
+# public tutorial pages. See
+# ci/vision_pipeline_demo_reference_check.sh's header for scope and why
+# it's narrower than forge:stale-reference-check.
+# ---------------------------------------------------------------------------
+forge:vision-pipeline-reference-check:
+  stage: validate
+  tags:
+    - default-x86_64
+  script:
+    - mkdir -p ci-logs
+    - bash ci/vision_pipeline_demo_reference_check.sh 2>&1 | tee ci-logs/vision-pipeline-reference-check.log
+  artifacts:
+    name: "forge-vision-pipeline-reference-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/vision-pipeline-reference-check.log
+
+# ---------------------------------------------------------------------------
 # forge:import-direction-check
 #
 # Cheap dependency-direction linter (release-plan §19, revised per the

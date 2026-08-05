@@ -18,9 +18,9 @@ void tile_stats_hls(
     flag_t      &out_valid
 ) {
 #pragma HLS PIPELINE II=1
-// Real II=1 (release-plan Phase 10, slice 10.5 follow-up -- was II=2;
-// see git history for the original single-accumulator, branching
-// version and its own real-not-assumed derivation). Two real,
+// Real II=1 (was II=2 in an earlier single-accumulator, branching
+// version; see git history for that version and its own real-not-assumed
+// derivation). Two real,
 // empirically-confirmed obstacles had to be removed together, not one:
 //
 // (1) `run_sumsq`'s multiply-accumulate (normalized_pixel^2, summed
@@ -61,11 +61,11 @@ void tile_stats_hls(
 //     extra combinational work, but it's cheap (one more mul/shift/sub)
 //     next to the real win of removing the branch-driven state split.
 //
-// Slice 10.7A extends this to MAX_TILE_COLS concurrent tile-column
+// This body is extended to MAX_TILE_COLS concurrent tile-column
 // register banks (tile_stats_hls.h), selected by a plain mux on `x`'s
 // TILE_COL_BIT -- not a branch, so it does not reintroduce obstacle (2)
 // above. Real II/latency re-confirmed against this extended body's own
-// csynth report, not assumed identical to the single-column version's.
+// csynth report, not assumed identical to a single-column version's.
 #pragma HLS LATENCY min=1 max=1
 #pragma HLS INTERFACE ap_ctrl_none port=return
 #pragma HLS INTERFACE ap_none port=normalized_pixel
@@ -92,11 +92,11 @@ void tile_stats_hls(
     // sum_sq partials <= 16*255^2 = 1,040,400 (21 bits, comfortably
     // inside the declared 24-bit width).
     //
-    // Slice 10.7A: two independent NAMED copies of the whole register
+    // Two independent NAMED copies of the whole register
     // set (col0_*/col1_*), one per concurrent tile column
     // (tile_stats_hls.h's MAX_TILE_COLS/TILE_COL_BIT) -- never a real
     // `[MAX_TILE_COLS]` array. The sum-of-squares split above already
-    // found (slice 10.5 follow-up) that a variable-indexed *static*
+    // found that a variable-indexed *static*
     // array inside a PIPELINE-only function gives Vitis's dependence
     // analysis nothing to disambiguate and it serializes the whole
     // group regardless of ARRAY_PARTITION; two named copies, muxed by a
@@ -136,7 +136,7 @@ void tile_stats_hls(
 
     // Which tile column this sample belongs to -- a plain select, read
     // once, used to mux every accumulator read/write below (never a
-    // branch; see item (2) in the 10.5 follow-up header note on why
+    // branch; see item (2) in the note above the function on why
     // control flow, not arithmetic, was the real II obstacle there).
     bool col1_sel = (x[TILE_COL_BIT] != 0);
 
@@ -170,7 +170,7 @@ void tile_stats_hls(
         (part_idx == ap_uint<2>(2)) ? sel_p2 : sel_p3;
     ap_uint<24> new_partial = (part_first_touch ? ap_uint<24>(0) : old_partial) + square;
     // Force the accumulate-add off the DSP48 the multiply above binds
-    // to -- see the 10.5 follow-up header note, item (1).
+    // to -- see the note above the function, item (1).
 #pragma HLS BIND_OP variable=new_partial op=add impl=fabric
 
     ap_uint<24> p0 = (part_idx == ap_uint<2>(0)) ? new_partial : sel_p0;
@@ -180,9 +180,9 @@ void tile_stats_hls(
     ap_uint<24> total_sumsq = p0 + p1 + p2 + p3;
 
     // Population mean/variance, exact power-of-two shift, no rounding
-    // mode (preflight.md §9.1, frozen): mean = sum>>6, variance =
-    // max(0, (sumsq>>6) - mean^2). Computed every sample (see the 10.5
-    // follow-up header note, item (2)), only the final gated write
+    // mode: mean = sum>>6, variance =
+    // max(0, (sumsq>>6) - mean^2). Computed every sample (see the note
+    // above the function, item (2)), only the final gated write
     // below cares whether this sample is really its tile's last.
     mean_t computed_mean = mean_t(new_sum >> 6);
     ap_uint<32> mean_sq  = ap_uint<32>(computed_mean) * ap_uint<32>(computed_mean);

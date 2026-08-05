@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator for slice 10.7A's
-full-functional flow (release-plan Phase 10, preflight.md §10/§11).
+"""vision_pipeline_demo stimulus generator for the full-functional flow.
 
 Mirrors gen_stimulus_packetizer.py's dual-clock-domain fork/join
 drive+check strategy (this design has the same genuinely independent
 ``clk_output`` domain downstream of two real async_fifo CDC crossings,
 so exact-cycle prediction is still not attempted -- see that script's
-own header). Two real differences from the 10.5 packetizer flow:
+own header). Two real differences from the packetizer flow:
 
   * ``drive_proc`` (``ap_clk``) drives a SINGLE shared ``norm`` instance
     (design_full_functional.yml unifies design_packetizer.yml's own
@@ -16,7 +15,7 @@ own header). Two real differences from the 10.5 packetizer flow:
     ``check_proc`` must expect 256 pixel-result records AND 4
     tile-statistics records (not 1) -- the expected tile-record list is
     built by walking the dataset in order and taking this event's own
-    ``tile_record_hex`` (from PacketizerProvider, slice 10.7A) whenever
+    ``tile_record_hex`` (from PacketizerProvider) whenever
     it is a real tile-completion event (``x % TILE_WIDTH == TILE_WIDTH-1
     and y % TILE_HEIGHT == TILE_HEIGHT-1``, tile_stats_hls.h's own frozen
     completion test) -- this reproduces the real hardware's own emission
@@ -52,10 +51,10 @@ _TILE_HEIGHT = 8
 _N_PIXELS = _FRAME_WIDTH * _FRAME_HEIGHT       # 256
 _N_TILES = (_FRAME_WIDTH // _TILE_WIDTH) * (_FRAME_HEIGHT // _TILE_HEIGHT)  # 4
 
-# Both paths are real II=1 (tile_stats_hls's slice 10.5 follow-up
-# correction, unaffected by slice 10.7A's concurrent-tile-column
-# extension -- re-confirmed via a real csynth run, see
-# tile_stats_hls.cpp's header) -- drive back-to-back, one pixel/cycle.
+# Both paths are real II=1 (tile_stats_hls's fixed pipeline, unaffected
+# by the concurrent-tile-column extension -- re-confirmed via a real
+# csynth run, see tile_stats_hls.cpp's header) -- drive back-to-back,
+# one pixel/cycle.
 _TOTAL_DRIVE_ITERATIONS = _N_PIXELS
 
 # Generous output-domain receive timeout: worst-case drive length in
@@ -113,7 +112,7 @@ def generate_for_flow(
 
     em = StimulusEmitter()
 
-    em.comment("Expected-record arrays (release-plan Phase 10, slice 10.7A) --")
+    em.comment("Expected-record arrays --")
     em.comment("declared up front, before any statement (Xilinx xvlog requires")
     em.comment("task-local declarations to precede statements even in SV mode,")
     em.comment("stricter than the bare IEEE 1800 grammar). Both FIFOs are")

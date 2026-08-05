@@ -1,7 +1,7 @@
 #pragma once
 // ════════════════════════════════════════════════════════════════════════
 // pixel_normalizer DutAdapter — wires pixel_normalizer() into
-// verif_fw::Driver<> (release-plan Phase 10, slice 10.1).
+// verif_fw::Driver<>.
 // ════════════════════════════════════════════════════════════════════════
 #include "dut_adapter.h"
 #include "transaction_concepts.h"

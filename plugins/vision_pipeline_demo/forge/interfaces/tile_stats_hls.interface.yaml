@@ -13,15 +13,14 @@ ip_interface:
   # ap_clk IS present in the synthesized RTL (same convention as
   # pixel_normalizer_ip.interface.yaml / sobel_hls.interface.yaml).
   notes: >
-    Slice 10.3 (release-plan Phase 10, preflight.md §6.2): a real
-    per-tile streaming statistics accumulator. Fan-out sibling of
-    window_builder_rtl/threshold_rtl (all driven directly from
+    This is a per-tile streaming statistics accumulator. Fan-out sibling
+    of window_builder_rtl/threshold_rtl (all driven directly from
     pixel_normalizer, not chained after either) -- accumulates running
     min/max/sum/sum-of-squares across one tile's 64 samples and emits
-    population mean/variance (preflight.md §9.1) on the tile's last
-    accepted sample. Fixed 6-cycle latency, II=2 -- the spec's own
-    "bounded 6..10" framing (§11) turned out, once actually synthesized,
-    to be one fixed depth; see modules.yml for the full correction.
+    population mean/variance on the tile's last accepted sample. Fixed
+    6-cycle latency, II=2 -- an earlier bounded 6..10 estimate turned
+    out, once actually synthesized, to be one fixed depth; see
+    modules.yml for the full correction.
 
   roles:
 
@@ -93,13 +92,13 @@ ip_interface:
       raw_port: mean
       direction: output
       width: 16
-      notes: "sum_of_64_pixels >> 6 (preflight.md §9.1, exact shift, no rounding)"
+      notes: "sum_of_64_pixels >> 6 (exact shift, no rounding, since tile size is a fixed power-of-two 64 samples)"
 
     variance:
       raw_port: variance
       direction: output
       width: 24
-      notes: "max(0, (sum_of_squares >> 6) - mean^2) -- population variance, preflight.md §9.1"
+      notes: "max(0, (sum_of_squares >> 6) - mean^2) -- population variance, clamped at 0 to absorb fixed-point rounding error that could otherwise drive it slightly negative"
 
     tile_id_out:
       raw_port: tile_id_out

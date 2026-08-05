@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""``ImageFolderAdapter`` (release-plan Phase 10, slice 10.6 —
-preflight.md §18.4/§18.1 Tier B).
+"""``ImageFolderAdapter``.
 
 Converts a directory (or explicit file list) of PNG/PGM/JPEG/BMP images
 into the canonical pixel-event representation, with every preprocessing
 choice made explicit and self-implemented rather than left to a library
-default (spec §18.5: "Do not rely on library defaults for ... grayscale
-conversion ... interpolation ... rounding ... value scaling"):
+default -- a library-default grayscale/resize/rounding policy can change
+silently between library versions, which would silently shift the
+pixel values a "same input" dataset produces and break bit-exact
+reproducibility of golden-model comparisons:
 
   * grayscale — integer luma, ``(77*R + 150*G + 29*B) >> 8``. The three
     coefficients sum to exactly 256, so an already-grayscale source
@@ -36,14 +37,15 @@ ADAPTER_VERSION = "1.0"
 
 DEFAULT_EXTENSIONS = (".png", ".pgm", ".jpg", ".jpeg", ".bmp")
 
-# Frozen grayscale coefficients (preflight.md §18.5) -- sum to 256 exactly.
+# Frozen grayscale coefficients -- sum to 256 exactly.
 _LUMA_R, _LUMA_G, _LUMA_B = 77, 150, 29
 
 
 def _load_rgb_pixels(path: Path) -> "tuple[int, int, list[tuple[int, int, int]]]":
     """Decode *path* into ``(width, height, rgb_pixels)``, row-major.
-    Raises ValueError (naming *path*) on any unsupported/corrupt file --
-    the "actionable diagnostics" spec §18.4 requires."""
+    Raises ValueError (naming *path*) on any unsupported/corrupt file, so
+    a bad input file produces a clear, actionable error instead of an
+    opaque failure downstream."""
     try:
         from PIL import Image, UnidentifiedImageError
     except ImportError as exc:  # pragma: no cover - environment-dependent
@@ -73,8 +75,9 @@ def _grayscale(width: int, height: int, rgb_pixels: "list[tuple[int, int, int]]"
 def _nearest_resize(
     src_width: int, src_height: int, src_gray: "list[int]", dst_width: int, dst_height: int,
 ) -> "list[int]":
-    """Hand-rolled nearest-neighbor resize -- explicit, library-independent
-    (spec §18.5). Row-major output, matching the frozen traversal order."""
+    """Hand-rolled nearest-neighbor resize -- explicit and
+    library-independent, so behavior can't shift between Pillow versions.
+    Row-major output, matching the frozen traversal order."""
     out: "list[int]" = [0] * (dst_width * dst_height)
     for oy in range(dst_height):
         sy = min(src_height - 1, (oy * src_height) // dst_height)
@@ -85,7 +88,7 @@ def _nearest_resize(
 
 
 class ImageFolderAdapter:
-    """Directory-of-images adapter (spec §18.4).
+    """Directory-of-images adapter.
 
     Args:
         source: a directory to scan, or an explicit list of file paths.
@@ -121,8 +124,9 @@ class ImageFolderAdapter:
             lowered_ext = {e.lower() for e in extensions}
             files = [p for p in root.iterdir() if p.is_file() and p.suffix.lower() in lowered_ext]
 
-        # Stable lexical order (spec §18.4) -- by filename string, never
-        # filesystem iteration order.
+        # Stable lexical order -- by filename string, never filesystem
+        # iteration order, so frame_id assignment is deterministic and
+        # reproducible across machines and filesystems.
         files.sort(key=lambda p: p.name)
         if max_events is not None:
             files = files[:max_events]

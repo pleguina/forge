@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator (release-plan Phase 10, slice
-10.1).
+"""vision_pipeline_demo stimulus generator.
 
 Generates ``stimulus_current.svh`` for the ``quickstart_pipeline_xsim``
 flow: drives one pixel event's full ``forge.pixel_stream.v1``-shaped
@@ -8,8 +7,8 @@ input, waits out the pipeline's total latency (3 HLS cycles +
 2 RTL cycles = 5), then checks ``out_pixel``/``threshold_mask``/
 ``out_valid`` against a real, live-computed golden-model result — routed
 through :class:`~forge.verify.dataset_service.DatasetService` and
-:func:`~forge.verify.golden_model.run_golden_model` (release-plan Phase
-10, slice 10.0A), never a hand-typed expected value.
+:func:`~forge.verify.golden_model.run_golden_model`, never a hand-typed
+expected value.
 
 Usage::
 
@@ -48,7 +47,7 @@ def _ensure_bootstrapped() -> None:
 
 def _load_dataset_and_golden(dataset_path: Path):
     """Load the real golden dataset and run the real golden model over
-    it once — both routed through the new Phase 10 slice 10.0A
+    it once — both routed through FORGE's dataset-service/golden-model
     machinery, never a bypass."""
     _ensure_bootstrapped()
     service = DatasetService()
@@ -131,9 +130,9 @@ def generate_for_flow(
     write_run_stimulus_svh(em, out_path, header_comment=f"flow={flow_name} event={event_id}")
     print(f"  wrote {out_path}")
 
-    # release-plan §10.0C: persist the golden-model provider's identity
-    # and hashes next to the stimulus it drove — otherwise this only
-    # ever lived in this process's memory. Consumed later by
+    # Persist the golden-model provider's identity and hashes next to
+    # the stimulus it drove — otherwise this only ever lived in this
+    # process's memory. Consumed later by
     # forge.verify.golden_comparison_result.build_golden_comparison_result
     # to join with a real simulation's per-event checks.
     provenance_path = out_path.parent / "golden_model_provenance.json"

@@ -10,13 +10,13 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.3 (release-plan Phase 10, preflight.md §6.2): the "tagged
-    elastic join" combining tile_stats_hls's computed statistics with
-    tile_boundary_rtl's independently-derived tile-end tag into one
-    forge.tile_statistics.v1-shaped record per tile. Matches by
-    tile_id/frame_id, not cycle position (spec §15.3: "must not be
-    reported as fixed") -- see tile_summary_join_rtl.v for the full
-    reasoning.
+    This is the "tagged elastic join" combining tile_stats_hls's
+    computed statistics with tile_boundary_rtl's independently-derived
+    tile-end tag into one forge.tile_statistics.v1-shaped record per
+    tile. Matches by tile_id/frame_id, not cycle position, because
+    tile_stats_hls's own latency is bounded rather than fixed, so the
+    two branches cannot be assumed to arrive a constant number of
+    cycles apart -- see tile_summary_join_rtl.v for the full reasoning.
 
   roles:
 

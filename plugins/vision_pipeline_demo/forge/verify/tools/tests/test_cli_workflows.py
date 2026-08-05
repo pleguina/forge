@@ -1,8 +1,6 @@
 """End-to-end coverage for `forge build`/`forge inspect`'s CLI workflows —
 plan-hash determinism, provenance/staleness, and the visual explorer
-(--dot/--explorer) — applied to THIS plugin's own real designs for the
-first time (release-plan Phase 10, docs/internal/phase10/preflight.md
-§11's 10.7C sub-slice).
+(--dot/--explorer) — applied to THIS plugin's own real designs.
 
 The framework-level suites (forge/tests/test_build_cli_group.py,
 forge/tests/test_inspect_cli_group.py) already prove these CLI workflows
@@ -12,7 +10,7 @@ design_full_functional.yml (11 instances, 2 clock/reset domains, two real
 async_fifo CDC crossings) and design_platform_wrapper.yml (12 instances,
 3 clock/reset domains, a real mailbox_transfer + two real async_fifo
 crossings) — which had never been driven through `forge build --json`/
-`forge inspect --provenance/--dot/--explorer` before this slice. All
+`forge inspect --provenance/--dot/--explorer` before. All
 designs here resolve their ip_info entirely from `modules.yml`'s real
 interface contracts (every module in this plugin's registry has one — no
 component.xml/HLS-build scan is needed, matching the framework tests'
@@ -95,9 +93,9 @@ def test_build_plan_hash_is_deterministic_for_full_functional_design(
     assert p1["metrics"]["plan_hash"] == p2["metrics"]["plan_hash"]
     # Real design, not a stub: two async_fifo CDC crossings (prpack->pktz,
     # tspack->pktz) resolve with zero inferred connections — every one of
-    # this design's 116 connections is an explicit port_map (10.7A's own
-    # completion evidence, re-proven here through forge build's own plan
-    # computation rather than assumed from forge analyze latency-check).
+    # this design's 116 connections is an explicit port_map, proven here
+    # through forge build's own plan computation rather than assumed from
+    # forge analyze latency-check.
     counts = p1["metrics"]["counts"]
     assert counts["explicit_connections"] == 116
     assert counts["inferred_connections"] == 0
@@ -187,17 +185,16 @@ def test_inspect_provenance_and_explain_staleness_round_trip_for_full_functional
     assert any("command options changed" in r for r in stale_staleness["reasons"])
 
 
-# ── forge inspect: visual explorer (--dot/--explorer), first application
-#    to this plugin (preflight.md §11's 10.7C sub-slice) ────────────────
+# ── forge inspect: visual explorer (--dot/--explorer) ───────────────────
 
 
 def test_inspect_dot_for_full_functional_design_carries_real_latency_and_cdc_labels(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
     """Real content, not just exit 0: `winbld`'s design-level `latency:`
-    override (18 cycles at FRAME_WIDTH=16, 10.7A's own previously-
-    unexercised per-instance override mechanism — see preflight.md's
-    10.7A scope note) must actually render, and both real async_fifo
+    override (18 cycles at FRAME_WIDTH=16, exercising the per-instance
+    override mechanism for the first time against a real design) must
+    actually render, and both real async_fifo
     crossings (prpack->pktz, tspack->pktz — each also a reset-domain
     crossing, pixel->output) must carry their CDC kind and reset-crossing
     labels through to the rendered DOT."""
@@ -224,8 +221,8 @@ def test_inspect_dot_for_full_functional_design_carries_real_latency_and_cdc_lab
         assert "CDC" in edge_line
         assert "reset-domain-crossing" in edge_line
 
-    # Module-definition clustering (release-plan §8.1) groups by this
-    # design's own instance names, not the modules.yml registry ref.
+    # Module-definition clustering groups by this design's own instance
+    # names, not the modules.yml registry ref.
     assert "label=<module: tstats" in dot_text
     assert "label=<module: winbld" in dot_text
 
@@ -233,13 +230,13 @@ def test_inspect_dot_for_full_functional_design_carries_real_latency_and_cdc_lab
 def test_inspect_dot_for_platform_wrapper_design_carries_real_three_domain_topology(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """The real 3-domain platform fixture (preflight.md §11's 10.7B
-    sub-slice, applied through the visual explorer for the first time
-    here): a real mailbox_transfer crossing (ctrl_mailbox -> threshcfg,
-    control -> pixel) and the two async_fifo crossings into `pktz`
+    """The real 3-domain platform fixture, applied through the visual
+    explorer for the first time here: a real mailbox_transfer crossing
+    (ctrl_mailbox -> threshcfg, control -> pixel) and the two async_fifo
+    crossings into `pktz`
     (pixel -> output) must all render with their real clock domains and
-    CDC kinds — not just the pixel-domain-only topology 10.7A already
-    covered above."""
+    CDC kinds — not just the pixel-domain-only topology the
+    full-functional design's own test above already covered."""
     dot_path = tmp_path / "topo.dot"
     result = _run_inspect(
         capsys, str(PLATFORM_WRAPPER_DESIGN), "--contracts-from", str(MODULES_YML),
@@ -286,9 +283,9 @@ def test_inspect_explorer_overlays_absent_without_verify_design_for_platform_wra
 def test_inspect_explorer_for_platform_wrapper_design_joins_real_verification_flow(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """The verification-flow-entry-point overlay (release-plan Phase 10,
-    slice 10.0D) applied to this plugin's own design.verification.yml for
-    the first time. Every `kind: full_chip_rtl` flow in this plugin
+    """The verification-flow-entry-point overlay applied to this plugin's
+    own design.verification.yml for the first time. Every `kind:
+    full_chip_rtl` flow in this plugin
     declares `top_module: algo_top` (the generated wrapper itself, not a
     module ref), which never resolves to a real module — an honest empty
     join, not a bug (see forge.analyze.design_explorer.verification_join's

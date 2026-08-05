@@ -20,9 +20,9 @@ void pixel_normalizer(
 ) {
 #pragma HLS PIPELINE II=1
 // LATENCY=3 forces HLS to insert 3 pipeline register stages in RTL,
-// making ap_clk visible in the synthesised Verilog (release-plan Phase
-// 10, slice 10.1 — the same pattern plugins/trigger_demo/algo/
-// trigger_logic/trigger_logic.cpp already establishes). C-sim is
+// making ap_clk visible in the synthesised Verilog — the same pattern
+// plugins/trigger_demo/algo/
+// trigger_logic/trigger_logic.cpp already establishes. C-sim is
 // unaffected (LATENCY is an RTL-synthesis-only constraint) — the golden
 // model this module is checked against (both the Python
 // GoldenModelProvider driving RTL-level stimulus, and this same
@@ -49,8 +49,9 @@ void pixel_normalizer(
 
     // normalized = clamp(scale*pixel + offset, 0, 255) — signed
     // intermediate (never exposed on any interface), unsigned,
-    // saturated result (release-plan Phase 10 interface freeze: all
-    // external/interface fields unsigned).
+    // saturated result (every external/interface field on this module
+    // is unsigned, so the signed working value never leaks past the
+    // clamp).
     ap_int<16> scaled =
         (ap_int<16>(pixel) * NORMALIZER_SCALE_NUM) / NORMALIZER_SCALE_DEN
         + NORMALIZER_OFFSET;

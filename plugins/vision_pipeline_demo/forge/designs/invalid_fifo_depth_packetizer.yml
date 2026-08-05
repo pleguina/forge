@@ -1,37 +1,35 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Negative Fixture (slice 10.5, spec §17.5
-# "Invalid FIFO fixture")
+# Vision Pipeline Demo — Negative Fixture: FIFO depth insufficient for
+# real burst/stall behavior
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# "Configure a burst/stall requirement that provably exceeds FIFO
-# capacity" (spec §17.5). Identical to design_packetizer.yml (real,
-# positive design, see that file's own header for the full topology) in
-# every respect except one: the pixel-result path's async_fifo depth is
-# 4 instead of 64. depth=4 is still a valid power of two (passes
-# ATG022/ATG026 at `forge topgen validate` time -- depth *sufficiency*
-# for a given burst pattern isn't and can't be a static topology-validity
-# concern, only a real simulated/measured one, unlike depth's own
-# power-of-two well-formedness). The real, already-measured burst this
-# plugin's own gen_stimulus_packetizer.py drives (64 back-to-back
-# pixel-domain writes at 200MHz, draining into a 125MHz packetizer)
-# provably needs more than 4 buffered entries at once --
-# design_packetizer.yml's own real depth=64 run already measured a real
-# high-water mark of 28 (see preflight.md's 10.5 completion evidence) --
-# so depth=4 is real, measured-insufficient capacity, not a hypothetical.
+# Configures a burst/stall requirement that provably exceeds FIFO
+# capacity. Identical to design_packetizer.yml (real, positive design,
+# see that file's own header for the full topology) in every respect
+# except one: the pixel-result path's async_fifo depth is 4 instead of
+# 64. depth=4 is still a valid power of two (passes ATG022/ATG026 at
+# `forge topgen validate` time -- depth *sufficiency* for a given burst
+# pattern isn't and can't be a static topology-validity concern, only a
+# real simulated/measured one, unlike depth's own power-of-two
+# well-formedness). The real, already-measured burst this plugin's own
+# gen_stimulus_packetizer.py drives (64 back-to-back pixel-domain writes
+# at 200MHz, draining into a 125MHz packetizer) provably needs more than
+# 4 buffered entries at once -- design_packetizer.yml's own real depth=64
+# run already measured a real high-water mark of 28 -- so depth=4 is
+# real, measured-insufficient capacity, not a hypothetical.
 #
-# Expected result (spec §17.5): a real release-gate failure, not a
-# topgen-time error -- run through the exact same packetizer_xsim
-# stimulus/checker (gen_stimulus_packetizer.py), this design's real xsim
-# run produces real `overflow_attempt`/`dropped_transactions` events and
-# a genuine functional check mismatch (a dropped record no longer
-# matches its expected value), both of which
-# check_fifo_capacity.py turns into a clear pass/fail with required vs.
-# configured depth shown, per spec §17.5's own requirement.
+# Expected result: a real release-gate failure, not a topgen-time error
+# -- run through the exact same packetizer_xsim stimulus/checker
+# (gen_stimulus_packetizer.py), this design's real xsim run produces real
+# `overflow_attempt`/`dropped_transactions` events and a genuine
+# functional check mismatch (a dropped record no longer matches its
+# expected value), both of which check_fifo_capacity.py turns into a
+# clear pass/fail with required vs. configured depth shown.
 # ═══════════════════════════════════════════════════════════════════════════
 
 schema_version: "1.0"
 part: xcvu9p-flga2104-2L-e
-clock_period: 5.0   # pixel domain (ap_clk): 200MHz, spec §6
+clock_period: 5.0   # pixel domain (ap_clk): 200MHz
 
 block_protocol: none
 connect_clock: true

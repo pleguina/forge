@@ -1,9 +1,10 @@
 # vision_pipeline_demo dataset adapters
 
-Release-plan Phase 10, slice 10.6 (`docs/internal/phase10/preflight.md` §11/§18).
+See [ADR 0001](../../../docs/development/adr/0001-dataset-ownership-boundary.md)
+for why dataset loading is owned by this plugin rather than FORGE core.
 
 Three real, project-owned dataset adapters producing the canonical
-`DatasetEvent` model (`model.py`, spec §18.3):
+`DatasetEvent` model (`model.py`):
 
 - `adapters/synthetic.py` — `SyntheticPatternAdapter`: deterministic
   generated patterns (constant, horizontal/vertical edge, corner,
@@ -45,5 +46,7 @@ python3 cli.py validate <manifest.yml> [--source-root <dir>]
 python3 cli.py rebuild  <manifest.yml> --source-root <dir> --output <dir>
 ```
 
-`import-bsds500`/`import-fashion-mnist` (spec §18.9, Tier C, optional)
-are explicitly out of this slice's scope — see preflight.md §11/§15.
+`import-bsds500`/`import-fashion-mnist` are explicitly out of scope: both
+would require network downloads, which conflicts with keeping the
+mandatory tutorial path offline-capable. See
+[ADR 0001](../../../docs/development/adr/0001-dataset-ownership-boundary.md).

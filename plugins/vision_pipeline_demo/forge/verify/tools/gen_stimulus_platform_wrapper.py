@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator for slice 10.7B's platform-
-wrapper flow (release-plan Phase 10, preflight.md §26/§9.1).
+"""vision_pipeline_demo stimulus generator for the platform-wrapper flow.
 
 Three genuinely independent clock domains this time (control/pixel/
 output, not just pixel/output like packetizer_xsim/full_functional_xsim)
@@ -17,8 +16,9 @@ output, not just pixel/output like packetizer_xsim/full_functional_xsim)
     crossing) before frame 1's own first pixel, and proving
     threshold_configurable_rtl.v's frame-boundary-gated latch really
     does apply a config change starting at the NEXT frame, never
-    retroactively affecting the frame already in flight (preflight.md
-    §9.1's frozen configuration-update-timing decision).
+    retroactively affecting the frame already in flight -- a mid-frame
+    threshold change would otherwise produce an ambiguous, half-old-
+    half-new record within the same frame.
   * ``drive_proc`` (``ap_clk``): waits a generous settle margin for T0,
     streams frame 0 (64 pixels, real II=1 back-to-back), idles for a
     generous inter-frame gap (>> window_builder_rtl's own required
@@ -63,10 +63,10 @@ _N_PIXELS_PER_FRAME = _FRAME_WIDTH * _FRAME_HEIGHT   # 64
 _N_PIXELS = _N_FRAMES * _N_PIXELS_PER_FRAME          # 128
 _N_TILES = _N_FRAMES                                 # one 8x8 tile per frame
 
-# Real, genuinely different per-frame thresholds (release-plan Phase 10,
-# slice 10.7B) -- neither equals DEFAULT_THRESHOLD (96), so a passing
-# check is real proof of reconfiguration, not a coincidental match with
-# the compile-time default threshold_rtl.v itself would have used.
+# Real, genuinely different per-frame thresholds -- neither equals
+# DEFAULT_THRESHOLD (96), so a passing check is real proof of
+# reconfiguration, not a coincidental match with the compile-time
+# default threshold_rtl.v itself would have used.
 _FRAME_THRESHOLDS = {0: 64, 1: 160}
 
 # Every wait below is a plain per-clock cycle count (`repeat(N)
@@ -149,7 +149,7 @@ def generate_for_flow(
 
     em = StimulusEmitter()
 
-    em.comment("Expected-record arrays (release-plan Phase 10, slice 10.7B) --")
+    em.comment("Expected-record arrays --")
     em.comment("declared up front, before any statement (Xilinx xvlog requires")
     em.comment("task-local declarations to precede statements even in SV mode).")
     em.raw(f"    reg [127:0] exp_pr [0:{_N_PIXELS - 1}];")
@@ -266,10 +266,9 @@ def generate_for_flow(
         '|signal=total_received|expected=0x%h|observed=0x%h|width=32|passed=%0d", '
         f"32'd{_N_PIXELS + _N_TILES}, total_received, (total_received === {_N_PIXELS + _N_TILES}));"
     )
-    # Real status-interface exercise (release-plan Phase 10, slice
-    # 10.7B): merge_tag_mismatch/tjoin_join_mismatch are real top-level
-    # status ports now (§26) -- confirm they read 0 throughout a real,
-    # passing run, the same runtime diagnostic role tag_mismatch/
+    # Real status-interface exercise: merge_tag_mismatch/tjoin_join_mismatch
+    # are real top-level status ports here -- confirm they read 0 throughout
+    # a real, passing run, the same runtime diagnostic role tag_mismatch/
     # join_mismatch already play internally in every other design here.
     em.raw(
         '        $display("FORGE_CHECK|check_id=status_tag_mismatch|label=status_tag_mismatch'

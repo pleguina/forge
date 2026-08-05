@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo's golden model — a real GoldenModelProvider
-(release-plan Phase 10, slice 10.0A/10.1 Decision C).
+"""vision_pipeline_demo's golden model — a real GoldenModelProvider.
 
 Computes the exact expected output for each pixel event:
 
@@ -10,7 +9,9 @@ Computes the exact expected output for each pixel event:
 The identical closed-form formula ``pixel_normalizer.cpp`` implements in
 HLS and ``threshold_rtl.v`` implements in RTL — this is the project-owned
 algorithm; FORGE's :func:`forge.verify.golden_model.run_golden_model`
-owns invocation determinism and hashing (never this module).
+owns invocation determinism and hashing (never this module). See
+``docs/development/adr/0004-golden-model-provider-boundary.md`` for why
+this split exists.
 """
 from __future__ import annotations
 
@@ -75,17 +76,17 @@ PROVIDER = QuickstartNormalizerThresholdProvider()
 register_golden_model_provider(PROVIDER.provider_id, PROVIDER)
 
 
-# ── Slice 10.2: pixel-result path (adds gradient_magnitude) ──────────────
+# ── pixel-result path (adds gradient_magnitude) ──────────────────────────
 
 PIXEL_RESULT_PROVIDER_ID = "vision_pipeline.pixel_result"
 PIXEL_RESULT_PROVIDER_VERSION = "1.0"
 
 
 class PixelResultProvider:
-    """Golden model for slice 10.2's pixel-result path: everything
+    """Golden model for the pixel-result path: everything
     QuickstartNormalizerThresholdProvider computes, plus
     ``gradient_magnitude`` from the same Sobel kernel ``sobel_hls.cpp``
-    implements (preflight.md §9.1, frozen):
+    implements:
 
         Gx = -r0c0 + r0c2 - 2*r1c0 + 2*r1c2 - r2c0 + r2c2
         Gy = -r0c0 - 2*r0c1 - r0c2 + r2c0 + 2*r2c1 + r2c2
@@ -95,8 +96,9 @@ class PixelResultProvider:
     needs each pixel's 3x3 neighborhood -- so it first reconstructs each
     frame as a normalized-pixel grid from every event sharing a
     frame_id (using x/y as coordinates, exactly as window_builder_rtl's
-    line buffers do), zero-pads it (preflight.md §9.1's frozen border
-    policy), then re-walks the dataset in its original event order.
+    line buffers do), zero-pads it (out-of-frame taps read as 0, matching
+    the RTL window builder's own border handling), then re-walks the
+    dataset in its original event order.
     """
 
     provider_id = PIXEL_RESULT_PROVIDER_ID
@@ -126,7 +128,7 @@ class PixelResultProvider:
             frames.setdefault(frame_id, {})[(x, y)] = normalize(pixel)
 
         def tap(frame: "dict[tuple[int, int], int]", x: int, y: int) -> int:
-            return frame.get((x, y), 0)  # zero-padding, preflight.md §9.1
+            return frame.get((x, y), 0)  # out-of-frame taps read as 0
 
         # Pass 2: per-event, using the reconstructed grid for the window.
         events: "list[dict[str, Any]]" = []
@@ -170,29 +172,28 @@ PIXEL_RESULT_PROVIDER = PixelResultProvider()
 register_golden_model_provider(PIXEL_RESULT_PROVIDER.provider_id, PIXEL_RESULT_PROVIDER)
 
 
-# ── Slice 10.3: tile-statistics path ──────────────────────────────────────
+# ── tile-statistics path ──────────────────────────────────────────────────
 
 TILE_STATS_PROVIDER_ID = "vision_pipeline.tile_stats"
 TILE_STATS_PROVIDER_VERSION = "1.0"
 
 
 class TileStatsProvider:
-    """Golden model for slice 10.3's tile-statistics path
-    (preflight.md §6.2/§9.1): one {minimum, maximum, mean, variance}
-    record per tile, computed over the *normalized* pixel stream
-    (tile_stats_hls's real input) -- the same normalize() formula
-    QuickstartNormalizerThresholdProvider/PixelResultProvider already
-    use.
+    """Golden model for the tile-statistics path: one
+    {minimum, maximum, mean, variance} record per tile, computed over the
+    *normalized* pixel stream (tile_stats_hls's real input) -- the same
+    normalize() formula QuickstartNormalizerThresholdProvider/
+    PixelResultProvider already use.
 
     ``minimum``/``maximum`` are a plain running min/max; ``mean``/
     ``variance`` use the exact power-of-two-shift population formula
-    frozen in preflight.md §9.1: ``mean = sum >> 6``,
+    tile_stats_hls itself computes: ``mean = sum >> 6``,
     ``variance = max(0, (sum_of_squares >> 6) - mean**2)`` -- identical
     to plain integer floor-division by 64 for the non-negative values
     involved, so this reproduces tile_stats_hls's own arithmetic
     exactly, not just approximately.
 
-    Slice 10.7A: generalized to any number of tiles per dataset, matching
+    Generalized to any number of tiles per dataset, matching
     tile_stats_hls's own concurrent-tile-column extension
     (tile_stats_hls.h's MAX_TILE_COLS). Events are grouped by ``tile_id``
     (not assumed to be a single tile) and each tile's own finalized
@@ -229,16 +230,13 @@ class TileStatsProvider:
 
         # Pass 1: group every event's normalized value by (frame_id, tile_id)
         # -- NOT tile_id alone. tile_id only encodes position *within* a
-        # frame (the frozen (y//8)*1024+(x//8) formula, preflight.md §9.1),
-        # so two different frames of the same fixed 8x8-tile shape reuse
-        # identical tile_id values (every single-tile 8x8 frame is
-        # tile_id=0, regardless of frame_id) -- grouping by tile_id alone
-        # silently conflates two different frames' own 64 samples into one
-        # combined "tile" once a dataset genuinely has more than one frame
-        # (slice 10.7B's platform-wrapper dataset is the first one that
-        # does; every earlier single-frame dataset this provider was
-        # exercised against had no way to expose this, tile_id already
-        # being effectively unique there).
+        # frame (the (y//8)*1024+(x//8) formula), so two different frames
+        # of the same fixed 8x8-tile shape reuse identical tile_id values
+        # (every single-tile 8x8 frame is tile_id=0, regardless of
+        # frame_id) -- grouping by tile_id alone silently conflates two
+        # different frames' own 64 samples into one combined "tile" once a
+        # dataset genuinely has more than one frame. See
+        # docs/development/adr/0004-golden-model-provider-boundary.md.
         tiles: "dict[tuple[int, int], dict[str, Any]]" = {}
         event_keys: "list[tuple[int, int]]" = []
         for ev in dataset.events:
@@ -250,9 +248,8 @@ class TileStatsProvider:
             bucket = tiles.setdefault(key, {"tile_id": tile_id, "frame_id": frame_id, "values": []})
             bucket["values"].append(normalize(pixel))
 
-        # Pass 2: closed-form population stats per (frame_id, tile_id)
-        # (preflight.md §9.1's frozen formula, unchanged from the
-        # single-tile version).
+        # Pass 2: closed-form population stats per (frame_id, tile_id),
+        # unchanged from the single-tile version's own formula.
         records: "dict[tuple[int, int], dict[str, Any]]" = {}
         for key, bucket in tiles.items():
             values = bucket["values"]
@@ -291,7 +288,7 @@ TILE_STATS_PROVIDER = TileStatsProvider()
 register_golden_model_provider(TILE_STATS_PROVIDER.provider_id, TILE_STATS_PROVIDER)
 
 
-# ── Slice 10.5: packetizer path ───────────────────────────────────────────
+# ── packetizer path ────────────────────────────────────────────────────────
 
 PACKETIZER_PROVIDER_ID = "vision_pipeline.packetizer"
 PACKETIZER_PROVIDER_VERSION = "1.0"
@@ -304,9 +301,10 @@ def pack_pixel_result_record(
     *, normalized_pixel: int, gradient_magnitude: int, threshold_mask: int,
     x: int, y: int, frame_id: int, tile_id: int, end_of_line: int, end_of_frame: int,
 ) -> int:
-    """Pack one pixel-result record into the frozen 128-bit layout
-    (preflight.md §6.1, MSB-first) -- bit-for-bit the same field order/
-    widths as pixel_result_packer_rtl.v's own concatenation.
+    """Pack one pixel-result record into the frozen 128-bit layout (see
+    docs/development/adr/0003-vision-packet-format.md), MSB-first --
+    bit-for-bit the same field order/widths as pixel_result_packer_rtl.v's
+    own concatenation.
     """
     value = RECORD_KIND_PIXEL_RESULT << 126
     value |= (normalized_pixel & 0xFF) << 118
@@ -324,9 +322,10 @@ def pack_pixel_result_record(
 def pack_tile_statistics_record(
     *, tile_id: int, minimum: int, maximum: int, mean: int, variance: int, frame_id: int,
 ) -> int:
-    """Pack one tile-statistics record into the frozen 128-bit layout
-    (preflight.md §6.1, MSB-first) -- bit-for-bit the same field order/
-    widths as tile_stats_packer_rtl.v's own concatenation.
+    """Pack one tile-statistics record into the frozen 128-bit layout (see
+    docs/development/adr/0003-vision-packet-format.md), MSB-first --
+    bit-for-bit the same field order/widths as tile_stats_packer_rtl.v's
+    own concatenation.
     """
     value = RECORD_KIND_TILE_STATISTICS << 126
     value |= (tile_id & 0xFFFF) << 110
@@ -339,19 +338,20 @@ def pack_tile_statistics_record(
 
 
 class PacketizerProvider:
-    """Golden model for slice 10.5's packetizer path (preflight.md
-    §6.1/§6.2/§9.1): reuses ``PixelResultProvider``/``TileStatsProvider``
-    verbatim for the per-domain field math (this module owns only the
-    128-bit packing, not a second copy of the Sobel/threshold/tile-stats
-    arithmetic) and packs each into the frozen record layout so the xsim
-    checker can compare decoded ``packet_data`` slots directly against
-    these hex values, without needing to reproduce real, clock-phase-
-    dependent CDC-crossing cycle timing (see design_packetizer.yml's own
-    header and gen_stimulus_packetizer.py for why this design is checked
-    by content -- every expected record observed exactly once, from
-    whichever beat/slot it lands in -- rather than by exact cycle, the
-    same "no golden-model exact-cycle timing" precedent slice 10.4's
-    cdc_xsim flow already established for a CDC-crossing design).
+    """Golden model for the packetizer path: reuses
+    ``PixelResultProvider``/``TileStatsProvider`` verbatim for the
+    per-domain field math (this module owns only the 128-bit packing, not
+    a second copy of the Sobel/threshold/tile-stats arithmetic) and packs
+    each into the frozen record layout (ADR 0003) so the xsim checker can
+    compare decoded ``packet_data`` slots directly against these hex
+    values, without needing to reproduce real, clock-phase-dependent
+    CDC-crossing cycle timing (see design_packetizer.yml's own header and
+    gen_stimulus_packetizer.py for why this design is checked by content
+    -- every expected record observed exactly once, from whichever
+    beat/slot it lands in -- rather than by exact cycle; any design whose
+    output crosses a CDC boundary needs this same by-content rather than
+    by-cycle checking strategy, since exact crossing timing isn't
+    predictable from the golden model alone).
     """
 
     provider_id = PACKETIZER_PROVIDER_ID
@@ -381,8 +381,8 @@ class PacketizerProvider:
                 x=x, y=y, frame_id=frame_id, tile_id=tile_id,
                 end_of_line=end_of_line, end_of_frame=end_of_frame,
             )
-            # This event's own tile's record (slice 10.7A: may differ
-            # across events when a dataset has more than one tile --
+            # This event's own tile's record (may differ across events
+            # when a dataset has more than one tile --
             # TileStatsProvider echoes each tile's finalized record at
             # every event belonging to that tile). The real hardware only
             # *emits* a tile-statistics record on that tile's own
@@ -420,16 +420,16 @@ PACKETIZER_PROVIDER = PacketizerProvider()
 register_golden_model_provider(PACKETIZER_PROVIDER.provider_id, PACKETIZER_PROVIDER)
 
 
-# ── Slice 10.7B: platform-wrapper path (real runtime-configurable threshold) ──
+# ── platform-wrapper path (real runtime-configurable threshold) ───────────
 
 PLATFORM_WRAPPER_PROVIDER_ID = "vision_pipeline.platform_wrapper"
 PLATFORM_WRAPPER_PROVIDER_VERSION = "1.0"
 
 
 class PlatformWrapperProvider:
-    """Golden model for slice 10.7B's platform-wrapper path (preflight.md
-    §26/§9.1): identical to PacketizerProvider except the threshold
-    comparison is real per-frame, not the shared DEFAULT_THRESHOLD
+    """Golden model for the platform-wrapper path: identical to
+    PacketizerProvider except the threshold comparison is real
+    per-frame, not the shared DEFAULT_THRESHOLD
     constant -- config carries ``frame_thresholds: {frame_id: threshold}``
     (default DEFAULT_THRESHOLD for any frame_id not listed), matching
     threshold_configurable_rtl.v's own frame-boundary-gated real

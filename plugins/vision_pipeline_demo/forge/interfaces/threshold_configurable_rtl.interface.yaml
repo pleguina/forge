@@ -10,12 +10,12 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.7B (release-plan Phase 10, preflight.md §26/§9.1): a
-    runtime-configurable variant of threshold_rtl.v -- threshold comes
-    from the control domain's real cdc: {kind: mailbox_transfer}
-    crossing (ctrl_mailbox_rtl.v's bundle), latched at frame boundaries
-    per the frozen configuration-update-timing decision. Fixed 2-cycle
-    registered latency, same as threshold_rtl.v.
+    This is a runtime-configurable variant of threshold_rtl.v --
+    threshold comes from the control domain's real
+    cdc: {kind: mailbox_transfer} crossing (ctrl_mailbox_rtl.v's
+    bundle), latched at frame boundaries so a mid-frame configuration
+    update never changes the threshold applied to pixels already in
+    flight. Fixed 2-cycle registered latency, same as threshold_rtl.v.
 
   roles:
 

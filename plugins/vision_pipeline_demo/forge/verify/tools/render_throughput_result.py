@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
-"""Build a real ``forge.throughput_result.v1`` artifact for slice 10.5's
-packetizer design (release-plan Phase 10, preflight.md §5 Decision B,
-§8) from real HLS synthesis reports plus a real Tier 2 probe CSV
-(``algo_top_probe.csv``, produced by ``forge verify run --probe-log``).
+"""Build a real ``forge.throughput_result.v1`` artifact for the
+packetizer design from real HLS synthesis reports plus a real Tier 2
+probe CSV (``algo_top_probe.csv``, produced by ``forge verify run
+--probe-log``).
 
 Known, honestly-stated limitation (found running this exact design, not
 assumed): ``forge.verify.gen_sim``'s Tier 2 probe CSV sampling is tied to
 a single clock (``ap_clk``) regardless of a given probe's own native
-domain -- true for every probe declared in this repo until this slice,
-since no earlier flow measured a FIFO's *read*-domain signals across a
-genuinely different, slower clock (``clk_output``, 8ns, vs. ``ap_clk``'s
-5ns). The write-domain probes (``*_full``/``*_overflow``/``*_occupancy``/
-``*_high_water``) are accurate -- they share ``ap_clk``, their own real
-domain. The read-domain probes (``*_empty``/``*_underflow``) are
-oversampled (~1.6x, the 8ns/5ns ratio) relative to real ``clk_output``
-edges, so ``emitted_transactions``/``empty_events``/the read-domain
-share of ``stall_cycles``/``measured_rate_records_per_sec`` are
-approximate, not exact -- a real, pre-existing single-clock probe
-sampling limitation this slice's own dual-clock design is the first to
-surface, not a new bug. A per-probe sampling-clock extension to
-``forge.verify.gen_sim`` would fix this properly; out of scope for this
-slice (see preflight.md's 10.5 scope note for the full reasoning) --
+domain -- no earlier flow in this plugin measured a FIFO's *read*-domain
+signals across a genuinely different, slower clock (``clk_output``, 8ns,
+vs. ``ap_clk``'s 5ns), so this dual-clock design is the first to surface
+the gap. The write-domain probes (``*_full``/``*_overflow``/
+``*_occupancy``/``*_high_water``) are accurate -- they share ``ap_clk``,
+their own real domain. The read-domain probes (``*_empty``/
+``*_underflow``) are oversampled (~1.6x, the 8ns/5ns ratio) relative to
+real ``clk_output`` edges, so ``emitted_transactions``/``empty_events``/
+the read-domain share of ``stall_cycles``/``measured_rate_records_per_sec``
+are approximate, not exact -- a real, pre-existing single-clock probe
+sampling limitation, not a new bug. A per-probe sampling-clock extension
+to ``forge.verify.gen_sim`` would fix this properly; that's a
+FORGE-core change, out of scope for a single plugin's render script --
 functional correctness does not depend on it at all (packetizer_rtl's
 own toggle-in-payload novelty detection, verified exhaustively by
 gen_stimulus_packetizer.py, needs none of this).
@@ -82,8 +81,8 @@ _DATA_WIDTH_BITS = {
     "sobel_hls": 12,
     "tile_stats_hls": 24,
 }
-# All three modules live in this design's pixel domain (ap_clk, 200MHz,
-# spec §6) -- real declared clock, not each module's own HLS-estimated fmax.
+# All three modules live in this design's pixel domain (ap_clk, 200MHz) --
+# the real declared clock, not each module's own HLS-estimated fmax.
 _CLOCK_MHZ = 200.0
 
 # Probe CSV rows are sampled on ap_clk (200MHz) -- see this module's own

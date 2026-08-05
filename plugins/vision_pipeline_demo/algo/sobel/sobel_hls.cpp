@@ -54,7 +54,7 @@ void sobel_hls(
 #pragma HLS INTERFACE ap_none port=end_of_frame_out
 #pragma HLS INTERFACE ap_none port=out_valid
 
-    // Standard Sobel kernel (preflight.md §9.1, frozen):
+    // Standard Sobel kernel:
     //   Gx = -r0c0 + r0c2 - 2*r1c0 + 2*r1c2 - r2c0 + r2c2
     //   Gy = -r0c0 - 2*r0c1 - r0c2 + r2c0 + 2*r2c1 + r2c2
     // Signed intermediates (never exposed on any interface); bounded by
@@ -72,10 +72,9 @@ void sobel_hls(
     ap_int<16> abs_gy = (gy < 0) ? ap_int<16>(-gy) : gy;
     ap_int<16> sum    = abs_gx + abs_gy;
 
-    // Saturate to gradient_magnitude's frozen 12-bit unsigned range
-    // (preflight.md §9.1) -- a safety net, not a normal-operation
-    // branch: the standard Sobel kernel on 8-bit pixels bounds |Gx|+|Gy|
-    // to 2040, well under 4095.
+    // Saturate to gradient_magnitude's 12-bit unsigned range -- a
+    // safety net, not a normal-operation branch: the standard Sobel
+    // kernel on 8-bit pixels bounds |Gx|+|Gy| to 2040, well under 4095.
     if (sum > 4095) {
         gradient_magnitude = 4095;
     } else {

@@ -10,9 +10,8 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.5 (release-plan Phase 10, preflight.md §6.1/§6.2/§9.1, spec
-    §11): the `output` domain's real multiplexing point for both record
-    kinds onto the corrected 256-bit forge.packet_stream.v1 (§6.1).
+    This is the `output` domain's real multiplexing point for both
+    record kinds onto the 256-bit forge.packet_stream.v1 wire format.
     Genuinely non-standard clock_primary/reset_primary names
     (clk_output/rst_output) -- see packetizer_rtl.v. Both record inputs
     are the destination side of a pixel -> output

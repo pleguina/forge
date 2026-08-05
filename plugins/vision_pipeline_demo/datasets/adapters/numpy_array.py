@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""``NumpyArrayAdapter`` (release-plan Phase 10, slice 10.6 —
-preflight.md §18.4/§18.1 Tier B).
+"""``NumpyArrayAdapter``.
 
 Loads a ``.npy``/``.npz`` array under one of three explicit layouts --
 ``HW`` (one frame), ``NHW`` (N grayscale frames), ``NHWC`` (N frames, 1 or
 3 channels) -- and rejects anything else outright rather than guessing
-which axis is which (spec §18.4: "must reject ambiguous or unsupported
-shapes rather than guessing").
+which axis is which: a silently-guessed axis mapping on a malformed or
+unexpected array would misinterpret a dataset without any error, turning
+a bad input into hard-to-diagnose downstream simulation failures instead
+of a clear rejection at load time.
 """
 from __future__ import annotations
 
@@ -20,9 +21,9 @@ ADAPTER_VERSION = "1.0"
 
 SUPPORTED_LAYOUTS = ("HW", "NHW", "NHWC")
 
-# Frozen grayscale coefficients (preflight.md §18.5), reused for NHWC's
-# 3-channel case -- same formula image_folder.py uses, so a 3-channel
-# NumPy source and an equivalent image-folder source normalize identically.
+# Frozen grayscale coefficients, reused for NHWC's 3-channel case --
+# same formula image_folder.py uses, so a 3-channel NumPy source and an
+# equivalent image-folder source normalize identically.
 _LUMA_R, _LUMA_G, _LUMA_B = 77, 150, 29
 
 
@@ -38,10 +39,11 @@ def _require_numpy():
 
 def _map_value_range(np, arr, *, source_min: float, source_max: float):
     """Explicit, declared linear rescale to the 0-255 domain -- nearest
-    rounding, saturating clamp (spec §18.5's frozen value-mapping shape,
-    same rounding/saturation policy as pixel_normalizer.cpp's own clamp).
-    A no-op (only a dtype cast) when the array is already the 0-255 uint8
-    domain, since ``source_min=0, source_max=255`` is the default."""
+    rounding, saturating clamp, matching the same rounding/saturation
+    policy as pixel_normalizer.cpp's own clamp so a rescaled NumPy source
+    and a design-side clamp never disagree on a boundary value. A no-op
+    (only a dtype cast) when the array is already the 0-255 uint8 domain,
+    since ``source_min=0, source_max=255`` is the default."""
     if source_max <= source_min:
         raise ValueError(f"value_range must have source_max > source_min, got ({source_min}, {source_max})")
     scaled = (arr.astype("float64") - source_min) * (255.0 / (source_max - source_min))
@@ -63,7 +65,7 @@ def _to_grayscale(np, frame):
 
 
 class NumpyArrayAdapter:
-    """``.npy``/``.npz`` array adapter (spec §18.4).
+    """``.npy``/``.npz`` array adapter.
 
     Args:
         source: path to a ``.npy`` or ``.npz`` file.

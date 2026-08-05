@@ -1,15 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Vision Pipeline Demo — Module Registry (quickstart tier)
+# Vision Pipeline Demo — Module Registry
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Release-plan Phase 10, slice 10.1 — the first, smallest rung of the
-# vision_pipeline_demo ladder (docs/internal/phase10/preflight.md /
-# vision_pipeline_reference_project.md). One HLS module, one RTL module:
+# Every HLS/RTL module used across this project's designs, one shared
+# registry. The smallest design (design.yml) uses only two entries:
 #
 #   pixel_normalizer (HLS) -> threshold_rtl (RTL) -> external result stream
 #
-# The fuller design (Sobel, tile statistics, CDC, throughput) is later
-# slices (10.2-10.7); this registers only what the quickstart tier needs.
+# Larger designs (Sobel edge detection, tile statistics, multi-domain
+# CDC, throughput/backpressure via async FIFOs, a runtime-configurable
+# platform wrapper) reuse these same entries and add more, all defined
+# below.
 # ═══════════════════════════════════════════════════════════════════════════
 registry_version: '1'
 
@@ -59,7 +60,7 @@ modules:
   interface_contract: interfaces/threshold_rtl.interface.yaml
   src: [../algo/rtl/threshold_rtl.v]
 
-# ─── Configurable Threshold Comparator (RTL) — slice 10.7B ─────────────────
+# ─── Configurable Threshold Comparator (RTL) ────────────────────────────────
 - name: threshold_configurable_rtl
   kind: rtl
   rtl_lang: verilog
@@ -67,14 +68,14 @@ modules:
   # Fixed 2-cycle registered latency, identical to threshold_rtl.v (see
   # algo/rtl/threshold_configurable_rtl.v) -- threshold comes from a real
   # cdc: {kind: mailbox_transfer} crossing instead of a compile-time
-  # parameter, latched at frame boundaries (preflight.md §9.1, frozen).
+  # parameter, latched at frame boundaries.
   latency:
     kind: fixed
     cycles: 2
   interface_contract: interfaces/threshold_configurable_rtl.interface.yaml
   src: [../algo/rtl/threshold_configurable_rtl.v]
 
-# ─── Control-domain configuration source (platform fixture) — slice 10.7B ──
+# ─── Control-domain configuration source (platform fixture) ────────────────
 - name: ctrl_mailbox_platform_rtl
   kind: rtl
   rtl_lang: verilog
@@ -86,7 +87,7 @@ modules:
   interface_contract: interfaces/ctrl_mailbox_platform_rtl.interface.yaml
   src: [../algo/rtl/ctrl_mailbox_platform_rtl.v]
 
-# ─── Window Builder (RTL) — slice 10.2 ─────────────────────────────────────
+# ─── Window Builder (RTL) ────────────────────────────────────────────────
 - name: window_builder_rtl
   kind: rtl
   rtl_lang: verilog
@@ -99,7 +100,7 @@ modules:
   interface_contract: interfaces/window_builder_rtl.interface.yaml
   src: [../algo/rtl/window_builder_rtl.v]
 
-# ─── Sobel Gradient (HLS) — slice 10.2 ─────────────────────────────────────
+# ─── Sobel Gradient (HLS) ────────────────────────────────────────────────
 - name: sobel_hls
   kind: hls
   top: sobel_hls
@@ -115,7 +116,7 @@ modules:
     stages: [csim, synth, cosim, export]
     csim_opts: -clean
 
-# ─── Edge/Mask Merge (RTL) — slice 10.2 ────────────────────────────────────
+# ─── Edge/Mask Merge (RTL) ───────────────────────────────────────────────
 - name: edge_mask_merge_rtl
   kind: rtl
   rtl_lang: verilog
@@ -127,12 +128,12 @@ modules:
   interface_contract: interfaces/edge_mask_merge_rtl.interface.yaml
   src: [../algo/rtl/edge_mask_merge_rtl.v]
 
-# ─── Tile Statistics (HLS) — slice 10.3 ────────────────────────────────────
+# ─── Tile Statistics (HLS) ───────────────────────────────────────────────
 - name: tile_stats_hls
   kind: hls
   top: tile_stats_hls
-  # Fixed 1-cycle latency, real II=1 (release-plan Phase 10, slice 10.5
-  # follow-up -- was `kind: fixed, cycles: 6` at II=2, see git history).
+  # Fixed 1-cycle latency, real II=1 (was `kind: fixed, cycles: 6` at
+  # II=2 in an earlier revision, see git history).
   # The original II=2 was a real, empirically-confirmed csynth result at
   # the time (a single loop-carried sum-of-squares accumulator bound to
   # a 3-cycle-latency DSP48 MACC), not a placeholder -- but it was not
@@ -164,7 +165,7 @@ modules:
     stages: [csim, synth, cosim, export]
     csim_opts: -clean
 
-# ─── Tile Boundary / tile-end summary (RTL) — slice 10.3 ───────────────────
+# ─── Tile Boundary / tile-end summary (RTL) ─────────────────────────────
 - name: tile_boundary_rtl
   kind: rtl
   rtl_lang: verilog
@@ -182,12 +183,12 @@ modules:
   interface_contract: interfaces/tile_boundary_rtl.interface.yaml
   src: [../algo/rtl/tile_boundary_rtl.v]
 
-# ─── Tile Summary Join (RTL) — slice 10.3 ──────────────────────────────────
+# ─── Tile Summary Join (RTL) ─────────────────────────────────────────────
 - name: tile_summary_join_rtl
   kind: rtl
   rtl_lang: verilog
   top: tile_summary_join_rtl
-  # Elastic (spec §15.3: "must not be reported as fixed") -- the join's
+  # Elastic -- must not be reported as fixed. The join's
   # real completion time is dominated by whichever of its two
   # predecessors (one fixed, one bounded) is slower for a given tile,
   # not this module's own 1-cycle match-and-forward step.
@@ -196,7 +197,7 @@ modules:
   interface_contract: interfaces/tile_summary_join_rtl.interface.yaml
   src: [../algo/rtl/tile_summary_join_rtl.v]
 
-# ─── Control Level (RTL) — slice 10.4 ──────────────────────────────────────
+# ─── Control Level (RTL) ─────────────────────────────────────────────────
 - name: ctrl_level_rtl
   kind: rtl
   rtl_lang: verilog
@@ -210,7 +211,7 @@ modules:
   interface_contract: interfaces/ctrl_level_rtl.interface.yaml
   src: [../algo/rtl/ctrl_level_rtl.v]
 
-# ─── Control Pulse (RTL) — slice 10.4 ──────────────────────────────────────
+# ─── Control Pulse (RTL) ─────────────────────────────────────────────────
 - name: ctrl_pulse_rtl
   kind: rtl
   rtl_lang: verilog
@@ -222,7 +223,7 @@ modules:
   interface_contract: interfaces/ctrl_pulse_rtl.interface.yaml
   src: [../algo/rtl/ctrl_pulse_rtl.v]
 
-# ─── Control Mailbox (RTL) — slice 10.4 ────────────────────────────────────
+# ─── Control Mailbox (RTL) ───────────────────────────────────────────────
 - name: ctrl_mailbox_rtl
   kind: rtl
   rtl_lang: verilog
@@ -234,7 +235,7 @@ modules:
   interface_contract: interfaces/ctrl_mailbox_rtl.interface.yaml
   src: [../algo/rtl/ctrl_mailbox_rtl.v]
 
-# ─── Pixel Sink (RTL) — slice 10.4 ──────────────────────────────────────────
+# ─── Pixel Sink (RTL) ────────────────────────────────────────────────────
 - name: pixel_sink_rtl
   kind: rtl
   rtl_lang: verilog
@@ -250,7 +251,7 @@ modules:
   interface_contract: interfaces/pixel_sink_rtl.interface.yaml
   src: [../algo/rtl/pixel_sink_rtl.v]
 
-# ─── Output Level (RTL) — slice 10.4 ───────────────────────────────────────
+# ─── Output Level (RTL) ──────────────────────────────────────────────────
 - name: outsink_level_rtl
   kind: rtl
   rtl_lang: verilog
@@ -262,7 +263,7 @@ modules:
   interface_contract: interfaces/outsink_level_rtl.interface.yaml
   src: [../algo/rtl/outsink_level_rtl.v]
 
-# ─── Output Pulse (RTL) — slice 10.4 ───────────────────────────────────────
+# ─── Output Pulse (RTL) ──────────────────────────────────────────────────
 - name: outsink_pulse_rtl
   kind: rtl
   rtl_lang: verilog
@@ -274,7 +275,7 @@ modules:
   interface_contract: interfaces/outsink_pulse_rtl.interface.yaml
   src: [../algo/rtl/outsink_pulse_rtl.v]
 
-# ─── Pixel-Result Record Packer (RTL) — slice 10.5 ─────────────────────────
+# ─── Pixel-Result Record Packer (RTL) ────────────────────────────────────
 - name: pixel_result_packer_rtl
   kind: rtl
   rtl_lang: verilog
@@ -286,7 +287,7 @@ modules:
   interface_contract: interfaces/pixel_result_packer_rtl.interface.yaml
   src: [../algo/rtl/pixel_result_packer_rtl.v]
 
-# ─── Tile-Statistics Record Packer (RTL) — slice 10.5 ──────────────────────
+# ─── Tile-Statistics Record Packer (RTL) ─────────────────────────────────
 - name: tile_stats_packer_rtl
   kind: rtl
   rtl_lang: verilog
@@ -298,13 +299,13 @@ modules:
   interface_contract: interfaces/tile_stats_packer_rtl.interface.yaml
   src: [../algo/rtl/tile_stats_packer_rtl.v]
 
-# ─── Packetizer (RTL) — slice 10.5 ──────────────────────────────────────────
+# ─── Packetizer (RTL) ────────────────────────────────────────────────────
 - name: packetizer_rtl
   kind: rtl
   rtl_lang: verilog
   top: packetizer_rtl
-  # Fixed 3-cycle latency, a real 3-stage pipeline (see
-  # algo/rtl/packetizer_rtl.v), matching spec §11's "L=3, II=1".
+  # Fixed 3-cycle latency, a real 3-stage pipeline accepting one input
+  # per cycle (see algo/rtl/packetizer_rtl.v).
   latency:
     kind: fixed
     cycles: 3

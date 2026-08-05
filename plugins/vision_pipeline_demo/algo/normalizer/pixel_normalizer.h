@@ -4,22 +4,22 @@
 #include <ap_int.h>
 
 // Fixed-point scale/offset applied to the incoming pixel, then saturated
-// to an 8-bit range. Compile-time constants (config-mailbox-driven
-// runtime configuration is a later slice's concern — see
-// docs/internal/phase10/preflight.md's Decision A/§9 checklist).
+// to an 8-bit range. Compile-time constants — this module does not
+// implement config-mailbox-driven runtime configuration (that pattern
+// is established elsewhere, e.g. threshold_configurable_rtl.v).
 #define NORMALIZER_SCALE_NUM 3
 #define NORMALIZER_SCALE_DEN 2
 #define NORMALIZER_OFFSET    (-64)
 
-// forge.pixel_stream.v1-shaped field widths (release-plan Phase 10).
+// forge.pixel_stream.v1-shaped field widths.
 typedef ap_uint<8>  pixel_t;
 typedef ap_uint<12> coord_t;
 typedef ap_uint<16> frame_id_t;
 typedef ap_uint<16> tile_id_t;
 typedef ap_uint<1>  flag_t;
 
-// pixel_normalizer — quickstart-tier HLS module (release-plan Phase 10,
-// slice 10.1): normalized = clamp(scale*pixel + offset, 0, 255).
+// pixel_normalizer — quickstart-tier HLS module:
+// normalized = clamp(scale*pixel + offset, 0, 255).
 // Every other forge.pixel_stream.v1 field is passed through unchanged,
 // aligned by the same PIPELINE/LATENCY-driven register stages the
 // normalized_pixel output goes through (see pixel_normalizer.cpp).

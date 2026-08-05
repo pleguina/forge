@@ -117,3 +117,8 @@ nav:
       - CLI Exit Codes: development/cli_exit_codes.md
       - Schema Versioning: development/SCHEMA_VERSIONING.md
       - Migration Tooling: development/MIGRATION_TOOLING.md
+      - Architecture Decisions:
+          - Dataset ownership boundary: development/adr/0001-dataset-ownership-boundary.md
+          - CDC primitive semantics: development/adr/0002-cdc-primitive-semantics.md
+          - Vision packet record format: development/adr/0003-vision-packet-format.md
+          - Golden-model provider boundary: development/adr/0004-golden-model-provider-boundary.md

@@ -1,12 +1,11 @@
 <!--
-  Vision Pipeline Demo — quickstart golden dataset (release-plan Phase 10, slice 10.1).
+  Vision Pipeline Demo — quickstart golden dataset.
 
   8x8 synthetic ramp frame (64 events, one per pixel: pixel = (i*4) & 0xFF).
   Deliberately carries only <in> values, no hand-authored <golden> tags —
   expected outputs are computed live by a real GoldenModelProvider
   (forge/verify/tools/golden_model_provider.py), not hand-typed and never
-  cross-checked (the anti-pattern this design exists to end — see
-  docs/internal/phase10/preflight.md Decision C).
+  cross-checked. See docs/development/adr/0004-golden-model-provider-boundary.md.
 -->
 <vision_pipeline_events>
   <event id="0">

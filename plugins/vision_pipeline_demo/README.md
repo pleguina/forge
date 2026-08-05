@@ -1,20 +1,17 @@
 # vision_pipeline_demo
 
-FORGE's domain-neutral vision-pipeline reference project (release-plan
-Phase 10 — see `docs/internal/phase10/preflight.md` and
-`docs/internal/phase10/vision_pipeline_reference_project.md` for the full
-frozen design). As of slice 10.7D, the full design is built: 8 real
-designs sharing one module registry, covering Sobel edge detection, tile
-statistics, all five CDC kinds across three real clock domains, an
-output packetizer with async-FIFO backpressure, a 3-domain platform
-wrapper with a runtime-configurable threshold, and two negative
-fixtures. `./run_vision_pipeline_demo.sh` runs all of it end to end (see
-"Running it" below). Only the optional hls4ml CNN extension (slice 10.8)
+FORGE's domain-neutral vision-pipeline reference project. The full
+design is built: 8 real designs sharing one module registry, covering
+Sobel edge detection, tile statistics, all five CDC kinds across three
+real clock domains, an output packetizer with async-FIFO backpressure, a
+3-domain platform wrapper with a runtime-configurable threshold, and two
+negative fixtures. `./run_vision_pipeline_demo.sh` runs all of it end to
+end (see "Running it" below). Only the optional hls4ml CNN extension
 remains unbuilt.
 
-Slice 10.1's own **quickstart tier** — one HLS module, one RTL module,
-one clock domain, no CDC, no tiling — is still the smallest complete
-example and the best place to start; see
+The **quickstart tier** — one HLS module, one RTL module, one clock
+domain, no CDC, no tiling — is still the smallest complete example and
+the best place to start; see
 `docs/tutorials/vision-pipeline-quickstart.md` for a full manual
 walkthrough of it, and
 `docs/tutorials/vision-pipeline-full-design.md` for the rest.
@@ -23,15 +20,17 @@ What makes this different from `plugins/passthrough_demo/` — beyond
 mixing HLS and RTL — is the golden model: the golden dataset carries only
 input values, no hand-typed expected outputs. Expected outputs are
 computed live by a real `GoldenModelProvider`
-(`forge/verify/tools/golden_model_provider.py`), routed through the new
+(`forge/verify/tools/golden_model_provider.py`), routed through
 `forge.verify.dataset_service.DatasetService` +
-`forge.verify.golden_model.run_golden_model` machinery (release-plan
-Phase 10, slice 10.0A) — the concrete fix for the "hand-typed, never
-cross-checked golden values" pattern every prior reference plugin used.
+`forge.verify.golden_model.run_golden_model` machinery — the concrete
+fix for the "hand-typed, never cross-checked golden values" pattern
+every prior reference plugin used. See
+`docs/development/adr/0004-golden-model-provider-boundary.md` for the
+ownership split behind this.
 
 ## What it does
 
-The quickstart pipeline (slice 10.1) is the simplest complete example:
+The quickstart pipeline is the simplest complete example:
 
 ```
 external pixel stream

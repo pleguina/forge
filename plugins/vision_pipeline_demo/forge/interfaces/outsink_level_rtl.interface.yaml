@@ -10,8 +10,7 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A): the
-    `output` domain's async_fifo consumer and level_sync source.
+    This is the `output` domain's async_fifo consumer and level_sync source.
     Genuinely non-standard clock_primary/reset_primary names
     (clk_output/rst_output) -- see outsink_level_rtl.v.
 

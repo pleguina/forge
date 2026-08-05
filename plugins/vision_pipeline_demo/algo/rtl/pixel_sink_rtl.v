@@ -1,8 +1,7 @@
 //==============================================================================
 // pixel_sink_rtl.v
 //==============================================================================
-// Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A, spec
-// §6-§8): the `pixel` domain's consumer of the three control -> pixel
+// The `pixel` domain's consumer of the three control -> pixel
 // crossings (level_sync/pulse_sync/mailbox_transfer), and the *source*
 // of the pixel -> output async_fifo crossing.
 //
@@ -18,9 +17,10 @@
 // producer-side backpressure signal (algo/rtl's own real primitive,
 // copied from plugins/trigger_demo -- see its header comment), so
 // holding the source value constant for the whole test, rather than
-// streaming a changing counter, is what keeps this slice's check
+// streaming a changing counter, is what keeps this check
 // (does a value cross correctly at all) decoupled from FIFO fill/drain
-// dynamics (slice 10.5's job, once throughput/backpressure is in scope).
+// dynamics -- throughput/backpressure behavior is exercised separately,
+// once it's actually in scope for a given design.
 //==============================================================================
 
 `timescale 1ns / 1ps

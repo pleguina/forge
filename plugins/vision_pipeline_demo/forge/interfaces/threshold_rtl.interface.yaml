@@ -10,12 +10,11 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Quickstart-tier threshold comparator (release-plan Phase 10, slice
-    10.1): threshold_mask = (normalized_pixel >= THRESHOLD). Every other
-    forge.pixel_stream.v1 field is passed through unchanged. Fixed
-    2-cycle registered latency — reused unmodified by the full
-    vision_pipeline_demo design's own topology (not a throwaway
-    quickstart-only variant).
+    Quickstart-tier threshold comparator: threshold_mask =
+    (normalized_pixel >= THRESHOLD). Every other forge.pixel_stream.v1
+    field is passed through unchanged. Fixed 2-cycle registered latency
+    — reused unmodified by the full vision_pipeline_demo design's own
+    topology (not a throwaway quickstart-only variant).
 
   roles:
 

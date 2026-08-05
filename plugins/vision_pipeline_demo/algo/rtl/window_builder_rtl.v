@@ -1,14 +1,13 @@
 //==============================================================================
 // window_builder_rtl.v
 //==============================================================================
-// Slice 10.2 (release-plan Phase 10, docs/internal/phase10/preflight.md
-// §6.3/§9.1): a real 3x3 sliding-window generator, sitting between
+// A real 3x3 sliding-window generator, sitting between
 // pixel_normalizer and sobel_hls so sobel_hls itself stays a small,
 // stateless 3x3-compute module. This is the module that actually owns
 // the N-dimensional (raw_port_tpl, dims:[3,3]) physical binding the
 // full spec calls for.
 //
-// Border policy (frozen, preflight §9.1): zero-padding. Out-of-frame
+// Border policy: zero-padding. Out-of-frame
 // taps read as 0 — never dropped, so every accepted input pixel still
 // produces exactly one output window (1:1), matching the fixed-latency
 // model every other module in this design uses.
@@ -54,8 +53,8 @@
 // contamination).
 //
 // Scope boundary (documented, not a bug): this module does not expose a
-// ready/backpressure port — real backpressure is slice 10.5's job. The
-// driving stimulus for this slice must leave at least FRAME_WIDTH+2
+// ready/backpressure port — real backpressure is out of scope for this
+// fixture. The driving stimulus must leave at least FRAME_WIDTH+2
 // idle cycles between one frame's last pixel and the next frame's
 // first, exactly like a video blanking interval, so the end-of-frame
 // drain above never overlaps a new frame's real data.

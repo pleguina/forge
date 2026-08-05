@@ -1,13 +1,13 @@
 //==============================================================================
 // pixel_result_packer_rtl.v
 //==============================================================================
-// Slice 10.5 (release-plan Phase 10, docs/internal/phase10/preflight.md
-// §6.1/§6.2/§9.1): packs edge_mask_merge_rtl's pixel-result fields into
-// the frozen 128-bit pixel-result packet record --
+// Packs edge_mask_merge_rtl's pixel-result fields into
+// the 128-bit pixel-result packet record (layout fixed by
+// docs/development/adr/0003-vision-packet-format.md) --
 //
 //   record_kind{2}=2'd0, normalized_pixel{8}, gradient_magnitude{12},
 //   threshold_mask{1}, x{12}, y{12}, frame_id{16}, tile_id{16},
-//   end_of_line{1}, end_of_frame{1}, reserved{47}   (MSB-first, §6.1)
+//   end_of_line{1}, end_of_frame{1}, reserved{47}   (MSB-first)
 //
 // -- and appends a 1-bit toggle at bit[128] so the crossing
 // cdc: {kind: async_fifo} connection to packetizer_rtl (output domain)
@@ -25,14 +25,16 @@
 // no core-framework change (no new port-wiring convention in
 // forge.topgen.generators.structural_verilog) -- the same "continuously
 // driven, self-describing payload" model every other CDC kind in this
-// repo already uses, just carrying one extra bit.
+// repo already uses, just carrying one extra bit (this toggle-in-payload
+// convention is documented project-wide in
+// docs/development/adr/0002-cdc-primitive-semantics.md).
 //
 // Fixed 1-cycle latency: a single registered stage, gated by in_valid --
 // holding both `out_record`'s value and the toggle unchanged on any
 // cycle in_valid is low, so a low-valid cycle produces neither a new
 // record nor a false toggle flip downstream.
 //
-// `out_record_valid` (release-plan Phase 10, slice 10.5): a real,
+// `out_record_valid`: a real,
 // per-record write-enable pulse -- `in_valid` registered on the same
 // edge as `out_record` itself, so it is high on exactly the cycle
 // `out_record` carries a genuinely new value. Wired as the pixel ->

@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-"""Dataset manifest + staleness check (release-plan Phase 10, slice 10.6
-— preflight.md §18.6).
+"""Dataset manifest + staleness check.
 
 Every converted dataset gets a sidecar manifest recording its adapter
 identity, source-file hashes, preprocessing-config hash, canonical-event
-hash, and (optionally) serialized-XML and golden-model hashes — the
-"Source, preprocessing, canonical-event, serialized, and golden hashes
-are recorded" acceptance criterion (spec §18.14). No new hashing scheme
-is introduced here: every hash reuses
-:mod:`forge.core.utils.content_hash` primitives already established by
-slice 10.0A (``compute_preprocessing_hash``) and Phase 7
-(``hash_file``/``hash_bytes``).
+hash, and (optionally) serialized-XML and golden-model hashes, so a
+reader can tell exactly which stage of the pipeline produced a given
+dataset and verify none of its inputs silently changed. No new hashing
+scheme is introduced here: every hash reuses
+:mod:`forge.core.utils.content_hash` primitives already established
+elsewhere in FORGE (``compute_preprocessing_hash``,
+``hash_file``/``hash_bytes``), so a dataset's hashes stay comparable with
+hashes computed anywhere else in the framework.
 
-Staleness (spec §18.11/§22 "Staleness identifies changed inputs") is a
-pure content-hash comparison, never a modification-time check — the same
-principle ``content_hash.py``'s own docstring states ("Modification times
-may remain an optimization, but must not be the source of truth").
+Staleness detection is a pure content-hash comparison, never a
+modification-time check — the same principle ``content_hash.py``'s own
+docstring states ("Modification times may remain an optimization, but
+must not be the source of truth"). A hash-based check survives file
+copies, checkouts, and touched-but-unchanged files without false
+positives.
 """
 from __future__ import annotations
 
@@ -45,15 +47,14 @@ def compute_canonical_events_hash(events: "Sequence[DatasetEvent]") -> str:
 
     Deliberately excludes ``source_metadata`` — adapters (e.g.
     ``ImageFolderAdapter``) populate it with the absolute local source
-    path, which must never affect a *semantic* content hash (the same
-    "local absolute source paths must not affect the portable semantic
-    dataset hash" principle spec §18.6 states explicitly, and the same
-    exclusion :class:`~forge.verify.dataset_format.SemanticMetadata`
-    already makes for :class:`~forge.verify.dataset_format.EnvironmentMetadata`).
-    A real, reproducible bug was found here during this slice's own
-    staleness/relocation tests: without this exclusion, copying a source
-    image directory to a new path changed ``canonical_events_hash`` even
-    though every pixel was byte-identical.
+    path, which must never affect a *semantic* content hash: relocating
+    a source directory must not change a dataset's semantic identity,
+    the same principle :class:`~forge.verify.dataset_format.SemanticMetadata`
+    already applies by excluding :class:`~forge.verify.dataset_format.EnvironmentMetadata`.
+    A real, reproducible bug was found here during development: without
+    this exclusion, copying a source image directory to a new path
+    changed ``canonical_events_hash`` even though every pixel was
+    byte-identical.
     """
     canonical = json.dumps(
         [
@@ -67,7 +68,7 @@ def compute_canonical_events_hash(events: "Sequence[DatasetEvent]") -> str:
 
 @dataclass(frozen=True)
 class DatasetManifest:
-    """The real ``forge.dataset_manifest`` sidecar (spec §18.6)."""
+    """The real ``forge.dataset_manifest`` sidecar."""
 
     dataset_id:        str
     adapter_id:        str
@@ -84,9 +85,8 @@ class DatasetManifest:
     deterministic:      bool = True
     schema:             ArtifactSchema = MANIFEST_SCHEMA
     # The exact adapter constructor kwargs used to produce this dataset --
-    # beyond spec §18.6's representative example, but what `rebuild`
-    # needs to re-materialize a dataset from the manifest alone, with
-    # nothing but this file and the original source files.
+    # what `rebuild` needs to re-materialize a dataset from the manifest
+    # alone, with nothing but this file and the original source files.
     adapter_config:     "Mapping[str, Any]" = field(default_factory=dict)
 
     def to_dict(self) -> "dict[str, Any]":
@@ -158,9 +158,9 @@ def build_manifest(
     that produced them.
 
     ``source_files`` keys are recorded relative to *source_root* (or, if
-    not given, as bare filenames) — never an absolute local path, per
-    spec §18.6 ("Local absolute source paths must not affect the portable
-    semantic dataset hash").
+    not given, as bare filenames) — never an absolute local path, so that
+    relocating a source directory does not change the recorded manifest
+    or the portable semantic dataset hash.
     """
     source_files: "dict[str, str]" = {}
     for p in source_paths:

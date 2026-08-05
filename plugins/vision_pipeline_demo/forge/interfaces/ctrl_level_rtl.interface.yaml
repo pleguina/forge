@@ -10,8 +10,7 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A): the
-    `control` domain's level_sync endpoint pair. Literal ap_clk/ap_rst
+    This is the `control` domain's level_sync endpoint pair. Literal ap_clk/ap_rst
     (control is this design's primary domain) -- see ctrl_level_rtl.v
     for why this is a dedicated module.
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator for slice 10.4's multi-domain
-CDC path (release-plan Phase 10, preflight.md §5 Decision A).
+"""vision_pipeline_demo stimulus generator for the multi-domain CDC path.
 
 Unlike every other gen_stimulus_*.py in this plugin, this flow has no
 per-event pixel/tile dataset to drive -- design_cdc.yml exercises five
@@ -19,16 +18,19 @@ cdc_async_fifo (algo/rtl, copied from plugins/trigger_demo -- see their
 own header comments) have no producer-side backpressure/valid concept,
 so their real completion timing is data-dependent and not statically
 bounded. Holding values constant sidesteps needing to model that
-timing precisely (this slice's job is proving each crossing kind works
-at all, not throughput/backpressure -- that's slice 10.5's), while
-apply_in/frame_done_pulse_in are driven as genuine single-cycle pulses
-(pulse_sync's whole point) with a comfortable settle window around them.
+timing precisely (this flow proves each crossing kind works at all, not
+sustained throughput/backpressure -- see check_throughput_sustainability.py
+and check_fifo_capacity.py for that), while apply_in/frame_done_pulse_in
+are driven as genuine single-cycle pulses (pulse_sync's whole point) with
+a comfortable settle window around them.
 
 frame_done_pulse_in lives in the `output` domain (clk_output) -- driven
-and paced with StimulusEmitter.tick(clock="clk_output") (release-plan
-Phase 10, slice 10.4's own new capability), not the default ap_clk, to
-actually exercise cross-domain-paced stimulus, not just because the
-period math would also tolerate ap_clk-paced driving here.
+and paced with StimulusEmitter.tick(clock="clk_output"), not the default
+ap_clk, to actually exercise cross-domain-paced stimulus, not just
+because the period math would also tolerate ap_clk-paced driving here.
+See docs/development/adr/0002-cdc-primitive-semantics.md for the
+continuously-driven, self-describing-payload convention every crossing
+in this plugin follows.
 
 Usage::
 
@@ -88,10 +90,10 @@ def generate_for_flow(flow_name: str, out_path: Path) -> None:
         em.tick(cycles=_SETTLE_CYCLES)
 
     with em.event_block("pulse_frame_done"):
-        # Paced against the output domain's own clock (release-plan
-        # Phase 10, slice 10.4's new StimulusEmitter.tick(clock=...)) --
-        # frame_done_pulse_in is sampled by outsink_pulse_rtl's
-        # always @(posedge clk_output) block.
+        # Paced against the output domain's own clock via
+        # StimulusEmitter.tick(clock="clk_output") -- frame_done_pulse_in
+        # is sampled by outsink_pulse_rtl's always @(posedge clk_output)
+        # block.
         em.drive("outsink_pulse_frame_done_pulse_in", 1, width=1)
         em.tick(clock="clk_output")
         em.drive("outsink_pulse_frame_done_pulse_in", 0, width=1)

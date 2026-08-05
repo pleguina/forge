@@ -1,16 +1,15 @@
 //==============================================================================
 // edge_mask_merge_rtl.v
 //==============================================================================
-// Slice 10.2 (release-plan Phase 10, docs/internal/phase10/preflight.md
-// §6.2): merges the Sobel branch (window_builder_rtl -> sobel_hls) and
+// Merges the Sobel branch (window_builder_rtl -> sobel_hls) and
 // the threshold branch (threshold_rtl -> a Connection.delay_cycles
 // alignment delay, see plugins/vision_pipeline_demo/forge/designs/
 // design.yml) into one forge.edge_mask_stream.v1-shaped pixel-result
 // record.
 //
-// This is the module the spec calls out as needing "exact-cycle
-// alignment" (vision_pipeline_reference_project.md §11) -- and per
-// preflight.md's 10.2 scope note, that alignment is a static property
+// This is the module that needs exact-cycle
+// alignment between its two upstream branches -- that alignment is a
+// static property
 // the two branches' declared fixed latencies already guarantee (checked
 // by forge.analyze.latency_static's real exact_cycle merge-point
 // classification at `forge topgen validate` time, not by anything in

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo dataset CLI (release-plan Phase 10, slice 10.6 —
-preflight.md §18.9).
+"""vision_pipeline_demo dataset CLI.
 
 Example-local commands, until FORGE has a generic top-level dataset
-command (spec §18.9's own framing):
+command -- see docs/development/adr/0001-dataset-ownership-boundary.md
+for why dataset loading is deliberately owned by this plugin rather than
+FORGE core:
 
     python3 datasets/cli.py generate-synthetic --output <dir> --dataset-id <id> \\
         --width 8 --height 8 --pattern ramp --event-count 1
@@ -15,9 +16,11 @@ command (spec §18.9's own framing):
     python3 datasets/cli.py validate <manifest.yml> [--source-root <dir>]
     python3 datasets/cli.py rebuild  <manifest.yml> --source-root <dir> --output <dir>
 
-BSDS500/Fashion-MNIST importers (spec §18.9's ``import-bsds500``/
-``import-fashion-mnist``) are Tier C, optional, and explicitly out of
-this slice's scope (preflight.md §11/§15) -- not wired up here.
+BSDS500/Fashion-MNIST importers (``import-bsds500``/
+``import-fashion-mnist``) are optional and explicitly out of scope: both
+would require network downloads, which conflicts with keeping the
+mandatory tutorial path offline-capable -- not wired up here. See the
+ADR above for the full reasoning.
 """
 from __future__ import annotations
 

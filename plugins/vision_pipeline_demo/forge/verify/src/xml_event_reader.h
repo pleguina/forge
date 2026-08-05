@@ -9,16 +9,17 @@
 // established.
 //
 // Unlike trigger_demo's golden XML, this dataset carries only `<in ...>`
-// values — no hand-authored `<golden ...>` tags (release-plan Phase 10,
-// slice 10.1, Decision C). Expected output is computed here, inline,
-// using the same closed-form formula
-// algo/normalizer/pixel_normalizer.cpp implements — a second, independent
-// implementation of the same trivial oracle for the C-sim testbench's
-// own use, deliberately not shared code with the Python
+// values — no hand-authored `<golden ...>` tags, so a hand-typed value can
+// never silently drift out of sync with the algorithm it's supposed to
+// validate. Expected output is computed here, inline, using the same
+// closed-form formula algo/normalizer/pixel_normalizer.cpp implements — a
+// second, independent implementation of the same trivial oracle for the
+// C-sim testbench's own use, deliberately not shared code with the Python
 // GoldenModelProvider that drives the RTL-level stimulus (see
-// forge/verify/tools/golden_model_provider.py) — the algorithm is simple
-// enough that this duplication is a cheap, honest choice, not an
-// accidental drift risk.
+// forge/verify/tools/golden_model_provider.py, and the provider boundary
+// explained in docs/development/adr/0004-golden-model-provider-boundary.md)
+// — the algorithm is simple enough that this duplication is a cheap,
+// honest choice, not an accidental drift risk.
 // ════════════════════════════════════════════════════════════════════════
 
 #include <vector>

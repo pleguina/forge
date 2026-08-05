@@ -1,9 +1,10 @@
-"""Tests for the slice 10.6 dataset adapters (release-plan Phase 10 —
-preflight.md §18.4/§18.12): ``SyntheticPatternAdapter``,
-``ImageFolderAdapter``, ``NumpyArrayAdapter``, their FORGE-registered
-``ProjectDatasetAdapter`` wrappers, and the manifest/staleness machinery.
+"""Tests for the project-owned dataset adapters (see
+docs/development/adr/0001-dataset-ownership-boundary.md):
+``SyntheticPatternAdapter``, ``ImageFolderAdapter``, ``NumpyArrayAdapter``,
+their FORGE-registered ``ProjectDatasetAdapter`` wrappers, and the
+manifest/staleness machinery.
 
-Required-test coverage (spec §18.12), mapped to test functions below:
+Required test coverage, mapped to test functions below:
   * same source/config produces byte-identical canonical events
     -> test_synthetic_determinism, test_numpy_layout_determinism
   * filesystem ordering does not change event order
@@ -60,9 +61,8 @@ def test_synthetic_unknown_pattern_rejected():
 
 
 def test_synthetic_row_major_traversal_and_tile_id():
-    # 16x16 exercises 2x2 tiles -- both tile_id row/col terms vary
-    # (matches preflight.md §9.1/§10's own reasoning for the full-functional
-    # dataset size).
+    # 16x16 exercises 2x2 tiles -- both tile_id row/col terms vary, the
+    # same reasoning behind the full-functional design's own dataset size.
     events = list(SyntheticPatternAdapter(width=16, height=16, patterns=["constant"], event_count=1).iter_events())
     pixels = events[0].pixels
     assert len(pixels) == 256

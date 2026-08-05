@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """vision_pipeline_demo plugin registration — connects vision_pipeline_demo
-to forge verify (release-plan Phase 10, slice 10.1).
+to forge verify.
 
 After importing this module, vision_pipeline_demo is known to the
 framework and forge verify generate / run will work for declared flows.

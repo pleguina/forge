@@ -1,16 +1,16 @@
 //==============================================================================
 // threshold_configurable_rtl.v
 //==============================================================================
-// Slice 10.7B (release-plan Phase 10, preflight.md §26/§9.1's "generic
-// platform fixture" — a real, runtime-configurable variant of
+// A real, runtime-configurable variant of
 // threshold_rtl.v, added alongside it (threshold_rtl.v itself stays
-// "reused unmodified" per its own header, not touched by this slice).
+// reused unmodified per its own header, not touched by this module's
+// addition).
 //
 // threshold_rtl.v's THRESHOLD is a compile-time Verilog parameter; this
 // module instead takes it from the `control` domain's real
 // cdc: {kind: mailbox_transfer} crossing (ctrl_mailbox_rtl.v's own
-// {threshold[7:0], kernel_mode[1:0], frame_limit[15:0]} bundle,
-// unchanged from slice 10.4/design_cdc.yml) via `mailbox_in` — the same
+// {threshold[7:0], kernel_mode[1:0], frame_limit[15:0]} bundle) via
+// `mailbox_in` — the same
 // plain, continuously-driven destination-side convention
 // pixel_sink_rtl.v's own `mailbox_in` already established (no
 // `dout_valid` companion signal needed: this module doesn't care
@@ -19,9 +19,10 @@
 // stimulus is responsible for a generous settle margin between writing
 // a new mailbox value and that value's frame, the same "no exact-cycle
 // CDC timing assumed" precedent every mailbox_transfer/async_fifo
-// consumer in this plugin already follows).
+// consumer in this plugin already follows; see
+// docs/development/adr/0002-cdc-primitive-semantics.md).
 //
-// Configuration-update timing (preflight.md §9.1, frozen): applied at
+// Configuration-update timing: applied at
 // the next frame boundary, not immediately. Realized here by latching
 // `mailbox_in`'s current threshold field into `active_threshold` only
 // on the frame's first accepted sample (`in_valid && x==0 && y==0`) —
@@ -29,7 +30,7 @@
 // threshold; a value written mid-frame is invisible until the next
 // frame's own first sample, never retroactively affecting an in-flight
 // frame. `kernel_mode`/`frame_limit` are carried through the mailbox
-// bundle (matching the frozen forge.configuration_mailbox.v1 format)
+// bundle (matching the forge.configuration_mailbox.v1 format)
 // but not functionally consumed by this fixture — no downstream
 // consumer needs them yet (Sobel is a fixed kernel; nothing in this
 // plugin enforces a frame-count limit) — an honest scope boundary, not
@@ -37,7 +38,7 @@
 //
 // Otherwise identical to threshold_rtl.v: same 2-cycle registered
 // latency (preserving the exact-cycle merge property against the sobel
-// branch), same `>=` comparison (preflight.md §9.1, frozen), same
+// branch), same `>=` comparison, same
 // pass-through fields.
 //
 // Parameters:

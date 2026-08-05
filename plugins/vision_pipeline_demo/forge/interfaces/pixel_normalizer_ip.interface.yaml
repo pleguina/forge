@@ -4,8 +4,7 @@
 # ip_info_key: norm
 # Policy: docs/concepts/contracts-and-protocols.md
 #
-# Field set mirrors the logical forge.pixel_stream.v1 bus described in
-# docs/internal/phase10/vision_pipeline_reference_project.md §9 — no
+# Field set mirrors the logical forge.pixel_stream.v1 bus -- no
 # bus-grouping mechanism exists in the framework today (confirmed:
 # forge.topgen.ip.contract_verifier.KNOWN_PROTOCOLS has no such concept),
 # so this is expressed as individual roles, exactly like every other
@@ -20,10 +19,9 @@ ip_interface:
   # ap_clk IS present in the synthesized RTL (same convention as
   # plugins/trigger_demo/algo/trigger_logic).
   notes: >
-    Quickstart-tier normalizer (release-plan Phase 10, slice 10.1):
-    normalized = clamp(scale*pixel + offset, 0, 255). Every other
-    forge.pixel_stream.v1 field is passed through unchanged. Pipelined
-    at II=1, fixed latency 3 cycles.
+    Quickstart-tier normalizer: normalized = clamp(scale*pixel + offset,
+    0, 255). Every other forge.pixel_stream.v1 field is passed through
+    unchanged. Pipelined at II=1, fixed latency 3 cycles.
 
   roles:
 
@@ -66,7 +64,7 @@ ip_interface:
       raw_port: tile_id
       direction: input
       width: 16
-      notes: "Tile identifier (fixed at 0 this slice — no real tiling until slice 10.3)"
+      notes: "Tile identifier -- passed through unchanged; pixel_normalizer itself does not compute tile geometry, so isolated tests of this module alone drive it as a fixed placeholder"
 
     end_of_line:
       raw_port: end_of_line

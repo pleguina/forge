@@ -10,12 +10,12 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.3 (release-plan Phase 10, preflight.md §6.2): the "tile-end
-    summary" half of the per-tile path's tagged elastic join. Fan-out
-    sibling of tile_stats_hls (both driven directly from
-    pixel_normalizer), independently re-derives the tile-end event and
-    holds {tile_id, frame_id, end_of_frame} for HOLD_CYCLES cycles
-    (bounded, no ack handshake) -- see tile_boundary_rtl.v for the full
+    This is the "tile-end summary" half of the per-tile path's tagged
+    elastic join. A fan-out sibling of tile_stats_hls (both driven
+    directly from pixel_normalizer), it independently re-derives the
+    tile-end event and holds {tile_id, frame_id, end_of_frame} for
+    HOLD_CYCLES cycles (bounded, no ack handshake) -- see
+    tile_boundary_rtl.v for the full
     reasoning on why this is a real, independent re-derivation rather
     than a tap off tile_stats_hls's own output.
 

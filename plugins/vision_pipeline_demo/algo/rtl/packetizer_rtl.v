@@ -1,27 +1,27 @@
 //==============================================================================
 // packetizer_rtl.v
 //==============================================================================
-// Slice 10.5 (release-plan Phase 10, docs/internal/phase10/preflight.md
-// §6.1/§6.2/§9.1, spec §11 "packetizer_rtl"): the `output` domain
-// multiplexing point for both record kinds onto the corrected
-// forge.packet_stream.v1 (§6.1): data{256}, keep{32}, last{1} +
-// ready/valid.
+// The `output` domain
+// multiplexing point for both record kinds onto
+// forge.packet_stream.v1: data{256}, keep{32}, last{1} +
+// ready/valid. Record and beat layout are fixed by
+// docs/development/adr/0003-vision-packet-format.md.
 //
 // Two independent upstream paths cross into this module's own `output`
 // domain via two separate cdc: {kind: async_fifo, depth: 64} connections
 // (design_packetizer.yml) -- pixel_result_packer_rtl and
 // tile_stats_packer_rtl each source their own crossing, rather than one
 // shared arbiter feeding one shared FIFO before the packetizer -- this
-// is what preflight.md §6.2 means by "multiplexed AT THE PACKETIZER, not
-// merged before it": this module is the only place the two record kinds
-// meet. Each input port is a raw, continuously-driven FIFO `dout`
+// module is the only place the two record kinds
+// meet (see ADR 0003's "multiplexing point" decision). Each input port
+// is a raw, continuously-driven FIFO `dout`
 // (129 bits: {toggle, record[127:0]}, see pixel_result_packer_rtl.v's
 // header for the toggle-in-payload novelty scheme) -- a real new record
 // on a given path is detected by comparing that path's toggle bit
 // against the last-seen value, not by any `empty`/valid port (FORGE's
 // structural wiring exposes neither to this module).
 //
-// Packing (frozen, §9.1): bits[127:0] carry whichever record is ready
+// Packing: bits[127:0] carry whichever record is ready
 // first that beat, bits[255:128] the second, from either path -- slot
 // position carries no kind meaning, record_kind alone disambiguates.
 // A beat carrying only one ready record packs it into bits[127:0] alone
@@ -30,22 +30,21 @@
 // whether any given beat ever carries two records depends on real,
 // clock-phase-dependent CDC crossing timing between the two crossings
 // -- observed from the real xsim run, not engineered/assumed; the
-// single-record-per-beat case is what the frozen packing rule's own
+// single-record-per-beat case is what the packing rule's own
 // second sentence already describes, and is what this design's own
 // stimulus checker verifies exhaustively (every record decoded and
 // checked, from whichever slot it lands in).
 //
-// `last` (not previously frozen by any preflight.md decision -- the
-// generic forge.packet_stream.v1 doesn't specify its meaning beyond the
-// standard AXI4-Stream-style "end of transfer" convention): this design
+// `last` (the generic forge.packet_stream.v1 doesn't specify its
+// meaning beyond the standard AXI4-Stream-style "end of transfer"
+// convention): this design
 // chooses `last` = the pixel-result record's own `end_of_frame` field,
 // when a pixel-result record occupies this beat (tile-statistics
 // records carry no end_of_frame field of their own).
 //
 // Fixed 3-cycle latency (a real 3-stage pipeline below, not a rough
 // estimate), II=1 (accepts a new toggle transition on either path every
-// cycle -- see spec §11's own "L=3, II=1" module-catalogue entry, now
-// realized against the corrected 256-bit width from §6.1).
+// cycle).
 //==============================================================================
 
 `timescale 1ns / 1ps
@@ -59,7 +58,7 @@ module packetizer_rtl (
     input  wire [128:0] pr_record_in,
     input  wire [128:0] ts_record_in,
 
-    // forge.packet_stream.v1 (corrected, §6.1)
+    // forge.packet_stream.v1 (docs/development/adr/0003-vision-packet-format.md)
     output reg  [255:0] packet_data,
     output reg  [31:0]  packet_keep,
     output reg          packet_last,

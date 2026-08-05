@@ -1,12 +1,11 @@
 //==============================================================================
 // ctrl_pulse_rtl.v
 //==============================================================================
-// Slice 10.4 (release-plan Phase 10, preflight.md §5 Decision A, spec
-// §8.2): the `control` domain's pulse_sync endpoint pair -- sources
-// `apply_in` as a pulse_sync crossing to pixel (spec §8.2:
-// "apply_configuration: control -> pixel"), and consumes the
+// The `control` domain's pulse_sync endpoint pair -- sources
+// `apply_in` as a pulse_sync crossing to pixel ("apply_configuration:
+// control -> pixel"), and consumes the
 // already-synchronized `frame_done_in` return crossing from output
-// (spec §8.2: "frame_done: output -> control"). See ctrl_level_rtl.v
+// ("frame_done: output -> control"). See ctrl_level_rtl.v
 // for why this is its own module rather than folded into one bigger
 // control-domain register bank.
 //==============================================================================

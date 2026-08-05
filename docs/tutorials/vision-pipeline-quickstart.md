@@ -1,24 +1,20 @@
 # Vision Pipeline Quickstart: vision_pipeline_demo
 
 `plugins/vision_pipeline_demo/` is the **quickstart tier** of FORGE's
-domain-neutral vision-pipeline reference project (release-plan Phase 10,
-slice 10.1) — the first rung of a much larger design frozen in
-`docs/internal/phase10/preflight.md` and
-`docs/internal/phase10/vision_pipeline_reference_project.md`. Deliberately
-small: one HLS module, one RTL module, one clock domain, no CDC, no
-tiling. Every command below is copied from either
-`plugins/vision_pipeline_demo/README.md` or the live `--help` output of
-the command itself, so nothing here is aspirational.
+domain-neutral vision-pipeline reference project — the first rung of a
+much larger design. Deliberately small: one HLS module, one RTL module,
+one clock domain, no CDC, no tiling. Every command below is copied from
+either `plugins/vision_pipeline_demo/README.md` or the live `--help`
+output of the command itself, so nothing here is aspirational.
 
 What makes this different from [`passthrough_demo`](rtl-example.md) and
 [`trigger_demo`](mixed-hls-rtl-example.md) — beyond mixing HLS and RTL —
 is the **golden model**: the golden dataset carries only input values, no
 hand-typed expected outputs. Expected outputs are computed live by a real
 `GoldenModelProvider`, routed through `forge.verify.dataset_service`'s
-`DatasetService` and `forge.verify.golden_model.run_golden_model`
-(release-plan Phase 10, slice 10.0A) — the fix for the "hand-typed, never
-cross-checked golden values" pattern the other two reference plugins
-still use.
+`DatasetService` and `forge.verify.golden_model.run_golden_model` — the
+fix for the "hand-typed, never cross-checked golden values" pattern the
+other two reference plugins still use.
 
 If you haven't installed FORGE yet, do that first:
 [installation](../getting-started/installation.md). If you're new to

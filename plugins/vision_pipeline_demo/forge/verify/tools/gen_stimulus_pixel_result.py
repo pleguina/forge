@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""vision_pipeline_demo stimulus generator for slice 10.2's
-pixel-result-path flow (release-plan Phase 10, preflight.md §6.2).
+"""vision_pipeline_demo stimulus generator for the pixel-result-path flow.
 
 Unlike ``gen_stimulus.py`` (quickstart tier: one isolated pixel per
 invocation, full reset-to-drain per event), this flow streams an entire

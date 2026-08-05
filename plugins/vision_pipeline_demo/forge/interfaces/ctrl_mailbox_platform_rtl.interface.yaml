@@ -10,9 +10,8 @@ ip_interface:
   source_type: rtl
   normalization_status: ready
   notes: >
-    Slice 10.7B (release-plan Phase 10, preflight.md §26): the real
-    control-domain configuration source, genuinely separate from this
-    design's pixel domain -- clock_primary/reset_primary use
+    This is the control-domain configuration source, genuinely separate
+    from this design's pixel domain -- clock_primary/reset_primary use
     clk_control/rst_control (non-standard names, same "own real
     top-level net" mechanism pixel_sink_rtl.interface.yaml's own
     clk_pixel/rst_pixel already established -- see

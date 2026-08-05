@@ -1,6 +1,6 @@
-"""vision_pipeline_demo dataset adapters (release-plan Phase 10, slice
-10.6 — preflight.md §18.4): ``SyntheticPatternAdapter``,
-``ImageFolderAdapter``, ``NumpyArrayAdapter``. BSDS500/Fashion-MNIST
-(Tier C, optional) are explicitly out of this slice's scope — see
-preflight.md §11/§15.
+"""vision_pipeline_demo dataset adapters: ``SyntheticPatternAdapter``,
+``ImageFolderAdapter``, ``NumpyArrayAdapter``. BSDS500/Fashion-MNIST are
+explicitly out of scope (they would require network downloads, which
+conflicts with keeping the mandatory tutorial path offline-capable) --
+see docs/development/adr/0001-dataset-ownership-boundary.md.
 """

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Canonical dataset event model (release-plan Phase 10, slice 10.6 —
-preflight.md §18.3).
+"""Canonical dataset event model.
 
 Every adapter in ``adapters/`` normalizes its own raw source into this one
-typed model before any serialization happens — the spec's own load-bearing
-requirement ("Every adapter must normalize its source into the same typed
-model before serialization", §18.3). Downstream conversion to FORGE's
-per-pixel event-dict shape (the shape ``golden_model_provider.py`` and
+typed model before any serialization happens — a single normalization
+point means downstream consumers (manifest hashing, XML serialization,
+the golden model) only ever have to handle one event shape, regardless of
+which adapter produced it. Downstream conversion to FORGE's per-pixel
+event-dict shape (the shape ``golden_model_provider.py`` and
 ``gen_stimulus.py`` already consume) happens once, in ``serialize_xml.py``
 and the FORGE-registered adapter wrappers
 (``forge/verify/tools/dataset_adapter.py``) — never duplicated per-adapter.
@@ -16,14 +16,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
-# Frozen tile geometry (preflight.md §9.1/§10) — every mandatory dataset
-# tier uses 8x8 tiles.
+# Frozen tile geometry — every mandatory dataset tier uses 8x8 tiles,
+# matching the design's tile_stats_hls/tile_boundary_rtl tile size.
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
 
 
 def tile_id_for(x: int, y: int, *, tile_width: int = TILE_WIDTH, tile_height: int = TILE_HEIGHT) -> int:
-    """The one frozen tile-ID formula (preflight.md §9.1, confirmed as-is):
+    """The one frozen tile-ID formula:
     ``(y // tile_height) * 1024 + (x // tile_width)``. Shared here so no
     adapter re-derives or drifts from it independently."""
     return (y // tile_height) * 1024 + (x // tile_width)
@@ -73,8 +73,8 @@ class DatasetEvent:
 
 
 class DatasetAdapter(Protocol):
-    """Adapter from one raw source format to canonical FORGE events
-    (spec §18.3). ``iter_events`` must yield in a stable, deterministic
+    """Adapter from one raw source format to canonical FORGE events.
+    ``iter_events`` must yield in a stable, deterministic
     order — callers (manifest hashing, serialization) rely on that order
     being reproducible for the same source/config."""
 
