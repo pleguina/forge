@@ -31,6 +31,10 @@ VPD_DESIGN = REPO_ROOT / "plugins/vision_pipeline_demo/forge/designs/design.yml"
 VPD_MODULES = REPO_ROOT / "plugins/vision_pipeline_demo/forge/modules.yml"
 VPD_DESIGN_VERIFICATION = REPO_ROOT / "plugins/vision_pipeline_demo/forge/verify/design.verification.yml"
 VPD_HLS_BUILD_ROOT = REPO_ROOT / "build_hls_vision_pipeline_demo"
+VPD_FULL_FUNCTIONAL_DESIGN = REPO_ROOT / "plugins/vision_pipeline_demo/forge/designs/design_full_functional.yml"
+VPD_FULL_FUNCTIONAL_PROBE_CSV = (
+    REPO_ROOT / "plugins/vision_pipeline_demo/forge/verify/full_functional_xsim/xsim_work/algo_top_probe.csv"
+)
 
 XSIM_AVAILABLE = all(shutil.which(tool) for tool in ("xvlog", "xelab", "xsim"))
 skip_without_xsim = pytest.mark.skipif(
@@ -305,6 +309,84 @@ def test_report_throughput_cdc_and_golden_comparison_sections(
     golden_md = (output_dir / "golden_comparison.md").read_text()
     assert "vision_pipeline.quickstart_normalizer_threshold" in golden_md
     assert "1/1 passed" in golden_md
+
+
+@skip_without_xsim
+@pytest.mark.skipif(not VPD_HLS_BUILD_ROOT.exists(), reason="no cached vision_pipeline_demo HLS build")
+@pytest.mark.skipif(
+    not VPD_FULL_FUNCTIONAL_PROBE_CSV.exists(),
+    reason="no cached full_functional_xsim probe CSV (run `forge verify run "
+    ".../full_functional_xsim/verify.flow.yml --probe-log` first)",
+)
+def test_report_release_acceptance_for_full_functional_design(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """release-plan Phase 10, slice 10.7A: `forge report`'s release-
+    acceptance bundle (preflight.md §13) against the real full-functional
+    design (16x16/2x2-tile, single shared normalizer, both CDC
+    crossings) -- real CDC verification (2 real async_fifo crossings)
+    plus real runtime throughput (real probe CSV from a prior
+    ``forge verify run --probe-log`` against full_functional_xsim).
+
+    Deliberately does NOT pass --golden-comparison-json: this design's
+    own real content-checked, dual-clock-domain scoreboard (see
+    gen_stimulus_full_functional.py) uses a hand-authored SystemVerilog
+    fork/join checker, not the standard per-event XML in/out comparison
+    ``forge test run --golden-comparison-json`` produces -- driving that
+    standard path against this flow overwrites its own custom
+    stimulus_current.svh with a generic single-event driver incompatible
+    with this design's port structure (found running this exact
+    combination; same scope boundary packetizer_xsim's own real,
+    passing checker already established in slice 10.5 for a
+    structurally identical reason -- see
+    test_report_omits_new_sections_honestly_without_their_flags for the
+    honest-absence path this exercises for a real (not synthetic) design).
+    """
+    cdc_result_path = tmp_path / "cdc_result.json"
+    validate_result = _run(
+        capsys, "topgen", "validate", str(VPD_FULL_FUNCTIONAL_DESIGN),
+        "--cdc-result-json", str(cdc_result_path),
+    )
+    assert validate_result.returncode == 0, validate_result.stdout + validate_result.stderr
+    assert cdc_result_path.exists()
+
+    output_dir = tmp_path / "report"
+    report_result = _run(
+        capsys, "report", str(VPD_FULL_FUNCTIONAL_DESIGN),
+        "--contracts-from", str(VPD_MODULES),
+        "--hls-build-root", str(VPD_HLS_BUILD_ROOT),
+        "--module-width", "pixel_normalizer:8",
+        "--module-width", "sobel_hls:12",
+        "--module-width", "tile_stats_hls:24",
+        "--probe-csv", str(VPD_FULL_FUNCTIONAL_PROBE_CSV),
+        "--probe-format", "wide",
+        "--fifo-probe", "prpack->pktz:pr_full:pr_empty:pr_occupancy:pr_overflow",
+        "--fifo-probe", "tspack->pktz:ts_full:ts_empty:ts_occupancy:ts_overflow",
+        "--cdc-result-json", str(cdc_result_path),
+        "--output", str(output_dir), "--json",
+    )
+
+    assert report_result.returncode == 0, report_result.stdout + report_result.stderr
+    payload = json.loads(report_result.stdout)
+    assert str(output_dir / "throughput.md") in payload["artifacts"]
+    assert str(output_dir / "cdc_verification.md") in payload["artifacts"]
+    assert payload["metrics"]["cdc_crossings"] == 2
+
+    cdc_md = (output_dir / "cdc_verification.md").read_text()
+    assert "prpack->pktz" in cdc_md
+    assert "tspack->pktz" in cdc_md
+    assert "crossings checked**: 2 (0 failing)" in cdc_md
+
+    throughput_md = (output_dir / "throughput.md").read_text()
+    assert "tile_stats_hls" in throughput_md
+    assert "prpack->pktz" in throughput_md
+    assert "tspack->pktz" in throughput_md
+
+    # Golden-comparison section honestly absent (see docstring).
+    assert not (output_dir / "golden_comparison.md").exists()
+    assert any(
+        "golden-model comparison report omitted" in d["message"] for d in payload["diagnostics"]
+    )
 
 
 def test_report_omits_new_sections_honestly_without_their_flags(

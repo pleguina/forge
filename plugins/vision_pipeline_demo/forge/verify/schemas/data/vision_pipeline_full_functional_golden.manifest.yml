@@ -1,0 +1,29 @@
+schema:
+  name: forge.dataset_manifest
+  version: '1.0'
+dataset:
+  id: vision_pipeline_full_functional_golden
+  adapter: synthetic
+  adapter_version: '1.0'
+  created_by: vision_pipeline_demo
+  event_count: 1
+  deterministic: true
+hashes:
+  source_files: {}
+  preprocessing_config: 72ef22af2d7074a1cccc6f19b3fb91ae56c823a71843d22bfe594f9c16fa0189
+  canonical_events: a3c7db872177e3050d9f5adc04386fc3a6df82624c52108605a66963aab6ac6f
+  serialized_dataset: ce574301bc792fba4e1cf7dfe5f9a05fd785a7123d184a74d17093cda44310cd
+preprocessing: {}
+serialization:
+  format: forge-xml
+  schema_version: '1.0'
+  output_files:
+  - vision_pipeline_full_functional_golden.xml
+golden_model: null
+adapter_config:
+  width: 16
+  height: 16
+  patterns:
+  - checkerboard
+  seed: 42
+  event_count: 1

@@ -192,12 +192,24 @@ class TileStatsProvider:
     involved, so this reproduces tile_stats_hls's own arithmetic
     exactly, not just approximately.
 
-    Only correct at this slice's single-tile-per-frame scope
-    (dataset.events is exactly one 8x8 tile's 64 samples) -- multiple
-    tiles per dataset is explicit future work alongside the
-    concurrent-tile-accumulation RTL/HLS work itself (see
-    tile_stats_hls.h's header).
+    Slice 10.7A: generalized to any number of tiles per dataset, matching
+    tile_stats_hls's own concurrent-tile-column extension
+    (tile_stats_hls.h's MAX_TILE_COLS). Events are grouped by ``tile_id``
+    (not assumed to be a single tile) and each tile's own finalized
+    record is repeated across every event belonging to that tile -- the
+    same "one real value, echoed at every index" convention the original
+    single-tile version already used, just scoped per tile instead of
+    per whole dataset. A caller wanting the real hardware emission order
+    (one record per tile, in the order tile_stats_hls actually completes
+    them) derives it directly from the dataset's own x/y fields -- see
+    gen_stimulus_full_functional.py, which appends this event's own
+    record whenever ``(x % TILE_WIDTH == TILE_WIDTH-1) and (y %
+    TILE_HEIGHT == TILE_HEIGHT-1)`` (tile_stats_hls.h's own frozen
+    completion test), needing no new provider API.
     """
+
+    TILE_WIDTH = 8
+    TILE_HEIGHT = 8
 
     provider_id = TILE_STATS_PROVIDER_ID
     provider_version = TILE_STATS_PROVIDER_VERSION
@@ -215,33 +227,42 @@ class TileStatsProvider:
             scaled = (pixel * scale_num) // scale_den + offset
             return max(0, min(255, scaled))
 
-        normalized: "list[int]" = []
-        tile_id = frame_id = 0
+        # Pass 1: group every event's normalized value by its own tile_id.
+        tiles: "dict[int, dict[str, Any]]" = {}
+        event_tile_ids: "list[int]" = []
         for ev in dataset.events:
             pixel = int(ev["in"]["pixel"], 0)
-            normalized.append(normalize(pixel))
             tile_id = int(ev["in"]["tile_id"], 0)
             frame_id = int(ev["in"]["frame_id"], 0)
+            event_tile_ids.append(tile_id)
+            bucket = tiles.setdefault(tile_id, {"frame_id": frame_id, "values": []})
+            bucket["values"].append(normalize(pixel))
 
-        n = len(normalized)
-        total = sum(normalized)
-        total_sq = sum(v * v for v in normalized)
-        mean = total // n
-        variance = max(0, (total_sq // n) - mean * mean)
+        # Pass 2: closed-form population stats per tile (preflight.md
+        # §9.1's frozen formula, unchanged from the single-tile version).
+        records: "dict[int, dict[str, Any]]" = {}
+        for tile_id, bucket in tiles.items():
+            values = bucket["values"]
+            n = len(values)
+            total = sum(values)
+            total_sq = sum(v * v for v in values)
+            mean = total // n
+            variance = max(0, (total_sq // n) - mean * mean)
+            records[tile_id] = {
+                "tile_id": tile_id,
+                "frame_id": bucket["frame_id"],
+                "minimum": min(values),
+                "maximum": max(values),
+                "mean": mean,
+                "variance": variance,
+            }
 
-        expected_record = {
-            "tile_id": tile_id,
-            "frame_id": frame_id,
-            "minimum": min(normalized),
-            "maximum": max(normalized),
-            "mean": mean,
-            "variance": variance,
-        }
-        # event_ids/events length mirrors CanonicalDataset (ExpectedDataset's
-        # own convention, see golden_model.py) even though every entry here
-        # is the same single tile-summary record -- there is only one real
-        # value at this slice's one-tile-per-dataset scope.
-        events: "list[dict[str, Any]]" = [{"expected": expected_record} for _ in dataset.events]
+        # Pass 3: echo each event's own tile record at that event's index
+        # (event_ids/events length mirrors CanonicalDataset, ExpectedDataset's
+        # own convention -- see golden_model.py).
+        events: "list[dict[str, Any]]" = [
+            {"expected": records[tile_id]} for tile_id in event_tile_ids
+        ]
 
         return ExpectedDataset(
             schema=EXPECTED_DATASET_SCHEMA,
@@ -330,17 +351,9 @@ class PacketizerProvider:
     ) -> ExpectedDataset:
         pixel_result = PIXEL_RESULT_PROVIDER.evaluate(dataset, config)
         tile_stats = TILE_STATS_PROVIDER.evaluate(dataset, config)
-        tile_record_hex = pack_tile_statistics_record(
-            tile_id=tile_stats.events[0]["expected"]["tile_id"],
-            minimum=tile_stats.events[0]["expected"]["minimum"],
-            maximum=tile_stats.events[0]["expected"]["maximum"],
-            mean=tile_stats.events[0]["expected"]["mean"],
-            variance=tile_stats.events[0]["expected"]["variance"],
-            frame_id=tile_stats.events[0]["expected"]["frame_id"],
-        )
 
         events: "list[dict[str, Any]]" = []
-        for ev, pr in zip(dataset.events, pixel_result.events):
+        for ev, pr, ts in zip(dataset.events, pixel_result.events, tile_stats.events):
             x = int(ev["in"]["x"], 0)
             y = int(ev["in"]["y"], 0)
             frame_id = int(ev["in"]["frame_id"], 0)
@@ -354,6 +367,24 @@ class PacketizerProvider:
                 threshold_mask=pr["expected"]["threshold_mask"],
                 x=x, y=y, frame_id=frame_id, tile_id=tile_id,
                 end_of_line=end_of_line, end_of_frame=end_of_frame,
+            )
+            # This event's own tile's record (slice 10.7A: may differ
+            # across events when a dataset has more than one tile --
+            # TileStatsProvider echoes each tile's finalized record at
+            # every event belonging to that tile). The real hardware only
+            # *emits* a tile-statistics record on that tile's own
+            # completion event (x%TILE_WIDTH==TILE_WIDTH-1 and
+            # y%TILE_HEIGHT==TILE_HEIGHT-1); callers building an ordered
+            # expected-record list for a stimulus check (e.g.
+            # gen_stimulus_full_functional.py) select on that same test
+            # rather than taking every event's tile_record_hex.
+            tile_record_hex = pack_tile_statistics_record(
+                tile_id=ts["expected"]["tile_id"],
+                minimum=ts["expected"]["minimum"],
+                maximum=ts["expected"]["maximum"],
+                mean=ts["expected"]["mean"],
+                variance=ts["expected"]["variance"],
+                frame_id=ts["expected"]["frame_id"],
             )
             events.append({
                 "expected": {

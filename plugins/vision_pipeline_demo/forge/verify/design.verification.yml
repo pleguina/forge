@@ -31,6 +31,23 @@ datasets:
       hand-typed and never cross-checked.
     adapter: vision_pipeline.pixel-stream-xml
 
+  # Slice 10.7A (release-plan Phase 10, preflight.md §10's frozen
+  # full-functional acceptance size): a real 16x16 checkerboard frame
+  # (256 events, generated via the slice 10.6 DatasetService/
+  # SyntheticPatternAdapter path — `datasets/cli.py generate-synthetic
+  # --width 16 --height 16 --pattern checkerboard --seed 42`), the
+  # smallest frame that forces a real 2x2 tile grid (4 tiles) and
+  # therefore genuinely exercises tile_stats_hls's slice-10.7A
+  # concurrent-tile-column extension, not just single-tile correctness.
+  vision_pipeline_full_functional_golden:
+    xml: schemas/data/vision_pipeline_full_functional_golden.xml
+    description: >
+      16x16 synthetic checkerboard frame (256 events, 2x2 tile grid).
+      Carries only <in> values — expected outputs computed live by
+      PacketizerProvider (release-plan Phase 10, slice 10.0A Decision C),
+      generalized in slice 10.7A to multiple tiles per dataset.
+    adapter: vision_pipeline.pixel-stream-xml
+
 # ─── Simulation Defaults ──────────────────────────────────────────────
 defaults:
   clk_period_ns:              4.0
@@ -186,6 +203,35 @@ flows:
   # reference is a required-schema formality, not a real dependency: this
   # flow's gen_stimulus_cdc.py drives fixed constants directly, not a
   # per-event dataset (see that script's own header for why).
+  # Slice 10.7A (release-plan Phase 10, preflight.md §11's 10.7A
+  # sub-slice): the real full-functional design -- a single shared
+  # `norm` (pixel_normalizer) fanning out to all four downstream
+  # consumers (unifying design_packetizer.yml's own norm_px/norm_tile
+  # split), streaming a real 16x16/2x2-tile frame (256 pixel-result
+  # records + 4 tile-statistics records) through the same packetizer/
+  # async-FIFO/throughput path slice 10.5 built. See
+  # gen_stimulus_full_functional.py for the dual-clock-domain drive+check
+  # strategy (same fork/join precedent as packetizer_xsim).
+  - name:             full_functional_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_full_functional
+    dataset:          vision_pipeline_full_functional_golden
+    default_event_id: 0
+    simulation:
+      clk_period_ns:              5.0    # pixel domain (ap_clk): 200MHz, matching design_full_functional.yml
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 40
+      extra_clocks:
+        clk_output: 8.0
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration
+
   - name:             cdc_xsim
     kind:             full_chip_rtl
     backend:          xsim

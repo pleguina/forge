@@ -1,0 +1,328 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Design Topology (slice 10.7A, full-functional path)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Pipeline (release-plan Phase 10, docs/internal/phase10/preflight.md
+# §6.1/§6.2/§9.1, §10, §11 10.7A sub-slice):
+#
+#                          ┌─> winbld -> sobel  ─┐
+#   external pixel stream -> norm (pixel_normalizer, HLS)
+#                          ├─> thresh, +20-cycle delay ┴-> merge -> prpack ─┐
+#                          │                                                │ [async FIFO: pixel -> output, depth 64]
+#                          └─> tstats -> tjoin  ─┐                          ┴-> pktz (output domain) -> external forge.packet_stream.v1
+#                              tbnd    ──────────┴-> tspack ────────────────┘ [async FIFO: pixel -> output, depth 64]
+#
+# This is the spec's own real topology (§5): ONE normalizer instance fans
+# out to all four downstream consumers, unlike design_packetizer.yml's own
+# deliberate two-instance (`norm_px`/`norm_tile`) scope choice, which that
+# design's own header explicitly deferred unifying to "the full-acceptance
+# assembly (10.6/10.7)" -- this design is that assembly. Fan-out from one
+# producer to multiple consumers is already an established FORGE pattern
+# (design_packetizer.yml's own `norm_px` already fans out to `winbld` and
+# `thresh`); unifying to four consumers needed no framework change.
+#
+# Frame scale: 16x16 (preflight.md §10's frozen full-functional acceptance
+# size), 8x8 tiles -> a real 2x2 tile grid (4 tiles/frame), the smallest
+# size that exercises the tile-ID formula's row AND column terms varying,
+# and forces tile_stats_hls's slice-10.7A concurrent-tile-column extension
+# (tile_stats_hls.h's MAX_TILE_COLS=2) to actually do real work: row-major
+# traversal of a 16-wide frame interleaves tile column 0 (x 0-7) and tile
+# column 1 (x 8-15) within the same 8-row band, unlike every 8x8-frame
+# design before this one.
+#
+# `winbld`'s FRAME_WIDTH is overridden to 16 (design-level `parameters:`,
+# a real per-instance Verilog `#(...)` mechanism -- see
+# forge/topgen/generators/structural_verilog.py's parameter-emission path
+# and forge/topgen/config.py's Module.parameters field) with a
+# correspondingly recomputed `latency:` override (18 cycles = FRAME_WIDTH+2
+# at FRAME_WIDTH=16, vs. modules.yml's registry default of 10 cycles at
+# FRAME_WIDTH=8) -- both real, working, previously-unexercised design.yml
+# mechanisms (design-level `latency:` replaces the registry's for this one
+# instance only, confirmed against forge/topgen/config.py's ref-merge +
+# forge/ir/build.py's per-instance ResolvedModuleDefinition resolution).
+# `sobel`'s own 4-cycle latency is frame-size-independent (pure 3x3
+# compute, no state) and needs no override. The sobel-branch total is
+# therefore 18+4=22 cycles; `merge`'s threshold-branch `delay_cycles` is
+# recomputed to 20 (thresh's own fixed 2-cycle latency + 20 = 22), from
+# 10.5's 12 (2+12=14, matching FRAME_WIDTH=8's 10+4=14 total) -- both
+# figures are re-verified against a real `forge analyze latency-check` run
+# and a real xsim run, not assumed from the formula alone (matching this
+# document's own "verified, not assumed" discipline; 10.2's own
+# window_builder latency figure had exactly this kind of hand-derivation
+# corrected once already).
+#
+# Two clock domains, same convention as design_packetizer.yml: `pixel`
+# (ap_clk/ap_rst) is primary, real 200MHz/5ns; `output` (clk_output/
+# rst_output) is a real secondary domain, 125MHz/8ns, with
+# reset_domains.rst_output.sync: reset_sync from the same external ap_rst.
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 5.0   # pixel domain (ap_clk): 200MHz, spec §6
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+reset_domains:
+  rst_output:
+    derived_from: ap_rst
+    sync: reset_sync
+
+# Tier 2 probes (release-plan Phase 10, preflight.md §5 Decision B / slice
+# 10.0C) -- same mechanism/convention as design_packetizer.yml, bound to
+# this design's own real net names (confirmed against a real
+# `forge topgen gen-top` run of this exact design).
+interface_metadata:
+  tier2_probes:
+    - {name: pr_full,        net: "dut.sync_net_prpack_pktz_out_record_full",        width: 1}
+    - {name: pr_empty,       net: "dut.sync_net_prpack_pktz_out_record_empty",       width: 1}
+    - {name: pr_overflow,    net: "dut.sync_net_prpack_pktz_out_record_overflow",    width: 1}
+    - {name: pr_underflow,   net: "dut.sync_net_prpack_pktz_out_record_underflow",   width: 1}
+    - {name: pr_occupancy,   net: "dut.sync_net_prpack_pktz_out_record_occupancy",   width: 8}
+    - {name: pr_high_water,  net: "dut.sync_net_prpack_pktz_out_record_high_water",  width: 8}
+    - {name: ts_full,        net: "dut.sync_net_tspack_pktz_out_record_full",        width: 1}
+    - {name: ts_empty,       net: "dut.sync_net_tspack_pktz_out_record_empty",       width: 1}
+    - {name: ts_overflow,    net: "dut.sync_net_tspack_pktz_out_record_overflow",    width: 1}
+    - {name: ts_underflow,   net: "dut.sync_net_tspack_pktz_out_record_underflow",   width: 1}
+    - {name: ts_occupancy,   net: "dut.sync_net_tspack_pktz_out_record_occupancy",   width: 7}
+    - {name: ts_high_water,  net: "dut.sync_net_tspack_pktz_out_record_high_water",  width: 7}
+
+modules:
+
+# ── Single shared normalizer (slice 10.7A: unifies design_packetizer.yml's
+#    norm_px/norm_tile into the spec's real single-source fan-out) ────────
+- name: norm
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+# ── Pixel-result path (slice 10.2, unmodified modules; winbld gets a real
+#    FRAME_WIDTH=16 override, see header) ──────────────────────────────────
+- name: winbld
+  ref: window_builder_rtl
+  instances: 1
+  parameters:
+    FRAME_WIDTH: 16
+  latency:
+    kind: fixed
+    cycles: 18
+
+- name: sobel
+  ref: sobel_hls
+  instances: 1
+
+- name: thresh
+  ref: threshold_rtl
+  instances: 1
+
+- name: merge
+  ref: edge_mask_merge_rtl
+  instances: 1
+
+- name: prpack
+  ref: pixel_result_packer_rtl
+  instances: 1
+
+# ── Tile-statistics path (slice 10.3 tbnd/tjoin/tspack unmodified; tstats
+#    is the slice-10.7A concurrent-tile-column tile_stats_hls) ─────────────
+- name: tstats
+  ref: tile_stats_hls
+  instances: 1
+
+- name: tbnd
+  ref: tile_boundary_rtl
+  instances: 1
+
+- name: tjoin
+  ref: tile_summary_join_rtl
+  instances: 1
+
+- name: tspack
+  ref: tile_stats_packer_rtl
+  instances: 1
+
+# ── Packetizer (output domain, slice 10.5, unmodified) ─────────────────────
+- name: pktz
+  ref: packetizer_rtl
+  instances: 1
+  external_out_ports: [packet_data, packet_keep, packet_last, packet_valid]
+
+connections:
+
+# Single-source fan-out: norm -> all four downstream consumers.
+- from: norm
+  to: winbld
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: thresh
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: tstats
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: tbnd
+  port_map:
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+# Pixel-result path.
+- from: winbld
+  to: sobel
+  port_map:
+    - [win_r0c0, win_r0c0]
+    - [win_r0c1, win_r0c1]
+    - [win_r0c2, win_r0c2]
+    - [win_r1c0, win_r1c0]
+    - [win_r1c1, win_r1c1]
+    - [win_r1c2, win_r1c2]
+    - [win_r2c0, win_r2c0]
+    - [win_r2c1, win_r2c1]
+    - [win_r2c2, win_r2c2]
+    - [out_x, x]
+    - [out_y, y]
+    - [out_frame_id, frame_id]
+    - [out_tile_id, tile_id]
+    - [out_end_of_line, end_of_line]
+    - [out_end_of_frame, end_of_frame]
+    - [out_valid, in_valid]
+
+- from: sobel
+  to: merge
+  port_map:
+    - [gradient_magnitude, sobel_magnitude]
+    - [x_out, sobel_x]
+    - [y_out, sobel_y]
+    - [frame_id_out, sobel_frame_id]
+    - [tile_id_out, sobel_tile_id]
+    - [end_of_line_out, sobel_end_of_line]
+    - [end_of_frame_out, sobel_end_of_frame]
+    - [out_valid, sobel_valid]
+
+- from: thresh
+  to: merge
+  delay_cycles: 20
+  port_map:
+    - [out_pixel, thresh_pixel]
+    - [threshold_mask, thresh_mask]
+    - [out_x, thresh_x]
+    - [out_y, thresh_y]
+    - [out_frame_id, thresh_frame_id]
+    - [out_tile_id, thresh_tile_id]
+    - [out_end_of_line, thresh_end_of_line]
+    - [out_end_of_frame, thresh_end_of_frame]
+    - [out_valid, thresh_valid]
+
+- from: merge
+  to: prpack
+  port_map:
+    - [normalized_pixel, in_normalized_pixel]
+    - [gradient_magnitude, in_gradient_magnitude]
+    - [threshold_mask, in_threshold_mask]
+    - [out_x, in_x]
+    - [out_y, in_y]
+    - [out_frame_id, in_frame_id]
+    - [out_tile_id, in_tile_id]
+    - [out_end_of_line, in_end_of_line]
+    - [out_end_of_frame, in_end_of_frame]
+    - [out_valid, in_valid]
+
+# Tile-statistics path.
+- from: tstats
+  to: tjoin
+  port_map:
+    - [minimum, stats_minimum]
+    - [maximum, stats_maximum]
+    - [mean, stats_mean]
+    - [variance, stats_variance]
+    - [tile_id_out, stats_tile_id]
+    - [frame_id_out, stats_frame_id]
+    - [out_valid, stats_valid]
+
+- from: tbnd
+  to: tjoin
+  port_map:
+    - [tag_valid, tag_valid]
+    - [tag_tile_id, tag_tile_id]
+    - [tag_frame_id, tag_frame_id]
+    - [tag_end_of_frame, tag_end_of_frame]
+
+- from: tjoin
+  to: tspack
+  port_map:
+    - [out_tile_id, in_tile_id]
+    - [out_minimum, in_minimum]
+    - [out_maximum, in_maximum]
+    - [out_mean, in_mean]
+    - [out_variance, in_variance]
+    - [out_frame_id, in_frame_id]
+    - [out_valid, in_valid]
+
+# Packetizer crossings (pixel -> output), each its own async FIFO with a
+# real per-record write_enable_pin -- identical shape to
+# design_packetizer.yml (slice 10.5).
+- from: prpack
+  to: pktz
+  cdc:
+    kind: async_fifo
+    # Real depth requirement, not 10.5's 64 (verified, not assumed --
+    # see this design's own header/completion-evidence note): this
+    # design's own real, sustained 256-pixel back-to-back burst at
+    # 200MHz (pixel) into packetizer_rtl's toggle-CDC novelty detector,
+    # which can drain at most 1 new pixel-result record per clk_output
+    # cycle (125MHz, cdc_async_fifo.v's own free-running
+    # `rd_bin_next = rd_bin + (!empty)` read side) -- a genuine,
+    # structural 200Mrecord/s write vs. ~125Mrecord/s single-path read
+    # ceiling, not a transient burst -- accumulates real backlog for the
+    # whole 1280ns drive window (peak ~96 records, well past 10.5's own
+    # quickstart-scale high-water mark of 28/64), which a 64-deep FIFO
+    # genuinely overflows (real dropped records observed in a real xsim
+    # run before this was raised).
+    depth: 128
+    write_enable_pin: out_record_valid
+  port_map:
+    - [out_record, pr_record_in]
+
+- from: tspack
+  to: pktz
+  cdc:
+    kind: async_fifo
+    depth: 64
+    write_enable_pin: out_record_valid
+  port_map:
+    - [out_record, ts_record_in]
