@@ -30,13 +30,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Scope: this plugin's production files, plus its two public tutorial
-# pages. Explicitly excludes docs/internal/** (where this history belongs
-# per plan §5.4) and any generated/gitignored output.
+# Scope: this plugin's production files, its two public tutorial pages,
+# and its root-level runner script. Explicitly excludes docs/internal/**
+# (where this history belongs per plan §5.4) and any generated/gitignored
+# output.
 SCAN_PATHS=(
     plugins/vision_pipeline_demo
     docs/tutorials/vision-pipeline-quickstart.md
     docs/tutorials/vision-pipeline-full-design.md
+    run_vision_pipeline_demo.sh
 )
 EXISTING_PATHS=()
 for p in "${SCAN_PATHS[@]}"; do

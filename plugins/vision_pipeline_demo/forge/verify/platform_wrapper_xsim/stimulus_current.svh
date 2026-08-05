@@ -10,7 +10,7 @@
 // flow=platform_wrapper_xsim (three-clock-domain fork/join drive+check, see gen_stimulus_platform_wrapper.py)
 
 task automatic run_stimulus();
-    // Expected-record arrays (release-plan Phase 10, slice 10.7B) --
+    // Expected-record arrays --
     // declared up front, before any statement (Xilinx xvlog requires
     // task-local declarations to precede statements even in SV mode).
     reg [127:0] exp_pr [0:127];

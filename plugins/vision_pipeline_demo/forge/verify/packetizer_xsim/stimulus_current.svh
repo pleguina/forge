@@ -10,7 +10,7 @@
 // flow=packetizer_xsim (dual-clock-domain fork/join drive+check, see gen_stimulus_packetizer.py)
 
 task automatic run_stimulus();
-    // Expected-record arrays (release-plan Phase 10, slice 10.5) --
+    // Expected-record arrays --
     // declared up front, before any statement (Xilinx xvlog requires
     // task-local declarations to precede statements even in SV mode,
     // stricter than the bare IEEE 1800 grammar). Both FIFOs are
