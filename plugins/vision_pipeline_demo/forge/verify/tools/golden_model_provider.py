@@ -227,29 +227,42 @@ class TileStatsProvider:
             scaled = (pixel * scale_num) // scale_den + offset
             return max(0, min(255, scaled))
 
-        # Pass 1: group every event's normalized value by its own tile_id.
-        tiles: "dict[int, dict[str, Any]]" = {}
-        event_tile_ids: "list[int]" = []
+        # Pass 1: group every event's normalized value by (frame_id, tile_id)
+        # -- NOT tile_id alone. tile_id only encodes position *within* a
+        # frame (the frozen (y//8)*1024+(x//8) formula, preflight.md §9.1),
+        # so two different frames of the same fixed 8x8-tile shape reuse
+        # identical tile_id values (every single-tile 8x8 frame is
+        # tile_id=0, regardless of frame_id) -- grouping by tile_id alone
+        # silently conflates two different frames' own 64 samples into one
+        # combined "tile" once a dataset genuinely has more than one frame
+        # (slice 10.7B's platform-wrapper dataset is the first one that
+        # does; every earlier single-frame dataset this provider was
+        # exercised against had no way to expose this, tile_id already
+        # being effectively unique there).
+        tiles: "dict[tuple[int, int], dict[str, Any]]" = {}
+        event_keys: "list[tuple[int, int]]" = []
         for ev in dataset.events:
             pixel = int(ev["in"]["pixel"], 0)
             tile_id = int(ev["in"]["tile_id"], 0)
             frame_id = int(ev["in"]["frame_id"], 0)
-            event_tile_ids.append(tile_id)
-            bucket = tiles.setdefault(tile_id, {"frame_id": frame_id, "values": []})
+            key = (frame_id, tile_id)
+            event_keys.append(key)
+            bucket = tiles.setdefault(key, {"tile_id": tile_id, "frame_id": frame_id, "values": []})
             bucket["values"].append(normalize(pixel))
 
-        # Pass 2: closed-form population stats per tile (preflight.md
-        # §9.1's frozen formula, unchanged from the single-tile version).
-        records: "dict[int, dict[str, Any]]" = {}
-        for tile_id, bucket in tiles.items():
+        # Pass 2: closed-form population stats per (frame_id, tile_id)
+        # (preflight.md §9.1's frozen formula, unchanged from the
+        # single-tile version).
+        records: "dict[tuple[int, int], dict[str, Any]]" = {}
+        for key, bucket in tiles.items():
             values = bucket["values"]
             n = len(values)
             total = sum(values)
             total_sq = sum(v * v for v in values)
             mean = total // n
             variance = max(0, (total_sq // n) - mean * mean)
-            records[tile_id] = {
-                "tile_id": tile_id,
+            records[key] = {
+                "tile_id": bucket["tile_id"],
                 "frame_id": bucket["frame_id"],
                 "minimum": min(values),
                 "maximum": max(values),
@@ -261,7 +274,7 @@ class TileStatsProvider:
         # (event_ids/events length mirrors CanonicalDataset, ExpectedDataset's
         # own convention -- see golden_model.py).
         events: "list[dict[str, Any]]" = [
-            {"expected": records[tile_id]} for tile_id in event_tile_ids
+            {"expected": records[key]} for key in event_keys
         ]
 
         return ExpectedDataset(
@@ -405,3 +418,87 @@ class PacketizerProvider:
 PACKETIZER_PROVIDER = PacketizerProvider()
 
 register_golden_model_provider(PACKETIZER_PROVIDER.provider_id, PACKETIZER_PROVIDER)
+
+
+# ── Slice 10.7B: platform-wrapper path (real runtime-configurable threshold) ──
+
+PLATFORM_WRAPPER_PROVIDER_ID = "vision_pipeline.platform_wrapper"
+PLATFORM_WRAPPER_PROVIDER_VERSION = "1.0"
+
+
+class PlatformWrapperProvider:
+    """Golden model for slice 10.7B's platform-wrapper path (preflight.md
+    §26/§9.1): identical to PacketizerProvider except the threshold
+    comparison is real per-frame, not the shared DEFAULT_THRESHOLD
+    constant -- config carries ``frame_thresholds: {frame_id: threshold}``
+    (default DEFAULT_THRESHOLD for any frame_id not listed), matching
+    threshold_configurable_rtl.v's own frame-boundary-gated real
+    threshold, sourced from a real cdc: {kind: mailbox_transfer}
+    crossing rather than a compile-time parameter. Reuses
+    PixelResultProvider/TileStatsProvider verbatim for the normalized
+    pixel/gradient/tile-statistics math (unaffected by threshold) --
+    this class owns only the per-frame threshold_mask override and the
+    128-bit packing, the same "reuse, don't re-derive" precedent
+    PacketizerProvider itself already established.
+    """
+
+    provider_id = PLATFORM_WRAPPER_PROVIDER_ID
+    provider_version = PLATFORM_WRAPPER_PROVIDER_VERSION
+
+    def evaluate(
+        self,
+        dataset: CanonicalDataset,
+        config: "Mapping[str, object]",
+    ) -> ExpectedDataset:
+        frame_thresholds = config.get("frame_thresholds", {})
+
+        pixel_result = PIXEL_RESULT_PROVIDER.evaluate(dataset, config)
+        tile_stats = TILE_STATS_PROVIDER.evaluate(dataset, config)
+
+        events: "list[dict[str, Any]]" = []
+        for ev, pr, ts in zip(dataset.events, pixel_result.events, tile_stats.events):
+            x = int(ev["in"]["x"], 0)
+            y = int(ev["in"]["y"], 0)
+            frame_id = int(ev["in"]["frame_id"], 0)
+            tile_id = int(ev["in"]["tile_id"], 0)
+            end_of_line = int(ev["in"]["end_of_line"], 0)
+            end_of_frame = int(ev["in"]["end_of_frame"], 0)
+
+            threshold = frame_thresholds.get(frame_id, DEFAULT_THRESHOLD)
+            normalized_pixel = pr["expected"]["normalized_pixel"]
+            mask = 1 if normalized_pixel >= threshold else 0
+
+            pixel_record_hex = pack_pixel_result_record(
+                normalized_pixel=normalized_pixel,
+                gradient_magnitude=pr["expected"]["gradient_magnitude"],
+                threshold_mask=mask,
+                x=x, y=y, frame_id=frame_id, tile_id=tile_id,
+                end_of_line=end_of_line, end_of_frame=end_of_frame,
+            )
+            tile_record_hex = pack_tile_statistics_record(
+                tile_id=ts["expected"]["tile_id"],
+                minimum=ts["expected"]["minimum"],
+                maximum=ts["expected"]["maximum"],
+                mean=ts["expected"]["mean"],
+                variance=ts["expected"]["variance"],
+                frame_id=ts["expected"]["frame_id"],
+            )
+            events.append({
+                "expected": {
+                    "pixel_record_hex": pixel_record_hex,
+                    "tile_record_hex": tile_record_hex,
+                },
+            })
+
+        return ExpectedDataset(
+            schema=EXPECTED_DATASET_SCHEMA,
+            event_ids=list(dataset.metadata.event_ids),
+            events=events,
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+        )
+
+
+PLATFORM_WRAPPER_PROVIDER = PlatformWrapperProvider()
+
+register_golden_model_provider(PLATFORM_WRAPPER_PROVIDER.provider_id, PLATFORM_WRAPPER_PROVIDER)

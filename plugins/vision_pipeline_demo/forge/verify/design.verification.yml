@@ -48,6 +48,24 @@ datasets:
       generalized in slice 10.7A to multiple tiles per dataset.
     adapter: vision_pipeline.pixel-stream-xml
 
+  # Slice 10.7B (release-plan Phase 10, preflight.md §26's "generic
+  # platform fixture"): two real 8x8 quickstart-scale frames back to
+  # back (frame_id 0 = ramp, frame_id 1 = checkerboard, 128 events —
+  # `datasets/cli.py generate-synthetic --width 8 --height 8 --pattern
+  # ramp --pattern checkerboard --event-count 2 --seed 7`), proving a
+  # real mailbox-written threshold change between frames actually
+  # changes pipeline behavior at the next frame boundary, not just
+  # "compiles" — PlatformWrapperProvider computes each frame's own
+  # expected threshold_mask from a real per-frame threshold schedule.
+  vision_pipeline_platform_wrapper_golden:
+    xml: schemas/data/vision_pipeline_platform_wrapper_golden.xml
+    description: >
+      Two 8x8 synthetic frames back to back (128 events, frame_id
+      0=ramp/1=checkerboard). Carries only <in> values — expected
+      outputs computed live by PlatformWrapperProvider (release-plan
+      Phase 10, slice 10.7B), with a real per-frame threshold schedule.
+    adapter: vision_pipeline.pixel-stream-xml
+
 # ─── Simulation Defaults ──────────────────────────────────────────────
 defaults:
   clk_period_ns:              4.0
@@ -227,6 +245,40 @@ flows:
       post_stimulus_drain_cycles: 40
       extra_clocks:
         clk_output: 8.0
+    xsim:
+      top_lib: xil_defaultlib
+      use_sv_flag: false
+    coverage_intent:  integration
+
+  # Slice 10.7B (release-plan Phase 10, preflight.md §26's "generic
+  # platform fixture", §11's 10.7B sub-slice): a real 3-domain assembly
+  # -- control (clk_control, 50MHz, ctrl_mailbox_platform_rtl) -> pixel
+  # (ap_clk, 200MHz, the real 9-module pipeline reused unmodified from
+  # 10.2/10.3/10.5/10.7A plus the new threshcfg) -> output (clk_output,
+  # 125MHz, pktz), plus a real status interface (merge.tag_mismatch/
+  # tjoin.join_mismatch/tjoin.out_end_of_frame). `ap_clk` (pixel) is
+  # this design's primary domain, unlike design_cdc.yml's own control-
+  # primary convention -- see design_platform_wrapper.yml's own header
+  # for why. See gen_stimulus_platform_wrapper.py for the
+  # three-clock-domain fork/join drive+check strategy, proving a real
+  # mailbox-written threshold change actually changes pipeline behavior
+  # at the next frame boundary.
+  - name:             platform_wrapper_xsim
+    kind:             full_chip_rtl
+    backend:          xsim
+    top_module:       algo_top
+    tb_module:        tb_algo_top
+    dut_rtl_source:   gen-top/design_vision_pipeline_platform_wrapper
+    dataset:          vision_pipeline_platform_wrapper_golden
+    default_event_id: 0
+    simulation:
+      clk_period_ns:              5.0    # pixel domain (ap_clk): 200MHz, matching design_platform_wrapper.yml
+      reset_cycles:               4
+      idle_cycles_after_reset:    0
+      post_stimulus_drain_cycles: 40
+      extra_clocks:
+        clk_control: 20.0
+        clk_output:  8.0
     xsim:
       top_lib: xil_defaultlib
       use_sv_flag: false

@@ -1,0 +1,386 @@
+<vision_pipeline_events>
+  <event id="0">
+    <in pixel="0x00" x="0" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="1">
+    <in pixel="0x24" x="1" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="2">
+    <in pixel="0x48" x="2" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="3">
+    <in pixel="0x6d" x="3" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="4">
+    <in pixel="0x91" x="4" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="5">
+    <in pixel="0xb6" x="5" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="6">
+    <in pixel="0xda" x="6" y="0" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="7">
+    <in pixel="0xff" x="7" y="0" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="8">
+    <in pixel="0x00" x="0" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="9">
+    <in pixel="0x24" x="1" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="10">
+    <in pixel="0x48" x="2" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="11">
+    <in pixel="0x6d" x="3" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="12">
+    <in pixel="0x91" x="4" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="13">
+    <in pixel="0xb6" x="5" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="14">
+    <in pixel="0xda" x="6" y="1" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="15">
+    <in pixel="0xff" x="7" y="1" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="16">
+    <in pixel="0x00" x="0" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="17">
+    <in pixel="0x24" x="1" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="18">
+    <in pixel="0x48" x="2" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="19">
+    <in pixel="0x6d" x="3" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="20">
+    <in pixel="0x91" x="4" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="21">
+    <in pixel="0xb6" x="5" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="22">
+    <in pixel="0xda" x="6" y="2" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="23">
+    <in pixel="0xff" x="7" y="2" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="24">
+    <in pixel="0x00" x="0" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="25">
+    <in pixel="0x24" x="1" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="26">
+    <in pixel="0x48" x="2" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="27">
+    <in pixel="0x6d" x="3" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="28">
+    <in pixel="0x91" x="4" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="29">
+    <in pixel="0xb6" x="5" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="30">
+    <in pixel="0xda" x="6" y="3" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="31">
+    <in pixel="0xff" x="7" y="3" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="32">
+    <in pixel="0x00" x="0" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="33">
+    <in pixel="0x24" x="1" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="34">
+    <in pixel="0x48" x="2" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="35">
+    <in pixel="0x6d" x="3" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="36">
+    <in pixel="0x91" x="4" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="37">
+    <in pixel="0xb6" x="5" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="38">
+    <in pixel="0xda" x="6" y="4" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="39">
+    <in pixel="0xff" x="7" y="4" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="40">
+    <in pixel="0x00" x="0" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="41">
+    <in pixel="0x24" x="1" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="42">
+    <in pixel="0x48" x="2" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="43">
+    <in pixel="0x6d" x="3" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="44">
+    <in pixel="0x91" x="4" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="45">
+    <in pixel="0xb6" x="5" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="46">
+    <in pixel="0xda" x="6" y="5" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="47">
+    <in pixel="0xff" x="7" y="5" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="48">
+    <in pixel="0x00" x="0" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="49">
+    <in pixel="0x24" x="1" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="50">
+    <in pixel="0x48" x="2" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="51">
+    <in pixel="0x6d" x="3" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="52">
+    <in pixel="0x91" x="4" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="53">
+    <in pixel="0xb6" x="5" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="54">
+    <in pixel="0xda" x="6" y="6" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="55">
+    <in pixel="0xff" x="7" y="6" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="56">
+    <in pixel="0x00" x="0" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="57">
+    <in pixel="0x24" x="1" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="58">
+    <in pixel="0x48" x="2" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="59">
+    <in pixel="0x6d" x="3" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="60">
+    <in pixel="0x91" x="4" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="61">
+    <in pixel="0xb6" x="5" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="62">
+    <in pixel="0xda" x="6" y="7" frame_id="0" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="63">
+    <in pixel="0xff" x="7" y="7" frame_id="0" tile_id="0" end_of_line="1" end_of_frame="1" pixel_valid="1" />
+  </event>
+  <event id="64">
+    <in pixel="0xff" x="0" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="65">
+    <in pixel="0x00" x="1" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="66">
+    <in pixel="0xff" x="2" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="67">
+    <in pixel="0x00" x="3" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="68">
+    <in pixel="0xff" x="4" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="69">
+    <in pixel="0x00" x="5" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="70">
+    <in pixel="0xff" x="6" y="0" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="71">
+    <in pixel="0x00" x="7" y="0" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="72">
+    <in pixel="0x00" x="0" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="73">
+    <in pixel="0xff" x="1" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="74">
+    <in pixel="0x00" x="2" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="75">
+    <in pixel="0xff" x="3" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="76">
+    <in pixel="0x00" x="4" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="77">
+    <in pixel="0xff" x="5" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="78">
+    <in pixel="0x00" x="6" y="1" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="79">
+    <in pixel="0xff" x="7" y="1" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="80">
+    <in pixel="0xff" x="0" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="81">
+    <in pixel="0x00" x="1" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="82">
+    <in pixel="0xff" x="2" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="83">
+    <in pixel="0x00" x="3" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="84">
+    <in pixel="0xff" x="4" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="85">
+    <in pixel="0x00" x="5" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="86">
+    <in pixel="0xff" x="6" y="2" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="87">
+    <in pixel="0x00" x="7" y="2" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="88">
+    <in pixel="0x00" x="0" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="89">
+    <in pixel="0xff" x="1" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="90">
+    <in pixel="0x00" x="2" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="91">
+    <in pixel="0xff" x="3" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="92">
+    <in pixel="0x00" x="4" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="93">
+    <in pixel="0xff" x="5" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="94">
+    <in pixel="0x00" x="6" y="3" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="95">
+    <in pixel="0xff" x="7" y="3" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="96">
+    <in pixel="0xff" x="0" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="97">
+    <in pixel="0x00" x="1" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="98">
+    <in pixel="0xff" x="2" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="99">
+    <in pixel="0x00" x="3" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="100">
+    <in pixel="0xff" x="4" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="101">
+    <in pixel="0x00" x="5" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="102">
+    <in pixel="0xff" x="6" y="4" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="103">
+    <in pixel="0x00" x="7" y="4" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="104">
+    <in pixel="0x00" x="0" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="105">
+    <in pixel="0xff" x="1" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="106">
+    <in pixel="0x00" x="2" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="107">
+    <in pixel="0xff" x="3" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="108">
+    <in pixel="0x00" x="4" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="109">
+    <in pixel="0xff" x="5" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="110">
+    <in pixel="0x00" x="6" y="5" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="111">
+    <in pixel="0xff" x="7" y="5" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="112">
+    <in pixel="0xff" x="0" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="113">
+    <in pixel="0x00" x="1" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="114">
+    <in pixel="0xff" x="2" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="115">
+    <in pixel="0x00" x="3" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="116">
+    <in pixel="0xff" x="4" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="117">
+    <in pixel="0x00" x="5" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="118">
+    <in pixel="0xff" x="6" y="6" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="119">
+    <in pixel="0x00" x="7" y="6" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="120">
+    <in pixel="0x00" x="0" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="121">
+    <in pixel="0xff" x="1" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="122">
+    <in pixel="0x00" x="2" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="123">
+    <in pixel="0xff" x="3" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="124">
+    <in pixel="0x00" x="4" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="125">
+    <in pixel="0xff" x="5" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="126">
+    <in pixel="0x00" x="6" y="7" frame_id="1" tile_id="0" end_of_line="0" end_of_frame="0" pixel_valid="1" />
+  </event>
+  <event id="127">
+    <in pixel="0xff" x="7" y="7" frame_id="1" tile_id="0" end_of_line="1" end_of_frame="1" pixel_valid="1" />
+  </event>
+</vision_pipeline_events>

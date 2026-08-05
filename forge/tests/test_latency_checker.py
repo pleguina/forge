@@ -27,6 +27,94 @@ def _node(name, cycles, *, is_variable=False):
     )
 
 
+def test_unknown_cdc_edge_is_not_silently_treated_as_zero_extra_cycles():
+    """release-plan Phase 10, slice 10.7B finding: before this fix, a
+    mailbox_transfer/async_fifo edge (LatencyEdge.latency is always None
+    for these kinds — see graph.py's _edge_latency_from_connection) was
+    indistinguishable from a plain connection with genuinely zero extra
+    cycles, so its predecessor's own real, fixed latency was folded
+    straight through as if the crossing added nothing — silently wrong,
+    since a mailbox_transfer/async_fifo's real latency is unbounded. A
+    node fed by one real, single fixed-latency predecessor and one
+    unknown_cdc predecessor must report that one real predecessor's
+    total as known, and the unknown_cdc one as unknown — never a
+    fabricated equal/mismatched delta between them."""
+    graph = LatencyGraph(
+        nodes={
+            "ctrl_src": _node("ctrl_src", 1),
+            "data_src": _node("data_src", 3),
+            "merge": _node("merge", 2),
+        },
+        edges=[
+            LatencyEdge(src="ctrl_src", dst="merge", latency=None, unknown_cdc=True),
+            LatencyEdge(src="data_src", dst="merge", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    assert len(reports) == 1
+    r = reports[0]
+    assert r.has_unknowns
+    assert not r.is_mismatch  # only one known path — no meaningful delta
+    totals = {p.path[0]: p.total_cycles for p in r.paths}
+    assert totals == {"ctrl_src": None, "data_src": 3}
+
+
+def test_node_with_one_real_and_one_unknown_cdc_predecessor_folds_through_the_real_side():
+    """release-plan Phase 10, slice 10.7B finding: a node with two
+    predecessors — one reached via an unknown_cdc edge (e.g. a
+    frame-boundary-gated config register fed by a real
+    cdc: {kind: mailbox_transfer} crossing), one a real single data
+    predecessor — still has a fully well-defined upstream chain through
+    its real side. A FURTHER downstream merge point comparing this
+    node's branch against a sibling straight-line branch must see the
+    real upstream latency folded all the way through (not reset to just
+    this node's own isolated latency, which would silently understate
+    the branch's real total and produce a false mismatch/wrong signal_delay
+    suggestion) — found running a real design (vision_pipeline_demo's
+    slice 10.7B platform-wrapper fixture) where this exact shape first
+    occurred: threshcfg has both a real `norm` data predecessor and an
+    unknown_cdc `ctrl_mailbox` predecessor, and is itself a predecessor
+    of `merge` alongside a real straight-line `sobel` branch."""
+    graph = LatencyGraph(
+        nodes={
+            "ctrl_mailbox": _node("ctrl_mailbox", 1),
+            "norm": _node("norm", 3),
+            "winbld": _node("winbld", 10),
+            "sobel": _node("sobel", 4),
+            "threshcfg": _node("threshcfg", 2),
+            "merge": _node("merge", 1),
+        },
+        edges=[
+            LatencyEdge(src="ctrl_mailbox", dst="threshcfg", latency=None, unknown_cdc=True),
+            LatencyEdge(src="norm", dst="threshcfg", latency=None),
+            LatencyEdge(src="norm", dst="winbld", latency=None),
+            LatencyEdge(src="winbld", dst="sobel", latency=None),
+            LatencyEdge(src="sobel", dst="merge", latency=None),
+            LatencyEdge(src="threshcfg", dst="merge", latency=LatencyValue(
+                cycles=12, provenance=LatencyProvenance("generated_transformation", detail="delay_cycles=12"),
+            )),
+        ],
+    )
+    reports = check_merge_points(graph)
+    by_node = {r.merge_node: r for r in reports}
+
+    # threshcfg's own point: one real (norm=3), one genuinely unknown
+    # (ctrl_mailbox) — no fabricated mismatch.
+    thresh_report = by_node["threshcfg"]
+    assert not thresh_report.is_mismatch
+    thresh_totals = {p.path[0]: p.total_cycles for p in thresh_report.paths}
+    assert thresh_totals == {"ctrl_mailbox": None, "norm": 3}
+
+    # merge's own point: sobel's real chain is norm(3)+winbld(10)+sobel(4)=17;
+    # threshcfg's real chain must fold through norm too — norm(3)+threshcfg(2)
+    # +edge(12)=17 — not threshcfg(2)+edge(12)=14 (which would falsely
+    # report a 3-cycle mismatch and a wrong signal_delay suggestion).
+    merge_report = by_node["merge"]
+    assert not merge_report.is_mismatch
+    merge_totals = {p.path[0]: p.total_cycles for p in merge_report.paths}
+    assert merge_totals == {"sobel": 17, "threshcfg": 17}
+
+
 def test_edge_latency_is_folded_into_the_path_total():
     """Two predecessors with EQUAL node latency, but one edge carries extra
     cycles (e.g. register_stages) the other doesn't — must now be flagged,

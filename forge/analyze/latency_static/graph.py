@@ -112,6 +112,22 @@ class LatencyEdge:
     src: str
     dst: str
     latency: Optional[LatencyValue] = None
+    # release-plan Phase 10, slice 10.7B finding: ``latency is None`` is
+    # ambiguous on its own — it means both "this edge adds no known extra
+    # cycles" (a plain same-domain connection) AND "this edge is a
+    # mailbox_transfer/async_fifo CDC crossing whose latency is
+    # deliberately, honestly unknown" (_edge_latency_from_connection's own
+    # docstring). Every merge-point/upstream-chain walk before this slice
+    # collapsed the second case into "0 extra cycles" instead of "this
+    # whole path is now unknown" — invisible until a design first wired a
+    # real fixed-latency-declared module with a real fixed-latency-declared
+    # sibling predecessor on the OTHER side of a mailbox_transfer/async_fifo
+    # edge (every prior CDC-fed merge point happened to have its own
+    # unrelated "unknown" node latency masking the gap, or no real sibling
+    # predecessor requiring alignment at all). This flag lets both
+    # ``_upstream_chain_latency`` and ``check_merge_points`` propagate the
+    # real "unknown" instead of silently treating the crossing as free.
+    unknown_cdc: bool = False
 
 
 @dataclasses.dataclass
@@ -399,22 +415,31 @@ def _build_graph_from_ir(
     edges: List[LatencyEdge] = []
     seen_pairs: set = set()
 
-    def _add_edge(src: str, dst: str, latency: Optional[LatencyValue] = None) -> None:
+    def _add_edge(
+        src: str, dst: str, latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
+    ) -> None:
         if src in nodes and dst in nodes and (src, dst) not in seen_pairs:
             seen_pairs.add((src, dst))
-            edges.append(LatencyEdge(src=src, dst=dst, latency=latency))
+            edges.append(LatencyEdge(src=src, dst=dst, latency=latency, unknown_cdc=unknown_cdc))
 
-    def _add_instance_edges(src_mod_name: str, dst_mod_name: str, latency: Optional[LatencyValue] = None) -> None:
+    def _add_instance_edges(
+        src_mod_name: str, dst_mod_name: str,
+        latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
+    ) -> None:
         src_mod = mod_by_name.get(src_mod_name)
         dst_mod = mod_by_name.get(dst_mod_name)
         src_names = _instance_node_names(src_mod) if src_mod else [src_mod_name]
         dst_names = _instance_node_names(dst_mod) if dst_mod else [dst_mod_name]
         for s in src_names:
             for d in dst_names:
-                _add_edge(s, d, latency)
+                _add_edge(s, d, latency, unknown_cdc)
 
     for conn in cfg.connections:
-        _add_instance_edges(conn.from_, conn.to, _edge_latency_from_connection(conn))
+        conn_cdc_kind = conn.cdc.get("kind") if conn.cdc else None
+        _add_instance_edges(
+            conn.from_, conn.to, _edge_latency_from_connection(conn),
+            unknown_cdc=conn_cdc_kind in ("mailbox_transfer", "async_fifo"),
+        )
     for tg in cfg.topology_groups:
         # TopologyGroup carries no register_stages/delay_cycles/cdc field —
         # honestly latency=None (no data source), not a fabricated 0.

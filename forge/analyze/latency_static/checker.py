@@ -126,16 +126,23 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     for the first time — every existing test/reference-design merge
     point is single-hop, so this gap had no test surface before.
 
-    Walks backward only through nodes with a single predecessor whose own
-    ``kind`` is fixed-ish (``None``/``fixed``/``hint``/``hls_report`` —
-    never ``bounded``/``elastic``, whose latency isn't a fixed scalar to
-    begin with, and stopping there is conservative, not a regression:
-    neither reference design uses those kinds mid-chain today). Stops
-    (returns just *name*'s own contribution) at a true source (no
-    predecessors) or a fan-in node (>=2 predecessors) — the latter is
-    itself a merge point, independently checked by the caller's own loop,
-    not something to fold through as if its alignment were already
-    verified.
+    Walks backward only through nodes with a single *real* predecessor
+    (release-plan Phase 10, slice 10.7B: a predecessor reached via an
+    ``unknown_cdc`` edge — mailbox_transfer/async_fifo — doesn't count
+    toward this "single predecessor" test at all, since it's a legitimate
+    async side-channel exempt from exact-cycle alignment, e.g. a
+    frame-boundary-gated configuration register, not a second data path
+    requiring reconciliation; a node with one real data predecessor plus
+    one such async predecessor still has a fully well-defined, foldable
+    upstream chain through its real side) whose own ``kind`` is fixed-ish
+    (``None``/``fixed``/``hint``/``hls_report`` — never ``bounded``/
+    ``elastic``, whose latency isn't a fixed scalar to begin with, and
+    stopping there is conservative, not a regression: neither reference
+    design uses those kinds mid-chain today). Stops (returns just
+    *name*'s own contribution) at a true source (no real predecessors) or
+    a real fan-in node (>=2 real predecessors) — the latter is itself a
+    merge point, independently checked by the caller's own loop, not
+    something to fold through as if its alignment were already verified.
     """
     node = graph.nodes[name]
     own_cycles = node.latency_cycles
@@ -143,11 +150,14 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     own_kind = node.latency.kind if node.latency else None
 
     preds = graph.predecessors(name)
-    if len(preds) != 1 or own_unknown or own_kind in ("bounded", "elastic"):
+    edges_by_pred = {e.src: e for e in graph.edges if e.dst == name}
+    real_preds = [p for p in preds if not (edges_by_pred.get(p) and edges_by_pred[p].unknown_cdc)]
+
+    if len(real_preds) != 1 or own_unknown or own_kind in ("bounded", "elastic"):
         return (None if own_unknown else own_cycles, own_unknown)
 
-    pred = preds[0]
-    edge = next((e for e in graph.edges if e.src == pred and e.dst == name), None)
+    pred = real_preds[0]
+    edge = edges_by_pred.get(pred)
     edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
 
     upstream_cycles, upstream_unknown = _upstream_chain_latency(graph, pred)
@@ -190,6 +200,12 @@ def check_merge_points(
             node_cycles, unknown = _upstream_chain_latency(graph, src)
 
             edge = edge_by_pair.get((src, node_name))
+            if edge and edge.unknown_cdc:
+                # This path's own final hop is a mailbox_transfer/async_fifo
+                # crossing into the merge node itself — genuinely unbounded
+                # (LatencyEdge.unknown_cdc's own docstring), regardless of
+                # how src's own upstream chain resolved.
+                unknown = True
             edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
 
             kind = src_node.latency.kind if src_node.latency else None

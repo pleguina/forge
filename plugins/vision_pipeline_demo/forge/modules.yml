@@ -59,6 +59,33 @@ modules:
   interface_contract: interfaces/threshold_rtl.interface.yaml
   src: [../algo/rtl/threshold_rtl.v]
 
+# ─── Configurable Threshold Comparator (RTL) — slice 10.7B ─────────────────
+- name: threshold_configurable_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: threshold_configurable_rtl
+  # Fixed 2-cycle registered latency, identical to threshold_rtl.v (see
+  # algo/rtl/threshold_configurable_rtl.v) -- threshold comes from a real
+  # cdc: {kind: mailbox_transfer} crossing instead of a compile-time
+  # parameter, latched at frame boundaries (preflight.md §9.1, frozen).
+  latency:
+    kind: fixed
+    cycles: 2
+  interface_contract: interfaces/threshold_configurable_rtl.interface.yaml
+  src: [../algo/rtl/threshold_configurable_rtl.v]
+
+# ─── Control-domain configuration source (platform fixture) — slice 10.7B ──
+- name: ctrl_mailbox_platform_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_mailbox_platform_rtl
+  # Fixed 1-cycle registered latency (see algo/rtl/ctrl_mailbox_platform_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_mailbox_platform_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_mailbox_platform_rtl.v]
+
 # ─── Window Builder (RTL) — slice 10.2 ─────────────────────────────────────
 - name: window_builder_rtl
   kind: rtl
