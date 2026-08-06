@@ -8,15 +8,13 @@ deterministically, and serialized/hashed/diffed — instead of each subsystem
 (topology generation, verification, latency analysis, testbench-parameter
 extraction) independently re-deriving them from the same source YAML.
 
-This is the *first slice* of the canonical IR (see
-``docs/development/release-readiness.md`` for the full migration-sequence
-tracking). It covers migration steps 1-3 (topology/config loading,
-interface-contract loading, IP/RTL port metadata) plus read-only
-consumption of the existing matcher's output for connections. It does not
-yet cover: multi-clock-domain modeling (single trivial domain only, see
+This model covers topology/config loading, interface-contract loading, and
+IP/RTL port metadata, plus read-only consumption of the existing matcher's
+output for connections. It does not yet cover: multi-clock-domain modeling
+(single trivial domain only, see
 ``ResolvedClockDomain``/``ResolvedResetDomain``), generation-plan hashing,
 protocol semantics, or verification planning (``ResolvedVerificationPlan``
-is present but explicitly unpopulated this slice).
+is present but explicitly unpopulated).
 
 ``IR_SCHEMA_VERSION`` is independent of the ``forge`` package version — see
 the "Versioning" section in the repository README for why FORGE tracks
@@ -116,8 +114,7 @@ class ResolvedModuleDefinition:
 
     ``latency_cycles``/``latency_hint``/``is_variable_latency`` are
     populated directly from ``forge.topgen.config.Module.timing`` (no
-    re-parsing — migration step 7, see
-    ``docs/development/release-readiness.md``). This intentionally does
+    re-parsing). This intentionally does
     **not** include the ``hls_report`` latency-source tier
     (``forge.analyze.latency_static``'s external HLS-synthesis-report
     overlay) — that's runtime data supplied only when analyzing actual

@@ -8,21 +8,17 @@ been closed.
 
 A complete, domain-neutral streaming reference project — something with
 no CMS/OMTF provenance in its naming or shape at all, exercising RTL, HLS,
-scalar interfaces, and array/prefix wiring together — is under construction
-as `vision_pipeline_demo`, in progressive-complexity slices
-(`docs/internal/phase10/preflight.md` and
-`docs/internal/phase10/vision_pipeline_reference_project.md` record the
-frozen design decisions; `docs/plan/FORGE_release_plan.md`'s Phase 10
-tracks the slice sequencing). The full design the preflight freezes is
-now built and CI-real (as of slice 10.7D): pixel source → normalization
-(HLS), parallel HLS filters (Sobel edge detection), fan-out, an
-exact-cycle merge, tile statistics (bounded→elastic tagged join), all
-five CDC kinds across three real clock domains, an output packetizer
-with async-FIFO backpressure, and a 3-domain platform wrapper with a
-runtime-configurable threshold — see the
+scalar interfaces, and array/prefix wiring together — exists as
+`vision_pipeline_demo`. It is built and CI-real: pixel source →
+normalization (HLS), parallel HLS filters (Sobel edge detection),
+fan-out, an exact-cycle merge, tile statistics (bounded→elastic tagged
+join), all five CDC kinds across three real clock domains, an output
+packetizer with async-FIFO backpressure, and a 3-domain platform wrapper
+with a runtime-configurable threshold — see the
+[progressive tutorial](../tutorials/vision-pipeline/index.md) or the
 [full design tutorial](../tutorials/vision-pipeline-full-design.md) for
-the complete, runnable walkthrough. hls4ml (optional CNN extension,
-slice 10.8) remains not built.
+the complete, runnable walkthrough. hls4ml (optional CNN extension)
+remains not built and is out of scope for the first stable release.
 
 ## What today's tutorials use
 
@@ -62,5 +58,5 @@ CMS/OMTF-specific vocabulary and fails CI if it finds any — see
 (`detector_input_roles`, `reference_period_ns`) that let a plugin bring
 its own domain's conventions instead of relying on a hardcoded default.
 In short: the framework is domain-neutral by construction and by CI gate
-today; a domain-neutral *example plugin* proving that end to end is the
-piece that's still on the roadmap.
+today, and `vision_pipeline_demo` is the domain-neutral *example plugin*
+that proves it end to end.

@@ -1,8 +1,8 @@
 """forge.analyze.latency_static.graph
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Build a directed latency graph from the canonical resolved design IR
-(migration step 7 — docs/development/release-readiness.md), falling back
-to an independent design.yml/modules.yml re-parse only for the narrow,
+Build a directed latency graph from the canonical resolved design IR,
+falling back to an independent design.yml/modules.yml re-parse only for
+the narrow,
 undocumented case of a `modules_yml_path` override that genuinely differs
 from design.yml's own `registry:` field (never observed in real/documented
 usage, but the parameter's public contract allows it).

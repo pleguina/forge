@@ -398,8 +398,7 @@ def build_project_ir(
     ``forge inspect``, which has no other reason to have these objects
     already in hand. A caller that *already* has ``cfg``/``contracts``/
     ``ip_info``/matcher output from its own pipeline (e.g. ``topgen
-    gen-top`` — migration step 4 of the canonical-IR plan, see
-    ``docs/development/release-readiness.md``) should call
+    gen-top``) should call
     ``assemble_project_ir`` directly instead of redundantly reloading
     everything here.
     """

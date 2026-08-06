@@ -1,9 +1,8 @@
 """forge inspect — canonical resolved-design IR, read-only.
 
-This is the first CLI consumer of ``forge.ir`` (see
-``docs/development/release-readiness.md`` for the migration-sequence
-tracking). It resolves a design's modules, instances, interfaces, and
-connections into one canonical model and can print it, export it as JSON,
+This is the first CLI consumer of ``forge.ir``. It resolves a design's
+modules, instances, interfaces, and connections into one canonical model
+and can print it, export it as JSON,
 or diff it against a previously exported snapshot.
 
 Read-only by default: building the IR never writes ``ip_info.yaml`` or any

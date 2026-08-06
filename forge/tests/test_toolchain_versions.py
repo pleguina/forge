@@ -1,11 +1,11 @@
 """
-Tests for forge.core.toolchain_versions (release-plan Phase 5 slice 5.1).
+Tests for forge.core.toolchain_versions.
 
 Toolchain-version parsing is exercised against a fake PATH entry (a
 trivial shell script), not a real installed Xilinx/GHDL/Verilator
 toolchain — this environment has none of those installed, matching the
-honest "synthetic-only" precedent already established for Phase 4 slice
-4's csynth.xml fixture (docs/development/release-readiness.md).
+same honest "synthetic-only" precedent used elsewhere for fixtures like
+csynth.xml.
 """
 
 from __future__ import annotations

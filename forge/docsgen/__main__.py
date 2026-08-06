@@ -10,12 +10,14 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from .artifact_walker import generate_artifacts_page
 from .cli_reference import generate_cli_reference_page
 from .diagnostics_registry import generate_diagnostics_page
+from .public_api import build_inventory, generate_public_api_page
 from .support_matrix_reference import generate_support_matrix_page
 from .vocab_reference import (
     generate_canonical_roles_page,
@@ -27,6 +29,7 @@ from ._io import write_page
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_OUTPUT_DIR = _REPO_ROOT / "docs" / "reference"
+_DEFAULT_INVENTORY_PATH = _REPO_ROOT / "docs" / "internal" / "release" / "public_api_inventory.json"
 
 # (relative filename, generator) — one entry per generated reference page.
 _PAGES = [
@@ -38,6 +41,7 @@ _PAGES = [
     ("diagnostics.md", generate_diagnostics_page),
     ("support-matrix.md", generate_support_matrix_page),
     ("artifacts.md", generate_artifacts_page),
+    ("public-python-api.md", generate_public_api_page),
 ]
 
 
@@ -53,6 +57,13 @@ def _parse_args(argv: "list[str] | None" = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-dir", type=Path, default=_DEFAULT_OUTPUT_DIR,
         help=f"Directory to write pages into (default: {_DEFAULT_OUTPUT_DIR.relative_to(_REPO_ROOT)}).",
+    )
+    parser.add_argument(
+        "--inventory-path", type=Path, default=_DEFAULT_INVENTORY_PATH,
+        help=(
+            "Where to write the machine-readable public-API inventory "
+            f"(default: {_DEFAULT_INVENTORY_PATH.relative_to(_REPO_ROOT)})."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -71,16 +82,25 @@ def main(argv: "list[str] | None" = None) -> int:
         else:
             write_page(args.output_dir, relative_name, content)
 
+    inventory_content = json.dumps(build_inventory(), indent=2, sort_keys=True) + "\n"
+    if args.check:
+        existing = args.inventory_path.read_text(encoding="utf-8") if args.inventory_path.exists() else None
+        if existing != inventory_content:
+            stale.append(str(args.inventory_path))
+    else:
+        write_page(args.inventory_path.parent, args.inventory_path.name, inventory_content)
+
     if args.check:
         if stale:
             print("Stale generated reference page(s) — run `python -m forge.docsgen`:", file=sys.stderr)
             for name in stale:
-                print(f"  - {args.output_dir / name}", file=sys.stderr)
+                print(f"  - {name}", file=sys.stderr)
             return 1
         print("All generated reference pages are up to date.")
         return 0
 
     print(f"Wrote {len(_PAGES)} page(s) to {args.output_dir}")
+    print(f"Wrote public API inventory to {args.inventory_path}")
     return 0
 
 

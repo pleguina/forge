@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # ci/import_direction_check.sh — cheap dependency-direction linter.
 #
-# The audit's revision of the original "split into 5 packages
-# (forge-model/sdk/backends/analysis/cli)" recommendation (§19): the
-# dependency direction that split was meant to enforce is *already* clean
-# in the current forge/{core,topgen,hls,verify,analyze,framework,ir}
-# layout — a cheap CI grep achieves the same goal at a fraction of the
-# cost of a physical package split, which is deferred (see
-# docs/development/release-readiness.md) unless repo/team growth later
+# A physical package split (forge-model/sdk/backends/analysis/cli) was
+# considered and rejected: the dependency direction it would enforce is
+# *already* clean in the current
+# forge/{core,topgen,hls,verify,analyze,framework,ir} layout — a cheap CI
+# grep achieves the same goal at a fraction of the cost of a physical
+# package split, which stays deferred unless repo/team growth later
 # justifies it.
 #
 # Rules enforced (all read-only greps, no AST — same tradeoff as

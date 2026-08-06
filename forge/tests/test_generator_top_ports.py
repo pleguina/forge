@@ -1,6 +1,5 @@
 """
-Proofs for migration step 6 (docs/development/release-readiness.md):
-write_structural_verilog's report["top_ports"] must exactly match what
+Proofs that write_structural_verilog's report["top_ports"] must exactly match what
 forge.core.utils.hdl_parser._scan_verilog_ports would parse back out of
 the generated file — proving the new structured data is a faithful,
 lossless stand-in for the regex re-parse that generate_port_map used to

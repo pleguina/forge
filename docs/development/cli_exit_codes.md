@@ -4,10 +4,10 @@ This document is the single source of truth for what a `forge` (and
 `forge verify`) command's exit code means. It is cross-referenced from each
 migrated command's `--help` epilog rather than duplicated there.
 
-## Before Phase 6
+## Historical inconsistency (resolved)
 
-Before the release-plan's Phase 6 (`§6.7`), exit code `2` meant three
-different things depending on which file raised it:
+Exit code `2` used to mean three different things depending on which file
+raised it:
 
 - `core/cli/main.py`: an unexpected, uncaught internal exception.
 - `core/cli/groups/core.py`, `core/cli/groups/topgen.py` (`init-plugin`):
@@ -16,10 +16,9 @@ different things depending on which file raised it:
   failure.
 
 Every `--json`-supporting command also invented its own JSON shape (see
-`forge/core/cli/envelope.py`'s module docstring for specifics). Phase 6
-closes both inconsistencies, one command at a time (see
-`docs/development/release-readiness.md`'s Phase 6 section for which
-commands have been migrated so far).
+`forge/core/cli/envelope.py`'s module docstring for specifics). Both
+inconsistencies are now closed: every command below shares one
+`CommandEnvelope` and one exit-code policy.
 
 ## The policy
 
@@ -57,9 +56,9 @@ warnings without losing the distinction between "found a real problem" and
   (`forge/verify/diagnostics.py`) and `ATGDiagnostic.to_dict()`
   (`forge/core/diagnostics.py`) already produce — those two stable code
   families (`FWVxxxx`, `ATGxxxx`) are **bridged** onto the envelope, not
-  merged into one registry (the release plan's own text only asks for a
-  bridge; see `docs/development/release-readiness.md`'s Phase 6 closure
-  notes for why a full merge is out of scope).
+  merged into one registry (a full merge is out of scope: the two
+  families serve different subsystems and merging them would break their
+  existing stable codes for no real benefit).
 - `metrics` is where query results and summary counts live —
   `--diff`/`--explain-staleness`-style output, plan summaries, per-event
   test counts, and so on. It is not diagnostics and not artifacts.
@@ -83,36 +82,31 @@ sweep — both are deliberate, documented behavior changes:
   (a bad `--key` value is a usage error, not a "the resource doesn't
   exist" finding).
 
-## Migration status
+## Command coverage
 
 All commands below emit `CommandEnvelope` under `--json` (schema version
 `0.1.0`) and follow the exit-code policy above.
 
 | Command | Notes |
 |---|---|
-| `forge doctor` | §6.3. `--strict` now genuinely fails on any missing check (previously dead code — no check was ever `required=True`). |
-| `forge verify doctor` | §6.0. First migration (the proof). |
-| `forge verify release-check` | §6.0/§6.3. |
-| `forge inspect` | §6.1. Plain `--json` is now a summary (counts + maturity + diagnostics), not a full IR dump — use `--emit-ir` for the full canonical IR. `--diff`/`--explain-staleness` results moved into `metrics`. |
-| `forge build` | §6.2. `{"plan","plan_hash"}` full-dump replaced with `metrics.counts` + `artifacts` + `diagnostics`. New `--strict`/`--dry-run`/`--provenance`/`--explain-staleness`. |
-| `forge test check-only` / `prepare` / `run` | §6.4 (new command). `run`'s `metrics` carries `events_run`/`events_passed`/`events_failed`; supports `--junit-xml`. |
-| `forge report` | §6.5 (new command). `artifacts` lists every file written; sections degrade to an honest "not available" note (`diagnostics` severity `note`) when optional inputs (`--hls-build-root`, `--probe-csv`, `--provenance`, `--junit-xml`) aren't given. |
-| `forge init` | §6.6 (new command). `metrics.steps_completed` only ever lists steps that actually succeeded — a failed step halts immediately. |
-| `forge topgen validate` | §6.7. Bespoke `{"passed","registry","design","stale"}` replaced; `metrics.stale` keeps the same `{"count","artifacts"}` shape as before for `--check-stale`. |
-| `forge topgen validate-registry` | §6.7. Bespoke `{"passed","errors","warnings","infos"}` replaced with `diagnostics`. |
-| `forge core resources` | §6.7. `--format json` (pre-existing) is a deprecated alias for the new `--json`; both produce the envelope, with the original `{key: {path, exists}}` dict now at `metrics.resources`. |
-| `forge core verify-contract` | §6.7. New `--json`. Exit-code conflation fixed (see above). |
-| `forge analyze hls-report` / `latency-check` / `runtime-latency` / `plot-results` / `dashboard` | §6.7, lighter-touch pass (report-generation commands, not pass/fail gates — `metrics`/`artifacts` matter more than `diagnostics` here). New `--json` on all 5; non-JSON text output and exit codes are unchanged. |
+| `forge doctor` | `--strict` genuinely fails on any missing check (previously dead code — no check was ever `required=True`). |
+| `forge verify doctor` | |
+| `forge verify release-check` | |
+| `forge inspect` | Plain `--json` is a summary (counts + maturity + diagnostics), not a full IR dump — use `--emit-ir` for the full canonical IR. `--diff`/`--explain-staleness` results live in `metrics`. |
+| `forge build` | `{"plan","plan_hash"}` full-dump replaced with `metrics.counts` + `artifacts` + `diagnostics`. Supports `--strict`/`--dry-run`/`--provenance`/`--explain-staleness`. |
+| `forge test check-only` / `prepare` / `run` | `run`'s `metrics` carries `events_run`/`events_passed`/`events_failed`; supports `--junit-xml`. |
+| `forge report` | `artifacts` lists every file written; sections degrade to an honest "not available" note (`diagnostics` severity `note`) when optional inputs (`--hls-build-root`, `--probe-csv`, `--provenance`, `--junit-xml`) aren't given. |
+| `forge init` | `metrics.steps_completed` only ever lists steps that actually succeeded — a failed step halts immediately. |
+| `forge topgen validate` | Bespoke `{"passed","registry","design","stale"}` replaced; `metrics.stale` keeps the same `{"count","artifacts"}` shape as before for `--check-stale`. |
+| `forge topgen validate-registry` | Bespoke `{"passed","errors","warnings","infos"}` replaced with `diagnostics`. |
+| `forge core resources` | `--format json` (pre-existing) is a deprecated alias for the new `--json`; both produce the envelope, with the original `{key: {path, exists}}` dict now at `metrics.resources`. |
+| `forge core verify-contract` | Exit-code conflation fixed (see above). |
+| `forge analyze hls-report` / `latency-check` / `runtime-latency` / `plot-results` / `dashboard` | Lighter-touch pass (report-generation commands, not pass/fail gates — `metrics`/`artifacts` matter more than `diagnostics` here). Non-JSON text output and exit codes are unchanged. |
 
-**Not migrated (deliberately out of scope for Phase 6)**: `forge verify
-preflight` (a real subset of `forge verify doctor`, kept separate per
-rule 5/§6.6 — see `docs/development/release-readiness.md`'s Phase 6 slice
-3 closure for the full containment table), `forge topgen gen-top`/`hls
-*`/`framework *` (detailed subsystem commands the release plan's golden
-path wraps rather than replaces — §6.1's own framing), and `forge topgen
+**Not on the envelope (deliberate)**: `forge verify
+preflight` (a real subset of `forge verify doctor`, kept separate and
+narrower/faster for tight verify-iteration loops), `forge topgen
+gen-top`/`hls *`/`framework *` (detailed subsystem commands the golden
+path wraps rather than replaces), and `forge topgen
 migrate` (a one-off developer tool, not a pass/fail gate or report
 generator).
-
-See `docs/development/release-readiness.md`'s Phase 6 section for the
-full evidence trail (investigation findings, real end-to-end test runs,
-exact before/after test counts) behind every row above.

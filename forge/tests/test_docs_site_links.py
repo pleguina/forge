@@ -144,7 +144,7 @@ def test_no_broken_internal_links_assets_or_anchors(
 
 @skip_without_mkdocs
 def test_excluded_content_is_truly_absent_from_built_site(built_site: Path) -> None:
-    """Defect 17: proves exclude_docs actually worked, for real — not just
+    """Proves exclude_docs actually worked, for real — not just
     that the config exists (complements forge/tests/test_docs_site_build.py's
     equivalent check, run here too since this module builds its own site
     fixture independently)."""

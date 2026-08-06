@@ -35,47 +35,35 @@ FORGE's public identity for this release is deliberately narrower than
 | Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see `docs/IP_INTERFACE_POLICY.md`) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
 
-`docs/development/release-readiness.md` tracks the full public-release
-checklist (canonical design IR, generation-plan hashing, provenance,
-visual design explorer, MkDocs site, additional backends, and more) with
-per-item status and evidence — treat that file, not marketing copy, as the
-source of truth for what's DONE versus planned.
-
 ## Architecture (canonical IR — generation is IR-driven for all three modes)
 
-A canonical resolved-design IR now exists (`forge/ir/` — `ResolvedProject`/
-`ResolvedDesign`/etc., see `forge inspect` below) covering topology/config
-loading, interface-contract loading, and IP/RTL port metadata. As of
-migration step 5, `topgen gen-top` — `--mode verilog`, `vhdl`, and `bd`
-alike — is genuinely **driven by** the IR: it builds the IR from its
-matching/config computation, then each generator
+A canonical resolved-design IR (`forge/ir/` — `ResolvedProject`/
+`ResolvedDesign`/etc., see `forge inspect` below) covers topology/config
+loading, interface-contract loading, and IP/RTL port metadata.
+`topgen gen-top` — `--mode verilog`, `vhdl`, and `bd` alike — is genuinely
+**driven by** the IR: it builds the IR from its matching/config
+computation, then each generator
 (`write_structural_verilog`/`write_structural_vhdl`/`write_bd_tcl`) is fed
 the connection topology projected back out of the IR
 (`forge.ir.project.project_to_conn_map`) rather than the raw matcher output
-directly — proven byte-identical to the original on both reference designs
-before each switch (see `docs/development/release-readiness.md`, Phase 1
-slices 4–5). `design.ir.json` is emitted from that same IR object alongside
-the existing manifests for verilog/vhdl/bd, and now also carries the
-resolved top-level port list (`design.top_ports`) for verilog mode —
-migration step 6 replaced `generate_port_map`'s regex re-parse of the just-
-generated Verilog file with the generator's own structured
-`report["top_ports"]` (proven byte-identical to the re-parse first; see
-Phase 1 slice 6). `forge analyze latency-check`'s `LatencyGraph` (migration
-step 7) also no longer independently re-parses `design.yml`/`modules.yml` —
-it now builds from `DesignConfig`/`Module` (the same shared loader the IR
-itself uses), including the module registry's optional
-`latency_cycles`/`latency_hint`/`variable_latency` metadata
+directly — proven byte-identical to the original on both reference
+designs. `design.ir.json` is emitted from that same IR object alongside
+the existing manifests for verilog/vhdl/bd, and also carries the resolved
+top-level port list (`design.top_ports`) for verilog mode, sourced from
+the generator's own structured `report["top_ports"]` rather than a
+regex re-parse of the generated file. `forge analyze latency-check`'s
+`LatencyGraph` also does not independently re-parse
+`design.yml`/`modules.yml` — it builds from `DesignConfig`/`Module` (the
+same shared loader the IR itself uses), including the module registry's
+optional `latency_cycles`/`latency_hint`/`variable_latency` metadata
 (`Module.timing`, see `docs/IP_INTERFACE_POLICY.md`), while deliberately
 stopping short of the full matched IR so latency analysis keeps working
-before any IP is built (see Phase 1 slice 7). It is **not yet** consumed
-by `generate_build_manifest` (needs resolved build-artifact paths the IR
+before any IP is built. The IR is **not yet** consumed by
+`generate_build_manifest` (needs resolved build-artifact paths the IR
 doesn't model yet), visualization, or verification planning — those still
 independently re-derive overlapping facts from the same
 `design.yml`/`modules.yml`/interface-contract YAML sources, exactly as
-shown below. Migrating them onto the IR is tracked incrementally in
-`docs/development/release-readiness.md` — this diagram will keep being
-updated as each subsystem migrates, not rewritten in one step once
-everything is done.
+shown below.
 
 ```mermaid
 flowchart TD
@@ -176,7 +164,6 @@ This index lists the minimum user-facing documentation required to adopt and use
 
 ### Project
 
-- `docs/development/release-readiness.md` - public-release checklist with per-item status and evidence
 - `CHANGELOG.md` - notable changes by release
 - `CONTRIBUTING.md` - development setup and contribution workflow
 - `MIGRATION.md` - breaking-change notes (start here if upgrading from ARC)

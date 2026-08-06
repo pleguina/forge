@@ -1,6 +1,6 @@
 """
-Golden-generation proof for migration step 5 (docs/development/release-readiness.md):
-write_structural_verilog must produce byte-identical output whether it's
+Golden-generation proof: write_structural_verilog must produce
+byte-identical output whether it's
 fed the conn_map/global_nets auto_match_ports returns directly, or the
 same structures reconstructed by projecting them through the canonical IR
 (forge.ir.project.project_to_conn_map). This is what makes it safe to

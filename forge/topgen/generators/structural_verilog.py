@@ -483,17 +483,15 @@ def write_structural_verilog(
     If system_yml is None, behavior matches the previous implementation: only
     user-declared externals are lifted as <inst>_<pin>.
 
-    ``match_report`` (release-plan §3.2, Phase 3 slice 3) is required only
+    ``match_report`` is required only
     when a connection declares ``cdc: {kind: 2ff_sync}`` — it's what lets
     this function resolve the *destination* instance's own clock/reset net
     (which may differ from the design's default ``ap_clk``/``ap_rst`` in a
     multi-domain design) via ``forge.topgen.ip.domains.resolve_domain_nets``,
     the same resolver the IR and ``forge.topgen.ip.cdc.verify_cdc`` use.
-    ``cdc: {kind: async_fifo}`` is accepted (structurally approved, no
-    strict-mode violation) but does not emit a FIFO body this release —
-    the connection is wired directly, same as if no adapter were declared;
-    see ``docs/development/release-readiness.md``'s Phase 3 slice 3 entry
-    for this documented limitation.
+    ``cdc: {kind: async_fifo}`` emits a real ``cdc_async_fifo`` instance
+    (depth, occupancy, and write-enable-gating handled below), not a
+    direct wire-through.
     """
     NL = "\n"
     lines: List[str] = []
@@ -683,8 +681,7 @@ def write_structural_verilog(
     # ====== Module declaration =============================================
     module_ports: List[str] = []
     declared_names: Set[str] = set()
-    # Structured mirror of module_ports (migration step 6 — release-plan
-    # §1.4 / docs/development/release-readiness.md): recorded alongside the
+    # Structured mirror of module_ports: recorded alongside the
     # text declarations below so callers (generate_port_map, the canonical
     # IR) can consume the resolved top-level port list directly instead of
     # re-parsing it back out of the generated Verilog file. This list has

@@ -584,8 +584,7 @@ A module definition (shared across all its instances).
 
     ``latency_cycles``/``latency_hint``/``is_variable_latency`` are
     populated directly from ``forge.topgen.config.Module.timing`` (no
-    re-parsing — migration step 7, see
-    ``docs/development/release-readiness.md``). This intentionally does
+    re-parsing). This intentionally does
     **not** include the ``hls_report`` latency-source tier
     (``forge.analyze.latency_static``'s external HLS-synthesis-report
     overlay) — that's runtime data supplied only when analyzing actual

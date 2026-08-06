@@ -547,7 +547,7 @@ def generate_port_map(
 ):
     """Write port_map.yaml from the top-level port list.
 
-    Migration step 6 (docs/development/release-readiness.md): when *ports*
+    When *ports*
     is given (``{name: (direction, width)}``, the same shape
     ``forge.core.utils.hdl_parser._scan_verilog_ports`` returns), it is
     used directly — this is ``write_structural_verilog``'s own
@@ -1645,7 +1645,6 @@ def cmd_gen_top(args):
 
         print("✅ Validation passed!\n")
 
-        # Migration step 4/Slice 6 (docs/development/release-readiness.md):
         # compute_gen_top_plan is the shared, sys.exit-free compute phase
         # also used by `forge build`. Unpacked back into the same local
         # names the rest of this function (dry-run preview, all 3 mode
@@ -1750,9 +1749,8 @@ def cmd_gen_top(args):
                 ):
                     print(f"  {_preview_output.parent / _artifact}")
                 # design.ir.json (canonical IR snapshot) is emitted for both
-                # verilog and vhdl modes — see migration step 5 in
-                # docs/development/release-readiness.md. provenance.json
-                # (release-plan Phase 5 slice 5.1) is written as its sibling.
+                # verilog and vhdl modes; provenance.json is written as its
+                # sibling.
                 print(f"  {_preview_output.parent / 'design.ir.json'}")
                 print(f"  {_preview_output.parent / 'provenance.json'}")
                 _should_gen_tb = args.mode == "verilog" and (
@@ -1762,9 +1760,7 @@ def cmd_gen_top(args):
                     print(f"  {_preview_output.parent}/  (SystemVerilog testbench — exact name set by generate_sv_testbench)")
             elif args.mode == "bd":
                 # design.ir.json (canonical IR snapshot) is also emitted for
-                # --mode bd — see migration step 5 in
-                # docs/development/release-readiness.md. provenance.json
-                # (release-plan Phase 5 slice 5.1) is written as its sibling.
+                # --mode bd; provenance.json is written as its sibling.
                 print(f"  {_preview_output.parent / 'design.ir.json'}")
                 print(f"  {_preview_output.parent / 'provenance.json'}")
 
@@ -1778,8 +1774,7 @@ def cmd_gen_top(args):
             output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
             print(f"🔨 Generating structural VHDL: {output}")
 
-            # Migration step 5, extended to vhdl mode (same pattern as
-            # verilog — see docs/development/release-readiness.md): proven
+            # Extended to vhdl mode (same pattern as verilog): proven
             # byte-identical to the original direct conn_map/global_nets on
             # both reference designs (test_generation_ir_equivalence.py)
             # before this switch was made.
@@ -1834,8 +1829,7 @@ def cmd_gen_top(args):
             output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
             print(f"🔨 Generating structural Verilog: {output}")
 
-            # Migration step 5 (docs/development/release-readiness.md):
-            # generation is now driven by the canonical IR rather than
+            # Generation is driven by the canonical IR rather than
             # directly by auto_match_ports's conn_map/global_nets. Proven
             # byte-for-byte equivalent to the original direct conn_map on
             # both reference designs (test_generation_ir_equivalence.py)
@@ -1909,10 +1903,9 @@ def cmd_gen_top(args):
 
             port_map_output = output.parent / "port_map.yaml"
             print(f"\n🗺  Generating port map: {port_map_output}")
-            # Migration step 6: use the generator's own resolved top-level
-            # port list (report["top_ports"]) instead of re-parsing it back
-            # out of the file just written — see
-            # docs/development/release-readiness.md.
+            # Use the generator's own resolved top-level port list
+            # (report["top_ports"]) instead of re-parsing it back out of
+            # the file just written.
             _top_ports_for_map = {
                 p["name"]: (p["direction"], p["width"]) for p in report.get("top_ports", [])
             }
@@ -2018,8 +2011,7 @@ def cmd_gen_top(args):
             output = _resolve_path(args.output, c_root, Path("block_design.tcl"))
             print(f"🔨 Generating Block Design TCL: {output}")
 
-            # Migration step 5, extended to bd mode (same pattern as
-            # verilog/vhdl — see docs/development/release-readiness.md):
+            # Extended to bd mode (same pattern as verilog/vhdl):
             # proven byte-identical to the original direct conn_map/
             # global_nets on both reference designs
             # (test_generation_ir_equivalence.py) before this switch.

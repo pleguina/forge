@@ -248,14 +248,14 @@ forge:import-direction-check:
 # ---------------------------------------------------------------------------
 # forge:docs-build
 #
-# Release-plan Phase 9. Slice 9.0: proves the MkDocs site actually builds
-# with zero warnings (--strict) and that exclude_docs: really keeps
-# docs/plan/** and docs/development/release-readiness.md out of the built
-# site, not just out of nav. Slice 9.4 adds the built-HTML link/anchor
-# checker, the no-external-runtime-asset check, and the generated-page /
-# root-mirror staleness checks — all run here for real via pytest rather
-# than re-implemented as shell checks (see forge/tests/test_docs_site_*.py,
-# test_docs_staleness.py). The forge.docsgen unit tests themselves
+# Proves the MkDocs site actually builds with zero warnings (--strict)
+# and that exclude_docs: really keeps docs/plan/** and docs/internal/**
+# out of the built site, not just out of nav. Also runs the built-HTML
+# link/anchor checker, the no-external-runtime-asset check, and the
+# generated-page / root-mirror staleness checks — all run here for real
+# via pytest rather than re-implemented as shell checks (see
+# forge/tests/test_docs_site_*.py, test_docs_staleness.py). The
+# forge.docsgen unit tests themselves
 # (test_docsgen_*.py) run as part of forge:python-unit-tests already, and
 # ci/quickstart_commands.sh's exact command sequence is already exercised
 # for real by forge:fresh-user-check — neither is duplicated here.

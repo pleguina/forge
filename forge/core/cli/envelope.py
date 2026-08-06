@@ -6,8 +6,7 @@ for ``build``, several incompatible shapes for ``inspect``, ...) and exit
 code ``2`` means three different things across the CLI (a hard
 contract-verification failure, a CLI usage error, an unexpected internal
 exception). :class:`CommandEnvelope` is the one shape every command is
-migrated onto (incrementally, slice by slice — see
-``docs/development/release-readiness.md``'s Phase 6 section), and
+migrated onto (incrementally), and
 :func:`emit`/:data:`EXIT_CODE_POLICY` is the one place exit codes are
 decided, closing both inconsistencies at once.
 

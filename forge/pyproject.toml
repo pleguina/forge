@@ -79,7 +79,9 @@ forge = "forge.core.cli.main:main"
 package-dir = {"forge" = "."}
 packages = [
     "forge",
-    "forge.core", "forge.core.cli", "forge.core.utils",
+    "forge.core", "forge.core.cli", "forge.core.cli.groups", "forge.core.utils",
+    "forge.docsgen",
+    "forge.framework",
     "forge.ir",
     "forge.topgen", "forge.topgen.generators", "forge.topgen.ip",
     "forge.hls",
@@ -88,6 +90,8 @@ packages = [
     "forge.analyze.hls_reports",
     "forge.analyze.latency_static",
     "forge.analyze.latency_runtime",
+    "forge.analyze.throughput_static",
+    "forge.analyze.throughput_runtime",
     "forge.analyze.result_plots",
     "forge.analyze.dashboards",
     "forge.analyze.design_explorer",

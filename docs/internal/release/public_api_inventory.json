@@ -1,0 +1,427 @@
+{
+  "excluded_private_in_all": [
+    {
+      "kind": "function",
+      "module": "forge.core.utils",
+      "name": "_scan_ports",
+      "summary": "Scan VHDL entity ports."
+    },
+    {
+      "kind": "function",
+      "module": "forge.core.utils",
+      "name": "_scan_verilog_ports",
+      "summary": "Parse ports of the first module in a Verilog/SystemVerilog file."
+    },
+    {
+      "kind": "function",
+      "module": "forge.core.utils",
+      "name": "_verilog_module_name",
+      "summary": "Extract module name from Verilog/SystemVerilog file."
+    },
+    {
+      "kind": "function",
+      "module": "forge.core.utils",
+      "name": "_vhdl_entity_name",
+      "summary": "Extract entity name from VHDL file."
+    }
+  ],
+  "forge_version": "2.0.0",
+  "public": [
+    {
+      "kind": "class",
+      "module": "forge",
+      "name": "Connection",
+      "summary": "Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None)"
+    },
+    {
+      "kind": "class",
+      "module": "forge",
+      "name": "DesignConfig",
+      "summary": "DesignConfig(part: 'str', clock_period: 'float', max_parallel_jobs: 'int' = 1, reference_period_ns: 'Optional[float]' = None, modules: 'List[Module]' = <factory>, connections: 'List[Connection]' = <factory>, topology_groups: 'List[TopologyGroup]' = <factory>, sweeps: 'Dict[str, SweepSpec]' = <factory>, block_protocol: 'BlockProto' = 'none', connect_clock: 'bool' = True, connect_reset: 'bool' = True, control_signals: 'Dict[str, ControlSignal]' = <factory>, testbench: 'Optional[TestBenchConfig]' = None, interface_metadata: 'Dict[str, Any]' = <factory>, interface_metadata_file: 'Optional[str]' = None, registry: 'Optional[str]' = None, allowed_unconnected: 'AllowedUnconnected' = <factory>, schema_version: 'Optional[str]' = None, clock_domains: 'Dict[str, Dict[str, Any]]' = <factory>, reset_domains: 'Dict[str, Dict[str, Any]]' = <factory>)"
+    },
+    {
+      "kind": "class",
+      "module": "forge",
+      "name": "Module",
+      "summary": "Module(name: 'str', top: 'str', src: 'List[str]', kind: 'ModuleKind' = 'hls', rtl_lang: 'Optional[RtlLang]' = None, vhdl_library: 'Optional[str]' = None, vhdl_version: 'Optional[str]' = None, rtl_include_dirs: 'List[str]' = <factory>, verilog_defines: 'List[str]' = <factory>, rtl_packages: 'List[str]' = <factory>, parameters: 'Dict[str, Any]' = <factory>, tb: 'List[str]' = <factory>, includes: 'List[str]' = <factory>, cflags: 'List[str]' = <factory>, stages: 'List[Stage]' = <factory>, version: 'str' = '1.0', tb_args: 'Optional[TestBenchArgs]' = None, csim_opts: 'Optional[str]' = None, csynth_opts: 'Optional[str]' = None, cosim_opts: 'Optional[str]' = None, ip_opts: 'Optional[str]' = None, instances: 'int' = 1, external_in_ports: 'List[str]' = <factory>, external_out_ports: 'List[str]' = <factory>, debug: 'bool' = False, output_delays: 'Dict[str, int]' = <factory>, ip_info_key: 'Optional[str]' = None, timing: 'Optional[ModuleTiming]' = None)"
+    },
+    {
+      "kind": "value",
+      "module": "forge",
+      "name": "__version__",
+      "summary": "str(object='') -> str"
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "auto_match_ports",
+      "summary": "Build:"
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "collect_all",
+      "summary": "Return {module.name: component-dict | None}, prioritising component.xml;"
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "load_ip_info",
+      "summary": "Thin YAML wrapper used by several sub-packages."
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "parse_component",
+      "summary": "Parse a single HLS-exported component.xml into a dict:"
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "unpack_ip_archives",
+      "summary": "Extract IP archives from source directory into IP root."
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "write_bd_tcl",
+      "summary": ""
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "write_structural_vhdl",
+      "summary": "Generate a structural RTL top that wires algorithm modules together."
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "write_summary",
+      "summary": "Write the summary dict out in either JSON or YAML form."
+    },
+    {
+      "kind": "value",
+      "module": "forge.analyze.design_explorer",
+      "name": "DESIGN_GRAPH_SCHEMA",
+      "summary": "A ``{\"name\", \"version\"}`` tag carried by every structured artifact"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "DesignGraph",
+      "summary": "DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]')"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "GraphEdge",
+      "summary": "GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]', crosses_clock_domain: 'bool', crosses_reset_domain: 'bool', transformations: 'Tuple[Dict[str, Any], ...]', diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '')"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "GraphNode",
+      "summary": "GraphNode(id: 'str', kind: 'GraphNodeKind', label: 'str', parent: 'Optional[str]' = None, module: 'Optional[str]' = None, clock_domain: 'Optional[str]' = None, reset_domain: 'Optional[str]' = None, members: 'Tuple[str, ...]' = (), latency: 'Optional[Dict[str, Any]]' = None, maturity: 'Optional[MaturitySummary]' = None, diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), inherited_diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '')"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "GraphNodeKind",
+      "summary": "An enumeration."
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "MaturityStatus",
+      "summary": "An enumeration."
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "MaturitySummary",
+      "summary": "MaturitySummary(status: 'MaturityStatus', contract_edges: 'int', explicit_edges: 'int', topology_edges: 'int', compatibility_edges: 'int')"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "ObjectRecord",
+      "summary": "One entry in the typed registry backing the selected-object details"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "ObjectReference",
+      "summary": "A reference into one of the real IR object kinds \u2014 never"
+    },
+    {
+      "kind": "class",
+      "module": "forge.analyze.design_explorer",
+      "name": "ProjectionDiagnostic",
+      "summary": "A projection-layer diagnostic reference \u2014 corresponds to"
+    },
+    {
+      "kind": "function",
+      "module": "forge.analyze.design_explorer",
+      "name": "build_design_graph",
+      "summary": "Build a ``DesignGraph`` projection of *project*."
+    },
+    {
+      "kind": "value",
+      "module": "forge.core.cli",
+      "name": "main",
+      "summary": "forge CLI entry point."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "DiagnosticReference",
+      "summary": "A diagnostic attached to a specific IR object, so tooling (CLI,"
+    },
+    {
+      "kind": "value",
+      "module": "forge.ir",
+      "name": "IR_SCHEMA_VERSION",
+      "summary": "str(object='') -> str"
+    },
+    {
+      "kind": "value",
+      "module": "forge.ir",
+      "name": "PROVENANCE_SCHEMA_VERSION",
+      "summary": "str(object='') -> str"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ProvenanceManifest",
+      "summary": "ProvenanceManifest(schema_version: 'str' = '0.2.0', forge_version: 'str' = '', project_name: 'str' = '', ir_schema_version: 'Optional[str]' = None, ir_content_hash: 'Optional[str]' = None, source_hashes: 'Dict[str, str]' = <factory>, command_options: 'Dict[str, Any]' = <factory>, generated_at: 'Optional[str]' = None, plan_hash: 'Optional[str]' = None, toolchain_versions: 'Dict[str, str]' = <factory>, output_hashes: 'Dict[str, str]' = <factory>, project_identity: 'Optional[str]' = None)"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedClockDomain",
+      "summary": "A named clock domain \u2014 one per distinct resolved clock net."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedConnection",
+      "summary": "A resolved wire between two endpoints."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedDesign",
+      "summary": "The resolved design: modules, instances, connections, domains,"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedEndpoint",
+      "summary": "One side of a connection \u2014 a concrete instance/interface/port."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedInstance",
+      "summary": "One instance of a module definition in the design."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedInterfaceMember",
+      "summary": "One physical signal belonging to a logical interface."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedLogicalInterface",
+      "summary": "A named role on a module (e.g. ``clock_primary``, ``trigger_data``)."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedModuleDefinition",
+      "summary": "A module definition (shared across all its instances)."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedPhysicalBinding",
+      "summary": "The physical RTL/HLS port binding behind a logical interface member."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedProject",
+      "summary": "Top-level IR object returned by ``forge.ir.build.build_project_ir``."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedResetDomain",
+      "summary": "A named reset domain \u2014 see ``ResolvedClockDomain``."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedTopLevelPort",
+      "summary": "A resolved top-level (e.g. ``algo_top``) port \u2014 name, direction"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedTransformation",
+      "summary": "A generated (or declared-and-approved) element sitting on a"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedVerificationPlan",
+      "summary": "Placeholder for verification planning/bindings (migration step 9)."
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "SourceLocation",
+      "summary": "A source reference, file-level only in this slice (no line/column"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "StalenessExplanation",
+      "summary": "StalenessExplanation(stale: 'bool', reasons: 'List[str]' = <factory>)"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "assemble_project_ir",
+      "summary": "Assemble a ``ResolvedProject`` from already-resolved facts."
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "build_project_ir",
+      "summary": "Build a ``ResolvedProject`` for the design at *design_path*, loading"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "build_project_ir_with_match_report",
+      "summary": "Same as :func:`build_project_ir`, but also returns the ``cfg``/"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "build_provenance",
+      "summary": "Build a provenance manifest for an already-built IR *project*."
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "content_hash",
+      "summary": "Deterministic sha256 hex digest of the resolved design's content."
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "diff_projects",
+      "summary": "A coarse but real diff between two IR snapshots."
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "explain_staleness",
+      "summary": "Compare two provenance manifests and explain, in plain language,"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "project_to_conn_map",
+      "summary": "Reconstruct ``(conn_map, global_nets)`` from *project*'s connections,"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "read_provenance",
+      "summary": ""
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "render_provenance_markdown",
+      "summary": "Render *manifest* as a Markdown summary \u2014 pure presentation over"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "to_json_dict",
+      "summary": "Return a plain, JSON-serializable dict for *project*."
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "to_json_str",
+      "summary": "Human/CI-friendly JSON rendering, with sorted keys for stable diffs."
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "write_provenance",
+      "summary": ""
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.generators",
+      "name": "write_bd_tcl",
+      "summary": ""
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.generators",
+      "name": "write_structural_verilog",
+      "summary": "Generate a structural Verilog top that wires algorithm modules together."
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.generators",
+      "name": "write_structural_vhdl",
+      "summary": "Generate a structural RTL top that wires algorithm modules together."
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.ip",
+      "name": "auto_match_ports",
+      "summary": "Build:"
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.ip",
+      "name": "collect_all",
+      "summary": "Return {module.name: component-dict | None}, prioritising component.xml;"
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.ip",
+      "name": "load_ip_info",
+      "summary": "Thin YAML wrapper used by several sub-packages."
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.ip",
+      "name": "parse_component",
+      "summary": "Parse a single HLS-exported component.xml into a dict:"
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.ip",
+      "name": "unpack_ip_archives",
+      "summary": "Extract IP archives from source directory into IP root."
+    },
+    {
+      "kind": "function",
+      "module": "forge.topgen.ip",
+      "name": "write_summary",
+      "summary": "Write the summary dict out in either JSON or YAML form."
+    }
+  ]
+}

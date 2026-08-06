@@ -24,9 +24,8 @@
 //   multi-bit value (no Gray-coding/handshake is applied here). Use this
 //   for single-bit control/status signals or signals whose bits are each
 //   individually meaningful (e.g. one-hot). For a coherent multi-bit data
-//   transfer across domains, use `cdc: {kind: async_fifo}` instead — FIFO
-//   RTL generation for that kind is not yet implemented (documented
-//   limitation, see docs/development/release-readiness.md).
+//   transfer across domains, use `cdc: {kind: async_fifo}` instead, which
+//   generates a real dual-clock FIFO (cdc_async_fifo) for that purpose.
 //
 // Timing:
 //   Reset is synchronous to dst_clk and clears both flop stages.

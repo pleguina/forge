@@ -1,7 +1,7 @@
 """
-Tests for forge.ir.project.project_to_conn_map — migration step 5's
-equivalence proof (docs/development/release-readiness.md): the IR must be
-able to reproduce the exact original conn_map/global_nets construction
+Tests for forge.ir.project.project_to_conn_map — an equivalence proof
+that the IR must be able to reproduce the exact original
+conn_map/global_nets construction
 order (via ResolvedConnection.emission_order), not just be set-equivalent
 to it, before generation can safely be switched to consume it.
 

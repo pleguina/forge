@@ -126,8 +126,8 @@ def register(sub) -> None:
     plugin's flow artifacts against a specific ``design.verification.yml``
     and is authoritative for that. ``forge verify preflight`` is a real
     subset of ``forge verify doctor``'s checks kept as a separate command
-    (not merged) — see ``docs/development/release-readiness.md``'s Phase 6
-    closure notes for the full containment table.
+    (not merged) — it stays intentionally narrower and faster for use in
+    tight verify-iteration loops.
     """
     p_doctor = sub.add_parser(
         "doctor",

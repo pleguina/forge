@@ -181,9 +181,9 @@ through `LoadedContract.get_connection_roles()` and the canonical IR
 Full protocol *compatibility validation across matched connections* (e.g.
 rejecting a `ready-valid` producer feeding a `valid-only` consumer) is
 **not yet implemented** — topology matching still operates per role, not
-per grouped interface (see "Interface members" below and
-`docs/development/release-readiness.md`). Do not implement a full new
-HDL/assertion language for this — that is explicitly out of scope.
+per grouped interface (see "Interface members" below). Do not implement a
+full new HDL/assertion language for this — that is explicitly out of
+scope.
 
 ---
 

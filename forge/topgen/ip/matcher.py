@@ -83,8 +83,7 @@ class MatchReport:
         the instance-replication loops below, nor ``_groupify``'s
         structural port exclusions (``ap_*``/protocol-suffix/external) —
         those are positional/structural, not "a candidate that lost a
-        semantic match", and are documented as deferred in
-        ``docs/development/release-readiness.md``.
+        semantic match", and are a deliberately deferred scope.
     ``gather_scatter_evidence``: per-pin-pair gather/scatter
         classification for topology-group connections, keyed the same way
         as ``connection_evidence`` — ``"scatter"`` (one array element

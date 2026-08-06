@@ -44,8 +44,7 @@ _CANONICAL_ROLES_FILE = Path(__file__).parent / "canonical_roles.yaml"
 # Roles that are unconditionally required on every IP.
 _ALWAYS_REQUIRED = {"clock_primary", "reset_primary"}
 
-# Documented built-in protocol values a role may declare (release-plan
-# §2.2 / Phase 2.2 — docs/development/release-readiness.md). Optional;
+# Documented built-in protocol values a role may declare. Optional;
 # absent means unspecified, not a validation failure.
 KNOWN_PROTOCOLS = frozenset({"combinational", "valid-only", "ready-valid", "fixed-frame"})
 

@@ -3,28 +3,25 @@ site_description: >-
   Framework for Orchestrated RTL Generation & Evaluation — a plugin-agnostic,
   contract-driven integration and verification framework for RTL/HLS firmware.
 # site_url is deliberately unset: the canonical public host is not yet
-# decided (release-plan Phase 9, slice 9.5 — status-honesty correction).
-# A placeholder URL here (e.g. the repo's own "https://github.com/<org>/forge/"
-# convention) makes MkDocs Material emit absolute-path links on pages like
-# 404.html that don't resolve locally — a real bug this exact placeholder
-# caused during development (see forge/tests/test_docs_site_links.py).
-# Set this for real only when slice 9.5's publish decision is made.
+# decided. A placeholder URL here (e.g. the repo's own
+# "https://github.com/<org>/forge/" convention) makes MkDocs Material emit
+# absolute-path links on pages like 404.html that don't resolve locally — a
+# real bug this exact placeholder caused during development (see
+# forge/tests/test_docs_site_links.py). Set this for real only once the
+# public host is decided.
 docs_dir: docs
 site_dir: site
 strict: true
 
 # docs/plan/** is an internal release-planning/audit workspace (raw,
-# first-person, still-evolving), docs/internal/** is tracked-in-git
-# release-gating planning material (e.g. Phase 10 preflight/spec docs)
-# that still isn't public-site content, and
-# docs/development/release-readiness.md is a raw session-log/audit-trail —
-# none of these are fit for the public site. Nav omission alone does not
-# stop MkDocs from rendering a file, so all three are physically excluded
+# first-person, still-evolving, gitignored) and docs/internal/** is
+# reserved for any tracked-in-git material that still isn't public-site
+# content — neither is fit for the public site. Nav omission alone does
+# not stop MkDocs from rendering a file, so both are physically excluded
 # from the build here.
 exclude_docs: |
   plan/**
   internal/**
-  development/release-readiness.md
 
 theme:
   name: material
@@ -122,6 +119,7 @@ nav:
       - Visual Design Explorer: concepts/visual-explorer.md
   - Reference:
       - CLI Reference: reference/cli.md
+      - Public Python API: reference/public-python-api.md
       - Canonical Roles: reference/canonical-roles.md
       - Protocols: reference/protocols.md
       - Interface Members: reference/interface-members.md

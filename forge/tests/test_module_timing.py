@@ -1,6 +1,6 @@
 """
 Tests for forge.topgen.config.ModuleTiming — optional per-module latency
-metadata (migration step 7, docs/development/release-readiness.md).
+metadata.
 """
 
 from __future__ import annotations

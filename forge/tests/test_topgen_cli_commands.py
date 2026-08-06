@@ -271,14 +271,13 @@ def test_gen_top_verilog_emits_tie_off_connection_for_an_open_input(
 
 
 def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    """Migration step 4 (docs/development/release-readiness.md): gen-top's
-    design.ir.json (assembled from objects it already computed during
-    generation) must be identical, content-hash-wise, to a fresh
+    """gen-top's design.ir.json (assembled from objects it already computed
+    during generation) must be identical, content-hash-wise, to a fresh
     forge.ir.build.build_project_ir() call independently re-resolving the
     same design from scratch — proving the build_project_ir/assemble_project_ir
     split didn't silently diverge behavior between the two call paths.
 
-    One documented exception (migration step 6): `top_ports` is populated
+    One documented exception: `top_ports` is populated
     from the generator's own report *after* generation runs, so gen-top's
     IR has it and a fresh, generation-free build_project_ir() call never
     can — compared separately below rather than folded into the hash
@@ -303,8 +302,7 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
     assert ir_payload["design"]["top_ports"]  # gen-top populated it
     gentop_design = dict(ir_payload["design"])
     gentop_design["top_ports"] = []  # strip before comparing (see docstring)
-    # Slice 5.0 (docs/development/release-readiness.md, Phase 5): mirror
-    # forge.ir.serialize._canonical_design_json's portable-hash rewriting
+    # Mirror forge.ir.serialize._canonical_design_json's portable-hash rewriting
     # here too — `source` and any absolute module contract_path/
     # source_files must be excluded/relativized the same way content_hash()
     # does, or this hand-rolled comparison hash would drift from it for a

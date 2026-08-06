@@ -1,9 +1,7 @@
 """
-Proofs for migration step 7 (docs/development/release-readiness.md):
-forge.analyze.latency_static.graph.build_graph's new DesignConfig-driven
-implementation must produce results identical to the pre-migration
-independent raw-YAML re-parse, on real designs — before treating the
-migration as done.
+Proofs that forge.analyze.latency_static.graph.build_graph's
+DesignConfig-driven implementation produces results identical to an
+independent raw-YAML re-parse, on real designs.
 """
 
 from __future__ import annotations

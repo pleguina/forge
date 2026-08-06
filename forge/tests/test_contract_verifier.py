@@ -443,8 +443,7 @@ class TestReservedRoles:
 
 
 class TestProtocolSemantics:
-    """protocol: is optional metadata on a role (release-plan §2.2 / Phase
-    2.2 — docs/development/release-readiness.md). Absent is valid (no
+    """protocol: is optional metadata on a role. Absent is valid (no
     existing contract needs to declare it); a declared value must be one
     of the known built-ins."""
 

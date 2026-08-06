@@ -17,8 +17,7 @@ Three modes:
   single-run path unchanged, not by inventing new backend/checker logic.
   `--all-dataset-parts` falls back to today's aggregate
   `_run_dataset_parts` behavior unchanged (no per-event breakdown for
-  part-file-level datasets — see the Honest deferral list in
-  docs/development/release-readiness.md's Phase 6 section).
+  part-file-level datasets — a known, deliberate limitation).
 
 Every mode adopts the shared `CommandEnvelope` (release-plan Phase 6,
 §6.0/§6.7).

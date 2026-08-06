@@ -30,13 +30,6 @@ FORGE's public identity for this release is deliberately narrower than
 | Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see [Contracts and Protocols](concepts/contracts-and-protocols.md)) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
 
-`docs/development/release-readiness.md` (repo-internal, not part of this
-site) tracks the full public-release checklist — canonical design IR,
-generation-plan hashing, provenance, visual design explorer, MkDocs site,
-additional backends, and more — with per-item status and evidence. Treat
-that file, not marketing copy, as the source of truth for what's DONE
-versus planned.
-
 For the architectural rationale behind the canonical IR and how generation
 is driven by it end-to-end, see
 [Architecture Rationale](explanation/architecture-rationale.md).

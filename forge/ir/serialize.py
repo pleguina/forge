@@ -126,8 +126,7 @@ def diff_projects(a: ResolvedProject, b: ResolvedProject) -> Dict[str, Any]:
 
     Reports content-hash equality plus added/removed/changed instance and
     connection IDs by stable-ID comparison. Deep semantic diffing (e.g.
-    "this instance's clock domain changed") is out of scope for this
-    slice — see ``docs/development/release-readiness.md``.
+    "this instance's clock domain changed") is out of scope.
     """
     hash_a, hash_b = content_hash(a), content_hash(b)
 

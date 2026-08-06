@@ -4,13 +4,10 @@
 # vision_pipeline_demo's production files and its two public tutorial
 # pages.
 #
-# docs/plan/FORGE_phase10_progressive_tutorial_productization_plan.md §5
-# requires production/public code to explain itself in stable, semantic
+# Production/public code should explain itself in stable, semantic
 # terms — not by citing the temporary planning document section that
-# caused it to be written. A one-time cleanup pass
-# (docs/internal/phase10/tutorial_productization_audit.md §1.13) removed
-# every such reference from this scope; this script keeps them from
-# coming back.
+# caused it to be written. A one-time cleanup pass removed every such
+# reference from this scope; this script keeps them from coming back.
 #
 # Scope is intentionally narrow: FORGE core (forge/) still carries this
 # same citation style throughout its own docstrings (a separate,
