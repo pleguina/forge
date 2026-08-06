@@ -245,6 +245,19 @@ def cmd_report(args) -> None:
                        "comparison report omitted (see forge test run --golden-comparison-json)",
         })
 
+    # ── Project attachments (optional, only with --plugin) ──────────────────
+    # A project contributes extra report sections (image panels, ownership
+    # annotations, dataset/golden-model identity — anything FORGE core has
+    # no business understanding) via forge.analyze.dashboards.attachments'
+    # registry, populated by the plugin's own bootstrap.py. FORGE core only
+    # ever sees a title/kind/path — never the domain semantics behind it.
+    plugin_id = getattr(args, "plugin", None)
+    if plugin_id:
+        try:
+            _write_project_attachments(plugin_id, design_path, output_dir, artifacts, diagnostics)
+        except Exception as exc:  # noqa: BLE001
+            diagnostics.append({"severity": "warning", "message": f"project attachments failed: {exc}"})
+
     # ── Dashboard (aggregates everything just written) ──────────────────────
     from forge.analyze.dashboards.aggregator import collect
     from forge.analyze.dashboards.renderer import render_html, render_markdown_summary
@@ -441,6 +454,64 @@ def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
     return len(static_analyses) + len(runtime_results)
 
 
+def _write_project_attachments(
+    plugin_id: str, design_path: Path, output_dir: Path,
+    artifacts: List[str], diagnostics: List[Dict[str, Any]],
+) -> None:
+    """Bootstrap *plugin_id* (same mechanism `forge verify run --plugin`
+    uses) and collect whatever ReportAttachmentProvider it has registered.
+
+    The plugin's own tools/ directory is derived from *design_path*'s
+    real location (``<plugin_root>/forge/designs/x.yml`` ->
+    ``<plugin_root>/forge/verify/tools``) rather than requiring a
+    separate flag — every reference plugin in this repo follows that
+    layout.
+    """
+    import json
+    import sys as _sys
+
+    from forge.analyze.dashboards.attachments import get_report_attachment_providers
+    from forge.verify.plugin_registry import bootstrap_plugin
+
+    tools_dir = design_path.parent.parent / "verify" / "tools"
+    if tools_dir.is_dir() and str(tools_dir) not in _sys.path:
+        _sys.path.insert(0, str(tools_dir))
+
+    try:
+        bootstrap_plugin(plugin_id)
+    except LookupError:
+        import importlib as _il
+        try:
+            _il.import_module("bootstrap")
+            bootstrap_plugin(plugin_id)
+        except (ImportError, LookupError) as exc:
+            diagnostics.append({
+                "severity": "warning",
+                "message": f"could not bootstrap plugin {plugin_id!r} for report attachments: {exc}",
+            })
+            return
+
+    providers = get_report_attachment_providers()
+    if not providers:
+        diagnostics.append({
+            "severity": "note",
+            "message": f"plugin {plugin_id!r} bootstrapped but registered no report attachment providers",
+        })
+        return
+
+    all_attachments = []
+    for provider in providers:
+        attachments = provider.build_attachments(design_path, output_dir)
+        all_attachments.extend(attachments)
+
+    (output_dir / "attachments.json").write_text(
+        json.dumps([a.to_dict() for a in all_attachments], indent=2) + "\n"
+    )
+    artifacts.append(str(output_dir / "attachments.json"))
+    for a in all_attachments:
+        artifacts.append(str(output_dir / a.path))
+
+
 def register(sub) -> None:
     """Register the top-level ``forge report`` command."""
     p = sub.add_parser(
@@ -492,6 +563,13 @@ def register(sub) -> None:
         "--golden-comparison-json",
         help="Existing forge.golden_comparison_result.v1 JSON (from a prior "
              "forge test run --golden-comparison-json)",
+    )
+    p.add_argument(
+        "--plugin",
+        help="Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and "
+             "collect any report attachments it has registered via "
+             "forge.analyze.dashboards.attachments.register_report_attachment_provider "
+             "— e.g. project-owned image panels or ownership annotations",
     )
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p.set_defaults(func=cmd_report)

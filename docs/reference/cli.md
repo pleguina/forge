@@ -526,7 +526,7 @@ usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                     [--verify-design VERIFY_DESIGN] [--results-json RESULTS_JSON]
                     [--module-width MODULE_WIDTH] [--fifo-probe FIFO_PROBE]
                     [--cdc-result-json CDC_RESULT_JSON]
-                    [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--json]
+                    [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--plugin PLUGIN] [--json]
                     design
 
 positional arguments:
@@ -572,6 +572,10 @@ optional arguments:
   --golden-comparison-json GOLDEN_COMPARISON_JSON
                         Existing forge.golden_comparison_result.v1 JSON (from a prior forge test
                         run --golden-comparison-json)
+  --plugin PLUGIN       Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and
+                        collect any report attachments it has registered via
+                        forge.analyze.dashboards.attachments.register_report_attachment_provider —
+                        e.g. project-owned image panels or ownership annotations
   --json                Machine-readable JSON output
 ```
 

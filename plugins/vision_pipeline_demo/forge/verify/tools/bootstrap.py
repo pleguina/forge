@@ -27,6 +27,10 @@ def bootstrap() -> None:
     import dataset_adapter as _dataset_adapter  # noqa: F401  (self-registers on import)
     import golden_model_provider as _golden_model_provider  # noqa: F401  (self-registers on import)
 
+    from forge.analyze.dashboards.attachments import register_report_attachment_provider
+    from report_attachment_provider import PROVIDER as _report_attachment_provider
+    register_report_attachment_provider(_report_attachment_provider)
+
     if is_plugin_bootstrapped(PLUGIN_ID):
         return
     mark_bootstrapped(

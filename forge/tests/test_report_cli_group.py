@@ -90,12 +90,18 @@ def test_report_bundle_on_passthrough_demo(capsys: pytest.CaptureFixture[str], t
     # topology.dot never requires `dot`; topology.svg degrades honestly
     # (present when `dot` is on PATH, a real next_action note otherwise —
     # never silently omitted either way).
+    dashboard_html = (output_dir / "dashboard.html").read_text()
     if DOT_AVAILABLE:
         assert str(output_dir / "topology.svg") in payload["artifacts"]
         assert (output_dir / "topology.svg").stat().st_size > 0
+        # dashboard.html embeds the SVG and links the interactive explorer
+        # rather than leaving them as files a reader has to know to browse to.
+        assert "data:image/svg+xml;base64," in dashboard_html
+        assert 'href="topology_explorer.html"' in dashboard_html
     else:
         assert any("dot" in a.lower() for a in payload["next_actions"])
         assert any("topology.svg" in d["message"] for d in payload["diagnostics"])
+        assert 'href="topology_explorer.html"' in dashboard_html
 
     maturity_md = (output_dir / "maturity.md").read_text()
     assert "Contract maturity" in maturity_md
