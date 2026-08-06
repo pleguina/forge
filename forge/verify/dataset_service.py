@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Unified dataset service (release-plan Phase 10, slice 10.0A —
-preflight.md §7).
+"""Unified dataset service.
 
 A thin, single entry point over the two existing dataset layers —
 :mod:`forge.verify.dataset_format` (layer A: format loaders, envelope,

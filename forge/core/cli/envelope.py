@@ -1,4 +1,4 @@
-"""forge CLI shared output envelope (release-plan Phase 6, §6.7).
+"""forge CLI shared output envelope.
 
 Every ``forge`` command that supports ``--json`` today invents its own
 JSON shape (``{"checks","ok"}`` for ``doctor``, ``{"plan","plan_hash"}``
@@ -232,9 +232,9 @@ def render_human(envelope: CommandEnvelope) -> str:
 
     The human view is always derived from the structured
     :class:`CommandEnvelope` — never assembled independently — so the two
-    representations can never silently drift apart (§6.7's requirement).
+    representations can never silently drift apart.
     Callers that need warnings/errors routed to stderr and everything else
-    to stdout (the Unix convention this CLI already followed before Phase 6)
+    to stdout (the Unix convention this CLI already followed)
     should use :func:`emit` instead, which performs that split; this
     function returns one combined string for callers that don't need it
     (logging, tests, non-interactive consumers).

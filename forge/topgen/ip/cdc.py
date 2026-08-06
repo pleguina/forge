@@ -1,6 +1,6 @@
 """
-Clock-domain-crossing (CDC) structural validation (release-plan §3.2,
-expanded to the full 5-kind primitive family in §10.0B).
+Clock-domain-crossing (CDC) structural validation (expanded to the full
+5-kind primitive family).
 
 A ``design.yml`` ``connections:`` entry may declare an approved adapter
 for a *data* crossing:
@@ -40,8 +40,8 @@ Following the exact existing convention of
 ``forge.topgen.ip.cardinality.verify_cardinality``/
 ``forge.topgen.ip.contract_verifier.verify_topology_groups``: this
 function only ever produces ``"error"``-severity issues (no warning
-tier). It is called both from ``gen-top --strict`` (as an error) and,
-new in release-plan §10.0B, from ``forge topgen validate`` (surfaced as
+tier). It is called both from ``gen-top --strict`` (as an error) and
+from ``forge topgen validate`` (surfaced as
 a warning, whenever contracts/ip_info are available) — see
 ``forge/core/cli/groups/topgen.py``.
 
@@ -70,7 +70,7 @@ class CdcIssue:
     severity: str  # 'error' (no warning tier — see module docstring)
     connection: str
     message: str
-    code: str = ""  # 'ATG023'/'ATG024' (release-plan §10.0B) — see forge.core.diagnostics
+    code: str = ""  # 'ATG023'/'ATG024' — see forge.core.diagnostics
 
     def __str__(self) -> str:
         icon = "❌" if self.severity == "error" else "⚠️ "
@@ -188,8 +188,7 @@ def report_all_crossings(
     module-pair connection that is actually a clock- or reset-domain
     crossing (both domains known and differing), or that explicitly
     declares a ``cdc:`` adapter regardless — passing entries included,
-    not just :func:`verify_cdc`'s failures (release-plan Phase 10, slice
-    10.0C).
+    not just :func:`verify_cdc`'s failures.
 
     A same-domain pair with no ``cdc:`` declared is not a crossing at
     all and is skipped entirely — there is nothing to verify.

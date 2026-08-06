@@ -1,7 +1,7 @@
 """
-Tests for forge.core.provenance_staleness (release-plan Phase 5 slice
-5.2) — the content-hash confirmation primitive shared by
-forge/core/stale_detection.py and forge/verify/stale_artifact.py.
+Tests for forge.core.provenance_staleness — the content-hash confirmation
+primitive shared by forge/core/stale_detection.py and
+forge/verify/stale_artifact.py.
 """
 
 from __future__ import annotations

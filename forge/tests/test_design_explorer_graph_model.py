@@ -1,5 +1,5 @@
-"""Tests for forge.analyze.design_explorer.graph_model (release-plan Phase
-8, slice 8.0A) — the DesignGraph projection's shape/provenance/determinism.
+"""Tests for forge.analyze.design_explorer.graph_model — the
+DesignGraph projection's shape/provenance/determinism.
 
 Runs against both real reference plugins' real IR (via
 build_project_ir_with_match_report, reused, not reimplemented) — same
@@ -47,7 +47,7 @@ def test_design_graph_provenance_matches_real_content_hash(design, modules):
 
 
 def test_trigger_demo_real_node_and_edge_counts():
-    """Confirmed real counts (release-plan Phase 8 investigation): 7
+    """Confirmed real counts: 7
     modules, 10 instances, 45 connections. Every real connection must
     resolve to exactly one GraphEdge — the direct "complete edge
     coverage" proof, including external-port connections."""

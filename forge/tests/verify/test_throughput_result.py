@@ -1,6 +1,6 @@
-"""Tests for forge.verify.throughput_result (release-plan Phase 10, slice
-10.0C — construction/serialization only; builders are tested separately
-in forge.analyze.throughput_static/throughput_runtime's own test files).
+"""Tests for forge.verify.throughput_result (construction/serialization
+only; builders are tested separately in
+forge.analyze.throughput_static/throughput_runtime's own test files).
 """
 from __future__ import annotations
 

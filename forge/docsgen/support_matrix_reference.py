@@ -1,4 +1,4 @@
-"""Support-matrix reference generator (release-plan Phase 9, Defect 3).
+"""Support-matrix reference generator.
 
 Generated directly from
 ``forge.verify.supported_matrix.MATRIX`` — the complete, real support

@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.dataset_format (Phase 7, slice 7.4a).
+"""Unit tests for forge.verify.dataset_format.
 
 Covers both real format loaders against real fixture files (the real
 passthrough_demo golden XML, and a real generated JSON sibling), the

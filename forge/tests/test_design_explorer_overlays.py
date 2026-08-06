@@ -1,11 +1,10 @@
-"""Tests for the visual-design-explorer's overlay joins (release-plan
-Phase 8, slice 8.0B) — latency, contract maturity, diagnostic linking, and
-the conservative "flow entry points" verification join.
+"""Tests for the visual-design-explorer's overlay joins — latency,
+contract maturity, diagnostic linking, and the conservative "flow entry
+points" verification join.
 
-Each test is the real regression guard for one of the three real join bugs
-found by the Phase 8 investigation (see the release plan's Phase 8 notes
-"Two real join-key gaps"), plus the diagnostic-linking id-space fix
-(Defect 3).
+Each test is the real regression guard for one of the three real join
+bugs found ("two real join-key gaps"), plus the diagnostic-linking
+id-space fix.
 """
 from __future__ import annotations
 
@@ -85,7 +84,7 @@ def test_compute_maturity_summary_exposes_real_per_module_name_lists():
     assert len(summary["modules"]["contract_driven_names"]) == summary["modules"]["contract_driven"]
 
 
-# ── Diagnostic linking: id-space fix (Defect 3) ──────────────────────────
+# ── Diagnostic linking: id-space fix ──────────────────────────────────────
 
 def test_parse_object_reference_handles_the_two_real_structured_conventions():
     assert parse_object_reference("module:dec") == parse_object_reference("module:dec")
@@ -106,7 +105,7 @@ def test_validator_diagnostic_object_id_round_trips_to_a_real_module_group_node(
     module-scoped validator issue (missing/mismatched module field) now
     gets a real, structured object_id and resolves to the real
     MODULE_GROUP node for that module — never fanned out onto an
-    arbitrary instance, per Defect 3's resolution policy."""
+    arbitrary instance."""
     design_yml = tmp_path / "design.yml"
     (tmp_path / "foo.v").write_text("module foo_top(); endmodule\n")
     design_yml.write_text(textwrap.dedent("""\

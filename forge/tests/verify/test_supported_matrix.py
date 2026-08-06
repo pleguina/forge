@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.supported_matrix (Phase 7, slice 7.1).
+"""Unit tests for forge.verify.supported_matrix.
 
 MatrixEntry was reshaped from a single ``canonical_backend`` string to
 ``default_backend`` + always-populated ``allowed_backends`` — these tests
@@ -91,8 +91,7 @@ def test_validate_flow_matrix_experimental_kind_without_opt_in_rejected():
     assert "EXPERIMENTAL" in errors[0]
 
 
-# ── MATRIX — the complete, real, runtime-immutable view (release-plan
-# Phase 9, Defect 3) ─────────────────────────────────────────────────────
+# ── MATRIX — the complete, real, runtime-immutable view ────────────────
 
 def test_matrix_is_a_mapping_proxy():
     assert isinstance(MATRIX, MappingProxyType)

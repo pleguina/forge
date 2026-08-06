@@ -73,8 +73,8 @@ def _write_contract(tmp_path: Path, *, schema_version: str | None = None) -> Pat
 
 
 def test_no_schema_version_loads_fine_and_defaults_to_supported(tmp_path: Path) -> None:
-    """release-plan §2.7: absence is silent — the file loads unchanged, and
-    the resolved contract still carries the current supported version."""
+    """Absence is silent — the file loads unchanged, and the resolved
+    contract still carries the current supported version."""
     from forge.verify.design_contract import VERIFY_CONTRACT_SCHEMA_VERSION
 
     contract = load_verify_design(_write_contract(tmp_path))
@@ -98,11 +98,11 @@ def test_different_major_schema_version_raises_typed_error(tmp_path: Path) -> No
 
 
 def test_flow_level_clk_period_ns_overrides_defaults(tmp_path: Path) -> None:
-    """release-plan Phase 10, slice 10.4: the primary ap_clk period had no
-    per-flow override before this — every flow silently shared
-    SimulationDefaults.clk_period_ns. A flow whose own design's primary
-    domain runs at a genuinely different rate than every other flow in
-    the same plugin needs its own override."""
+    """The primary ap_clk period has a per-flow override — without it,
+    every flow would silently share SimulationDefaults.clk_period_ns. A
+    flow whose own design's primary domain runs at a genuinely different
+    rate than every other flow in the same plugin needs its own
+    override."""
     design = tmp_path / "design.verification.yml"
     design.write_text(textwrap.dedent("""\
         plugin: demo_plugin

@@ -1,4 +1,4 @@
-"""Real end-to-end Verilator coverage for `forge verify run` (Phase 7, slice 7.1).
+"""Real end-to-end Verilator coverage for `forge verify run`.
 
 Mirrors test_verify_run_xsim.py's convention exactly: tool-gated skip (real
 `shutil.which`, never mocked), a `shutil.copytree` of plugins/passthrough_demo
@@ -178,8 +178,8 @@ def test_run_missing_rtl_fails_preflight_without_running_verilator(
 def test_run_backend_populates_enriched_execution_result_fields(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], consumer_root: Path
 ) -> None:
-    """Phase 7 slice 7.0's enriched ExecutionResult fields, proven for a
-    second, independent backend — backend_id/duration_s/stage are real, and
+    """The enriched ExecutionResult fields, proven for a second,
+    independent backend — backend_id/duration_s/stage are real, and
     the waveform-capability claim is empirically honest: no .fst file exists
     for this backend in this slice, so capabilities.supports_waveform is
     False and waveform_path stays None — never fabricated."""

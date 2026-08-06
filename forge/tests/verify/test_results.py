@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.results (Phase 7, slice 7.2).
+"""Unit tests for forge.verify.results.
 
 Fast, non-simulator unit coverage for the dataclasses, their `to_dict()`
 serialisation, the stage-aware diagnostic-code selection, and Markdown
@@ -68,7 +68,7 @@ def test_flow_result_schema_round_trip():
     assert payload["schema"] == {"name": "forge.verification_results", "version": "1.0"}
     # Round-trip: reconstruct the schema tag from the serialised dict and
     # confirm it survives byte-for-byte (the discipline already established
-    # for CommandEnvelope in Phase 6).
+    # for CommandEnvelope).
     schema_back = ArtifactSchema(**payload["schema"])
     assert schema_back == RESULTS_SCHEMA
 

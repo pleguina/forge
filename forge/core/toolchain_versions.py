@@ -1,6 +1,6 @@
 """
 forge.core.toolchain_versions — best-effort toolchain version capture
-(release-plan Phase 5, §5.1: provenance-manifest toolchain versions).
+(provenance-manifest toolchain versions).
 
 ``forge doctor`` (``forge/core/cli/groups/doctor.py``) already checks tool
 *presence* on ``PATH`` via ``shutil.which`` for the same 5 tools — this
@@ -50,7 +50,7 @@ def tool_present(name: str) -> bool:
     check both ``forge doctor`` (``core/cli/groups/doctor.py``) and
     ``forge verify doctor`` (``verify/__main__.py``) now call, instead of
     each independently invoking ``shutil.which`` for the same 5 tools
-    (release-plan Phase 6, §6.3: closes a duplication that could
+    (closes a duplication that could
     previously make the two doctor commands disagree if one's check list
     or invocation ever drifted from the other's)."""
     return shutil.which(name) is not None

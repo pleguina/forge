@@ -1,6 +1,6 @@
 """
 Regression test for a crash found while building the canonical IR
-(forge/ir/build.py, Phase 1 slice 1): forge.topgen.ip.matcher.auto_match_ports's
+(forge/ir/build.py): forge.topgen.ip.matcher.auto_match_ports's
 heuristic global-net (clock/reset/control-signal) scanner assumed every
 module resolved to a non-None ip_info entry and crashed with a bare
 ``TypeError: 'NoneType' object is not subscriptable`` whenever a module had

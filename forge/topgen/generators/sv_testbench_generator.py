@@ -505,7 +505,7 @@ class SVTestbenchGenerator:
 
         # ------------------------------------------------------------------ SVA
         f.write("//============================================================================\n")
-        f.write("// Phase 7 — No-X / no-Z assertions on key outputs (after reset deasserts)\n")
+        f.write("// No-X / no-Z assertions on key outputs (after reset deasserts)\n")
         f.write("// Add design-specific properties here; refer to port_map.yaml for port names.\n")
         f.write("//============================================================================\n")
         f.write("// Example (replace signal names as appropriate):\n")

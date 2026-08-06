@@ -27,7 +27,11 @@ the tracked repo (`docs/development/release-readiness.md`,
 `docs/internal/phase10/*.md` — 1774+ lines of phase-by-phase work log,
 never meant for an external reader), fixed the ~30 files left with dangling
 references to those two paths, added a generated public-Python-API freeze
-(`docs/reference/public-python-api.md` + `public_api_inventory.json`), and
+(`docs/reference/public-python-api.md` + `public_api_inventory.json`), then
+in a second pass removed the broader "release-plan §X.Y/Phase N/slice N.N"
+internal-citation convention from all 182 remaining files across `forge/`
+and `plugins/` (see P1-2 below — this was originally deferred as a
+follow-up, then completed in this same session), and
 found/fixed two real bugs described under P0/P1 below. All of this is
 committed to the working tree as of this audit; see `git status` for the
 exact diff if this file is read before those changes are committed.
@@ -108,31 +112,59 @@ AI-plan-doc-removal/hygiene work); recommend narrowing the script's
 exclusion list and regex in a dedicated follow-up before relying on this
 gate for the release candidate.
 
-### P1-2: broad "release-plan §X.Y / Phase N / slice N.N" citation convention across ~186 files in `forge/`
+### P1-2: broad "release-plan §X.Y / Phase N / slice N.N" citation convention across ~186 files in `forge/` (FIXED this session)
 
 Plan §7.2 requires production comments to "explain semantics, not
-Phase/Slice history." A narrow slice of this (the ~30 files with literal
-`docs/development/release-readiness.md` / `docs/internal/phase10/*`
-path citations, which would have become dangling links once those files
-were removed) was fixed this session. The broader convention —
-`release-plan §4.2`, `Phase 6`, `slice 10.7B`-style citations with no
-literal path, referencing `docs/plan/FORGE_release_plan.md` (gitignored,
-never shipped) — is used throughout **~186 files** across `forge/` and
-`plugins/` as this codebase's standard rationale-comment style, confirmed
-via `git grep -lE 'release-plan|migration step|Phase [0-9]+|Slice
-[0-9]+\.' -- forge plugins`. `ci/vision_pipeline_demo_reference_check.sh`
-already documents this exact tradeoff in its own comments: it enforces the
-citation-free style for `vision_pipeline_demo` and its tutorial pages, and
-explicitly excludes `forge/` core as "a separate, pre-existing, much
-larger convention... explicitly out of scope for this productization
-pass." This audit concurs with that prior scoping decision rather than
-reversing it under time pressure: a blind mechanical rewrite of ~186 files
-in one pass risks subtle regressions in working, tested code comments for
-a cosmetic (if real) issue, and isn't itself a release blocker — nothing
-in these comments is factually wrong (unlike the one stale docstring found
-and fixed, see below), they just cite an internal, non-shipped document.
-**Recommendation**: a dedicated follow-up session, scoped and reviewed
-like any other refactor, not a rider on this freeze pass.
+Phase/Slice history." The broad convention — `release-plan §4.2`,
+`Phase 6`, `slice 10.7B`-, `migration step N`-, `Defect N`-, and
+`preflight.md §N`-style citations, all pointing at internal, gitignored,
+never-shipped planning documents — was used throughout **182 files**
+across `forge/` and `plugins/` (~504 occurrences) as this codebase's
+standard rationale-comment style.
+
+Rather than a blind mechanical regex rewrite, this was done as a reviewed
+refactor: 7 parallel agents each handled a disjoint file set (split by
+subsystem — `forge/core`+`forge/docsgen`, `forge/ir`+`forge/topgen`,
+`forge/verify`, `forge/analyze`+`plugins`, and `forge/tests` in 3 parts),
+each with explicit instructions to preserve all real technical content,
+strip only the internal-document pointers, watch for legitimate hardware/EE
+uses of "phase" (clock phase) and "slice" (FPGA slice) as false positives,
+and never touch identifiers, test assertions, or executable code — only
+prose inside comments/docstrings.
+
+Two of the agents found and flagged **6 cases where the citation had
+leaked past a source comment into actual generated/user-facing output**,
+outside their stated scope (comments/docstrings only) — these were fixed
+directly afterward, since they're more consequential than a stray source
+comment:
+
+- `forge topgen migrate --help`'s own CLI help text (`--kind` option)
+- `docs/reference/transformations.md` — the **published, generated public
+  docs page** — via `forge/docsgen/vocab_reference.py`'s transformation
+  descriptions
+- `design.ir.json`'s `ResolvedVerificationPlan.note` default value
+  (shipped in every generated IR snapshot)
+- A comment emitted directly into generated Verilog RTL
+  (`structural_verilog.py`'s occupancy/backpressure telemetry comment)
+- A comment emitted into generated SystemVerilog testbenches
+  (`sv_testbench_generator.py`)
+- A comment emitted into `forge topgen migrate --kind infer-contract`'s
+  generated interface-contract skeleton
+
+A final sweep after all 7 agents completed found 7 remaining occurrences
+(a related `Defect N` pattern in 4 files that fell just outside the
+agents' exact grep pattern, flagged by one of them) — fixed directly.
+Final state: **0** occurrences of any of these patterns remain in `forge/`
+or `plugins/`.
+
+**Verification**: every edited `.py` file passes `python3 -m py_compile`;
+full test suite re-run clean after the change (1274 passed, 12 skipped,
+0 failed — same counts as before, confirming zero behavioral regressions);
+`mkdocs build --strict` clean; `python -m forge.docsgen --check` clean
+after regenerating the 4 pages whose source docstrings changed
+(`cli.md`, `transformations.md`, `artifacts.md`, `public-python-api.md`);
+`ci/agnosticism_check.sh`, `ci/import_direction_check.sh`,
+`ci/vision_pipeline_demo_reference_check.sh` all still pass.
 
 ### P1-3: stale docstring claimed CDC `async_fifo` doesn't generate real RTL (FIXED this session)
 

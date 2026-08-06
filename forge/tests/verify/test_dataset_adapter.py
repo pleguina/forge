@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.dataset_adapter (Phase 7, slice 7.4b — layer B).
+"""Unit tests for forge.verify.dataset_adapter (adapter layer B).
 
 Covers the registry (explicit adapter_id selection, never suffix) and
 CanonicalDataset/DatasetSource shapes. Real end-to-end coverage of

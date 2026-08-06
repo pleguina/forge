@@ -1,5 +1,4 @@
-"""Tests for forge.verify.dataset_service.DatasetService (release-plan
-Phase 10, slice 10.0A).
+"""Tests for forge.verify.dataset_service.DatasetService.
 
 Uses passthrough_demo's real golden XML fixture and its real
 IdentityXmlDatasetAdapter, matching the convention already established by

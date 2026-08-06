@@ -47,7 +47,7 @@ port_groups:
     direction: input
     width: 1
 tier2_probes:
-  # Phase 4 slice 5 (release-plan §4.5): real probe declarations using
+  # Real probe declarations using
   # real top-level port names already listed above (dec_0_raw_valid,
   # tout_out_valid — the same input/output valid pair
   # forge.analyze.latency_runtime.measure_latency needs to measure
@@ -55,8 +55,8 @@ tier2_probes:
   # _render_probe_open/_render_probe_fwrite will emit these into
   # algo_top_probe.csv in the WIDE format (cycle,<name1>,<name2>,...)
   # under --probe-log/PROBE_LOG=1 — consumed by
-  # forge.analyze.latency_runtime.probe.load_wide_probe_csv (new this
-  # slice). XSIM execution was not run in this environment to produce a
+  # forge.analyze.latency_runtime.probe.load_wide_probe_csv.
+  # XSIM execution was not run in this environment to produce a
   # real probe CSV (no Xilinx toolchain available here) — declared and
   # format-compatible, not end-to-end simulation-verified; an honest gap,
   # not a fabricated result.

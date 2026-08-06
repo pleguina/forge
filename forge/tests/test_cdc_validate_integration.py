@@ -1,5 +1,5 @@
 """
-Integration test for release-plan §10.0B's `forge topgen validate` CDC
+Integration test for `forge topgen validate`'s CDC
 wiring: `verify_cdc` used to be reachable only from `gen-top --strict`;
 this test drives the real `forge topgen validate` CLI entry point
 against a small two-module, two-clock-domain synthetic design (built

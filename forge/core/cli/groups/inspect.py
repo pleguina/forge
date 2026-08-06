@@ -70,9 +70,8 @@ def cmd_inspect(args):
 
     # forge inspect never runs the generator, so the maturity summary's
     # port-accounting fields (open_outputs/tied_inputs/strict_pass) stay
-    # honestly absent (None) rather than fabricated — release-plan Phase 6,
-    # §6.1. Module/connection/wiring-method counts are knowable pre-
-    # generation and always populate.
+    # honestly absent (None) rather than fabricated. Module/connection/
+    # wiring-method counts are knowable pre-generation and always populate.
     maturity = _compute_maturity_summary(cfg, match_report)
 
     diagnostics = [_ir_diagnostic_to_dict(d) for d in project.design.diagnostics]
@@ -138,7 +137,7 @@ def cmd_inspect(args):
         if not json_mode:
             print(f"✅ provenance manifest written to {prov_path}")
 
-    # ── §8.1 static DOT/SVG (release-plan Phase 8) ──────────────────────
+    # ── static DOT/SVG ────────────────────────────────────────────────
     # `--dot` never requires the real `dot` binary (it's a plain text
     # template); `--svg` does, and fails loudly and specifically when it's
     # not on PATH — it never silently no-ops on an explicit user request.
@@ -230,7 +229,7 @@ def _command_options(args) -> dict:
 
 def _ir_diagnostic_to_dict(diag) -> dict:
     """Reshape one IR ``DiagnosticReference`` into the envelope's
-    diagnostic-dict shape (release-plan Phase 6, §6.1). ``code`` stays
+    diagnostic-dict shape. ``code`` stays
     ``None`` where the IR has none — an honest absence, matching
     ``Diagnostic.to_dict()``'s "omit/None falsy fields" convention rather
     than fabricating a code the IR never assigned."""
@@ -245,10 +244,9 @@ def _ir_diagnostic_to_dict(diag) -> dict:
 def _compute_next_actions(diagnostics: list, maturity: dict) -> list:
     """A small, explicit, testable heuristic mapping from diagnostic
     severity / maturity state to a suggested next step — not a new IR
-    field (release-plan Phase 6, §6.1 explicitly scopes this out of
-    ``forge/ir/build.py``, since threading an ``action`` hint through every
-    ``DiagnosticReference`` construction site would touch many call sites
-    for a phase about the CLI, not the IR)."""
+    field on ``forge/ir/build.py``, since threading an ``action`` hint
+    through every ``DiagnosticReference`` construction site would touch
+    many call sites for a concern that's CLI-specific, not IR-specific."""
     actions: list = []
     if any(d["severity"] == "error" for d in diagnostics):
         actions.append("Fix the errors above before generating")

@@ -1,4 +1,4 @@
-"""Tests for forge.docsgen.vocab_reference (release-plan Phase 9, Defect 10)."""
+"""Tests for forge.docsgen.vocab_reference."""
 from __future__ import annotations
 
 import pytest

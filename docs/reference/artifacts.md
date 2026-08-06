@@ -81,7 +81,7 @@ One parsed ``FORGE_CHECK|...`` log record.
 
     Populated on **both** outcomes — a passing check's ``expected`` and
     ``observed`` are both real values read from the log, not inferred from
-    the absence of a failure (the corrected slice 7.3 design; the first
+    the absence of a failure (the corrected design; the first
     draft's fail-only-line design could not have produced ``observed`` for
     a passing check at all).
 
@@ -100,13 +100,13 @@ One parsed ``FORGE_CHECK|...`` log record.
 *Defined in `forge.verify.dataset_format`.*
 
 Real dataset metadata: schema version, event ids, provenance, units,
-    seed, generator version — the fields §7.3 requires.
+    seed, generator version.
 
     ``event_ids`` is always ``list[str]``, never ``int`` — real external
     identifiers (``"run-355100-event-1842"``, ``"frame_000013"``) are not
     guaranteed to be small contiguous integers. The separate, purely
     internal, always-contiguous ``event_index`` that memory-indexed
-    stimulus (slice 7.5) actually addresses by is a position in
+    stimulus actually addresses by is a position in
     :attr:`SerializedDataset.events` — computed by the caller from this
     list's index, not stored here.
 
@@ -201,13 +201,13 @@ Where/when this envelope was produced — excluded from the content
 
 The real, structured result of simulating one event.
 
-    ``event_id`` is always a string (matching the dataset corrections in
-    slice 7.4a — real external identifiers are not guaranteed to be small
+    ``event_id`` is always a string (matching the dataset corrections —
+    real external identifiers are not guaranteed to be small
     contiguous integers). ``event_index`` is the internal, always-numeric
-    position used for memory-indexed stimulus addressing (slice 7.5); it
-    stays honestly ``None`` until slice 7.4a's dataset envelope exists to
+    position used for memory-indexed stimulus addressing; it
+    stays honestly ``None`` until the dataset envelope exists to
     define it for real — never fabricated from loop position.
-    ``checks`` is populated (slice 7.3) by scanning the event's real
+    ``checks`` is populated by scanning the event's real
     ``simulate_log`` for ``FORGE_CHECK|`` records — only for checks emitted
     via ``StimulusEmitter.check()``/``emit_output_check`` (an honest,
     documented gap for hand-written SV checks and binary checkers that
@@ -285,7 +285,7 @@ GraphNode(id: 'str', kind: 'GraphNodeKind', label: 'str', parent: 'Optional[str]
 
 *Defined in `forge.ir.model`.*
 
-Release-plan §3.5 evidence for one connection: matching keys,
+Evidence for one connection: matching keys,
     coordinates, protocol, width, cardinality result, clock-domain result,
     gather/scatter pattern, and rejected candidates. Every field is
     ``Optional``/empty-default and left unset whenever the underlying
@@ -331,7 +331,7 @@ MaturitySummary(status: 'MaturityStatus', contract_edges: 'int', explicit_edges:
 *Defined in `forge.analyze.design_explorer.graph_model`.*
 
 One entry in the typed registry backing the selected-object details
-    panel (§8.4) — one per real IR object (instance, module definition,
+    panel — one per real IR object (instance, module definition,
     connection, transformation, top-port/external-port, interface), built
     once here and referenced by id everywhere else rather than
     duplicated.
@@ -400,8 +400,7 @@ ProvenanceManifest(schema_version: 'str' = '0.2.0', forge_version: 'str' = '', p
 
 *Defined in `forge.ir.model`.*
 
-A losing producer for a connection's consumer pin — release-plan
-    §3.5's "rejected candidates and rejection reasons", sourced read-only
+A losing producer for a connection's consumer pin, sourced read-only
     from ``forge.topgen.ip.matcher.MatchReport.rejected_fanin`` (never a
     second source of truth for it).
 
@@ -416,14 +415,14 @@ A losing producer for a connection's consumer pin — release-plan
 
 A named clock domain — one per distinct resolved clock net.
 
-    Phase 3.1: ``name`` is the resolved net's raw port name (e.g.
+    ``name`` is the resolved net's raw port name (e.g.
     ``"ap_clk"``), not a hardcoded literal. ``instances`` is *derived* from
     each ``ResolvedInstance.clock_domain`` (the per-instance scalar is the
     source of truth — this list is a grouping view of it, not maintained
     independently). Instances whose clock could not be resolved (or whose
     module is clock-free) do not appear in any domain here.
 
-    Phase 3.2: ``derived_from``/``ratio`` are purely descriptive,
+    ``derived_from``/``ratio`` are purely descriptive,
     populated from ``design.yml``'s optional ``clock_domains:`` block
     (``forge.topgen.config.DesignConfig.clock_domains``) when the design
     documents a relationship to another domain. They do **not** auto-
@@ -448,7 +447,7 @@ A resolved wire between two endpoints.
     ``port_map``/``auto_match``/``topology_group``/``heuristic``) is
     populated from ``forge.topgen.ip.matcher.MatchReport.connection_evidence``.
 
-    ``matching_evidence`` (release-plan §3.5, ``MatchingEvidence``) is
+    ``matching_evidence`` (``MatchingEvidence``) is
     populated in ``forge/ir/build.py`` and carries coordinates/protocol/
     width/cardinality-result/clock-domain-result/gather-scatter-pattern/
     rejected-candidates — ``None`` whenever the connection has no
@@ -459,10 +458,10 @@ A resolved wire between two endpoints.
     is sorted by ``id`` for reproducible hashing/diffing/visualization).
     It exists solely so ``forge.ir.project.project_to_conn_map`` can
     reproduce the exact legacy iteration order generators rely on for
-    naming (e.g. ``reg_stage_N``/``delay_N`` instance counters) — migration
-    step 5. Nothing about ID-based sort order, hashing, or diffing changes.
+    naming (e.g. ``reg_stage_N``/``delay_N`` instance counters). Nothing
+    about ID-based sort order, hashing, or diffing changes.
 
-    ``crosses_clock_domain``/``crosses_reset_domain`` (Phase 3.2) are
+    ``crosses_clock_domain``/``crosses_reset_domain`` are
     descriptive only — computed from the two endpoints' resolved domains
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
@@ -499,7 +498,7 @@ The resolved design: modules, instances, connections, domains,
 | `clock_domains` | `list[ResolvedClockDomain]` | optional | `[]` |
 | `reset_domains` | `list[ResolvedResetDomain]` | optional | `[]` |
 | `top_ports` | `list[ResolvedTopLevelPort]` | optional | `[]` |
-| `verification_plan` | `ResolvedVerificationPlan` | optional | `ResolvedVerificationPlan(populated=False, note='Verification planning is not yet migrated to the canonical IR (Phase 1 migration step 9).')` |
+| `verification_plan` | `ResolvedVerificationPlan` | optional | `ResolvedVerificationPlan(populated=False, note='Verification planning is not yet migrated to the canonical IR.')` |
 | `diagnostics` | `list[DiagnosticReference]` | optional | `[]` |
 | `source` | `Optional[SourceLocation]` | optional | `None` |
 
@@ -527,7 +526,7 @@ One instance of a module definition in the design.
     (see ``DiagnosticReference`` for the latter case). These are the
     source of truth for domain membership — ``ResolvedClockDomain``/
     ``ResolvedResetDomain``'s ``instances`` lists are derived from them,
-    not maintained independently (Phase 3.1).
+    not maintained independently.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -543,7 +542,7 @@ One instance of a module definition in the design.
 
 One physical signal belonging to a logical interface.
 
-    Phase 2.5: a contract role opts into grouping by declaring a shared
+    A contract role opts into grouping by declaring a shared
     ``interface:`` name; roles that don't declare it keep today's 1:1
     mapping (interface name == role name, one member named after the
     role) — see ``forge.ir.build._build_interfaces``.
@@ -590,7 +589,7 @@ A module definition (shared across all its instances).
     overlay) — that's runtime data supplied only when analyzing actual
     build artifacts, not a pre-generation design/registry fact.
 
-    ``latency`` (release-plan §4.2, Phase 4 slice 2) is the structured
+    ``latency`` is the structured
     ``kind: fixed|bounded|elastic`` declaration, when the module used the
     new ``latency:`` YAML syntax — a
     ``forge.topgen.config.LatencyDeclaration``, additive alongside the
@@ -649,7 +648,7 @@ Top-level IR object returned by ``forge.ir.build.build_project_ir``.
 
 A named reset domain — see ``ResolvedClockDomain``.
 
-    Slice 10.0B: ``sync`` is populated from ``reset_domains.<name>.sync``
+    ``sync`` is populated from ``reset_domains.<name>.sync``
     (currently only ``"reset_sync"`` is supported) — unlike
     ``derived_from``/``ratio``, this field DOES trigger real RTL
     generation: a ``cdc_reset_sync`` instance is emitted for this domain
@@ -675,7 +674,7 @@ A resolved top-level (e.g. ``algo_top``) port — name, direction
     convention), and width.
 
     Populated from ``write_structural_verilog``'s ``report["top_ports"]``
-    (migration step 6 — release-plan §1.4) *after* generation runs, since
+    *after* generation runs, since
     the top-level port list is a result of that generator's clock/reset/
     control-signal/global-net/external-port lifting logic, not a
     pre-generation design fact. ``assemble_project_ir`` therefore leaves
@@ -697,7 +696,7 @@ A resolved top-level (e.g. ``algo_top``) port — name, direction
 *Defined in `forge.ir.model`.*
 
 A generated (or declared-and-approved) element sitting on a
-    connection — release-plan §3.3's transformation taxonomy.
+    connection.
 
     Kinds with real, generated-or-declared instances (``forge/ir/build.py``):
 
@@ -715,23 +714,23 @@ A generated (or declared-and-approved) element sitting on a
       global-net fan-out (universal, not a meaningful signal there).
     - ``cdc_synchronizer`` — from ``Connection.cdc: {kind: level_sync}``
       (``2ff_sync`` is a backwards-compatible alias for ``level_sync`` —
-      both map to this same kind) (Phase 3.2/3, real RTL —
+      both map to this same kind) (real RTL —
       ``cdc_sync2ff``).
     - ``pulse_sync`` — from ``Connection.cdc: {kind: pulse_sync,
-      min_spacing_cycles: N}`` (release-plan §10.0B, real RTL —
+      min_spacing_cycles: N}`` (real RTL —
       ``cdc_pulse_sync``, a toggle + double-flop + edge-detect
       synchronizer for a one-cycle source-domain pulse).
     - ``mailbox_transfer`` — from ``Connection.cdc: {kind:
-      mailbox_transfer}`` (release-plan §10.0B, real RTL — ``cdc_mailbox``,
+      mailbox_transfer}`` (real RTL — ``cdc_mailbox``,
       a request/acknowledge handshake for a coherent multi-bit payload;
       one outstanding transaction at a time).
     - ``async_fifo`` — from ``Connection.cdc: {kind: async_fifo, depth:
-      N}``. Real dual-clock FIFO RTL (release-plan §10.0B —
-      ``cdc_async_fifo``, Gray-code pointer synchronization); before
-      10.0B this kind could appear with no corresponding generated
-      instance (a documented limitation), which is no longer the case.
+      N}``. Real dual-clock FIFO RTL (``cdc_async_fifo``, Gray-code
+      pointer synchronization); this kind now always has a corresponding
+      generated instance (previously a documented limitation, no longer
+      the case).
     - ``reset_synchronizer`` — from ``reset_domains.<name>.sync:
-      reset_sync`` (release-plan §10.0B, real RTL — ``cdc_reset_sync``,
+      reset_sync`` (real RTL — ``cdc_reset_sync``,
       async-assert/sync-deassert). Domain-keyed, not connection-keyed —
       see ``ResolvedResetDomain.transformations``, not this list.
     - ``tie_off`` — synthesized post-generation from the generator's
@@ -740,7 +739,7 @@ A generated (or declared-and-approved) element sitting on a
       Absent from ``forge inspect``'s pre-generation IR (only known after
       generation runs), present only in ``gen-top``'s emitted
       ``design.ir.json`` — same asymmetry as ``ResolvedTopLevelPort``.
-    - ``gather_scatter`` — release-plan §3.5 (matching-evidence expansion):
+    - ``gather_scatter`` — matching-evidence expansion:
       ``forge.topgen.ip.topology_deriver``'s scatter/gather classification
       (previously discarded before reaching ``MatchReport``) is now
       surfaced via ``MatchReport.gather_scatter_evidence`` and synthesized
@@ -770,7 +769,7 @@ A generated (or declared-and-approved) element sitting on a
 
 *Defined in `forge.ir.model`.*
 
-Placeholder for verification planning/bindings (migration step 9).
+Placeholder for verification planning/bindings.
 
     Deliberately unpopulated in this slice — ``populated`` is always
     ``False`` here so consumers can tell "not yet migrated" apart from
@@ -779,7 +778,7 @@ Placeholder for verification planning/bindings (migration step 9).
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `populated` | `bool` | optional | `False` |
-| `note` | `str` | optional | `'Verification planning is not yet migrated to the canonical IR (Phase 1 migration step 9).'` |
+| `note` | `str` | optional | `'Verification planning is not yet migrated to the canonical IR.'` |
 
 ### `SemanticMetadata`
 
@@ -838,11 +837,10 @@ A real, provable claim about what one event's simulation actually
     visual design explorer uses (``forge.analyze.design_explorer.graph_model``).
 
     Additive and schema-only this phase — no real emission site populates
-    it yet (see the honest deferral in the release plan's Phase 8 notes).
-    A flow's declared ``top_module`` is a real, provable fact ("this flow's
-    entry point is this module") but does **not** by itself prove every
-    reachable instance was independently, behaviorally exercised — that
-    stronger claim is exactly what a populated ``VerificationTarget``
+    it yet. A flow's declared ``top_module`` is a real, provable fact
+    ("this flow's entry point is this module") but does **not** by
+    itself prove every reachable instance was independently, behaviorally
+    exercised — that stronger claim is exactly what a populated ``VerificationTarget``
     would represent, once a plugin's flow declaration says what it
     actually covers.
 

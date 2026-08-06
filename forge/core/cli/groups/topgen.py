@@ -62,7 +62,7 @@ def _validator_payload(validator) -> dict:
 
 def _validation_error_to_diagnostic(err, *, category_prefix: str) -> dict:
     """Reshape one `ValidationError` (topgen/validation.py) into the
-    shared envelope's diagnostic-dict shape (release-plan Phase 6, §6.7)
+    shared envelope's diagnostic-dict shape
     — `code=None` (ValidationError has no stable code table, honest
     absence), `action` from `suggestion`, `object_id` from `location`."""
     d: dict = {
@@ -84,7 +84,7 @@ def _validators_to_envelope(*validators_with_prefix, metrics: Optional[dict] = N
     exit-code promotion is applied by the caller via
     `CommandEnvelope.exit_code(strict=...)`/`emit(..., strict=...)` — same
     "status string never changes, only the exit code does" contract every
-    other envelope-adopting command follows (release-plan Phase 6, §6.0)."""
+    other envelope-adopting command follows."""
     from forge.core.cli.envelope import CommandEnvelope
 
     diagnostics: List[dict] = []
@@ -133,7 +133,7 @@ def _filter_unaccounted(port_list, patterns):
 
 def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) -> dict:
     """Module/connection/port maturity summary — factored out of
-    ``cmd_gen_top``'s inline ``maturity`` dict (release-plan Phase 6, §6.1)
+    ``cmd_gen_top``'s inline ``maturity`` dict
     so ``forge inspect`` can share it without running the generator.
 
     ``report`` is the generator's own open/tied-port accounting
@@ -149,7 +149,7 @@ def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) 
             "total": len(cfg.modules),
             "contract_driven": len(match_report.contract_driven_modules),
             "compat_mode": len(match_report.compat_mode_modules),
-            # release-plan Phase 8, slice 8.0B: the real per-module name
+            # The real per-module name
             # lists were already sitting on match_report, previously
             # discarded down to a bare len() here — additive so `forge
             # report`'s existing Markdown section and the visual design
@@ -189,7 +189,7 @@ def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) 
 def render_maturity_markdown(maturity: dict) -> str:
     """Render a `_compute_maturity_summary` dict as Markdown — pure
     presentation over an already-computed summary, no new maturity logic
-    (release-plan Phase 6, §6.5: `forge report`'s maturity/compatibility
+    (`forge report`'s maturity/compatibility
     report section, shared with `forge inspect` rather than duplicated)."""
     modules = maturity["modules"]
     lines = [
@@ -451,13 +451,13 @@ def generate_build_manifest(
         manifest["modules"][module_name] = module_info
 
     # ── Framework support RTL: RegisterStage, signal_delay, slr_crossing_delay,
-    #    cdc_sync2ff, and the release-plan §10.0B CDC primitive family
+    #    cdc_sync2ff, and the CDC primitive family
     #    (cdc_pulse_sync, cdc_mailbox, cdc_async_fifo, cdc_reset_sync) ──
     # When any connection uses register_stages or delay_cycles, topgen generates
     # RegisterStage / signal_delay instances in algo_top.v.  Boundary-tagged
     # delay connections use slr_crossing_delay instead of signal_delay.
-    # cdc: {kind: level_sync|2ff_sync} connections need cdc_sync2ff (release-plan
-    # §3.2). All must be in the compile list for simulation and synthesis.
+    # cdc: {kind: level_sync|2ff_sync} connections need cdc_sync2ff.
+    # All must be in the compile list for simulation and synthesis.
     needs_register_stage    = any(getattr(conn, "register_stages", 0) > 0 for conn in cfg.connections)
     needs_signal_delay      = any(
         getattr(conn, "delay_cycles", 0) > 0 and not getattr(conn, "boundary", None)
@@ -1212,7 +1212,7 @@ def cmd_validate(args):
 
         metrics: Dict[str, Any] = {}
 
-        # ── CDC crossing check (release-plan §10.0B) ────────────────────
+        # ── CDC crossing check ────────────────────────────────────────
         # verify_cdc used to be gen-top --strict-only (see cmd_gen_top);
         # authors got no CDC feedback until the final generation step.
         # Run it here too, as a best-effort, whenever contracts can be
@@ -1246,7 +1246,7 @@ def cmd_validate(args):
                         for issue in _cdc_issues
                     ]
 
-                    # release-plan §10.0C: forge.cdc_verification_result.v1
+                    # forge.cdc_verification_result.v1
                     # — written from the exact same crossing data the
                     # warnings above were derived from, no recomputation.
                     _cdc_result_json = getattr(args, "cdc_result_json", None)
@@ -1409,7 +1409,7 @@ class GenTopPlanContext:
     """Everything ``cmd_gen_top`` computes before its dry-run/real-write
     fork (design/path/contract/ip_info resolution, matching, the 3
     structured strict-check issue lists, and the pre-generation IR) —
-    bundled so ``forge build`` (release-plan §3.4) can reuse the exact
+    bundled so ``forge build`` can reuse the exact
     same computation without cmd_gen_top's sys.exit-based control flow.
     Adding a field here must never change any existing print/exit
     behavior in ``cmd_gen_top`` — this is pure extraction, not a behavior
@@ -1449,7 +1449,7 @@ def compute_gen_top_plan(
     """Behavior-preserving extraction of ``cmd_gen_top``'s compute phase
     (path/contract/ip_info resolution, matching, and the 3 structured
     strict-check issue lists), used both by ``cmd_gen_top`` itself and by
-    ``forge build`` (release-plan §3.4).
+    ``forge build``.
 
     Callers must have already loaded and validated *cfg* — the two
     "can't even start" failure modes (missing design file, validation
@@ -1809,7 +1809,7 @@ def cmd_gen_top(args):
             print(f"✓ VHDL top generated: {output}")
             _print_gen_report(report)
 
-            # Attach tie_off connections (release-plan §3.3) — see the
+            # Attach tie_off connections — see the
             # verilog branch's identical comment above.
             project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
             project.design.connections.sort(key=lambda c: c.id)
@@ -1871,7 +1871,7 @@ def cmd_gen_top(args):
             _print_gen_report(report)
 
             # Attach the generator's resolved top-level port list to the IR
-            # object built above (migration step 6) — this is the one place
+            # object built above — this is the one place
             # both pieces of information exist together; `project` is
             # serialized to design.ir.json further below.
             project.design.top_ports = [
@@ -1879,7 +1879,7 @@ def cmd_gen_top(args):
                 for p in report.get("top_ports", [])
             ]
 
-            # Attach tie_off connections (release-plan §3.3) — same timing/
+            # Attach tie_off connections — same timing/
             # asymmetry as top_ports: only known after generation runs, so
             # absent from forge inspect's pre-generation IR.
             project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
@@ -1968,7 +1968,7 @@ def cmd_gen_top(args):
             print(f"  ✓ Maturity report: {maturity_output}")
 
             # Canonical IR snapshot — `project` was already built above to
-            # drive this generation run (migration step 5); reuse it rather
+            # drive this generation run; reuse it rather
             # than building it a second time.
             ir_output = output.parent / "design.ir.json"
             ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
@@ -2087,8 +2087,8 @@ def _write_gen_top_provenance(
 ) -> Path:
     """Write ``provenance.json`` as a sibling of ``design.ir.json`` — same
     ``project`` object, same directory, same timing as the IR snapshot
-    (release-plan Phase 5 slice 5.1: "close the gap between the existing
-    IR-attached provenance manifest and gen-top, which never wrote one").
+    (closing the gap between the existing IR-attached provenance manifest
+    and gen-top, which never wrote one).
 
     ``plan_hash`` is computed from ``ctx.project`` (the *pre-generation*
     IR, before tie-off/top-port attachment) via the exact same
@@ -2417,7 +2417,7 @@ def cmd_init_plugin(args):
 
 
 def cmd_migrate(args):
-    """Migration helpers (release-plan §2.8) — see
+    """Migration helpers — see
     docs/development/MIGRATION_TOOLING.md for the full policy of each kind.
 
     Every kind computes its change fully in memory, always prints a
@@ -2784,7 +2784,7 @@ def register(sub) -> None:
         "migrate",
         help="Migration helpers: schema-version insertion, partition->coordinates, "
              "legacy plugin layout, legacy verify-contract filename, compat-mode "
-             "contract inference (release-plan §2.8)",
+             "contract inference",
     )
     p_migrate.add_argument(
         "--kind", required=True,

@@ -1,6 +1,6 @@
 """
-Tests for CDC synchronizer RTL emission (release-plan §3.2, Phase 3
-slice 3) in forge.topgen.generators.structural_verilog.write_structural_verilog.
+Tests for CDC synchronizer RTL emission in
+forge.topgen.generators.structural_verilog.write_structural_verilog.
 
 Structural crossing *detection* (forge.topgen.ip.cdc.verify_cdc) is tested
 in test_cdc.py; these tests cover the actual generated Verilog text for a
@@ -153,9 +153,8 @@ class TestCdcSync2ffEmission:
         assert ".dout(sync_net_src_dst_dout)," in text
 
     def test_async_fifo_emits_real_fifo_rtl(self, tmp_path):
-        """release-plan §10.0B closes the previously-documented gap:
-        async_fifo now emits a real dual-clock FIFO instance, not a
-        placeholder comment."""
+        """Closes the previously-documented gap: async_fifo now emits a
+        real dual-clock FIFO instance, not a placeholder comment."""
         cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
             cdc={"kind": "async_fifo", "depth": 8},
         )
@@ -177,8 +176,8 @@ class TestCdcSync2ffEmission:
         assert ".din(sync_net_src_dst_dout)" in text
 
     def test_async_fifo_emits_occupancy_and_high_water_telemetry(self, tmp_path):
-        """release-plan §10.0C: real occupancy/high_water instrumentation
-        signals (Decision B), not just full/empty/overflow/underflow."""
+        """Real occupancy/high_water instrumentation signals, not just
+        full/empty/overflow/underflow."""
         cfg, ip_info, contracts, conn_map, global_nets, report = _two_domain_setup(
             cdc={"kind": "async_fifo", "depth": 8},
         )
@@ -230,7 +229,7 @@ class TestCdcSync2ffEmission:
 
 class TestResetSyncEmission:
     def test_reset_domains_sync_emits_reset_synchronizer(self, tmp_path):
-        """reset_domains.<name>.sync: reset_sync (release-plan §10.0B) emits
+        """reset_domains.<name>.sync: reset_sync emits
         a real cdc_reset_sync instance clocked by the domain's own resolved
         clock — a reset crossing is a domain property, not a Connection.cdc
         declaration, so this is driven by cfg.reset_domains directly."""
@@ -259,9 +258,9 @@ class TestResetSyncEmission:
         assert ".async_rst_in(ap_rst)," in text
 
     def test_member_instance_reset_pin_binds_to_synchronizer_output(self, tmp_path):
-        """release-plan Phase 10, slice 10.4: a real reset_sync domain's
-        member instance must be wired to the synchronizer's own
-        sync_rst_out net — not the raw (unsynchronized) domain net —
+        """A real reset_sync domain's member instance must be wired to
+        the synchronizer's own sync_rst_out net — not the raw
+        (unsynchronized) domain net —
         or the whole point of declaring reset_sync (asynchronous assert,
         synchronous deassert in the *destination* domain) is silently
         lost. Regression guard for the exact gap the "not yet wired into
@@ -291,9 +290,9 @@ class TestResetSyncEmission:
         assert ".rst_slow(rst_slow)" not in text
 
     def test_reset_sync_net_is_declared_before_first_use(self, tmp_path):
-        """release-plan Phase 10, slice 10.4: rst_sync_<name> must be
-        declared (pre-declared, alongside every other intermediate net)
-        before the member instance that references it — declaring it
+        """rst_sync_<name> must be declared (pre-declared, alongside
+        every other intermediate net) before the member instance that
+        references it — declaring it
         only later (in the cdc_reset_sync emission section, after every
         module instance) makes Xilinx xvlog implicitly declare a
         *separate*, permanently-undriven net for the earlier reference
@@ -329,9 +328,10 @@ class TestResetSyncEmission:
         assert text.count("wire rst_sync_rst_slow;") == 1
 
     def test_cdc_synchronizer_between_reset_sync_domains_uses_synchronizer_output(self, tmp_path):
-        """release-plan Phase 10, slice 10.4: a CDC data synchronizer
+        """A CDC data synchronizer
         (cdc_pulse_sync/cdc_mailbox/cdc_async_fifo/cdc_sync2ff) whose
-        src or dst module belongs to a reset_sync domain must bind that
+        src or dst module belongs to a reset_sync domain must bind
+        that
         side's src_rst/dst_rst to the real synchronizer output
         (rst_sync_<name>), not the raw domain net — the same class of
         bug as the member-instance reset pin (see
@@ -447,7 +447,7 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     ("async_fifo", {"kind": "async_fifo", "depth": 8}, "cdc_async_fifo.v"),
 ])
 def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind, cdc, filename):
-    """release-plan §10.0B: the 3 new CDC kinds' RTL files must be found
+    """The 3 new CDC kinds' RTL files must be found
     and included the same way cdc_sync2ff.v already is, and must NOT be
     included when nothing declares that kind."""
     from forge.core.cli.groups.topgen import generate_build_manifest
@@ -490,7 +490,7 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
 
 
 def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
-    """release-plan §10.0B: cdc_reset_sync.v is needed based on
+    """cdc_reset_sync.v is needed based on
     reset_domains.*.sync, not a Connection.cdc declaration."""
     from forge.core.cli.groups.topgen import generate_build_manifest
 

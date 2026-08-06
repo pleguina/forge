@@ -1,7 +1,7 @@
-"""Tests for forge.verify.cdc_verification_result (release-plan Phase 10,
-slice 10.0C). report_all_crossings' own crossing-detection logic is
-tested in forge/tests/test_cdc.py alongside verify_cdc; this file covers
-construction/serialization plus build_cdc_verification_result's join.
+"""Tests for forge.verify.cdc_verification_result. report_all_crossings'
+own crossing-detection logic is tested in forge/tests/test_cdc.py
+alongside verify_cdc; this file covers construction/serialization plus
+build_cdc_verification_result's join.
 """
 from __future__ import annotations
 

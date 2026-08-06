@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Versioned, structured per-flow/per-event verification results (Phase 7,
-slice 7.2 — §7.5 core).
+"""Versioned, structured per-flow/per-event verification results.
 
 Before this module, `forge test run`'s per-event loop
 (`forge/core/cli/groups/test.py::cmd_run`) built a bare `dict` per event and
 threw away everything but three printed counters — no structured
 `backend_id`, no real duration, no waveform path, and log selection for a
 failed event always read `simulate_log` even when the failure happened at
-`xvlog`/`xelab`/`verilate` time (`ExecutionResult.stage`, added in slice
-7.0, is the direct fix for that).
+`xvlog`/`xelab`/`verilate` time (`ExecutionResult.stage` is the direct
+fix for that).
 
 `ArtifactSchema` is the shared version tag every structured artifact this
-phase introduces (results, and — slice 7.4a — dataset envelopes) carries,
-so a future reader can tell which shape it is looking at before assuming
-field names.
+phase introduces (results, and dataset envelopes) carries, so a future
+reader can tell which shape it is looking at before assuming field
+names.
 """
 from __future__ import annotations
 
@@ -27,9 +26,9 @@ from forge.verify.execution_stage import ExecutionStage
 
 # ── Schema tag ───────────────────────────────────────────────────────────
 #
-# ArtifactSchema itself now lives in forge.core.artifact_schema (release-
-# plan Phase 8, slice 8.0A) — a neutral, dependency-free location, since
-# the concept has nothing to do with verification specifically. Re-
+# ArtifactSchema itself now lives in forge.core.artifact_schema — a
+# neutral, dependency-free location, since the concept has nothing to do
+# with verification specifically. Re-
 # imported here so every existing `from forge.verify.results import
 # ArtifactSchema` call site keeps working unchanged.
 
@@ -61,7 +60,7 @@ class ArtifactRef:
         }
 
 
-# ── Machine-readable check records (slice 7.3) ──────────────────────────
+# ── Machine-readable check records ───────────────────────────────────────
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -69,7 +68,7 @@ class CheckResult:
 
     Populated on **both** outcomes — a passing check's ``expected`` and
     ``observed`` are both real values read from the log, not inferred from
-    the absence of a failure (the corrected slice 7.3 design; the first
+    the absence of a failure (the corrected design; the first
     draft's fail-only-line design could not have produced ``observed`` for
     a passing check at all).
     """
@@ -133,7 +132,7 @@ def parse_forge_check_lines(text: str) -> "list[CheckResult]":
     return results
 
 
-# ── Verification-target schema (release-plan Phase 8, Defect 4) ─────────
+# ── Verification-target schema ────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class VerificationTarget:
@@ -142,11 +141,10 @@ class VerificationTarget:
     visual design explorer uses (``forge.analyze.design_explorer.graph_model``).
 
     Additive and schema-only this phase — no real emission site populates
-    it yet (see the honest deferral in the release plan's Phase 8 notes).
-    A flow's declared ``top_module`` is a real, provable fact ("this flow's
-    entry point is this module") but does **not** by itself prove every
-    reachable instance was independently, behaviorally exercised — that
-    stronger claim is exactly what a populated ``VerificationTarget``
+    it yet. A flow's declared ``top_module`` is a real, provable fact
+    ("this flow's entry point is this module") but does **not** by
+    itself prove every reachable instance was independently, behaviorally
+    exercised — that stronger claim is exactly what a populated ``VerificationTarget``
     would represent, once a plugin's flow declaration says what it
     actually covers.
     """
@@ -168,13 +166,13 @@ class VerificationTarget:
 class EventResult:
     """The real, structured result of simulating one event.
 
-    ``event_id`` is always a string (matching the dataset corrections in
-    slice 7.4a — real external identifiers are not guaranteed to be small
+    ``event_id`` is always a string (matching the dataset corrections —
+    real external identifiers are not guaranteed to be small
     contiguous integers). ``event_index`` is the internal, always-numeric
-    position used for memory-indexed stimulus addressing (slice 7.5); it
-    stays honestly ``None`` until slice 7.4a's dataset envelope exists to
+    position used for memory-indexed stimulus addressing; it
+    stays honestly ``None`` until the dataset envelope exists to
     define it for real — never fabricated from loop position.
-    ``checks`` is populated (slice 7.3) by scanning the event's real
+    ``checks`` is populated by scanning the event's real
     ``simulate_log`` for ``FORGE_CHECK|`` records — only for checks emitted
     via ``StimulusEmitter.check()``/``emit_output_check`` (an honest,
     documented gap for hand-written SV checks and binary checkers that
@@ -189,9 +187,9 @@ class EventResult:
     artifacts:   "list[ArtifactRef]" = field(default_factory=list)
     diagnostics: "list[Diagnostic]"  = field(default_factory=list)
     checks:      "list[CheckResult]" = field(default_factory=list)
-    # Additive, empty by default (release-plan Phase 8, Defect 4) — every
-    # existing Phase 7 EventResult remains valid and simply carries no
-    # targets until a future slice populates them for real.
+    # Additive, empty by default — every existing EventResult remains
+    # valid and simply carries no targets until a future slice populates
+    # them for real.
     targets:     "list[VerificationTarget]" = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:

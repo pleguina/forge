@@ -341,7 +341,7 @@ def write_structural_vhdl(
         *name or prefix* basis — cross-checked against *pname*'s own real
         direction (see the identical fix + rationale in
         forge/topgen/generators/structural_verilog.py's own
-        ``_is_user_external``, release-plan Phase 10 slice 10.1 — this
+        ``_is_user_external`` — this
         VHDL generator carries the same bug, unexercised by any existing
         test).
         Returns 'in' / 'out' / None.

@@ -1,5 +1,4 @@
-"""Centralized escaping helpers for every renderer in this package
-(release-plan Phase 8, slices 8.1/8.2).
+"""Centralized escaping helpers for every renderer in this package.
 
 Every string that reaches a rendered artifact — module/instance/interface
 names, diagnostic messages, source paths, parameter values, matching-

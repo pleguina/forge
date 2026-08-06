@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """``forge.golden_comparison_result.v1`` — per-event pass/fail against a
 :class:`~forge.verify.golden_model.GoldenModelProvider`'s output, plus the
-provider identity/hash used to produce it (release-plan Phase 10, slice
-10.0C — preflight.md §8).
+provider identity/hash used to produce it.
 
 This is genuinely new persistence, not a wrapper around something that
-already existed on disk: ``run_golden_model()`` (slice 10.0A) already
+already existed on disk: ``run_golden_model()`` already
 computes ``provider_id``/``provider_version``/``output_hash`` on its
 returned :class:`~forge.verify.golden_model.ExpectedDataset`, but that
 identity lived only in the Python process running a plugin's

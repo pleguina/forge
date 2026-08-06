@@ -1,11 +1,11 @@
 """
-Deterministic generation-plan artifact (release-plan §3.4).
+Deterministic generation-plan artifact.
 
 Deliberately separate from ``model.py``/``build.py``/``serialize.py`` —
 same rationale as ``serialize.py``'s own docstring: a plan is a *reshape*
 of already-computed IR/matching facts (``ResolvedProject``, ``MatchReport``,
-the 3 structured strict-check issue lists) into the 8 sections the release
-plan requires, not a new computation. This keeps it reusable by any future
+the 3 structured strict-check issue lists) into 8 defined sections, not a
+new computation. This keeps it reusable by any future
 consumer (CLI, CI, explorer) without pulling in argparse or the CLI layer
 — enforced the same way the rest of ``forge/ir/`` is, by
 ``ci/import_direction_check.sh``.
@@ -41,8 +41,8 @@ class PlannedConnection:
 
 @dataclass
 class PlannedTransformation:
-    """One generated-or-declared transformation (release-plan §3.3),
-    attributed back to its owning connection."""
+    """One generated-or-declared transformation, attributed back to its
+    owning connection."""
     connection_id: str
     kind: str
     cycles: Optional[int]
@@ -62,7 +62,7 @@ class UnresolvedIssue:
 
 @dataclass
 class GenerationPlan:
-    """release-plan §3.4's 8 required sections. ``generated_from`` is
+    """The plan's 8 required sections. ``generated_from`` is
     provenance-only and deliberately excluded from ``plan_hash`` — same
     exclusion rationale as ``serialize.py``'s ``_canonical_design_json``
     excluding ``ResolvedProject.generated_from``: a plan hash should
@@ -77,7 +77,7 @@ class GenerationPlan:
     # carry cycle counts) — NOT a new latency computation. `forge analyze
     # latency-check` remains the actual latency-analysis tool.
     latency_changes: List[PlannedTransformation] = field(default_factory=list)
-    # Release-plan §3.5: per-connection MatchingEvidence (as plain dicts,
+    # Per-connection MatchingEvidence (as plain dicts,
     # already JSON-shaped via asdict) plus MatchReport.rejected_matches
     # under the "unmatched_candidates" key.
     matching_evidence: Dict[str, Any] = field(default_factory=dict)
@@ -125,7 +125,7 @@ def build_generation_plan(
             explicit.append(pc)
         # wiring_method in {"heuristic", None} (global clock/reset nets):
         # not part of either bucket — reflected via compat_mode_modules
-        # instead, matching the release-plan text's own scope (connections/
+        # instead, matching this plan's own scope (connections/
         # topology_groups, not clock/reset fan-out).
 
         for xform in conn.transformations:

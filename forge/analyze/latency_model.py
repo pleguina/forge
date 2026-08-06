@@ -1,10 +1,10 @@
 """forge.analyze.latency_model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Shared, provenance-carrying latency representation (release-plan §4.1),
+Shared, provenance-carrying latency representation,
 reused by every latency-related consumer: static analysis
 (``forge.analyze.latency_static``), runtime observation
-(``forge.analyze.latency_runtime``), and later slices' fixed/bounded/
-elastic declarations (§4.2). Kept as its own module — not nested inside
+(``forge.analyze.latency_runtime``), and later fixed/bounded/
+elastic declarations. Kept as its own module — not nested inside
 ``latency_static`` — so ``latency_runtime`` can depend on it without a
 wrong-direction package dependency between analysis sibling packages.
 
@@ -18,8 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-# The six latency-value sources release-plan §4.1 requires be
-# distinguishable. Kept as a frozenset (not an Enum) to match this
+# The six latency-value sources this module keeps distinguishable.
+# Kept as a frozenset (not an Enum) to match this
 # codebase's existing convention for small closed vocabularies validated
 # at construction time (e.g. forge.topgen.ip.cardinality's KNOWN_* sets).
 LATENCY_SOURCES = frozenset({
@@ -31,9 +31,9 @@ LATENCY_SOURCES = frozenset({
     "runtime_observation",       # measured from a simulation probe
 })
 
-# The three timing kinds release-plan §4.2 requires. Defined here (not in
-# forge.topgen.config) because both the schema-input side (§4.2) and the
-# analysis-output side (this module, already used by §4.1) need the same
+# The three timing kinds this module defines. Defined here (not in
+# forge.topgen.config) because both the schema-input side and the
+# analysis-output side (this module) need the same
 # vocabulary, and this module is the one with no upstream dependencies.
 LATENCY_KINDS = frozenset({"fixed", "bounded", "elastic"})
 
@@ -48,8 +48,8 @@ class LatencyModelError(ValueError):
 
 @dataclass
 class LatencyProvenance:
-    """Where one latency value came from — release-plan §4.1's
-    "each latency value must record its provenance" requirement."""
+    """Where one latency value came from — captures the "each latency
+    value must record its provenance" requirement."""
     source: str
     detail: Optional[str] = None
 
@@ -63,10 +63,10 @@ class LatencyProvenance:
 
 @dataclass
 class LatencyValue:
-    """A single latency figure, kind-tagged (§4.2) and provenance-tagged
-    (§4.1). ``kind='fixed'`` is the only kind actually produced before
-    Phase 4 slice 2 lands — ``bounded``/``elastic`` construction is
-    already supported here so slice 2 doesn't need to touch this module.
+    """A single latency figure, kind-tagged and provenance-tagged.
+    ``kind='fixed'`` is the only kind actually produced today —
+    ``bounded``/``elastic`` construction is already supported here so
+    future work doesn't need to touch this module.
     """
     kind: str = "fixed"
     cycles: Optional[int] = None

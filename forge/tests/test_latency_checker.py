@@ -1,8 +1,7 @@
 """
-Tests for forge.analyze.latency_static.checker's edge-latency fold-in
-(release-plan §4.1, Phase 4 slice 1).
+Tests for forge.analyze.latency_static.checker's edge-latency fold-in.
 
-Before this slice, LatencyEdge carried no latency at all, so
+Before this fix, LatencyEdge carried no latency at all, so
 check_merge_points summed only each predecessor node's own latency — any
 register_stages/delay_cycles/CDC latency FORGE inserted on the connecting
 edge was silently invisible to mismatch detection. These tests prove the
@@ -28,7 +27,7 @@ def _node(name, cycles, *, is_variable=False):
 
 
 def test_unknown_cdc_edge_is_not_silently_treated_as_zero_extra_cycles():
-    """release-plan Phase 10, slice 10.7B finding: before this fix, a
+    """Before this fix, a
     mailbox_transfer/async_fifo edge (LatencyEdge.latency is always None
     for these kinds — see graph.py's _edge_latency_from_connection) was
     indistinguishable from a plain connection with genuinely zero extra
@@ -60,7 +59,7 @@ def test_unknown_cdc_edge_is_not_silently_treated_as_zero_extra_cycles():
 
 
 def test_node_with_one_real_and_one_unknown_cdc_predecessor_folds_through_the_real_side():
-    """release-plan Phase 10, slice 10.7B finding: a node with two
+    """A node with two
     predecessors — one reached via an unknown_cdc edge (e.g. a
     frame-boundary-gated config register fed by a real
     cdc: {kind: mailbox_transfer} crossing), one a real single data
@@ -71,7 +70,7 @@ def test_node_with_one_real_and_one_unknown_cdc_predecessor_folds_through_the_re
     this node's own isolated latency, which would silently understate
     the branch's real total and produce a false mismatch/wrong signal_delay
     suggestion) — found running a real design (vision_pipeline_demo's
-    slice 10.7B platform-wrapper fixture) where this exact shape first
+    platform-wrapper fixture) where this exact shape first
     occurred: threshcfg has both a real `norm` data predecessor and an
     unknown_cdc `ctrl_mailbox` predecessor, and is itself a predecessor
     of `merge` alongside a real straight-line `sobel` branch."""
@@ -192,10 +191,9 @@ def test_unknown_edge_latency_defaults_to_zero_not_unknown():
 
 def test_real_reference_designs_report_zero_false_mismatches():
     """Real-design regression guard: neither reference design should
-    report a *mismatch* as a side effect of folding edge latency in
-    (Phase 4 slice 1) or per-instance graph granularity (Phase 4 slice
-    3). passthrough_demo has zero merge points (single module). As of
-    slice 3, trigger_demo now has 2 real merge points (col, partmon —
+    report a *mismatch* as a side effect of folding edge latency in or
+    per-instance graph granularity. passthrough_demo has zero merge points
+    (single module). trigger_demo now has 2 real merge points (col, partmon —
     each fed by all 4 real 'dec' instances, previously invisible when
     'dec' collapsed to one module-group node) — both correctly balanced,
     since every 'dec' instance shares the same module-level
@@ -218,7 +216,7 @@ def test_real_reference_designs_report_zero_false_mismatches():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Release-plan Phase 10, slice 10.2 — multi-hop chain latency (found while
+# Multi-hop chain latency (found while
 # wiring window_builder_rtl -> sobel_hls -> merge into a real merge point:
 # the checker only ever summed the *direct* predecessor's own node latency,
 # silently dropping window_builder_rtl's 10 cycles entirely since it sits
@@ -277,12 +275,12 @@ def test_multi_hop_chain_stops_at_a_bounded_or_elastic_node():
 
 
 def test_vision_pipeline_demo_pixel_result_design_has_zero_merge_skew():
-    """Real-design proof (release-plan Phase 10, slice 10.2): the Sobel
+    """Real-design proof: the Sobel
     branch (window_builder_rtl 10 cycles + sobel_hls 4 cycles, 2 hops
     into `merge`) and the threshold branch (threshold_rtl 2 cycles + a
     12-cycle Connection.delay_cycles alignment delay) must land on
     edge_mask_merge_rtl at the exact same cycle -- the whole point of
-    slice 10.2's design. Before this slice's chain-walk fix, the Sobel
+    this design. Before the chain-walk fix, the Sobel
     path would have been silently under-reported as 4 cycles (just
     sobel_hls's own latency), producing a false "balanced" or a bogus
     delta depending on what the threshold branch happened to total."""
@@ -305,7 +303,7 @@ def test_vision_pipeline_demo_pixel_result_design_has_zero_merge_skew():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 4 slice 3 — per-instance graph granularity (release-plan §4.3)
+# Per-instance graph granularity
 # ─────────────────────────────────────────────────────────────────────────
 
 def test_multi_instance_module_produces_real_merge_point():
@@ -331,10 +329,10 @@ def test_multi_instance_module_produces_real_merge_point():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 4 slice 3 — alignment-kind inference (release-plan §4.3)
+# Alignment-kind inference
 #
 # Neither reference design declares kind: bounded/elastic today (only
-# kind: fixed, via the real trigger_logic migration in slice 2) — these
+# kind: fixed, via the real trigger_logic migration) — these
 # cases are necessarily synthetic-only, same honesty as every other
 # "no real usage exists yet" item in this project's deferral lists.
 # ─────────────────────────────────────────────────────────────────────────
@@ -352,7 +350,7 @@ def _node_with_kind(name, kind, *, cycles=None, min_cycles=None, max_cycles=None
 
 def test_elastic_predecessor_suppresses_mismatch_despite_unequal_cycles():
     """The checker must not assume every reconvergence requires identical
-    scalar latency (release-plan §4.3) — an elastic predecessor makes the
+    scalar latency — an elastic predecessor makes the
     merge point tolerant, even though the fixed predecessor's cycle count
     differs wildly."""
     graph = LatencyGraph(

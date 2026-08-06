@@ -1,6 +1,6 @@
 """
 Tests for MatchReport.connection_evidence — per-pin-pair wiring-method
-attribution (release-plan §3.5 "matching evidence"). Also covers
+attribution ("matching evidence"). Also covers
 rejected_matches (semantic candidate rejections that never produced a
 wire, so there's no ResolvedConnection to attach rejected_fanin-style
 evidence to) and gather_scatter_evidence — later slices of the same

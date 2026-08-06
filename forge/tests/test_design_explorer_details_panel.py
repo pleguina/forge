@@ -1,11 +1,9 @@
-"""Tests for the selected-object details panel's data contract
-(release-plan Phase 8, §8.4) — walks one real module and one real
-connection from trigger_demo, asserting every field §8.4 lists is either
-present with a real value in the ``ObjectRecord`` or explicitly marked
-absent. This repo has no browser-automation infrastructure and this
-phase does not introduce one (see the release plan's Honest deferral
-list) — this validates the data contract the panel renders from, not
-pixel output.
+"""Tests for the selected-object details panel's data contract — walks
+one real module and one real connection from trigger_demo, asserting
+every field the panel's contract lists is either present with a real
+value in the ``ObjectRecord`` or explicitly marked absent. This repo
+has no browser-automation infrastructure, so this validates the data
+contract the panel renders from, not pixel output.
 """
 from __future__ import annotations
 
@@ -87,7 +85,7 @@ def test_connection_details_walks_every_real_field_the_release_plan_lists():
     assert edge.crosses_clock_domain is False
     assert edge.crosses_reset_domain is False
     # transformations — real gather_scatter transformation on this
-    # connection (release-plan §3.5's gather/scatter classification).
+    # connection.
     assert any(t["kind"] == "gather_scatter" for t in conn_obj.data["transformations"])
     gs = next(t for t in conn_obj.data["transformations"] if t["kind"] == "gather_scatter")
     assert gs["tag"] == "gather"

@@ -414,8 +414,8 @@ def run_release_check(
     # ── Optional: tool availability ───────────────────────────────────────
     if check_tools:
         # Same shared presence check `forge doctor`/`forge verify doctor`
-        # use (release-plan Phase 6, §6.3) — one tool-availability verdict
-        # across the whole doctor family for the same environment.
+        # use — one tool-availability verdict across the whole doctor
+        # family for the same environment.
         from forge.core.toolchain_versions import tool_present
         for tool in ("xvlog", "xelab", "xsim"):
             if tool_present(tool):

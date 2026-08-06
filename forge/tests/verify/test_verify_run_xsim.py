@@ -148,7 +148,7 @@ def test_run_executes_real_xsim_simulation_and_passes(
 def test_run_backend_populates_enriched_execution_result_fields(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], consumer_root: Path
 ) -> None:
-    """Phase 7 slice 7.0: ExecutionResult.duration_s/waveform_path/backend_id/stage
+    """ExecutionResult.duration_s/waveform_path/backend_id/stage
     are real, non-fabricated values — proven by calling the real adapter directly
     (not mocked) after a real `generate`, then inspecting the returned dataclass."""
     design_yml = consumer_root / "plugins/passthrough_demo/forge/verify/design.verification.yml"
@@ -257,10 +257,10 @@ def test_run_missing_rtl_fails_preflight_without_running_xsim(
 def test_json_dataset_format_parity_real_run_passes(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], consumer_root: Path
 ) -> None:
-    """Phase 7 slice 7.4a: a real simulation run driven by stimulus
-    generated from the JSON dataset sibling (JsonDatasetLoader) produces
-    the same real pass as the XML-driven one — format parity proven by an
-    actual xsim run, not just "the loader doesn't crash."""
+    """A real simulation run driven by stimulus generated from the JSON
+    dataset sibling (JsonDatasetLoader) produces the same real pass as
+    the XML-driven one — format parity proven by an actual xsim run, not
+    just "the loader doesn't crash."""
     design_yml = consumer_root / "plugins/passthrough_demo/forge/verify/design.verification.yml"
     _run_verify_inprocess(
         monkeypatch, capsys, "generate", str(design_yml),
@@ -307,7 +307,7 @@ def test_json_dataset_format_parity_real_run_passes(
 def test_identity_dataset_adapter_drives_a_real_passing_run(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], consumer_root: Path
 ) -> None:
-    """Phase 7 slice 7.4b: passthrough_demo's real `passthrough.identity-xml`
+    """passthrough_demo's real `passthrough.identity-xml`
     adapter, resolved by explicit id (never suffix), `materialize()`s a
     real layer-A SerializedDataset into a CanonicalDataset that is a
     genuine no-op — then drives an actual xsim run from that
@@ -336,7 +336,7 @@ def test_identity_dataset_adapter_drives_a_real_passing_run(
 
     # The genuine-no-op proof: adapter output is byte-identical to the
     # direct layer-A loader path (the same one gen_stimulus.py itself now
-    # uses since slice 7.4a) — not silently dropping or altering data.
+    # uses) — not silently dropping or altering data.
     assert canonical.events == direct.events
     assert canonical.metadata == direct.metadata
 

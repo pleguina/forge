@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Fixed-shape, non-recompiling stimulus mechanism — the ``.mem``-file half
-(Phase 7, slice 7.5, §7.4).
+"""Fixed-shape, non-recompiling stimulus mechanism — the ``.mem``-file half.
 
-Explicitly scoped conservative, per the plan: this covers **fixed-width,
+Explicitly scoped conservative: this covers **fixed-width,
 fixed-shape event records only**. Datasets with variable-length events,
 multiple input interfaces, or per-event arrays of differing size are not
 covered here and stay on the default ``svh_include`` mechanism.
@@ -49,7 +48,7 @@ def write_event_memory_file(
     ``event_index`` order, to *out_path*.
 
     Args:
-        canonical:   The flow's materialized dataset (slice 7.4b).
+        canonical:   The flow's materialized dataset.
         pack_event:  Plugin-supplied callback: one event dict →  one
                      fixed-width hex string (no ``0x``/``'h`` prefix,
                      e.g. ``"03a01"``). Every returned string must be the
@@ -63,7 +62,7 @@ def write_event_memory_file(
         The real ``event_index → event_id`` mapping — ``event_index`` is
         the word's line position (0-based), ``event_id`` is the real
         string id from ``canonical.metadata.event_ids`` at that position.
-        This is the mapping ``EventResult``/``FlowResult`` (slice 7.2)
+        This is the mapping ``EventResult``/``FlowResult``
         report from, and the mapping ``forge test run`` resolves a
         user-given ``--event-id`` back into a ``+EVENT_INDEX=N`` plusarg
         through (never the reverse — the index is purely an internal

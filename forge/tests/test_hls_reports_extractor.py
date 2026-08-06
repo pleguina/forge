@@ -1,8 +1,8 @@
 """
 Tests for forge.analyze.hls_reports.extractor/formatter's recovery of
-csynth.xml's Interval-min/Interval-max (release-plan §4.4, Phase 4 slice
-4) — data the extractor's underlying HLSMetricsExtractor already parsed,
-but that was silently dropped before reaching HLSModuleReport.
+csynth.xml's Interval-min/Interval-max — data the extractor's underlying
+HLSMetricsExtractor already parsed, but that was silently dropped before
+reaching HLSModuleReport.
 
 No real HLS build artifact (csynth.xml) is checked into this repo for
 either reference plugin (confirmed by search) — this fixture is

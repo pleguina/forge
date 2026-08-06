@@ -1,7 +1,7 @@
 // cdc_async_fifo.v — Dual-clock asynchronous FIFO
 //
 // Real generated RTL for `cdc: {kind: async_fifo, depth: N}` connections
-// (release-plan §10.0B, §5 Decision A/B) — this used to be structurally
+// — this used to be structurally
 // approved but emit no RTL at all ("wired directly, no crossing
 // protection applied", documented limitation). Standard Gray-code
 // dual-pointer design (Cummings, "Simulation and Synthesis Techniques
@@ -17,10 +17,10 @@
 // require or expose separate write-enable/read-enable ports. It
 // therefore provides real dual-clock buffering and synchronization, but
 // not true producer/consumer backpressure — `overflow_attempt`/
-// `underflow_attempt` are exposed for release-plan §5 Decision B /
-// slice 10.0C to report on.
+// `underflow_attempt` are exposed for real backpressure/occupancy
+// reporting to consume.
 //
-// `occupancy`/`high_water` (added slice 10.0C): real instrumentation
+// `occupancy`/`high_water`: real instrumentation
 // signals, computed in the WRITE domain only — the synchronized read
 // pointer (`rd_gray_sync1`, already 2FF-safe for comparison) is
 // converted back to binary so it can be subtracted from the live write
@@ -30,14 +30,14 @@
 // limitation, not new to this design. `high_water` is a running
 // maximum of `occupancy`, cleared on `wr_rst`.
 //
-// `wr_en` (added release-plan Phase 10, slice 10.5): an explicit,
+// `wr_en`: an explicit,
 // real write-enable, tied to `1'b1` by every prior usage in this repo
 // (`forge.topgen.generators.structural_verilog` defaults it there when
 // a connection's `cdc:` doesn't declare `write_enable_pin` — see that
 // generator's own comment), preserving this primitive's original
 // "continuously driven" behavior unchanged for every existing design.
 // Found empirically wiring a real, non-constant record producer for the
-// first time (slice 10.5's own packetizer design): without a real
+// first time (the packetizer design): without a real
 // write-enable, this primitive writes a fresh entry every write-domain
 // cycle regardless of whether `din` actually changed, so a source that
 // only updates `din` occasionally (gated by its own upstream `in_valid`,
@@ -45,7 +45,7 @@
 // the write clock is faster than the read clock — occupancy/high-water/
 // overflow telemetry then reflects how fast the write clock runs, not
 // how many real records were produced, defeating the whole point of
-// Decision B's real backpressure/occupancy reporting. A real per-record
+// this primitive's real backpressure/occupancy reporting. A real per-record
 // write-enable (the source module's own `in_valid`, or equivalent) fixes
 // this at the source, without changing what "continuously driven" means
 // for a level-style status value that has no such concept.
@@ -67,7 +67,7 @@
 // Timing: fill/drain latency is data-dependent (depends on relative
 // write/read rates and clock phase) and is not statically bounded —
 // forge.analyze.latency_static.graph treats async_fifo edges as unknown
-// (None), same as before this slice.
+// (None).
 //==============================================================================
 
 `timescale 1ns / 1ps
@@ -122,13 +122,13 @@ module cdc_async_fifo #(
     reg  empty_r;
 
     // ── Write domain ────────────────────────────────────────────────
-    // `wr_en` (slice 10.5): a real write only happens when the source
+    // `wr_en`: a real write only happens when the source
     // actually asserts it, not unconditionally every cycle -- see this
     // file's header for why. `do_write` is the single gate the write
     // pointer, the memory write, and `overflow_attempt` all share.
     // Case-equality against a literal 1 (not a plain logical AND) is
     // deliberate: found empirically that a real HLS-generated upstream
-    // signal (tile_stats_hls, reused unmodified from an earlier slice)
+    // signal (tile_stats_hls, reused unmodified from elsewhere in this design)
     // can read as X on cycles it never actually issues on -- harmless
     // for every check that ever compared it against a clean-0 operand
     // (X && 0 correctly resolves to 0 under 4-state AND), but this
@@ -173,7 +173,7 @@ module cdc_async_fifo #(
     wire [ADDR_WIDTH:0] rd_bin_next  = rd_bin + (!empty);
     wire [ADDR_WIDTH:0] rd_gray_next = (rd_bin_next >> 1) ^ rd_bin_next;
 
-    // `dout` is registered, gated by `!empty` (slice 10.5) -- a plain
+    // `dout` is registered, gated by `!empty` -- a plain
     // combinational `mem[rd_bin]` read (this primitive's original form)
     // lets a destination that samples `dout` unconditionally (no `empty`
     // routed to it -- see cdc_async_fifo's own header on why FORGE's
@@ -181,8 +181,8 @@ module cdc_async_fifo #(
     // value *before* the Gray-code-synchronized `empty` flag confirms
     // it's real: `mem[]` itself isn't part of the CDC synchronization
     // path, only the pointer comparison is, so a combinational read can
-    // glitch ahead of it. Found empirically wiring this slice's own
-    // packetizer design: a destination-side toggle-in-payload novelty
+    // glitch ahead of it. Found empirically wiring the packetizer design: a
+    // destination-side toggle-in-payload novelty
     // detector (packetizer_rtl.v) silently "caught up" to record 0's
     // toggle bit one or more cycles before `empty` ever deasserted,
     // permanently losing that one transition -- every later record then

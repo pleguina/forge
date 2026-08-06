@@ -3,7 +3,7 @@
 // Synchronizes a signal from an asynchronous (or unrelated) source domain
 // into the destination clock domain using the standard double
 // flip-flop pattern. Used by topgen-generated algo_top.v to implement
-// `cdc: {kind: 2ff_sync}` connections (release-plan §3.2).
+// `cdc: {kind: 2ff_sync}` connections.
 //
 // Parameters:
 //   WIDTH - Bit width of the signal to synchronize (default: 1)

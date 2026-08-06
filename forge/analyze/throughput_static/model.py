@@ -1,7 +1,6 @@
 """forge.analyze.throughput_static.model — build
 :class:`~forge.verify.throughput_result.StaticThroughputAnalysis` records
-from real HLS synthesis reports (release-plan Phase 10, slice 10.0C —
-preflight.md §5 Decision B).
+from real HLS synthesis reports.
 
 No simulation is needed for any of this — every field is derived from a
 module's already-parsed :class:`~forge.analyze.hls_reports.extractor.HLSModuleReport`

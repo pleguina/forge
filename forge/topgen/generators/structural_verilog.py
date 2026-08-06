@@ -98,7 +98,7 @@ def _reset_net_for_domain(
     reset_sync_domains: Dict[str, Dict[str, Any]],
 ) -> str:
     """Resolve a module's reset domain to the net that actually carries a
-    real, synchronized reset (release-plan Phase 10, slice 10.4).
+    real, synchronized reset.
 
     A `reset_domains.<name>.sync: reset_sync` domain's real reset signal
     is `rst_sync_<name>` — the cdc_reset_sync instance's own output — not
@@ -594,8 +594,8 @@ def write_structural_verilog(
         match (e.g. a real output port ``x_out`` must never match a
         declared external *input* ``x``, even though
         ``"x_out".startswith("x_")`` is true). Found via real testing —
-        release-plan Phase 10, slice 10.1's vision_pipeline_demo
-        quickstart declared ``external_in_ports: [x, y, ...]`` for its
+        vision_pipeline_demo's quickstart declared
+        ``external_in_ports: [x, y, ...]`` for its
         real scalar pixel-stream inputs, and the prefix match (with no
         direction check) silently misrouted the module's real, unrelated
         ``x_out``/``y_out``/etc. *output* pins to a bogus, wrong-direction
@@ -640,7 +640,7 @@ def write_structural_verilog(
             inst_to_mod[ilabel] = mod.name
             inst_to_params[ilabel] = mod.parameters  # Store parameters for this instance
 
-    # Phase 3.2 (release-plan §3.2, slice 3): resolve each module's real
+    # Resolve each module's real
     # clock/reset net so a CDC synchronizer instance can be clocked/reset
     # by the *destination* domain, not always assumed to be ap_clk/ap_rst.
     clock_of_module: Dict[str, Optional[str]] = {}
@@ -650,7 +650,7 @@ def write_structural_verilog(
             cfg, contracts or {}, match_report, global_nets, inst_to_mod,
         )
 
-    # release-plan Phase 10, slice 10.4: which reset_domains declare a real
+    # Which reset_domains declare a real
     # `sync: reset_sync` synchronizer — hoisted here (not just where the
     # cdc_reset_sync instances themselves are emitted, later in this
     # function) so the per-instance port-binding loop below can route a
@@ -863,7 +863,7 @@ def write_structural_verilog(
                     delay_nets.add(delay_net)
 
             # cdc: {kind: ...} — intermediate wire for the synchronizer/
-            # FIFO output (release-plan §10.0B: every kind now emits real
+            # FIFO output (every kind now emits real
             # RTL and therefore a real intermediate net, including
             # async_fifo, which used to be wired straight through).
             if cdc_kind in ("level_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
@@ -875,7 +875,7 @@ def write_structural_verilog(
                         emit(f"  wire [{w-1}:0] {sync_net};")
                     sync_nets.add(sync_net)
 
-        # cdc.write_enable_pin (release-plan Phase 10, slice 10.5): an
+        # cdc.write_enable_pin: an
         # async_fifo connection may name one of the *source* instance's
         # other own output pins as a real write-enable, gating
         # cdc_async_fifo's write so it stops writing a fresh FIFO entry
@@ -885,7 +885,7 @@ def write_structural_verilog(
         # accurate for a level-style status value, but it silently floods
         # a real record-producing FIFO with duplicate entries whenever the
         # write clock is faster than the read clock, found empirically
-        # wiring this slice's own packetizer design: occupancy/high-water/
+        # wiring a real packetizer design: occupancy/high-water/
         # overflow telemetry saturated almost immediately even though only
         # 64 real records were ever produced). Not part of any port_map
         # pair, so it needs its own pre-declared driver net here, exactly
@@ -915,7 +915,7 @@ def write_structural_verilog(
             emit(f"  wire [{w-1}:0] {net};")
         driver_net_set.add(net)
 
-    # release-plan Phase 10, slice 10.4: pre-declare each reset_sync
+    # Pre-declare each reset_sync
     # domain's own sync_rst_out net here too, up front, alongside every
     # other intermediate net this function pre-declares (sync_net_* for
     # CDC data crossings, above) — a member instance's reset pin
@@ -974,7 +974,7 @@ def write_structural_verilog(
                     s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
                     driven_outs.add(s_pin)
 
-                # cdc.write_enable_pin (release-plan Phase 10, slice 10.5):
+                # cdc.write_enable_pin:
                 # this instance's own write-enable output pin (see the
                 # matching pre-declaration above) also counts as driven,
                 # even though it's never a port_map pair.
@@ -998,7 +998,7 @@ def write_structural_verilog(
                     pm.append(f"    .{pname}(ap_rst)")
                     continue
 
-                # release-plan Phase 10, slice 10.4: a non-standard-named
+                # A non-standard-named
                 # reset pin (doesn't match the pattern above, so it's this
                 # module's own genuine domain-specific reset net) that
                 # belongs to a `reset_domains.<name>.sync: reset_sync`
@@ -1227,14 +1227,14 @@ def write_structural_verilog(
 
                     delay_counter += 1
 
-    # ====== CDC Synchronizer Instances (release-plan §3.2, slice 3; =======
-    # ====== expanded to the full 5-kind primitive family, §10.0B) ========
+    # ====== CDC Synchronizer Instances (expanded to the full 5-kind ========
+    # ====== primitive family) ===============================================
     # A real synchronizer/FIFO is emitted for every declared cdc: {kind: ...}
     # connection, clocked/reset by each side's own resolved clock/reset net
     # (which may differ from ap_clk/ap_rst in a multi-domain design —
     # though no plugin in this repo declares a real second domain yet, see
     # forge.topgen.ip.domains; the physical top-level port is still always
-    # a single ap_clk/ap_rst pair this release, deferred to slice 10.4).
+    # a single ap_clk/ap_rst pair this release).
     if cdc_map:
         emit("  // CDC synchronizers for declared clock-domain-crossing connections")
         cdc_sync_counter = 0
@@ -1321,9 +1321,9 @@ def write_structural_verilog(
                     unf_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_underflow")
                     occ_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_occupancy")
                     hw_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_high_water")
-                    # cdc.write_enable_pin (release-plan Phase 10, slice
-                    # 10.5): real write-enable gating, opt-in per
-                    # connection — see the pre-declaration above for why.
+                    # cdc.write_enable_pin: real write-enable gating,
+                    # opt-in per connection — see the pre-declaration
+                    # above for why.
                     # Defaults to 1'b1 (every prior async_fifo usage's
                     # unchanged "continuously driven" behavior) when unset.
                     we_pin_raw = cdc.get("write_enable_pin")
@@ -1333,8 +1333,8 @@ def write_structural_verilog(
                     else:
                         wr_en_expr = "1'b1"
                     emit(
-                        f"  // Occupancy/backpressure telemetry (release-plan §5 Decision B / "
-                        "slice 10.0C) — consume via a Tier 2 probe declaration."
+                        "  // Occupancy/backpressure telemetry — "
+                        "consume via a Tier 2 probe declaration."
                     )
                     emit(f"  wire {full_net}, {empty_net}, {ovf_net}, {unf_net};")
                     emit(f"  wire [{addr_width}:0] {occ_net}, {hw_net};")
@@ -1363,8 +1363,8 @@ def write_structural_verilog(
 
                 cdc_sync_counter += 1
 
-    # ====== Reset Synchronizer Instances (release-plan §10.0B, §5 =========
-    # ====== Decision A) — reset_domains.<name>.sync: reset_sync =========
+    # ====== Reset Synchronizer Instances ====================================
+    # ====== reset_domains.<name>.sync: reset_sync ===========================
     # A reset crossing is a property of a destination reset *domain*, not
     # a connections:-level data crossing (see forge.topgen.ip.cdc's module
     # docstring), so this is driven directly off cfg.reset_domains rather
@@ -1373,8 +1373,8 @@ def write_structural_verilog(
     # instance's reset pin is still bound to the literal ap_rst
     # unconditionally elsewhere in this generator (the same single-
     # top-level-clock/reset-port limitation the CDC data synchronizers
-    # above already have). release-plan Phase 10, slice 10.4 closed that
-    # gap (see the per-instance port-binding loop earlier in this
+    # above already have). That gap has since been closed
+    # (see the per-instance port-binding loop earlier in this
     # function): a member instance's reset pin is now bound to this
     # synchronizer's own `sync_rst_out` net below, not the raw domain net.
     if reset_sync_domains:

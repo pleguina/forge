@@ -1,5 +1,5 @@
-"""End-to-end coverage for `forge build` (release-plan §3.4 — deterministic
-generation plan), driving the real argparse entry point in-process against
+"""End-to-end coverage for `forge build` (deterministic generation plan),
+driving the real argparse entry point in-process against
 plugins/passthrough_demo and plugins/trigger_demo (mirrors the pattern used
 in test_topgen_cli_commands.py/test_inspect_cli_group.py).
 """
@@ -93,7 +93,7 @@ def test_plan_human_output_sections(capsys: pytest.CaptureFixture[str], tmp_path
 def test_plan_json_output_matches_wiring_method_counts(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Release-plan Phase 6 §6.2: `--json`'s `{"plan": ..., "plan_hash": ...}`
+    """`--json`'s `{"plan": ..., "plan_hash": ...}`
     full-plan-dump shape becomes one CommandEnvelope — `metrics.counts`
     carries the same connection/transformation counts this test used to
     read off the raw plan lists, and `artifacts` carries
@@ -108,8 +108,7 @@ def test_plan_json_output_matches_wiring_method_counts(
     assert payload["metrics"]["plan_hash"]
     # Real trigger_demo: 45 total connections, 16 inferred (auto_match/
     # topology_group) + 29 explicit (contract_wiring/port_map/ranges) —
-    # cross-checked against the design's known connection count (release-
-    # readiness.md, Phase 1 slice 1/Phase 3 slice 4).
+    # cross-checked against the design's known connection count.
     assert counts["inferred_connections"] + counts["explicit_connections"] <= 45
     assert counts["inferred_connections"] > 0
     assert counts["explicit_connections"] > 0
@@ -220,7 +219,7 @@ def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tu
     depending on pytest's import-mode resolving a sibling test module by
     bare name) — a real strict-mode violation (undeclared clock/reset
     domain crossing) reusable here for `forge build --strict`'s
-    plan-only-path coverage (release-plan Phase 6, §6.2)."""
+    plan-only-path coverage."""
     (tmp_path / "interfaces").mkdir()
     (tmp_path / "interfaces" / "src.interface.yaml").write_text(
         "ip_interface:\n"

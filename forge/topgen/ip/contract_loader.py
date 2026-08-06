@@ -36,10 +36,10 @@ from typing import Dict, List, Optional
 import yaml
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Generation-authoritative role set (Phase 3 of CONTRACT_DRIVEN_GENERATION_PLAN)
+# Generation-authoritative role set
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Schema-version identity for *.interface.yaml (release-plan §2.7) — see
+# Schema-version identity for *.interface.yaml — see
 # forge/core/schema_version.py for the shared compatibility policy.
 INTERFACE_CONTRACT_SCHEMA_VERSION = "1.0"
 
@@ -93,7 +93,7 @@ class LoadedContract:
 
     @property
     def schema_version(self) -> Optional[str]:
-        """Declared schema_version (release-plan §2.7), or None if absent —
+        """Declared schema_version, or None if absent —
         absence is valid, not an error. See docs/IP_INTERFACE_POLICY.md
         "Schema versioning"."""
         return self._iface.get("schema_version")
@@ -177,16 +177,16 @@ class LoadedContract:
             docs/IP_INTERFACE_POLICY.md "Protocol semantics")
           - ``direction``      : str (``'input'`` or ``'output'`` — the
             *direction* argument this role was matched under)
-          - ``interface``      : str (Phase 2.5 — the logical-interface
+          - ``interface``      : str (the logical-interface
             group name this role's ``member`` belongs to; defaults to
             ``role_name`` when the role doesn't declare ``interface:``,
             preserving today's 1:1 role-to-interface mapping)
-          - ``member``         : str (Phase 2.5 — the member name within
+          - ``member``         : str (the member name within
             ``interface``, e.g. ``data``/``valid``/``ready``/``last``/
             ``metadata``; defaults to ``role_name`` when the role doesn't
             declare ``member:``. See docs/IP_INTERFACE_POLICY.md
             "Interface members")
-          - ``cardinality``    : dict or None (Phase 2.4 — the role's raw
+          - ``cardinality``    : dict or None (the role's raw
             ``cardinality:`` block, if declared; parse with
             ``forge.topgen.ip.cardinality.parse_cardinality``. See
             docs/IP_INTERFACE_POLICY.md "Declarative cardinality")

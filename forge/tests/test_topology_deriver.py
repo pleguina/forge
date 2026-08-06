@@ -624,11 +624,10 @@ class TestScatterGather:
     def test_gather_scalar_to_array(self):
         """scalar src → prefix_array dst produces gather pairs with slot.
 
-        Slice 5 (release-plan §3.5) tags gather pairs' meta symmetrically
-        with scatter's existing {"kind": "scatter", ...} tag — purely
-        additive evidence, doesn't change slot-based instance selection
-        (still the sole determinant of wiring, see matcher.py's
-        replication loop).
+        Gather pairs' meta is tagged symmetrically with scatter's
+        existing {"kind": "scatter", ...} tag — purely additive evidence,
+        doesn't change slot-based instance selection (still the sole
+        determinant of wiring, see matcher.py's replication loop).
         """
         src = _make_contract({
             "dout": _scalar_role("output", "generic", "dout"),

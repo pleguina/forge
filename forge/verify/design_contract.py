@@ -42,7 +42,7 @@ from typing import Any
 from forge.verify.exceptions import DesignContractError
 from forge.core.schema_version import check_schema_version
 
-# Schema-version identity for design.verification.yml (release-plan §2.7) —
+# Schema-version identity for design.verification.yml —
 # see forge/core/schema_version.py for the shared compatibility policy.
 VERIFY_CONTRACT_SCHEMA_VERSION = "1.0"
 
@@ -123,7 +123,7 @@ def classify_field(field_name: str) -> str:
 class DatasetDeclaration:
     """A named XML-backed dataset reference.
 
-    ``adapter`` (Phase 7, slice 7.4b) optionally names a registered
+    ``adapter`` optionally names a registered
     :class:`~forge.verify.dataset_adapter.ProjectDatasetAdapter` by its
     explicit ``adapter_id`` — never inferred from ``xml``'s suffix. Absent
     (``None``) for datasets that don't yet use the layer-B adapter
@@ -174,7 +174,7 @@ class SimulationDefaults:
     idle_cycles_after_reset:    int = 8
     post_stimulus_drain_cycles: int = 160
     extra:                      tuple = ()  # (key, value) pairs — plugin-specific fields passed through verbatim
-    # Multi-clock-domain designs (release-plan Phase 10, slice 10.4): additional
+    # Multi-clock-domain designs: additional
     # top-level clock/reset nets beyond the primary ap_clk/ap_rst, each free-running
     # at its own period and reset-then-deasserted against its own clock — see
     # forge.verify.gen_sim.render_tb_sv. {net_name: period_ns} / {reset_net_name:
@@ -246,8 +246,8 @@ class FlowDeclaration:
     reset_cycles:               int | None = None
     idle_cycles_after_reset:    int | None = None
     post_stimulus_drain_cycles: int | None = None
-    # release-plan Phase 10, slice 10.4: the primary ap_clk period had no
-    # per-flow override at all before this (every flow silently shared
+    # The primary ap_clk period had no per-flow override at all before
+    # this (every flow silently shared
     # SimulationDefaults.clk_period_ns) -- found wiring a design whose own
     # primary domain is genuinely 50MHz (20ns) while every other flow in
     # this plugin is 4.0ns. Simulated clock period is independent of any
@@ -294,7 +294,7 @@ class VerifyDesignContract:
     defaults:   SimulationDefaults
     flows:      tuple[FlowDeclaration, ...]
     source_path: Path | None = None   # path to the loaded YAML file
-    schema_version: str = VERIFY_CONTRACT_SCHEMA_VERSION  # release-plan §2.7
+    schema_version: str = VERIFY_CONTRACT_SCHEMA_VERSION
 
     def get_dataset(self, name: str) -> DatasetDeclaration | None:
         """Look up a dataset by name."""
@@ -424,7 +424,7 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
             context={"path": str(path)},
         ) from exc
 
-    # ── Schema version (release-plan §2.7) — only error-severity issues are
+    # ── Schema version — only error-severity issues are
     # acted on here; this loader has no warnings-collection channel (it's
     # raise-only throughout), so a newer-minor warning is intentionally not
     # surfaced. See docs/development/SCHEMA_VERSIONING.md.

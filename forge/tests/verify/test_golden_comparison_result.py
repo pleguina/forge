@@ -1,5 +1,4 @@
-"""Tests for forge.verify.golden_comparison_result (release-plan Phase
-10, slice 10.0C).
+"""Tests for forge.verify.golden_comparison_result.
 """
 from __future__ import annotations
 

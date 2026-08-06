@@ -1,5 +1,5 @@
 """forge init — unify the two existing plugin scaffolders and chain the
-whole golden path (release-plan Phase 6, §6.6): `forge init <plugin_id>`
+whole golden path: `forge init <plugin_id>`
 runs, in order, the topgen-side scaffolder, the (now-fixed) verify-side
 scaffolder, `forge topgen validate`, `forge build --apply`, `forge test
 prepare`/`run`, and `forge report` — real invocations of those real

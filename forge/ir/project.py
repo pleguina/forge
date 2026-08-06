@@ -4,7 +4,7 @@ shapes generators consume (``forge.topgen.ip.matcher.auto_match_ports``'s
 return shape) — the inverse of what ``forge.ir.build.assemble_project_ir``
 builds them into.
 
-This exists for migration step 5: generators (currently
+This exists so that generators (currently
 ``write_structural_verilog``, verilog mode only) can be fed from the IR
 instead of directly from the matcher, without changing their internal
 logic or the exact bytes of what they emit. Byte-for-byte equivalence
@@ -38,7 +38,7 @@ def project_to_conn_map(project: ResolvedProject) -> Tuple[ConnMap, GlobalNets]:
     ordered = sorted(project.design.connections, key=lambda c: c.emission_order)
     for conn in ordered:
         if conn.producer.instance_id == _TIE_OFF:
-            # Informational only (release-plan §3.3) — a tied-to-zero port
+            # Informational only — a tied-to-zero port
             # has no real driver; never part of a real conn_map/global_nets.
             continue
         if conn.producer.instance_id == _EXTERNAL:

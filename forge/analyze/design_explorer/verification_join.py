@@ -1,5 +1,4 @@
-"""The conservative "flow entry points" verification overlay join
-(release-plan Phase 8, Defect 4).
+"""The conservative "flow entry points" verification overlay join.
 
 ``flow.top_module`` names a flow's *configured entry point* — it does not
 prove independent behavioral verification of every instance reachable
@@ -40,8 +39,7 @@ def join_flow_entry_points(
     *top_module* is matched against both the design's own module name and
     its ``ip_info_key`` (the ``modules.yml`` ``ref`` a module may resolve
     through) — ``flow.top_module`` is documented to use the ``modules.yml``
-    ref, which is not always the same string as the design.yml module name
-    (release-plan Phase 8 investigation, §2).
+    ref, which is not always the same string as the design.yml module name.
 
     Returns an empty dict — never raises — when the flow isn't declared in
     the verification contract, or its entry point doesn't resolve to any

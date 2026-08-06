@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Simulator-agnostic checker stack, shared by every backend adapter.
 
-Lifted out of ``backend_xsim.py`` (Phase 7, slice 7.0): nothing here
+Lifted out of ``backend_xsim.py``: nothing here
 references Vivado, xsim, or any other simulator-specific tool or file —
 it operates only on ``ExecutionResult`` (a log path, an exit code) and
 ``cfg``/``ctx`` duck-typed attributes shared across backends

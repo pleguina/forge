@@ -1,5 +1,5 @@
 """
-Integration tests for schema_version wiring (release-plan §2.7) into
+Integration tests for schema_version wiring into
 design.yml (DesignConfig/DesignValidator) and modules.yml (RegistryValidator).
 Unit tests for the shared policy itself live in test_schema_version.py.
 """

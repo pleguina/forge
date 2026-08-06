@@ -107,6 +107,6 @@ def test_collect_toolchain_versions_omits_tools_not_on_path(monkeypatch, tmp_pat
 def test_collect_toolchain_versions_real_environment_never_raises():
     """No assumption about what's actually installed here — just that
     calling this in the real dev environment (no Xilinx/GHDL/Verilator
-    confirmed present, per Phase 4's own environment notes) never raises."""
+    confirmed present) never raises."""
     versions = collect_toolchain_versions()
     assert isinstance(versions, dict)

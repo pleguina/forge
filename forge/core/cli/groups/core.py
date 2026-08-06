@@ -108,8 +108,8 @@ def cmd_resources(args):
 
     if json_mode:
         # --format json is this command's original (pre-envelope) JSON
-        # flag; --json (added alongside the sweep, release-plan Phase 6
-        # §6.7) is the standard envelope flag. Both now produce the same
+        # flag; --json (added alongside the sweep) is the standard
+        # envelope flag. Both now produce the same
         # envelope shape.
         sys.exit(emit(envelope, json_mode=True))
     for k, v in resources.items():

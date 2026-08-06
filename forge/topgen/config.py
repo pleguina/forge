@@ -10,7 +10,7 @@ import yaml
 
 
 # Schema-version identity for the two user-authored YAML schemas this
-# module loads (release-plan §2.7) — see forge/core/schema_version.py for
+# module loads — see forge/core/schema_version.py for
 # the shared compatibility policy these are checked against.
 DESIGN_SCHEMA_VERSION = "1.0"
 MODULE_REGISTRY_SCHEMA_VERSION = "1.0"
@@ -55,8 +55,7 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
         # by _pop_timing() at Module-construction time, not stored flat.
         "latency_cycles", "latency_hint", "variable_latency",
         # Structured latency: {kind: fixed|bounded|elastic, ...} declaration
-        # (release-plan §4.2, Phase 4 slice 2) — same pass-through
-        # treatment as the three flat fields above.
+        # — same pass-through treatment as the three flat fields above.
         "latency",
     }
     result: dict[str, dict] = {}
@@ -107,7 +106,7 @@ class TestBenchConfig:
     event_id: int = 1  # Which event to extract from XML
     generate: bool = True  # Whether to generate testbench by default
 
-# The three timing kinds release-plan §4.2 requires. Duplicated (not
+# The three timing kinds this module requires. Duplicated (not
 # imported) from forge.analyze.latency_model.LATENCY_KINDS deliberately —
 # forge/topgen is the schema/config layer and forge/analyze is a
 # downstream consumer of it; importing analyze from here would be a
@@ -119,7 +118,7 @@ _LATENCY_KINDS = ("fixed", "bounded", "elastic")
 @dataclass
 class LatencyDeclaration:
     """A structured ``latency: {kind: fixed|bounded|elastic, ...}``
-    declaration (release-plan §4.2, Phase 4 slice 2) — coexists with,
+    declaration — coexists with,
     does not replace, :class:`ModuleTiming`'s existing flat
     ``latency_cycles``/``latency_hint``/``variable_latency`` fields (real,
     currently-used YAML — ``latency_hint`` appears throughout both
@@ -175,7 +174,7 @@ class ModuleTiming:
 
     Resolution order used by consumers (forge.analyze.latency_static,
     the canonical IR): a structured ``latency:`` declaration (explicit,
-    authoritative — release-plan §4.2) > ``latency_cycles`` (explicit,
+    authoritative) > ``latency_cycles`` (explicit,
     authoritative, the older flat spelling) > an externally-supplied HLS
     synthesis report (not modeled here — a runtime overlay, not
     registry/design data) > ``latency_hint`` (a rough manual estimate) >
@@ -335,7 +334,7 @@ class Connection:
     boundary: Optional[str] = None
 
     # Declares an approved clock/reset-domain-crossing adapter for this
-    # connection (release-plan §3.2): {"kind": "2ff_sync"|"async_fifo",
+    # connection: {"kind": "2ff_sync"|"async_fifo",
     # "depth": int|None}. Covers both clock- and reset-crossing approval
     # for the connection — see forge.topgen.ip.cdc.verify_cdc, which is
     # what actually checks a connection against this declaration.
@@ -441,21 +440,21 @@ class DesignConfig:
     # Intentionally unconnected ports (glob patterns matched against instance.port).
     allowed_unconnected: AllowedUnconnected = field(default_factory=AllowedUnconnected)
 
-    # Optional schema-version identity (release-plan §2.7). None means the
+    # Optional schema-version identity. None means the
     # file doesn't declare one — a fully backward-compatible, silent case,
     # not an error (see forge/core/schema_version.py). Checked by
     # DesignValidator.validate_schema_version(), not here.
     schema_version: Optional[str] = None
 
-    # Optional, purely descriptive domain-relationship declarations
-    # (release-plan §3.2), keyed by the already-resolved net name (e.g.
+    # Optional, purely descriptive domain-relationship declarations,
+    # keyed by the already-resolved net name (e.g.
     # "ap_clk" — see forge.topgen.ip.domains.resolve_domain_nets). Each
     # entry: {"derived_from": str|None, "ratio": int|None, "sync": str|None}.
     # `derived_from`/`ratio` do NOT auto-approve crossings between related
     # domains — every data crossing still needs an explicit
     # per-connection `cdc:` declaration; this is documentation, not an
-    # enforcement mechanism. `sync` (reset_domains only, release-plan
-    # §10.0B, §5 Decision A) is the one exception: `sync: reset_sync`
+    # enforcement mechanism. `sync` (reset_domains only) is the one
+    # exception: `sync: reset_sync`
     # actually triggers generation of a real reset synchronizer for that
     # destination reset domain — a reset crossing is a domain property,
     # not a `connections:`-level data crossing, so it doesn't go through
@@ -605,7 +604,7 @@ class DesignConfig:
                 )
 
             # Validation: cdc: declares an approved clock/reset-domain-
-            # crossing adapter (release-plan §3.2, §5 Decision A) — see
+            # crossing adapter — see
             # forge.topgen.ip.cdc.KNOWN_CDC_KINDS (kept in sync with the
             # literal tuple below by hand; cdc.py cannot be imported here,
             # it already imports DesignConfig from this module).
@@ -688,7 +687,7 @@ class DesignConfig:
                     )
                 )
 
-        # release-plan Phase 10, slice 10.4: forge.topgen.generators.
+        # forge.topgen.generators.
         # structural_verilog's cdc_map (and conn_map's own per-instance-pair
         # grouping) is keyed by (src_module, dst_module) alone, not per-pin —
         # a real limitation discovered wiring a genuine multi-crossing design
@@ -702,7 +701,7 @@ class DesignConfig:
         # cdc kind between the same two modules through its own dedicated
         # module pair (see design_cdc.yml's per-crossing-kind module split
         # for the pattern). A genuinely per-pin cdc_map is a larger,
-        # separate refactor this slice does not attempt.
+        # separate refactor not attempted here.
         _cdc_kind_by_pair: Dict[Tuple[str, str], str] = {}
         for conn in connections:
             if not conn.cdc:
@@ -812,7 +811,7 @@ class DesignConfig:
                 if ratio is not None and (not isinstance(ratio, int) or isinstance(ratio, bool) or ratio <= 0):
                     raise ValueError(f"'{top_key}.{domain_name}.ratio' must be a positive integer")
 
-                # 'sync' (release-plan §10.0B, §5 Decision A): declares a
+                # 'sync': declares a
                 # real reset synchronizer for this destination reset
                 # domain — only meaningful on reset_domains (a reset
                 # crossing is a domain property, not a data connection;

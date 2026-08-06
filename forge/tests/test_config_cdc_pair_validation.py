@@ -1,13 +1,13 @@
-"""Tests for DesignConfig.load's ATG027 check (release-plan Phase 10,
-slice 10.4): forge.topgen.generators.structural_verilog's cdc_map is
+"""Tests for DesignConfig.load's ATG027 check:
+forge.topgen.generators.structural_verilog's cdc_map is
 keyed by (src_module, dst_module) alone, not per-pin — declaring two
 `cdc:` connections between the same module pair with *different* kinds
 used to merge silently (the second declaration's kind was applied to
 every pin between that pair, with zero diagnostic). This is now a real,
 actionable load-time error instead.
 
-Found wiring plugins/vision_pipeline_demo/forge/designs/design_cdc.yml
-(slice 10.4) — the first design in this repo to attempt more than one
+Found wiring plugins/vision_pipeline_demo/forge/designs/design_cdc.yml —
+the first design in this repo to attempt more than one
 distinct cdc kind between the same two module instances.
 """
 from __future__ import annotations

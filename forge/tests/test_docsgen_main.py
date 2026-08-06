@@ -1,6 +1,5 @@
-"""Tests for forge.docsgen._io and forge.docsgen.__main__ (release-plan
-Phase 9, Defect 12's write-discipline requirements and §9.4's staleness
-check)."""
+"""Tests for forge.docsgen._io and forge.docsgen.__main__: write-discipline
+requirements and the staleness check."""
 from __future__ import annotations
 
 from pathlib import Path

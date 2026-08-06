@@ -33,7 +33,7 @@ def test_trigger_demo_nodes_and_edges_equivalent():
 
 
 def test_trigger_demo_real_edge_latency_is_folded_in():
-    """Phase 4 slice 1 (release-plan §4.1): real register_stages/
+    """Real register_stages/
     delay_cycles values already declared on trigger_demo's design.yml
     connections (col->trig: register_stages: 2; trig->tfan: delay_cycles:
     3) must now be visible on the LatencyEdge, not silently discarded."""
@@ -61,7 +61,7 @@ def test_passthrough_demo_nodes_and_edges_equivalent():
 
 
 class TestEdgeLatencyFromCdcConnection:
-    """release-plan §10.0B: _edge_latency_from_connection's CDC-kind
+    """_edge_latency_from_connection's CDC-kind
     treatment, extended from the single 2ff_sync case above to the full
     5-kind primitive family."""
 
@@ -114,16 +114,16 @@ def test_build_graph_dispatches_to_ir_path_by_default():
     """No modules_yml_path override -> the IR-driven path is used, and its
     result matches what forge inspect/build_project_ir would derive."""
     g = build_graph(TRIGGER_DESIGN)
-    # Phase 4 slice 3: 'dec' has 4 real instances -> 4 real per-instance
-    # nodes (release-plan §4.3), not one collapsed 'dec' bucket node.
+    # 'dec' has 4 real instances -> 4 real per-instance
+    # nodes, not one collapsed 'dec' bucket node.
     assert set(g.nodes) == {
         "dec[0]", "dec[1]", "dec[2]", "dec[3]",
         "col", "trig", "partmon", "tfan", "tsink", "tout",
     }
     assert g.nodes["trig"].latency_cycles == 3
-    # Phase 4 slice 2: 'trig' migrated to a structured latency: {kind:
+    # 'trig' migrated to a structured latency: {kind:
     # fixed, cycles: 3} declaration (a real, known-fixed HLS latency) —
-    # provenance is now explicit_contract, not user_hint (release-plan §4.2).
+    # provenance is now explicit_contract, not user_hint.
     assert g.nodes["trig"].latency_source == "explicit_contract"
     assert g.nodes["trig"].latency.kind == "fixed"
 
@@ -151,7 +151,7 @@ def test_build_graph_falls_back_to_legacy_for_a_genuinely_different_override(tmp
     # real modules.yml declares latency_hint: 0 for it. Seeing 99 here
     # proves the fallback path (not the IR path, which would have used
     # trigger_demo's real modules.yml) was actually used. 'dec' has 4 real
-    # instances (Phase 4 slice 3) -> checking one representative instance
+    # instances -> checking one representative instance
     # node is sufficient; all 4 share the same module-level latency.
     assert g.nodes["dec[0]"].latency_cycles == 99
     assert g.nodes["dec[0]"].latency_source == "user_hint"

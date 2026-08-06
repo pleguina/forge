@@ -1,11 +1,10 @@
-"""forge report — orchestrates existing renderers into one report bundle
-(release-plan Phase 6, §6.5).
+"""forge report — orchestrates existing renderers into one report bundle.
 
 This is a thin wrapper, not new rendering logic: every section reuses a
 renderer that already exists elsewhere in the codebase —
 
 - maturity/compatibility: `topgen._compute_maturity_summary`/
-  `render_maturity_markdown` (release-plan Phase 6, §6.1's shared helper).
+  `render_maturity_markdown` (shared helper).
 - latency check: `forge.analyze.latency_static` (graph/checker/reporter).
 - HLS summary: `forge.analyze.hls_reports` (extractor/formatter) — only
   when `--hls-build-root` is given and has real synthesis data; honest
@@ -22,10 +21,10 @@ renderer that already exists elsewhere in the codebase —
   `renderer.render_html`/`render_markdown_summary`, run over everything
   this command just wrote into the output directory.
 
-- topology: `forge.analyze.design_explorer` (release-plan Phase 8) — a
-  deterministic Graphviz DOT/SVG rendering (§8.1) of the same canonical IR
+- topology: `forge.analyze.design_explorer` — a
+  deterministic Graphviz DOT/SVG rendering of the same canonical IR
   the maturity section above already builds, plus the self-contained
-  interactive HTML explorer (§8.2). Degrades gracefully: the DOT artifact
+  interactive HTML explorer. Degrades gracefully: the DOT artifact
   is always written; SVG is attempted and its absence (the real `dot`
   binary not on PATH) is noted honestly in `next_actions`/diagnostics,
   never silently omitted.
@@ -58,7 +57,7 @@ def cmd_report(args) -> None:
     metrics: Dict[str, Any] = {}
     next_actions: List[str] = []
 
-    # ── Topology DOT/SVG (release-plan Phase 8, §8.1) ───────────────────────
+    # ── Topology DOT/SVG ──────────────────────────────────────────────────
     try:
         n_edges = _write_topology_report(design_path, args, output_dir)
         artifacts.append(str(output_dir / "topology.dot"))
@@ -80,7 +79,7 @@ def cmd_report(args) -> None:
             "message": f"topology report failed: {exc}",
         })
 
-    # ── Maturity / compatibility report (reuses slice 6.1's helper) ────────
+    # ── Maturity / compatibility report (reuses the shared helper) ─────────
     try:
         maturity = _write_maturity_report(design_path, args, output_dir)
         artifacts.append(str(output_dir / "maturity.md"))
@@ -165,7 +164,7 @@ def cmd_report(args) -> None:
         })
 
     # ── Verification results (reused from a prior `forge test run`) ────────
-    # --results-json (slice 7.2) is preferred when given — it carries
+    # --results-json is preferred when given — it carries
     # backend id, real duration, and waveform/artifact paths that JUnit's
     # schema has no slot for. --junit-xml alone still works unchanged.
     results_json_path = getattr(args, "results_json", None)
@@ -194,7 +193,7 @@ def cmd_report(args) -> None:
         artifacts.append(str(output_dir / "verification_results.md"))
         next_actions.append("No verification results yet — run `forge test run`")
 
-    # ── Throughput (release-plan Phase 10, slice 10.0C) ─────────────────────
+    # ── Throughput ────────────────────────────────────────────────────────
     try:
         n_throughput = _write_throughput_report(design_path, args, output_dir)
         if n_throughput:
@@ -209,7 +208,7 @@ def cmd_report(args) -> None:
     except Exception as exc:  # noqa: BLE001
         diagnostics.append({"severity": "warning", "message": f"throughput report failed: {exc}"})
 
-    # ── CDC verification (release-plan Phase 10, slice 10.0C) ───────────────
+    # ── CDC verification ─────────────────────────────────────────────────
     cdc_result_json_path = getattr(args, "cdc_result_json", None)
     if cdc_result_json_path and Path(cdc_result_json_path).exists():
         import json
@@ -227,7 +226,7 @@ def cmd_report(args) -> None:
                        "report omitted (see forge topgen validate --cdc-result-json)",
         })
 
-    # ── Golden-model comparison (release-plan Phase 10, slice 10.0C) ────────
+    # ── Golden-model comparison ─────────────────────────────────────────────
     golden_comparison_json_path = getattr(args, "golden_comparison_json", None)
     if golden_comparison_json_path and Path(golden_comparison_json_path).exists():
         import json
@@ -387,7 +386,7 @@ def _write_runtime_latency(probe_csv: Path, args, output_dir: Path) -> int:
 
 
 def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
-    """release-plan Phase 10, slice 10.0C — forge.throughput_result.v1.
+    """forge.throughput_result.v1.
 
     Static side reuses --hls-build-root (already an existing flag) plus
     a new repeatable --module-width name:bits (a port width isn't an HLS-

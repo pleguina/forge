@@ -2,7 +2,7 @@
 
 Every page this package produces is written atomically and only ever
 inside the requested output directory — the same absolute-path-leakage
-discipline release-plan Phase 8 established for
+discipline already established for
 ``forge.core.utils.portable_path``/the visual design explorer (reused as
 precedent, not code — the data shapes differ).
 """

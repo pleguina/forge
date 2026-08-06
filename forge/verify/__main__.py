@@ -211,9 +211,9 @@ def _resolve_xml_run_selection_from_values(
     values (precedence: value given > environment variables > flow
     defaults).
 
-    Extracted from `_resolve_xml_run_selection` (release-plan Phase 6,
-    §6.4) so `forge test` can call the same precedence logic directly
-    with plain values instead of needing a full `argparse.Namespace` —
+    Extracted from `_resolve_xml_run_selection` so `forge test` can call
+    the same precedence logic directly with plain values instead of
+    needing a full `argparse.Namespace` —
     `_resolve_xml_run_selection` itself is now a thin wrapper below.
     """
     event_id_raw = (
@@ -462,7 +462,7 @@ def _run_one_loaded_flow(
         print(f"FAIL  (backend exited {result.exit_code})", file=sys.stderr)
 
     # ── 10. Checker lifecycle ────────────────────────────────────────────────
-    # Real bug found while building slice 7.3's end-to-end test (not part of
+    # Real bug found while building this flow's end-to-end test (not part of
     # the original plan): this used to gate on `cfg.has_checker` (a
     # `checker:` YAML block), so any flow on the *default* `checker_mode:
     # log_scan` without a declared `checker:` section — every real reference
@@ -691,8 +691,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         rst   = flow_decl.reset_cycles               or getattr(defaults, "reset_cycles", 4)
         idle  = flow_decl.idle_cycles_after_reset    or getattr(defaults, "idle_cycles_after_reset", 0)
         drain = flow_decl.post_stimulus_drain_cycles or getattr(defaults, "post_stimulus_drain_cycles", 8)
-        # Multi-clock-domain designs (release-plan Phase 10, slice 10.4) —
-        # empty dict for every pre-existing single-clock flow.
+        # Multi-clock-domain designs — empty dict for every pre-existing
+        # single-clock flow.
         extra_clocks = getattr(flow_decl, "extra_clocks", None) or getattr(defaults, "extra_clocks", {}) or {}
         extra_resets = getattr(flow_decl, "extra_resets", None) or getattr(defaults, "extra_resets", {}) or {}
 
@@ -1262,10 +1262,10 @@ def _cmd_init_plugin(args: argparse.Namespace) -> int:
         created.append(dest_path)
 
     # Real golden dataset (2 real events, matching gen_stimulus.py's
-    # _EVENTS) — not a stub requiring manual editing (release-plan Phase
-    # 6, §6.6: the RTL stub is byte-for-byte identical to
-    # passthrough_demo's real RTL, so passthrough_demo's real golden data
-    # is directly reusable here, parametrized by plugin_id).
+    # _EVENTS) — not a stub requiring manual editing (the RTL stub is
+    # byte-for-byte identical to passthrough_demo's real RTL, so
+    # passthrough_demo's real golden data is directly reusable here,
+    # parametrized by plugin_id).
     golden_xml = schemas_dir / f"{plugin_id}_golden.xml"
     if not golden_xml.exists():
         schemas_dir.mkdir(parents=True, exist_ok=True)
@@ -1396,7 +1396,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     # Reuses forge.core.toolchain_versions.tool_present — the same shared
     # presence check `forge doctor` (core/cli/groups/doctor.py) uses, so
     # both doctor commands agree on tool availability for the same
-    # environment (release-plan Phase 6, §6.3).
+    # environment.
     for tool in ("xvlog", "xelab", "xsim"):
         if tool_present(tool):
             report.note("FWV000", f"Tool on PATH: {tool}")
@@ -1622,7 +1622,7 @@ def _doctor_emit(
     `"pass"`/`"fail"`, even when warnings (no errors) were present —
     `from_diagnostic_report` derives the real 3-way status instead. This
     wraps `DiagnosticReport`, it does not replace it — `FWVxxxx` codes and
-    the class itself are unchanged (release-plan Phase 6, §6.0).
+    the class itself are unchanged.
     """
     from forge.core.cli.envelope import emit, from_diagnostic_report
 

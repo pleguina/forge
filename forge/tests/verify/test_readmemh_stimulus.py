@@ -1,5 +1,5 @@
 """Unit tests for forge.verify.readmemh_stimulus and the readmemh-mode SV
-emission helpers in stimulus_helpers.py (Phase 7, slice 7.5).
+emission helpers in stimulus_helpers.py.
 
 Real end-to-end proof (single real compile across 2 real events, real
 distinct pass results, real xvlog/xelab-run-once observation) lives in

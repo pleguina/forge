@@ -56,7 +56,7 @@ def test_inspect_human_output(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
-    """Release-plan Phase 6 §6.1: plain `--json` now emits one
+    """Plain `--json` now emits one
     CommandEnvelope summary (status/diagnostics/metrics/next_actions), not
     a full IR dump — the full canonical IR is still obtainable via
     `--emit-ir` (see test_inspect_emit_ir_writes_exactly_the_requested_file
@@ -110,7 +110,7 @@ def test_inspect_emit_ir_writes_exactly_the_requested_file(
     assert result.returncode == 0, result.stdout + result.stderr
     assert out_path.exists()
     payload = json.loads(out_path.read_text())
-    assert payload["schema_version"] == "0.2.0"  # release-plan §3.3 kind-vocabulary expansion
+    assert payload["schema_version"] == "0.2.0"  # kind-vocabulary expansion
     # Nothing else was written.
     assert _tree_snapshot(tmp_path) == frozenset({"nested", "nested/design.ir.json"})
 
@@ -131,7 +131,7 @@ def test_inspect_diff_against_itself_reports_no_changes(
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
-    # Phase 6 §6.1: --diff's result is a query result, not a diagnostic, so
+    # --diff's result is a query result, not a diagnostic, so
     # it moves into metrics["diff"] rather than being top-level keys.
     diff = payload["metrics"]["diff"]
     assert diff["hash_equal"] is True
@@ -181,7 +181,7 @@ def test_inspect_provenance_writes_manifest(capsys: pytest.CaptureFixture[str], 
     assert prov_path.exists()
     payload = json.loads(prov_path.read_text())
     assert payload["ir_content_hash"]
-    # Slice 5.0: source_hashes keys are relative to design.yml's own
+    # source_hashes keys are relative to design.yml's own
     # directory, not absolute paths — the design file itself keys as
     # its own bare name.
     assert "design.yml" in payload["source_hashes"]
@@ -202,7 +202,7 @@ def test_inspect_explain_staleness_fresh_then_stale(
     )
     assert fresh.returncode == 0
     fresh_payload = json.loads(fresh.stdout)
-    # Phase 6 §6.1: --explain-staleness's result is a query result, not a
+    # --explain-staleness's result is a query result, not a
     # diagnostic, so it moves into metrics["explain_staleness"].
     fresh_staleness = fresh_payload["metrics"]["explain_staleness"]
     assert fresh_staleness["stale"] is False
@@ -257,8 +257,8 @@ def test_inspect_missing_diff_file_is_guided(capsys: pytest.CaptureFixture[str],
 def _write_one_contract_one_compat_design(tmp_path: Path) -> tuple[Path, Path, Path]:
     """A synthetic 2-module design where `src` has a real interface
     contract (contract-driven) and `dst` has none (falls back to
-    heuristic clk/rst matching — compat mode) — release-plan Phase 6
-    §6.1's compat-mode-module case, needed for
+    heuristic clk/rst matching — compat mode) — the compat-mode-module
+    case, needed for
     `test_inspect_next_actions_flags_compat_mode_modules` below since
     neither real reference plugin (passthrough_demo, trigger_demo) has a
     compat-mode module today (confirmed: both report
@@ -413,7 +413,7 @@ def test_inspect_next_actions_flags_errors(capsys: pytest.CaptureFixture[str], t
 def test_inspect_explorer_overlays_absent_without_the_new_flags(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Regression guard (release-plan Phase 10, slice 10.0D): --explorer
+    """Regression guard: --explorer
     without --verify-design/--results-json must be unaffected."""
     explorer_path = tmp_path / "explorer.html"
     result = _run_inspect(
@@ -428,7 +428,7 @@ def test_inspect_explorer_overlays_absent_without_the_new_flags(
 def test_inspect_explorer_carries_real_latency_and_verification_overlays(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """release-plan Phase 10, slice 10.0D: forge inspect --verify-design
+    """forge inspect --verify-design
     --results-json --explorer/--dot must carry real latency values
     (trigger_logic's real declared `latency: {kind: fixed, cycles: 3}`)
     and a real verification-flow-entry-point join (hit_decoder_xsim's

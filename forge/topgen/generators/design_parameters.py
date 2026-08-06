@@ -392,7 +392,7 @@ def extract_design_parameters(
     # ===========================================================================
     # 6. PIPELINE INFORMATION (from HLS metrics)
     # ===========================================================================
-    # NOTE (release-plan §4.5, Phase 4 slice 5): this walks cfg.modules in
+    # NOTE: this walks cfg.modules in
     # design.yml file order and sums worst_case_latency linearly — it has
     # no DAG/merge-point awareness at all. That's correct wherever the
     # pipeline is genuinely linear (e.g. trigger_demo's col->trig->tfan->
@@ -402,11 +402,11 @@ def extract_design_parameters(
     # with no concept of "these 4 modules feed the same consumer in
     # parallel." forge.analyze.latency_static (LatencyGraph/check_merge_points)
     # is the DAG-aware alternative that does model this correctly,
-    # including per-instance merge points as of Phase 4 slice 3. This
-    # walker's output is deliberately not replaced this phase (it's a
+    # including per-instance merge points. This
+    # walker's output is deliberately not replaced here (it's a
     # live, generation-time artifact — design_parameters.json — changing
-    # its shape/numbers is a higher-risk, out-of-scope change for a
-    # phase otherwise scoped to read-only analysis); see
+    # its shape/numbers is a higher-risk, out-of-scope change for
+    # read-only analysis); see
     # test_design_parameters_latency_agreement.py for a real-design proof
     # that the two codepaths agree on trigger_demo's actual linear segment.
     pipeline_info = {

@@ -1,5 +1,5 @@
-"""Real end-to-end coverage for `forge report` (release-plan Phase 6,
-§6.5) — the orchestrator that bundles maturity/latency/verification/
+"""Real end-to-end coverage for `forge report`
+— the orchestrator that bundles maturity/latency/verification/
 provenance sections plus a dashboard into one output directory.
 
 Runs against both real reference plugins directly (no gen-top needed for
@@ -208,7 +208,7 @@ def test_report_reuses_real_provenance_and_junit_artifacts(
 def test_report_prefers_results_json_over_junit_xml(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Phase 7 slice 7.2: `forge report --results-json` reuses the richer
+    """`forge report --results-json` reuses the richer
     versioned FlowResult (backend id, real duration, waveform path) rather
     than JUnit — and takes precedence when both are given, since it's a
     strict superset of what JUnit's schema can express."""
@@ -263,7 +263,7 @@ def test_report_prefers_results_json_over_junit_xml(
 def test_report_throughput_cdc_and_golden_comparison_sections(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """release-plan Phase 10, slice 10.0C: end-to-end against
+    """End-to-end against
     vision_pipeline_demo's already-validated quickstart flow (reusing its
     cached HLS build, no fresh synthesis) — forge topgen validate
     --cdc-result-json, forge test run --golden-comparison-json, and
@@ -327,9 +327,8 @@ def test_report_throughput_cdc_and_golden_comparison_sections(
 def test_report_release_acceptance_for_full_functional_design(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """release-plan Phase 10, slice 10.7A: `forge report`'s release-
-    acceptance bundle (preflight.md §13) against the real full-functional
-    design (16x16/2x2-tile, single shared normalizer, both CDC
+    """`forge report`'s release-acceptance bundle against the real
+    full-functional design (16x16/2x2-tile, single shared normalizer, both CDC
     crossings) -- real CDC verification (2 real async_fifo crossings)
     plus real runtime throughput (real probe CSV from a prior
     ``forge verify run --probe-log`` against full_functional_xsim).
@@ -343,7 +342,7 @@ def test_report_release_acceptance_for_full_functional_design(
     stimulus_current.svh with a generic single-event driver incompatible
     with this design's port structure (found running this exact
     combination; same scope boundary packetizer_xsim's own real,
-    passing checker already established in slice 10.5 for a
+    passing checker already established for a
     structurally identical reason -- see
     test_report_omits_new_sections_honestly_without_their_flags for the
     honest-absence path this exercises for a real (not synthetic) design).
@@ -417,7 +416,7 @@ def test_report_omits_new_sections_honestly_without_their_flags(
 def test_report_topology_overlays_are_absent_without_the_new_flags(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Regression guard (release-plan Phase 10, slice 10.0D): topology
+    """Regression guard: topology
     rendering without --verify-design/--results-json must be unaffected —
     build_design_graph's own `or {}` overlay defaults already guarantee
     this, this confirms it holds through the new call sites too."""
@@ -435,7 +434,7 @@ def test_report_topology_overlays_are_absent_without_the_new_flags(
 def test_report_topology_carries_real_latency_and_verification_overlays(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """release-plan Phase 10, slice 10.0D: forge report --verify-design
+    """forge report --verify-design
     --results-json must make the topology explorer/DOT carry real
     latency values (trigger_logic's real declared `latency: {kind:
     fixed, cycles: 3}`) and a real verification-flow-entry-point join

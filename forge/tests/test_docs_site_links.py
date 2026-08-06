@@ -1,5 +1,4 @@
-"""Built-HTML link/anchor checker (release-plan Phase 9, slice 9.4,
-Defect 17).
+"""Built-HTML link/anchor checker.
 
 `mkdocs build --strict` already fails on a broken *Markdown-source* link
 it can resolve against its own nav/file tree, but that isn't the same

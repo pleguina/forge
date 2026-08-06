@@ -1,6 +1,6 @@
-"""Coverage for `forge.core.cli.envelope` (release-plan Phase 6, §6.0/§6.7):
+"""Coverage for `forge.core.cli.envelope`:
 the shared CommandEnvelope shape and exit-code policy every CLI command is
-migrated onto, slice by slice.
+migrated onto.
 """
 
 from __future__ import annotations

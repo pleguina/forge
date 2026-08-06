@@ -90,7 +90,7 @@ def test_trigger_demo_modules_have_timing_from_registry():
     cfg = DesignConfig.load_relaxed(TRIGGER_DESIGN)
     trig = next(m for m in cfg.modules if m.name == "trig")
     assert trig.timing is not None
-    # Phase 4 slice 2: migrated to the structured latency: {kind: fixed,
+    # Migrated to the structured latency: {kind: fixed,
     # cycles: 3} spelling (a real, known-fixed HLS latency, not a rough
     # estimate) — see plugins/trigger_demo/forge/modules.yml.
     assert trig.timing.latency_hint is None
@@ -199,7 +199,7 @@ def test_registry_validator_passes_with_no_timing_fields(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 4 slice 2 — LatencyDeclaration (release-plan §4.2)
+# LatencyDeclaration
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_latency_declaration_fixed_requires_cycles():

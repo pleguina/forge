@@ -1,6 +1,6 @@
 """Tests for forge.docsgen._type_resolution — the PEP 604 / postponed-
-evaluation workaround this package's field-type resolution depends on
-(release-plan Phase 9). Exercises the exact real classes that exposed the
+evaluation workaround this package's field-type resolution depends on.
+Exercises the exact real classes that exposed the
 bug during development: quoted ``"X | None"`` forward-references under
 ``from __future__ import annotations`` evaluate, on Python < 3.10, to a
 ``ForwardRef`` (a useless opaque string) unless the outer quote layer is

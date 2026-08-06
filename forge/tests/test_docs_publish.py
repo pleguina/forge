@@ -1,4 +1,4 @@
-"""Tests for ci/docs_publish.sh (release-plan Phase 9, slice 9.5).
+"""Tests for ci/docs_publish.sh.
 
 Builds a small, throwaway scratch git repo (its own commits/tags) so this
 test can exercise the real `mike`/git worktree mechanics without touching

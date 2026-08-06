@@ -64,12 +64,12 @@ class ArtifactStaleness:
         source:         The source file that is newer than *artifact*.
         artifact_mtime: Modification time of the artifact.
         source_mtime:   Modification time of the source.
-        content_confirmed_fresh: Phase 5 slice 5.2 — ``True`` when a
+        content_confirmed_fresh: ``True`` when a
             provenance manifest confirms *source*'s content hasn't
             actually changed despite a newer mtime (overrides the
             mtime-only verdict below to "not stale"). ``None`` (the
             default) means no usable provenance data was found — mtime
-            alone decides, exactly as before this slice.
+            alone decides, exactly as before this check existed.
     """
     artifact:       Path
     source:         Path
@@ -237,9 +237,9 @@ def check_top_gen_staleness(
             source_mtime=newest_mtime,
         )
         if finding.stale:
-            # Phase 5 slice 5.2: mtime says stale — confirm against a
-            # provenance.json (gen-top writes one into output_dir as of
-            # slice 5.1) before trusting it. A touched-but-unchanged
+            # mtime says stale — confirm against a
+            # provenance.json (gen-top writes one into output_dir)
+            # before trusting it. A touched-but-unchanged
             # source no longer reports as stale.
             finding.content_confirmed_fresh = confirms_fresh(newest_src, output_dir)
         if finding.stale:

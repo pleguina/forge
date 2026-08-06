@@ -1,6 +1,6 @@
 """
 Tests for forge.core.utils.content_hash — the generic file-content hashing
-primitive (release-plan §12/§5.1: staleness must not be mtime-only).
+primitive: staleness must not be mtime-only.
 """
 
 from __future__ import annotations

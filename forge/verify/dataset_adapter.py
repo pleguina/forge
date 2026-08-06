@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project dataset-adapter protocol (Phase 7, slice 7.4b — §7.3, layer B).
+"""Project dataset-adapter protocol (layer B).
 
 This is layer B of two — **project-owned**, deliberately a separate
 protocol from layer A's format loaders (:mod:`forge.verify.dataset_format`),

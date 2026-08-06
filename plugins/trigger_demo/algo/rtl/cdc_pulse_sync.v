@@ -4,7 +4,7 @@
 // one-cycle pulse in the DESTINATION clock domain, using the standard
 // toggle-flop + double-flop-synchronize + edge-detect pattern. Used by
 // topgen-generated algo_top.v to implement `cdc: {kind: pulse_sync,
-// min_spacing_cycles: N}` connections (release-plan §10.0B, §5 Decision A).
+// min_spacing_cycles: N}` connections.
 //
 // Correctness depends on the connection's declared `min_spacing_cycles`:
 // the source domain must not assert `pulse_in` again until the previous

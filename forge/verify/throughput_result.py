@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """``forge.throughput_result.v1`` — static + runtime throughput/backpressure
-artifact (release-plan Phase 10, slice 10.0C — preflight.md §5 Decision B,
-§8).
+artifact.
 
 Two distinct result types, kept separate per Decision B rather than
 folded into ``forge.analyze.hls_reports.extractor.HLSModuleReport``: a

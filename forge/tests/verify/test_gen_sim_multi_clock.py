@@ -1,5 +1,5 @@
-"""Tests for multi-clock-domain testbench generation (release-plan Phase 10,
-slice 10.4) in forge.verify.gen_sim.render_tb_sv.
+"""Tests for multi-clock-domain testbench generation in
+forge.verify.gen_sim.render_tb_sv.
 
 Every pre-existing flow declares no extra_clocks/extra_resets at all — the
 first class of tests here locks in that the single-clock path is completely

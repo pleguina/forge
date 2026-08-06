@@ -1,9 +1,9 @@
 """
 Build a ``ResolvedProject`` from the existing (pre-IR) loaders.
 
-This is migration steps 1-3 of the canonical-IR plan (topology/config
-loading, interface-contract loading, IP/RTL port metadata) plus read-only
-consumption of the existing matcher's output for connections. It does not
+This module handles topology/config loading, interface-contract loading,
+and IP/RTL port metadata, plus read-only consumption of the existing
+matcher's output for connections. It does not
 reimplement matching, generation, latency analysis, or verification — it
 only *reads* what those subsystems' existing loaders already produce.
 
@@ -77,8 +77,7 @@ def build_tie_off_connections(
 ) -> List[ResolvedConnection]:
     """Build synthetic ``tie_off`` connections from a generator's
     ``report["tied_to_zero"]`` list (``[(instance, port, width), ...]`` —
-    ``write_structural_verilog``/``write_structural_vhdl``, release-plan
-    §3.3).
+    ``write_structural_verilog``/``write_structural_vhdl``).
 
     Mirrors the existing ``"$external"`` sentinel convention: a tied port
     has no real producer in ``conn_map`` at all (there's nothing driving
@@ -168,7 +167,7 @@ def _index_interface_ports(
     interfaces: List[ResolvedLogicalInterface],
 ) -> Dict[str, Tuple[ResolvedLogicalInterface, ResolvedInterfaceMember]]:
     """Physical port name -> (owning interface, member), for every member
-    binding on *interfaces*. Release-plan §3.5: this is what lets matching
+    binding on *interfaces*. This is what lets matching
     evidence (coordinates/protocol/wiring_kind) be attached per connection
     without any new matcher plumbing — it's a reverse index over data the
     IR already resolved in ``_build_interfaces``."""
@@ -199,7 +198,7 @@ def _build_matching_evidence(
     cdc_declared: Optional[str],
     rejected_candidates: List[RejectedCandidate],
 ) -> Optional[MatchingEvidence]:
-    """Release-plan §3.5 per-connection evidence. Returns ``None`` only
+    """Per-connection evidence. Returns ``None`` only
     when literally nothing is known about either pin (e.g. both sides are
     ``$external``/unresolved) — a connection to a plain handshake pin still
     gets a ``MatchingEvidence`` with only ``producer_width``/``consumer_width``
@@ -256,7 +255,7 @@ def _build_interfaces(contract: LoadedContract, vocab: Dict[str, Any], module_na
                        diagnostics: List[DiagnosticReference]) -> List[ResolvedLogicalInterface]:
     """Group contract roles into logical interfaces.
 
-    Phase 2.5: roles that declare a shared ``interface:`` name (e.g. a
+    Roles that declare a shared ``interface:`` name (e.g. a
     ``data``/``valid``/``ready`` triple) are merged into one
     ``ResolvedLogicalInterface`` with multiple ``ResolvedInterfaceMember``
     entries. Roles that don't declare ``interface:`` keep today's 1:1
@@ -425,7 +424,7 @@ def build_project_ir_with_match_report(
     """Same as :func:`build_project_ir`, but also returns the ``cfg``/
     ``match_report`` the matcher produced along the way — for callers that
     need pre-generation topology data (e.g. ``forge inspect``'s contract-
-    maturity summary, release-plan Phase 6 §6.1) without loading the
+    maturity summary) without loading the
     design and re-running the matcher a second time.
     """
     return _build_project_ir_full(
@@ -445,7 +444,7 @@ def _validator_object_id(location: Optional[str], cfg: DesignConfig) -> Optional
     """Turn a validator issue's free-text YAML-path ``location`` (e.g.
     ``"modules[3].kind"``) into the same structured ``f"module:{name}"``
     convention the two other diagnostic-emission sites below already use
-    (release-plan Phase 8, Defect 3), when — and only when — the location
+    when — and only when — the location
     is genuinely module-scoped and resolves to a real module index.
 
     Every other validator category (``'connection'``/``'yaml'``/``'timing'``,
@@ -500,9 +499,9 @@ def assemble_project_ir(
     This is the shared core used both by ``build_project_ir`` (fresh
     reload — ``forge inspect``) and directly by callers that already have
     ``cfg``/``contracts``/``ip_info``/matcher output from their own
-    pipeline (``topgen gen-top`` — migration step 4: generation and the IR
-    now share one matching/config computation instead of two independent
-    ones). Never writes any file.
+    pipeline (``topgen gen-top`` — generation and the IR now share one
+    matching/config computation instead of two independent ones). Never
+    writes any file.
     """
     design_path = Path(design_path).expanduser().resolve()
 
@@ -522,7 +521,7 @@ def assemble_project_ir(
 
     vocab = load_canonical_role_vocab()
 
-    # Release-plan §3.5: reverse indexes used later to attach per-connection
+    # Reverse indexes used later to attach per-connection
     # matching evidence (coordinates/protocol/wiring_kind/width) without any
     # new matcher plumbing — built once per module here, alongside the data
     # they're derived from, rather than re-scanned per connection.
@@ -584,7 +583,7 @@ def assemble_project_ir(
     instance_ids = [i.id for i in instances]
     mod_of_instance = {i.id: i.module for i in instances}
 
-    # Phase 3.1: resolve each instance's clock/reset domain from the net
+    # Resolve each instance's clock/reset domain from the net
     # actually wired to it (or None for clock-free/reset-free modules) —
     # see forge.topgen.ip.domains.resolve_domain_nets's docstring. This
     # must run before clock_domains/reset_domains below, which are
@@ -599,12 +598,12 @@ def assemble_project_ir(
         inst.reset_domain = reset_of_module.get(inst.module)
 
     # Per-(from-module, to-module) transformations declared on design.yml
-    # connections (release-plan §3.3). Coarse: applied to every expanded
+    # connections. Coarse: applied to every expanded
     # instance pair between those two modules — matches the generator's
     # own module-pair-level register_stages/delay_cycles/boundary/cdc maps
     # (forge/topgen/generators/structural_verilog.py).
     module_transforms: Dict[tuple, List[ResolvedTransformation]] = {}
-    # Release-plan §3.5: the connection's *declared* CDC kind (if any),
+    # The connection's *declared* CDC kind (if any),
     # keyed the same way as module_transforms — separate from
     # crosses_clock_domain/crosses_reset_domain (a resolved fact about the
     # two endpoints' domains) and separate from whether a cdc_synchronizer
@@ -634,7 +633,7 @@ def assemble_project_ir(
                     kind="latency_delay", cycles=c.delay_cycles,
                 ))
         if c.cdc:
-            # release-plan §10.0B: the 5-kind CDC primitive family.
+            # The 5-kind CDC primitive family.
             # 'level_sync'/'2ff_sync' (alias) both map to the existing
             # 'cdc_synchronizer' transformation kind; the other 3 declared
             # kinds map to their own same-named kind. Written as literal
@@ -664,10 +663,10 @@ def assemble_project_ir(
     # generators iterate in. The list is later sorted by `id` for stable
     # hashing/diffing/visualization; emission_order travels with each
     # object so `forge.ir.project.project_to_conn_map` can still reproduce
-    # the original iteration order (migration step 5).
+    # the original iteration order.
     _emission_counter = 0
 
-    # Release-plan §3.5: precomputed once (not per-connection) using the
+    # Precomputed once (not per-connection) using the
     # exact same counting rule forge.topgen.ip.cardinality.verify_cardinality
     # already applies — a sink's producer count includes both the one
     # candidate that won (connection_evidence) and every one that lost the
@@ -687,7 +686,7 @@ def assemble_project_ir(
     for (src_inst, dst_inst), pairs in conn_map.items():
         src_mod, dst_mod = mod_of_instance.get(src_inst), mod_of_instance.get(dst_inst)
         xforms = module_transforms.get((src_mod, dst_mod), [])
-        # Phase 3.2: descriptive only — does the connection's two module
+        # Descriptive only — does the connection's two module
         # instances resolve to different, both-known domains? Enforcement
         # (rejecting an undeclared crossing under --strict) is
         # forge.topgen.ip.cdc.verify_cdc's job, not this builder's.
@@ -759,7 +758,7 @@ def assemble_project_ir(
             ))
             _emission_counter += 1
 
-    # Fan-out (release-plan §3.3): a producer pin driving more than one
+    # Fan-out: a producer pin driving more than one
     # connection gets a `fanout` transformation on each of those
     # connections. Computed generically from the connections already
     # built above, no new schema. Excludes "$external" producers (clock/
@@ -784,7 +783,7 @@ def assemble_project_ir(
     for warning in match_report.warnings:
         diagnostics.append(DiagnosticReference(severity="warning", message=warning))
 
-    # Phase 3.1: derive the domain-list grouping views from each instance's
+    # Derive the domain-list grouping views from each instance's
     # already-resolved clock_domain/reset_domain scalar (the source of
     # truth) — instances with no resolved domain (clock-free/reset-free,
     # or unresolved) correctly don't appear in any domain here.
@@ -796,7 +795,7 @@ def assemble_project_ir(
                 groups.setdefault(name, []).append(inst.id)
         return groups
 
-    # Phase 3.2: attach the design's optional, purely descriptive
+    # Attach the design's optional, purely descriptive
     # clock_domains:/reset_domains: relationship declarations, matched by
     # the already-resolved domain (net) name.
     clock_domains = [
@@ -811,7 +810,7 @@ def assemble_project_ir(
     for name, members in sorted(_grouped_domains("reset_domain").items()):
         _rel = cfg.reset_domains.get(name, {})
         _sync = _rel.get("sync")
-        # release-plan §10.0B: a real reset_synchronizer transformation,
+        # A real reset_synchronizer transformation,
         # domain-keyed rather than connection-keyed (see
         # ResolvedResetDomain.transformations' own docstring for why).
         _xforms = (

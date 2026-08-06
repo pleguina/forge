@@ -129,14 +129,14 @@ def load_verify_flow_entries(verify_design_path: Path) -> list[tuple[str, str | 
 
 
 # ---------------------------------------------------------------------------
-# Design-explorer overlay data (release-plan Phase 10, slice 10.0D)
+# Design-explorer overlay data
 # ---------------------------------------------------------------------------
 
 def build_explorer_overlay_data(design_path: Path, project, args):
     """Compute the two overlays ``build_design_graph``
     (``forge.analyze.design_explorer.graph_model``) has always accepted
     but that neither ``forge report`` nor ``forge inspect`` ever
-    populated with real data before this slice (preflight §2/§4):
+    populated with real data before now:
     ``latency_by_instance`` and ``verification_flow_entry_points``.
 
     Shared by both commands' topology/explorer call sites so they can

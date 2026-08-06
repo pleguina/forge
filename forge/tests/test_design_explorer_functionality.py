@@ -1,9 +1,8 @@
-"""Tests for the explorer functionality's data contract (release-plan
-Phase 8, §8.3) — every overlay/filter/collapse feature the client-side JS
-implements reads from real ``DesignGraph``/``ObjectRecord`` fields; these
-tests prove those fields are real, correct, and honestly absent where
-appropriate. Per this codebase's own honest-deferral discipline (see the
-release plan's Phase 8 "Honest deferral list" #7), no browser-automation
+"""Tests for the explorer functionality's data contract — every
+overlay/filter/collapse feature the client-side JS implements reads
+from real ``DesignGraph``/``ObjectRecord`` fields; these tests prove
+those fields are real, correct, and honestly absent where appropriate.
+Per this codebase's own honest-deferral discipline, no browser-automation
 or JS-runtime infrastructure exists in this repo or this sandbox (no
 Node.js, no sudo to install one) — JS *execution* behavior (a live
 collapse/expand round-trip, a live overlay switch) is therefore not
@@ -65,7 +64,7 @@ def test_filter_vocabulary_matches_real_wiring_methods_present():
 
 def test_diagnostics_only_view_data_is_sparse_but_honest(tmp_path):
     """No real emission site produces an instance- or connection-level
-    diagnostic today (confirmed in the Phase 8 investigation) — the
+    diagnostic today — the
     diagnostics-only view's data is therefore honestly sparse for both
     reference plugins. This test proves it's sparse for the *documented*
     reason (nothing to attach), not a bug silently dropping real data."""

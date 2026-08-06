@@ -1,17 +1,17 @@
-"""Phase 7, slice 7.6 — cross-slice integration acceptance test.
+"""Cross-stage integration acceptance test.
 
-Not a new feature: a single, real, end-to-end chain proving every prior
-slice's output is genuinely consumable by the next, since each slice's own
-tests only prove that slice in isolation:
+Not a new feature: a single, real, end-to-end chain proving every stage's
+output is genuinely consumable by the next, since each stage's own unit
+tests only prove that stage in isolation:
 
     JSON dataset file
-      -> 7.4a format loader (real content-hash verification)
-      -> 7.4b project adapter (passthrough.identity-xml)
+      -> format loader (real content-hash verification)
+      -> project adapter (passthrough.identity-xml)
       -> CanonicalDataset
-      -> 7.5's stable stimulus memory (one real compile)
+      -> stable stimulus memory (one real compile)
       -> multiple real event runs, selected by event_id -> event_index
-      -> 7.3's machine-readable FORGE_CHECK records (pass and fail cases)
-      -> 7.2's versioned results.json (schema-checked)
+      -> machine-readable FORGE_CHECK records (pass and fail cases)
+      -> versioned results.json (schema-checked)
       -> JUnit XML (time populated)
       -> forge report's verification_results.md
 
@@ -90,8 +90,7 @@ def _break_golden_json_sibling(consumer_root: Path) -> Path:
     """A real, deliberately-broken JSON dataset sibling — one event's
     golden value changed, its declared content_hash recomputed to match
     (so this exercises the *DUT-vs-golden mismatch* failure path, not the
-    unrelated hash-tamper-detection path already covered by slice 7.4a's
-    own tests)."""
+    unrelated hash-tamper-detection path already covered elsewhere)."""
     from forge.verify.dataset_format import compute_events_content_hash
 
     golden = (
@@ -143,7 +142,7 @@ def test_full_chain_json_dataset_through_report_on_xsim(
         canonical = adapter.materialize(DatasetSource(serialized=serialized), {})
         assert canonical.events == serialized.events
 
-        # ── Slice 7.5: write the readmemh stimulus from the JSON-sourced
+        # ── Write the readmemh stimulus from the JSON-sourced
         # CanonicalDataset for real (not the default XML path) ──────────
         sys.modules.pop("gen_stimulus", None)
         import gen_stimulus  # noqa: PLC0415
@@ -171,7 +170,7 @@ def test_full_chain_json_dataset_through_report_on_xsim(
     assert run_result.stdout.count("[xsim 1/3] Compiling") == 1
     assert run_result.stdout.count("[xsim 1-2/3] Reusing existing compile+elaborate") == 1
 
-    # ── Slice 7.2: versioned, schema-checked results.json ──────────────
+    # ── Versioned, schema-checked results.json ──────────────
     flow_result = json.loads(results_path.read_text())
     assert flow_result["schema"] == {"name": "forge.verification_results", "version": "1.0"}
     assert flow_result["backend_id"] == "xsim"
@@ -180,7 +179,7 @@ def test_full_chain_json_dataset_through_report_on_xsim(
     assert [e["event_id"] for e in events] == ["0", "1"]
     assert [e["event_index"] for e in events] == [0, 1]
 
-    # ── Slice 7.3: real FORGE_CHECK records, both events, real values ──
+    # ── Real FORGE_CHECK records, both events, real values ──
     checks_0 = {c["label"]: c for c in events[0]["checks"]}
     checks_1 = {c["label"]: c for c in events[1]["checks"]}
     assert checks_0["data_out_check"]["expected"] == checks_0["data_out_check"]["observed"] == "0x3a"
@@ -218,10 +217,9 @@ def test_full_chain_fail_case_json_driven_readmemh_stimulus_on_xsim(
 ) -> None:
     """The same chain's fail path, driven specifically through the JSON
     dataset (layer A) + identity adapter (layer B) + readmemh stimulus
-    (slice 7.5) generation call, with one real golden value deliberately
-    broken — a real mismatch, caught by the checker fix from slice 7.3
-    (the checker now actually runs for flows without a declared
-    `checker:` section) and reported with a genuinely mismatched
+    generation call, with one real golden value deliberately broken — a
+    real mismatch, caught by the checker (which runs for flows without a
+    declared `checker:` section) and reported with a genuinely mismatched
     FORGE_CHECK record, not a false pass.
 
     Uses `forge verify run` directly (not `forge test run`) so the

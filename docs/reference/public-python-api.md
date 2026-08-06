@@ -53,7 +53,7 @@ path.
 | `forge.ir` | `ResolvedResetDomain` | class | A named reset domain — see ``ResolvedClockDomain``. |
 | `forge.ir` | `ResolvedTopLevelPort` | class | A resolved top-level (e.g. ``algo_top``) port — name, direction |
 | `forge.ir` | `ResolvedTransformation` | class | A generated (or declared-and-approved) element sitting on a |
-| `forge.ir` | `ResolvedVerificationPlan` | class | Placeholder for verification planning/bindings (migration step 9). |
+| `forge.ir` | `ResolvedVerificationPlan` | class | Placeholder for verification planning/bindings. |
 | `forge.ir` | `SourceLocation` | class | A source reference, file-level only in this slice (no line/column |
 | `forge.ir` | `StalenessExplanation` | class | StalenessExplanation(stale: 'bool', reasons: 'List[str]' = <factory>) |
 | `forge.ir` | `assemble_project_ir` | function | Assemble a ``ResolvedProject`` from already-resolved facts. |

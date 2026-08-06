@@ -1,5 +1,4 @@
-"""forge test — wraps verification preparation and execution (release-plan
-Phase 6, §6.4).
+"""forge test — wraps verification preparation and execution.
 
 Three modes:
 
@@ -19,8 +18,7 @@ Three modes:
   `_run_dataset_parts` behavior unchanged (no per-event breakdown for
   part-file-level datasets — a known, deliberate limitation).
 
-Every mode adopts the shared `CommandEnvelope` (release-plan Phase 6,
-§6.0/§6.7).
+Every mode adopts the shared `CommandEnvelope`.
 """
 
 from __future__ import annotations
@@ -114,8 +112,8 @@ def _parse_event_list(event_list: str) -> List[int]:
 
 def _enumerate_xml_event_ids(xml_path: Path) -> List[int]:
     """Every event id in *xml_path*, routed through
-    :class:`~forge.verify.dataset_service.DatasetService` (release-plan
-    Phase 10, slice 10.0A) instead of parsing the XML directly — the
+    :class:`~forge.verify.dataset_service.DatasetService` instead of
+    parsing the XML directly — the
     real `XmlDatasetLoader` this now goes through was itself written to
     be tag-name-agnostic on the root element (passthrough_demo's root is
     `<passthrough_events>`, trigger_demo's is `<trigger_events>` — both
@@ -152,7 +150,7 @@ def _tail_of_log(log_path: Any, *, lines: int = 20) -> Optional[str]:
     """Return the last *lines* of *log_path*, or None.
 
     Takes the real stage-correct log path directly (typically
-    ``ExecutionResult.log_path``, slice 7.0) rather than always reading a
+    ``ExecutionResult.log_path``) rather than always reading a
     hardcoded ``outputs["simulate_log"]`` — the direct fix for a compile
     failure's diagnostic message being read from the wrong (empty/stale)
     log file."""
@@ -190,7 +188,7 @@ def _build_event_artifacts(exec_result: Any, outputs: Dict[str, Any]) -> List[An
 
 def _parse_event_checks(outputs: Dict[str, Any]) -> List[Any]:
     """Scan the event's real ``simulate_log`` for ``FORGE_CHECK|`` records
-    (slice 7.3) — always ``simulate_log`` specifically, since that's where
+    — always ``simulate_log`` specifically, since that's where
     the SV stimulus (and its checks) actually runs, never whichever log
     happened to be the one a compile/elaborate failure returned."""
     from forge.verify.results import parse_forge_check_lines
@@ -331,7 +329,7 @@ def cmd_run(args) -> None:
     junit_xml_path = getattr(args, "junit_xml", None)
 
     if selection.all_dataset_parts:
-        # Honest deferral (release-plan Phase 6, §6.4): part-file-level
+        # Honest deferral: part-file-level
         # datasets aren't individually event-addressable, so this falls
         # back to today's aggregate-only reporting unchanged — no JUnit
         # XML (there is no per-event data to report) and no per-event
@@ -356,7 +354,7 @@ def cmd_run(args) -> None:
 
     from forge.verify.results import RESULTS_SCHEMA, EventResult, FlowResult, diagnostic_for_event_failure
 
-    # ── Phase 7 slice 7.5: stimulus_mode == "readmemh" ──────────────────────
+    # ── stimulus_mode == "readmemh" ──────────────────────────────────────────
     # Fixed-shape, non-recompiling stimulus: the plugin's gen_stimulus.py
     # writes the .mem file + a content-stable stimulus_current.svh ONCE
     # (below, before the loop) instead of _regenerate_stimulus_for_event's
@@ -508,7 +506,7 @@ def cmd_run(args) -> None:
         results_path.write_text(json.dumps(flow_result.to_dict(), indent=2) + "\n")
         artifacts.append(str(results_path))
 
-    # release-plan §10.0C: forge.golden_comparison_result.v1 — only when
+    # forge.golden_comparison_result.v1 — only when
     # the plugin's gen_stimulus.py actually wrote a provider-provenance
     # sidecar next to this flow (e.g. passthrough_demo's still-hand-typed
     # golden XML has no real GoldenModelProvider, so no sidecar exists;

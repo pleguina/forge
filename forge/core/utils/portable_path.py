@@ -2,7 +2,7 @@
 into a portable, non-absolute display string.
 
 Extracted from ``forge.ir.provenance``'s private ``_relative_key()``
-(release-plan Phase 8, slice 8.0A) so other consumers — the visual design
+so other consumers — the visual design
 explorer's renderers, in particular — can reuse the same policy without
 reaching into another module's underscore-prefixed implementation.
 ``forge.ir.provenance._relative_key()`` now delegates here instead of

@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.backend_checker (Phase 7, slice 7.0).
+"""Unit tests for forge.verify.backend_checker.
 
 The checker stack was lifted verbatim out of XsimBackend into module-level
 functions — these tests exercise the lifted functions directly against

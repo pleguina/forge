@@ -1,5 +1,4 @@
-"""The visual-design-explorer's graph model (release-plan Phase 8, §8.1's
-default view, slices 8.0A/8.0B).
+"""The visual-design-explorer's graph model.
 
 **Load-bearing invariant**: ``DesignGraph`` is a deterministic, read-only
 **visualization projection** of exactly one canonical IR
@@ -126,8 +125,7 @@ def _compute_module_maturity(connections: Sequence[ResolvedConnection], instance
     """Per-module-definition ``MaturitySummary``, computed directly from
     the real ``wiring_method`` on every connection touching that module
     (as producer or consumer) — no new data source, real aggregation
-    instead of a lossy boolean (release-plan Phase 8, "Maturity is not a
-    boolean")."""
+    instead of a lossy boolean ("Maturity is not a boolean")."""
     counts: Dict[str, Dict[str, int]] = {}
 
     def _bump(module_name: str, bucket: str) -> None:
@@ -161,7 +159,7 @@ def _compute_module_maturity(connections: Sequence[ResolvedConnection], instance
     }
 
 
-# ── Diagnostic object_id parsing (Defect 3) ──────────────────────────────
+# ── Diagnostic object_id parsing ──────────────────────────────────────────
 
 _MODULE_OBJECT_ID_RE = re.compile(r"^module:(?P<name>[^#]+)(?:#interface:(?P<iface>.+))?$")
 
@@ -177,8 +175,7 @@ def parse_object_reference(object_id: Optional[str]) -> Optional[ObjectReference
     ``f"module:{name}#interface:{role}"`` (interface, on a module).
     ``instance``/``connection``/``top-port`` kinds are part of the
     vocabulary for forward-compatibility but have no real emission site
-    today (confirmed in the release-plan Phase 8 investigation) — nothing
-    parses to them yet.
+    today — nothing parses to them yet.
     """
     if not object_id:
         return None
@@ -205,7 +202,7 @@ class GraphNode:
     reset_domain: Optional[str] = None
     # Members of a MODULE_GROUP/DOMAIN_GROUP compound node (instance ids)
     # — carried directly so client-side re-parenting (e.g. toggling
-    # clock-domain grouping, §8.3) doesn't need to re-derive membership by
+    # clock-domain grouping) doesn't need to re-derive membership by
     # walking `parent` pointers.
     members: Tuple[str, ...] = ()
     latency: Optional[Dict[str, Any]] = None  # asdict()'d LatencyValue, or None for genuinely absent data
@@ -231,7 +228,7 @@ class GraphEdge:
 @dataclass(frozen=True)
 class ObjectRecord:
     """One entry in the typed registry backing the selected-object details
-    panel (§8.4) — one per real IR object (instance, module definition,
+    panel — one per real IR object (instance, module definition,
     connection, transformation, top-port/external-port, interface), built
     once here and referenced by id everywhere else rather than
     duplicated."""
@@ -288,7 +285,7 @@ def build_design_graph(
 ) -> DesignGraph:
     """Build a ``DesignGraph`` projection of *project*.
 
-    *latency_by_instance* (release-plan Phase 8, slice 8.0B): optional
+    *latency_by_instance*: optional
     ``{instance_id: LatencyValue}`` map, keyed by the real, canonical
     ``ResolvedInstance.id`` (e.g. via
     ``forge.analyze.latency_static.graph.LatencyNode.instance_id`` — the
@@ -298,7 +295,7 @@ def build_design_graph(
     *verification_flow_entry_points*: optional ``{flow_name:
     module_group_node_id}`` map (see
     ``forge.analyze.design_explorer.verification_join``) — the
-    conservative "flow entry points" overlay (Defect 4): a real fact
+    conservative "flow entry points" overlay: a real fact
     ("this flow's declared entry point is this module"), never rendered
     or labeled as proof of behavioral coverage.
 
@@ -453,7 +450,7 @@ def build_design_graph(
     # `ObjectRecord.data["verification_flow_entry_points"]` instead, see
     # below, so GraphNode's shape doesn't grow a rarely-used field).
 
-    # ── Object registry (§8.4) ──────────────────────────────────────────
+    # ── Object registry ──────────────────────────────────────────────────
     objects: List[ObjectRecord] = []
     for mod in design.modules:
         entry_flows = sorted(

@@ -14,7 +14,7 @@ datasets:
   passthrough_demo_golden:
     xml: schemas/data/passthrough_demo_golden.xml
     description: Golden reference dataset for the passthrough module
-    # Phase 7 slice 7.4b: passthrough_demo's dataset is already FORGE-shaped
+    # passthrough_demo's dataset is already FORGE-shaped
     # (no domain transformation needed), so it uses the trivial identity
     # layer-B adapter — see tools/dataset_adapter.py. Declared for real, not
     # yet consumed by the CLI pipeline (gen_stimulus.py still reads via the
@@ -51,7 +51,7 @@ flows:
       use_sv_flag: false
     coverage_intent:  functional
 
-  # Second real backend for the same DUT (Phase 7, slice 7.1) — proves
+  # Second real backend for the same DUT — proves
   # single_module_rtl/full_chip_rtl are genuinely multi-backend, not just
   # matrix-declared. Same top/TB/dataset as passthrough_xsim; only the
   # backend differs.
@@ -69,7 +69,7 @@ flows:
       post_stimulus_drain_cycles: 4
     coverage_intent:  functional
 
-  # Fixed-shape, non-recompiling stimulus mechanism (Phase 7, slice 7.5).
+  # Fixed-shape, non-recompiling stimulus mechanism.
   # Same DUT/TB/dataset as passthrough_xsim; only stimulus_mode differs —
   # proves xvlog/xelab compile once across both real golden events, event
   # selection happening only via the +EVENT_INDEX runtime plusarg.
@@ -91,7 +91,7 @@ flows:
       use_sv_flag: false
     coverage_intent:  functional
 
-  # Phase 7 slice 7.6: the same readmemh chain (dataset -> format loader ->
+  # The same readmemh chain (dataset -> format loader ->
   # project adapter -> stable stimulus memory -> compile once -> multiple
   # real event runs -> FORGE_CHECK -> results.json), on the real Verilator
   # backend instead of xsim — proves the whole chain is backend-agnostic,

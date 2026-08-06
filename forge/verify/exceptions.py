@@ -253,7 +253,7 @@ class PluginBootstrapError(ForgeVerifyError):
     """
 
 
-# ── E-series: Dataset (Phase 7, slice 7.4a) ────────────────────────────────
+# ── E-series: Dataset ───────────────────────────────────────────────────────
 
 class DatasetContentHashError(ForgeVerifyError):
     """Raised when a dataset file's declared ``source_content_hash`` does

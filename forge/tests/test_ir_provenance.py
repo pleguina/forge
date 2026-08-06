@@ -1,6 +1,6 @@
 """
 Tests for forge.ir.provenance — content-hash provenance for the canonical
-IR (release-plan Phase 5, first slice). See the module docstring for what
+IR. See the module docstring for what
 this does and does not replace (the existing mtime-based
 forge/core/stale_detection.py and forge/verify/stale_artifact.py are
 untouched this session).
@@ -32,7 +32,7 @@ def test_build_provenance_hashes_real_source_files():
 
     assert manifest.ir_content_hash
     assert manifest.project_name == "design"
-    # Slice 5.0: keys are relative to design.yml's own directory, not
+    # Keys are relative to design.yml's own directory, not
     # absolute paths — the design file itself keys as its own bare name.
     assert "design.yml" in manifest.source_hashes
     # The passthrough interface contract file should also be hashed.
@@ -54,7 +54,7 @@ def _copy_passthrough_demo(dest_root: Path) -> "tuple[Path, Path]":
 
 
 def test_content_hash_is_portable_across_absolute_checkout_paths(tmp_path):
-    """Slice 5.0 regression: the real bug this slice fixes was
+    """Regression: the real bug fixed here was
     ``content_hash()`` changing when only the caller's absolute filesystem
     layout changed (``design.source.file``), not the design's actual
     content. Two independent checkouts of the same real design at
@@ -87,9 +87,9 @@ def test_source_hashes_keys_are_portable_across_absolute_checkout_paths(tmp_path
 
 def test_content_hash_is_portable_when_a_diagnostic_carries_a_location(tmp_path):
     """A second, independent instance of the same portable-hash bug class,
-    found by the release-plan §5.4 YAML-key-ordering determinism test
+    found by the YAML-key-ordering determinism test
     (test_ir_build.py::test_content_hash_is_independent_of_yaml_top_level_key_order),
-    not by the original slice 5.0 investigation: every validation
+    not by the original investigation: every validation
     diagnostic attached to the design carries a `location.file` stamped
     with the resolved absolute design.yml path
     (`forge/ir/build.py`). A module declaring an HLS module with a
@@ -136,7 +136,7 @@ def test_provenance_write_read_round_trip(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Slice 5.1 — plan_hash / toolchain_versions / output_hashes / project_identity
+# plan_hash / toolchain_versions / output_hashes / project_identity
 # ---------------------------------------------------------------------------
 
 def test_build_provenance_defaults_new_fields_to_honest_absence():
@@ -213,8 +213,8 @@ def test_provenance_round_trip_preserves_slice_5_1_fields(tmp_path):
 
 
 def test_provenance_schema_version_is_0_2_0():
-    """Slice 5.0 bumped PROVENANCE_SCHEMA_VERSION for the source_hashes
-    key-format change; slice 5.1's new fields are purely additive and
+    """PROVENANCE_SCHEMA_VERSION was bumped for the source_hashes
+    key-format change; the newer fields are purely additive and
     don't need a further bump."""
     from forge.ir.provenance import PROVENANCE_SCHEMA_VERSION
     assert PROVENANCE_SCHEMA_VERSION == "0.2.0"
@@ -294,8 +294,8 @@ def test_explain_staleness_detects_schema_version_change():
 
 
 def test_explain_staleness_flags_unsupported_old_manifest():
-    """Slice 5.3: a previous manifest older than PROVENANCE_SCHEMA_VERSION
-    (e.g. 0.1.0, predating slice 5.0's source_hashes key-format change)
+    """A previous manifest older than PROVENANCE_SCHEMA_VERSION
+    (e.g. 0.1.0, predating the source_hashes key-format change)
     must not be diffed field-by-field — its absolute-path keys would
     silently misreport as both "removed" and "added" against a current
     manifest's relative-path keys, a false diff rather than a true
@@ -321,8 +321,8 @@ def test_explain_staleness_detects_command_option_change():
 
 
 def test_explain_staleness_detects_changed_tool_version():
-    """Slice 5.3's first new §5.3 reason — now meaningful since slice 5.1
-    populates toolchain_versions for real."""
+    """A changed tool version is a staleness reason, now meaningful since
+    toolchain_versions is actually populated for real."""
     a = ProvenanceManifest(ir_content_hash="h", toolchain_versions={"ghdl": "GHDL 3.0.0"})
     b = ProvenanceManifest(ir_content_hash="h", toolchain_versions={"ghdl": "GHDL 4.1.0"})
 

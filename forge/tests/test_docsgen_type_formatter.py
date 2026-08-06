@@ -1,4 +1,4 @@
-"""Tests for forge.docsgen.type_formatter (release-plan Phase 9, Defect 12)."""
+"""Tests for forge.docsgen.type_formatter."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union

@@ -1,4 +1,4 @@
-"""Diagnostic-code catalogue generator (release-plan Phase 9, Defect 13).
+"""Diagnostic-code catalogue generator.
 
 Diagnostic codes are emitted through several different real mechanisms in
 this codebase, not one:

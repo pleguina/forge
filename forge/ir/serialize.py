@@ -90,7 +90,7 @@ def _canonical_design_json(project: ResolvedProject) -> str:
       resolved absolute ``design.yml`` path
       (``forge/ir/build.py``, ``DiagnosticReference(location=SourceLocation(file=str(design_path)))``).
       Found the same way as the three fields above: a YAML-key-ordering
-      determinism test (release-plan §5.4) building the identical design
+      determinism test building the identical design
       from two different tmp directories caught this as a second,
       independent leak of the same class, not called out by the original
       investigation that added the fields above.

@@ -91,9 +91,9 @@ class TestHlsReport:
     def test_json_mode_reports_envelope_with_warn_status(
         self, capsys: pytest.CaptureFixture[str], tmp_path: Path
     ) -> None:
-        """Release-plan Phase 6 §6.7: `--json` wraps the result in the
-        shared CommandEnvelope — a module with no csynth.xml is a real,
-        non-fatal finding, so `status` is `"warn"`, not `"pass"`."""
+        """`--json` wraps the result in the shared CommandEnvelope — a
+        module with no csynth.xml is a real, non-fatal finding, so
+        `status` is `"warn"`, not `"pass"`."""
         import json
 
         (tmp_path / "build_hls/hit_decoder").mkdir(parents=True)
@@ -177,10 +177,10 @@ class TestRuntimeLatency:
     def test_reports_observed_latency_from_wide_probe_csv(
         self, capsys: pytest.CaptureFixture[str], tmp_path: Path
     ) -> None:
-        """--probe-format wide (release-plan §4.5, Phase 4 slice 5) —
-        the format forge.verify.gen_sim's real Tier-2 probe emission
-        actually produces (previously unusable by this CLI command at
-        all — the broken producer/consumer pipe this slice fixes)."""
+        """--probe-format wide is the format forge.verify.gen_sim's real
+        Tier-2 probe emission actually produces (previously unusable by
+        this CLI command at all — the broken producer/consumer pipe this
+        fixes)."""
         probe_csv = tmp_path / "algo_top_probe.csv"
         probe_csv.write_text(
             "cycle,data_in_valid,data_out_valid\n"

@@ -1,6 +1,6 @@
 """
 Shared schema-version parsing/compatibility policy for FORGE's user-facing
-YAML schemas (release-plan §2.7).
+YAML schemas.
 
 Every user-facing schema (design topology, module registry, interface
 contract, verification contract) may declare an explicit

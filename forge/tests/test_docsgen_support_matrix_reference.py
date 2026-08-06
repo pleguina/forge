@@ -1,5 +1,4 @@
-"""Tests for forge.docsgen.support_matrix_reference (release-plan Phase 9,
-Defect 3)."""
+"""Tests for forge.docsgen.support_matrix_reference."""
 from __future__ import annotations
 
 from forge.verify.supported_matrix import MATRIX

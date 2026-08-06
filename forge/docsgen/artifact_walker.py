@@ -1,5 +1,4 @@
-"""Recursive artifact-model reference generator (release-plan Phase 9,
-Defect 11).
+"""Recursive artifact-model reference generator.
 
 ``ARTIFACT_ROOTS`` names FORGE's real, versioned structured-artifact
 types. Each root's own field table is not enough on its own — e.g.

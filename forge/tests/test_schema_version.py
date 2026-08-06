@@ -1,7 +1,7 @@
 """
-Tests for forge.core.schema_version (release-plan §2.7): the shared
-parsing/compatibility policy used by design.yml, modules.yml,
-*.interface.yaml, and design.verification.yml.
+Tests for forge.core.schema_version: the shared parsing/compatibility
+policy used by design.yml, modules.yml, *.interface.yaml, and
+design.verification.yml.
 """
 
 from __future__ import annotations

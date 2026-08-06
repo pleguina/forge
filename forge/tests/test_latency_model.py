@@ -1,6 +1,6 @@
 """
 Tests for forge.analyze.latency_model — the shared, provenance-carrying
-latency wrapper (release-plan §4.1, Phase 4 slice 1).
+latency wrapper.
 """
 
 from __future__ import annotations

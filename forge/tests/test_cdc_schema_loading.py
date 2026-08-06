@@ -1,11 +1,11 @@
 """
-Tests for design.yml-level parsing/validation of the release-plan §3.2
-schema additions: `Connection.cdc` and the top-level `clock_domains:`/
+Tests for design.yml-level parsing/validation of the schema
+additions: `Connection.cdc` and the top-level `clock_domains:`/
 `reset_domains:` relationship-declaration blocks
-(`forge/topgen/config.py::DesignConfig.load`), plus the release-plan
-§10.0B CDC primitive family expansion (`level_sync`/`2ff_sync` alias,
-`pulse_sync`, `mailbox_transfer`, `async_fifo`'s now-required `depth`,
-and `reset_domains.*.sync`).
+(`forge/topgen/config.py::DesignConfig.load`), plus the CDC primitive
+family expansion (`level_sync`/`2ff_sync` alias, `pulse_sync`,
+`mailbox_transfer`, `async_fifo`'s now-required `depth`, and
+`reset_domains.*.sync`).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class TestCdcConnectionField:
         ))
         cfg = DesignConfig.load_relaxed(design)
         # 2ff_sync is a backwards-compatible alias, normalized to the
-        # canonical name at load time (release-plan §10.0B, §5 Decision A).
+        # canonical name at load time.
         assert cfg.connections[0].cdc == {"kind": "level_sync"}
 
     def test_valid_level_sync_loads_fine(self, tmp_path):

@@ -1,6 +1,6 @@
 """
-Runs ci/import_direction_check.sh (release-plan §19 revised: a cheap CI
-import-linter instead of the premature 5-package split) as a real
+Runs ci/import_direction_check.sh (a cheap CI import-linter instead of
+the premature 5-package split) as a real
 subprocess, so the dependency-direction guard has test coverage
 independent of the GitLab CI job that also runs it.
 """

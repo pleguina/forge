@@ -1,8 +1,8 @@
-"""Real end-to-end integration check for release-plan Phase 10, slice
-10.0C's forge.golden_comparison_result.v1 artifact: drives a real
+"""Real end-to-end integration check for the
+forge.golden_comparison_result.v1 artifact: drives a real
 `forge test run --golden-comparison-json` against vision_pipeline_demo's
 already-validated quickstart xsim flow (reusing the cached HLS build and
-generated algo_top.v from slice 10.1 — no fresh HLS synthesis).
+generated algo_top.v — no fresh HLS synthesis).
 
 Unit-level coverage of build_golden_comparison_result's join logic lives
 in forge/tests/verify/test_golden_comparison_result.py; this file is the

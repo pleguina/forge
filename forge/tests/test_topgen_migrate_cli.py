@@ -1,5 +1,5 @@
 """
-CLI-level tests for `forge topgen migrate` (release-plan §2.8). Pure-function
+CLI-level tests for `forge topgen migrate`. Pure-function
 tests for the migration logic itself live in test_migrate.py — these tests
 only exercise argument handling, --dry-run's "never writes" guarantee, and
 exit codes, mirroring the _run_topgen/Result/_tree_snapshot conventions in

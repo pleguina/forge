@@ -1,6 +1,5 @@
 """
-Tests for forge.analyze.latency_runtime's Phase 4 slice 5 additions
-(release-plan §4.5):
+Tests for forge.analyze.latency_runtime's additions:
   - probe.load_wide_probe_csv, the fix for the previously-broken pipe
     between forge.verify.gen_sim's real Tier-2 probe emission (wide CSV)
     and this package's consumer (which only accepted long-format CSV).

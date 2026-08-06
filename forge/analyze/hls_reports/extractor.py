@@ -59,7 +59,7 @@ class HLSModuleReport:
     pipeline_ii: int = 0
     pipeline_depth: int = 0
     pipeline_type: str = ""
-    # release-plan §4.4 (Phase 4 slice 4): csynth.xml's Interval-min/
+    # csynth.xml's Interval-min/
     # Interval-max were already parsed by
     # forge.hls.extract_hls_metrics.HLSMetricsExtractor.extract_latency
     # but silently dropped before reaching this dataclass — recovered
@@ -70,14 +70,14 @@ class HLSModuleReport:
     # (a single scalar) doesn't fully express.
     interval_min: int = 0
     interval_max: int = 0
-    # release-plan §4.4: buffering_capacity/occupancy/backpressure/
+    # buffering_capacity/occupancy/backpressure/
     # frame_rate — defined in the vocabulary (satisfies "track separately
     # where available") but genuinely reserved: csynth.xml (a synthesis-
     # time report) does not structurally carry any of this data — it is
     # runtime/simulation or RTL-generation-time information, not an HLS
     # synthesis fact. No current producer exists anywhere in this
     # codebase; these stay None rather than a fabricated value, same
-    # "reserved, no effect yet" precedent as Phase 3's width_adapter/
+    # "reserved, no effect yet" precedent as the width_adapter/
     # protocol_adapter/constant_source transformation kinds.
     buffering_capacity: Optional[int] = None
     occupancy: Optional[float] = None

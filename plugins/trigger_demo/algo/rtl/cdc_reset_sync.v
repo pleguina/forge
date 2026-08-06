@@ -6,7 +6,7 @@
 // to the destination clock so every flop in the destination domain
 // releases reset on the same edge. Used by topgen-generated algo_top.v
 // for `reset_domains.<name>.sync: reset_sync` declarations
-// (release-plan §10.0B, §5 Decision A) — a reset crossing is a property
+// — a reset crossing is a property
 // of a destination reset *domain*, not a `connections:`-level data
 // crossing, so this primitive is emitted once per synchronized reset
 // domain rather than once per connection (see

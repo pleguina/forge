@@ -76,7 +76,7 @@ class StalenessResult:
         source_path:   The most-recently-modified source file.
         artifact_mtime: mtime of the artifact.
         source_mtime:  mtime of the source.
-        content_confirmed_fresh: Phase 5 slice 5.2 — ``True`` when a
+        content_confirmed_fresh: ``True`` when a
             provenance manifest (``provenance.json``, next to
             *source_path*) confirms the source's content hasn't actually
             changed despite a newer mtime, overriding the mtime-only
@@ -269,7 +269,7 @@ def _check(
         source_mtime=source_mtime,
     )
     if result.stale:
-        # Phase 5 slice 5.2: confirm against a provenance.json next to
+        # Confirm against a provenance.json next to
         # *source_path*, when one exists — real for the common case where
         # source_path is the DUT RTL `gen-top` itself wrote (design.verification.yml's
         # `dut_rtl_source: gen-top/<name>` layout); a harmless no-op

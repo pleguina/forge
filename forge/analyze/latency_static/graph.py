@@ -7,16 +7,16 @@ undocumented case of a `modules_yml_path` override that genuinely differs
 from design.yml's own `registry:` field (never observed in real/documented
 usage, but the parameter's public contract allows it).
 
-Each node represents one physical module instance (release-plan §4.3 —
-Phase 4 slice 3; single-instance modules keep their bare module name, e.g.
+Each node represents one physical module instance (single-instance modules
+keep their bare module name, e.g.
 ``"col"``; a multi-instance module's instances are named ``"dec[0]"``,
-``"dec[1]"``, ... — before this slice, all instances of a module
+``"dec[1]"``, ... — previously, all instances of a module
 collapsed into one node, which meant a real multi-producer fan-in (e.g.
 trigger_demo's ``dec`` x4 -> ``col`` gather) could never register as a
 "merge point" at all). Each node's latency is the number of clock cycles
 from valid-in to valid-out for a single pipeline pass, wrapped in a
-provenance-tagged :class:`~forge.analyze.latency_model.LatencyValue`
-(release-plan §4.1 — Phase 4 slice 1) — identical across every instance
+provenance-tagged :class:`~forge.analyze.latency_model.LatencyValue` —
+identical across every instance
 of the same module, since latency is a module-level (HLS-synthesis-level)
 fact, not something that varies per physical instance.
 
@@ -41,7 +41,7 @@ Latency resolution order
 
 Edges are inferred from ``connections`` and ``topology_groups`` in design.yml
 (via the IR's resolved connections in the primary path; via a raw re-parse
-in the fallback path). As of Phase 4 slice 1, an edge also carries the
+in the fallback path). An edge also carries the
 originating ``Connection``'s ``register_stages``/``delay_cycles``/``cdc``
 latency (``generated_transformation`` provenance) — previously discarded
 entirely, meaning the checker was blind to any latency FORGE itself
@@ -71,7 +71,7 @@ class LatencyNode:
     kind: str             # "hls" | "rtl" | "unknown"
     latency: Optional[LatencyValue]
     is_variable: bool = False
-    # release-plan Phase 8: the real, canonical instance id
+    # The real, canonical instance id
     # (``forge.ir.identifiers.resolved_instance_id`` — e.g. "dec_0"), used
     # for every join against the canonical IR (``ResolvedInstance.id``).
     # ``display_name`` is the existing human-readable bracket form (e.g.
@@ -91,11 +91,11 @@ class LatencyNode:
             self.display_name = self.name
 
     # --- Back-compat accessors -------------------------------------------
-    # LatencyNode was a bare (latency_cycles, latency_source) pair before
-    # Phase 4 slice 1. Never serialized (latency-check has no --json/
+    # LatencyNode was previously a bare (latency_cycles, latency_source)
+    # pair. Never serialized (latency-check has no --json/
     # --format flag), so this internal reshape is safe; these properties
     # let checker.py/reporter.py keep reading .latency_cycles/.latency_source
-    # unchanged this slice.
+    # unchanged.
     @property
     def latency_cycles(self) -> Optional[int]:
         return self.latency.cycles if self.latency else None
@@ -112,7 +112,7 @@ class LatencyEdge:
     src: str
     dst: str
     latency: Optional[LatencyValue] = None
-    # release-plan Phase 10, slice 10.7B finding: ``latency is None`` is
+    # ``latency is None`` is
     # ambiguous on its own — it means both "this edge adds no known extra
     # cycles" (a plain same-domain connection) AND "this edge is a
     # mailbox_transfer/async_fifo CDC crossing whose latency is
@@ -177,7 +177,7 @@ def _latency_value_from_declared_kind(
     max_cycles: Optional[int],
 ) -> LatencyValue:
     """A structured ``latency: {kind: ...}`` declaration is explicit and
-    authoritative — release-plan §4.2 — shared by both the IR-driven path
+    authoritative — shared by both the IR-driven path
     (``Module.timing.latency``, a ``LatencyDeclaration``) and the legacy
     raw-YAML fallback (a plain dict from ``entry.get("latency")``), so
     the two paths can't silently diverge on this precedence rule."""
@@ -209,18 +209,17 @@ def _resolve_latency(
 
 
 def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
-    """release-plan §4.1: fold ``register_stages``/``delay_cycles``/a
+    """Fold ``register_stages``/``delay_cycles``/a
     known-depth CDC synchronizer into the edge's latency
     (``generated_transformation`` provenance) — this FORGE-inserted RTL
     has a real, known cycle depth that was previously discarded before
     reaching the checker (``LatencyEdge`` carried no latency at all).
 
-    release-plan §10.0B expands this to the full 5-kind CDC primitive
+    This covers the full 5-kind CDC primitive
     family: ``level_sync``/``2ff_sync`` (alias) is a fixed +2 destination-
-    domain cycles (unchanged), ``pulse_sync`` is a fixed +3 (2 toggle-sync
+    domain cycles, ``pulse_sync`` is a fixed +3 (2 toggle-sync
     stages + 1 edge-detect stage, ``cdc_pulse_sync.v``). ``mailbox_transfer``
-    and ``async_fifo`` are deliberately NOT folded in, same honest
-    treatment as before this slice — a request/acknowledge handshake's
+    and ``async_fifo`` are deliberately NOT folded in — a request/acknowledge handshake's
     round-trip timing depends on relative clock phase, and a FIFO's
     fill/drain timing depends on relative write/read rates; neither is
     statically knowable, so such an edge stays ``latency=None``, not a
@@ -262,7 +261,7 @@ def _build_latency_map(
         latency_block = entry.get("latency")
         if latency_block:
             # Same precedence as _build_graph_from_ir: a structured
-            # latency: {kind: ...} block wins outright (release-plan §4.2).
+            # latency: {kind: ...} block wins outright.
             result[name] = _latency_value_from_declared_kind(
                 latency_block.get("kind"), latency_block.get("cycles"),
                 latency_block.get("min_cycles"), latency_block.get("max_cycles"),
@@ -285,8 +284,8 @@ def _instance_names_raw(name: str, instances: int) -> List[str]:
 
 
 def _instance_node_names(mod) -> List[str]:
-    """One node name per physical instance of *mod* (release-plan §4.3,
-    Phase 4 slice 3). A single-instance module keeps its bare module name
+    """One node name per physical instance of *mod*.
+    A single-instance module keeps its bare module name
     (``"col"``) — identical to every prior slice's naming, zero graph
     change for the common case. A multi-instance module gets
     ``"name[0]"``, ``"name[1]"``, ... so latency analysis can see real
@@ -383,7 +382,7 @@ def _build_graph_from_ir(
         is_var = timing.variable_latency if timing else False
         declaration = timing.latency if timing else None
         if declaration is not None:
-            # release-plan §4.2: a structured latency: {kind: ...} block is
+            # A structured latency: {kind: ...} block is
             # explicit and authoritative — takes precedence over the flat
             # latency_cycles/hls_report/latency_hint chain, same "explicit
             # wins" precedence _resolve_latency already applies to
@@ -393,7 +392,7 @@ def _build_graph_from_ir(
             )
         else:
             lat = _resolve_latency(lat_cycles, lat_hint, ref, hls_reports)
-        # release-plan §4.3: one LatencyNode per physical instance — see
+        # One LatencyNode per physical instance — see
         # this module's docstring. Every instance of the same module
         # shares the exact same latency (a module/HLS-synthesis-level
         # fact, not something that varies per instance).
@@ -405,7 +404,7 @@ def _build_graph_from_ir(
                 kind=mod.kind,
                 latency=lat,
                 is_variable=is_var,
-                # release-plan Phase 8: the real, canonical IR instance id
+                # The real, canonical IR instance id
                 # (matches forge.ir.build.py's ResolvedInstance.id exactly)
                 # — the fix for the bracket-vs-underscore join mismatch.
                 instance_id=resolved_instance_id(mod.name, idx, mod.instances),
@@ -470,7 +469,7 @@ def _build_graph_legacy(
     design_mod_by_name: Dict[str, dict] = {m["name"]: m for m in design.get("modules", [])}
 
     # ── Nodes ──────────────────────────────────────────────────────────────
-    # Release-plan §4.3 (Phase 4 slice 3): one node per physical instance,
+    # One node per physical instance,
     # same rule as _build_graph_from_ir (via _instance_names_raw) — so the
     # two paths can't silently diverge on graph shape.
     nodes: Dict[str, LatencyNode] = {}

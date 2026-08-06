@@ -1,4 +1,4 @@
-"""Cross-command consistency check (release-plan Phase 6, §6.7): every
+"""Cross-command consistency check: every
 top-level `forge` command's `--json` output must round-trip through
 `CommandEnvelope.from_dict` and share the same `schema_version` — proof
 that the envelope sweep actually landed everywhere it claims to, not just

@@ -1,4 +1,4 @@
-"""CLI reference generator (release-plan Phase 9, §9.3) — walks the real,
+"""CLI reference generator — walks the real,
 live ``build_parser()`` tree so ``docs/reference/cli.md`` cannot drift
 from the actual registered commands and flags.
 
@@ -25,7 +25,7 @@ _DELEGATED_GROUP_PARSERS = {"verify": build_verify_parser}
 
 # Pinned so generated help text never depends on the terminal width of
 # whichever machine/CI runner regenerates it — the same determinism
-# requirement Defect 12 established for field-type strings, extended here
+# requirement already established for field-type strings, extended here
 # to argparse's own help formatting.
 _PINNED_COLUMNS = "100"
 

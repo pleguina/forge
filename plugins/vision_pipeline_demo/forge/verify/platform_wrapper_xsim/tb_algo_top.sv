@@ -22,7 +22,7 @@ module tb_algo_top;
   initial ap_clk = 1'b0;
   always #(CLK_PERIOD_NS / 2.0) ap_clk = ~ap_clk;
 
-  // ── Additional clock domains (release-plan Phase 10, slice 10.4) ──
+  // ── Additional clock domains ──
   logic clk_control;
   initial clk_control = 1'b0;
   always #(20.0 / 2.0) clk_control = ~clk_control;

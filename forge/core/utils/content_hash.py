@@ -6,7 +6,7 @@ Generalizes the hashing pattern already used by
 reusable, source-agnostic building block: hashing arbitrary files by
 content, not by modification time. This is the primitive that
 ``forge.core.provenance`` builds content-hash-based staleness detection on
-top of (release-plan §12/§5.1: "Modification times may remain an
+top of ("Modification times may remain an
 optimization, but must not be the source of truth").
 
 Deliberately minimal: no YAML-aware canonicalization here (unlike
@@ -59,7 +59,7 @@ def hash_files(paths: Iterable["str | Path"]) -> str:
 
 def compute_preprocessing_hash(config: "Mapping[str, object]") -> str:
     """A deterministic hash over a dataset-materialization preprocessing
-    configuration (release-plan Phase 10, slice 10.0A).
+    configuration.
 
     *config* should carry only what actually determines the preprocessed
     output — adapter id/version, resize/rounding/saturation/tiling

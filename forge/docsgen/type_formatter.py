@@ -1,5 +1,5 @@
 """Deterministic, Python-version-stable type-string formatting for the
-generated artifact-model reference page (release-plan Phase 9, Defect 12).
+generated artifact-model reference page.
 
 Printing a dataclass field's raw ``field.type`` is not safe: every IR/
 provenance/results/dataset module in this repo uses

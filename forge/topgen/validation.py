@@ -70,7 +70,7 @@ class DesignValidator:
         return len(self.errors) == 0
 
     def validate_schema_version(self):
-        """release-plan §2.7: an undeclared schema_version is silent (fully
+        """An undeclared schema_version is silent (fully
         backward compatible); a declared one is checked for compatibility
         against DESIGN_SCHEMA_VERSION."""
         for issue in check_schema_version(self.cfg.schema_version, DESIGN_SCHEMA_VERSION, schema_name="design.yml"):
@@ -462,8 +462,7 @@ _KNOWN_MODULE_KEYS: Set[str] = {
     # via Module.timing — see topgen/config.py::ModuleTiming)
     'latency_hint', 'latency_cycles', 'variable_latency',
     # Structured latency: {kind: fixed|bounded|elastic, ...} declaration
-    # (release-plan §4.2, Phase 4 slice 2) — coexists with, does not
-    # replace, the three flat fields above.
+    # — coexists with, does not replace, the three flat fields above.
     'latency',
 }
 _KNOWN_LATENCY_KINDS: Set[str] = {'fixed', 'bounded', 'elastic'}
@@ -650,7 +649,7 @@ class RegistryValidator:
 
     def _validate_latency_block(self, mod: dict, name: str, loc: str):
         """Structural validation of a ``latency: {kind: fixed|bounded|elastic,
-        ...}`` declaration (release-plan §4.2). Reported as a structured
+        ...}`` declaration. Reported as a structured
         error here (the user-facing surface for YAML mistakes);
         ``LatencyDeclaration.__post_init__`` raising ``ValueError`` is a
         defense-in-depth backstop for direct programmatic construction, not

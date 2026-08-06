@@ -1,5 +1,5 @@
-"""Tests for forge.analyze.design_explorer.html_renderer (release-plan
-Phase 8, §8.2) — the self-contained, offline, interactive HTML explorer.
+"""Tests for forge.analyze.design_explorer.html_renderer — the
+self-contained, offline, interactive HTML explorer.
 """
 from __future__ import annotations
 

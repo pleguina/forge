@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Golden-model provider protocol and runner (release-plan Phase 10,
-slice 10.0A — preflight.md §5 Decision C).
+"""Golden-model provider protocol and runner.
 
 This is a third, distinct ownership boundary alongside the two dataset
 layers already established in :mod:`forge.verify.dataset_format` (layer
@@ -19,10 +18,9 @@ never directly, so the identity/output hashes on the returned
 :class:`ExpectedDataset` are always FORGE-computed, never
 self-reported by the provider.
 
-Scoped strictly to what slice 10.0A/10.1 need: deterministic invocation
-plus real hashing. Comparison-result artifacts
+Scoped strictly to deterministic invocation plus real hashing. Comparison-result artifacts
 (``forge.golden_comparison_result.v1``) were a separate, later concern
-at that time; :func:`write_provider_provenance` (slice 10.0C) is the
+at that time; :func:`write_provider_provenance` is the
 concrete follow-through — a small JSON sidecar written next to a
 plugin's generated stimulus, since a provider's identity/hashes
 otherwise live only in the Python process running ``gen_stimulus.py``
@@ -154,7 +152,7 @@ def run_golden_model(
     )
 
 
-# ── Provider provenance sidecar (release-plan Phase 10, slice 10.0C) ─────
+# ── Provider provenance sidecar ───────────────────────────────────────────
 
 def write_provider_provenance(expected: ExpectedDataset, path: "str | Path") -> None:
     """Write *expected*'s provider identity/hashes to a small JSON sidecar

@@ -1,6 +1,6 @@
 """
 Real-design agreement test between the two independent latency-summing
-codepaths (release-plan §4.5, Phase 4 slice 5):
+codepaths:
 
 - forge.topgen.generators.design_parameters.extract_design_parameters's
   naive, DAG-blind cumulative-latency walker (walks cfg.modules in
@@ -100,7 +100,7 @@ def test_linear_chain_cumulative_latency_agrees_with_dag_aware_graph(tmp_path):
 
     # Sanity: the chain isn't trivially all-zero for every module — 'trig'
     # really does carry the real, non-zero latency: {kind: fixed, cycles:
-    # 3} declaration (Phase 4 slice 2's real-design migration), so this
+    # 3} declaration, so this
     # test is exercising real arithmetic, not just comparing zeros.
     assert graph.nodes["trig"].latency_cycles == 3
     assert naive_modules["trig"]["latency_max"] == 3

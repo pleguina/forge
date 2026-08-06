@@ -1,5 +1,5 @@
 """Shared, small AST-based scanning utilities for forge.docsgen's
-registries (release-plan Phase 9, Defect 13 applied consistently to both
+registries (applied consistently to both
 the diagnostic-code registry and the transformation-kind registry).
 
 Structural call-site matching, not text/regex grepping: a grep for

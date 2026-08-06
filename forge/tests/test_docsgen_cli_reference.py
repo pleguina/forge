@@ -1,4 +1,4 @@
-"""Tests for forge.docsgen.cli_reference (release-plan Phase 9, §9.3)."""
+"""Tests for forge.docsgen.cli_reference."""
 from __future__ import annotations
 
 from forge.docsgen.cli_reference import generate_cli_reference_page

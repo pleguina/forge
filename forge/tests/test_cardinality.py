@@ -1,5 +1,5 @@
 """
-Tests for declarative cardinality (release-plan §2.4):
+Tests for declarative cardinality:
 ``forge.topgen.ip.cardinality.parse_cardinality`` (per-role structural
 parsing/sugar resolution) and ``verify_cardinality`` (design-level
 enforcement against what ``auto_match_ports`` actually wired).

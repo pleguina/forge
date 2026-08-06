@@ -174,10 +174,9 @@ class TestCheckIpInfoStaleness:
 
 
 class TestContentHashAwareStaleness:
-    """Release-plan Phase 5 slice 5.2: mtime stays the fast pre-check, but
-    a sibling provenance.json (gen-top writes one into output_dir as of
-    slice 5.1) can now confirm a source's content hasn't actually
-    changed, overriding a misleading mtime bump."""
+    """mtime stays the fast pre-check, but a sibling provenance.json
+    (gen-top writes one into output_dir) can now confirm a source's
+    content hasn't actually changed, overriding a misleading mtime bump."""
 
     def test_touched_but_unchanged_source_reports_fresh_with_provenance(self, tmp_path: Path):
         from forge.core.utils.content_hash import hash_file
@@ -228,8 +227,8 @@ class TestContentHashAwareStaleness:
 
     def test_no_provenance_json_falls_back_to_mtime_only(self, tmp_path: Path):
         """Backward compatible: a project that hasn't regenerated since
-        this feature landed (no provenance.json at all) behaves exactly
-        as it did before slice 5.2."""
+        this feature landed (no provenance.json at all) falls back to
+        mtime-only staleness checking."""
         now = time.time()
         _touch(tmp_path / "build_manifest.json", mtime=now - 100)
         _touch(tmp_path / "design.yml", mtime=now)

@@ -15,8 +15,8 @@ The file is written either by a plugin-specific ``gen_stimulus.py``
 script.  The framework does not dictate the exact tool; it only defines the
 column contract above.
 
-Wide probe CSV format (release-plan §4.5, Phase 4 slice 5)
-------------------------------------------------------------
+Wide probe CSV format
+-----------------------
 ``forge.verify.gen_sim``'s real Tier-2 probe mechanism
 (``_render_probe_open``/``_render_probe_fwrite``, emitted by XSIM
 testbenches under ``--probe-log``/``PROBE_LOG=1``) writes a *wide*-format

@@ -1,5 +1,4 @@
-"""Tests for forge.analyze.throughput_static.model (release-plan Phase
-10, slice 10.0C).
+"""Tests for forge.analyze.throughput_static.model.
 """
 from __future__ import annotations
 
@@ -88,8 +87,7 @@ def test_build_design_throughput_analysis_skips_modules_without_declared_width()
 
 def test_build_design_throughput_analysis_real_vision_pipeline_demo_hls_build():
     """Integration check against the real, already-synthesized
-    pixel_normalizer HLS build cached on disk from slice 10.1's
-    validation — not a fresh HLS run."""
+    pixel_normalizer HLS build cached on disk — not a fresh HLS run."""
     if not VPD_HLS_BUILD_ROOT.exists():
         import pytest
         pytest.skip(f"no cached HLS build at {VPD_HLS_BUILD_ROOT} — run "

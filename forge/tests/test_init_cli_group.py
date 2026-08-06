@@ -1,9 +1,9 @@
-"""Real end-to-end coverage for `forge init` (release-plan Phase 6, §6.6)
+"""Real end-to-end coverage for `forge init`
 — the command that unifies the topgen-side and verify-side scaffolders
 and chains validate -> build --apply -> test -> report, all with zero
 manual edits.
 
-The acceptance bar (from the phase's own plan) is literal: run `forge
+The acceptance bar is literal: run `forge
 init <plugin_id>`, touch nothing by hand, and confirm a JUnit XML with a
 passing test and a report bundle both exist at the end. This file does
 exactly that, against the real xsim toolchain confirmed present in this

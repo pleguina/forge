@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Dataset neutral envelope and format loaders (Phase 7, slice 7.4a — §7.3
-layer A).
+"""Dataset neutral envelope and format loaders (layer A).
 
 This is layer A of two. **Layer A only answers "how does FORGE read an
 already-FORGE-shaped dataset file (XML or JSON) into a neutral, in-memory
 envelope."** It says nothing about interpreting arbitrary external raw
 data (ROOT files, image folders, PCAP captures) — that is layer B
-(``forge.verify.dataset_adapter``, slice 7.4b), a deliberately separate
+(``forge.verify.dataset_adapter``), a deliberately separate
 protocol with a different owner:
 
   * **This layer (A)** — FORGE-owned. Loads a file whose bytes are
@@ -67,13 +66,13 @@ class EnvironmentMetadata:
 @dataclass(frozen=True)
 class DatasetMetadata:
     """Real dataset metadata: schema version, event ids, provenance, units,
-    seed, generator version — the fields §7.3 requires.
+    seed, generator version.
 
     ``event_ids`` is always ``list[str]``, never ``int`` — real external
     identifiers (``"run-355100-event-1842"``, ``"frame_000013"``) are not
     guaranteed to be small contiguous integers. The separate, purely
     internal, always-contiguous ``event_index`` that memory-indexed
-    stimulus (slice 7.5) actually addresses by is a position in
+    stimulus actually addresses by is a position in
     :attr:`SerializedDataset.events` — computed by the caller from this
     list's index, not stored here.
 

@@ -42,8 +42,7 @@ _CSV_FIELDS = [
     "timing_met", "slack_ns",
     "latency_best", "latency_avg", "latency_worst",
     "pipeline_ii", "pipeline_depth", "pipeline_type",
-    # release-plan §4.4 (Phase 4 slice 4): recovered, previously-dropped
-    # throughput range data.
+    # Recovered, previously-dropped throughput range data.
     "interval_min", "interval_max",
     "lut", "ff", "dsp", "bram_18k", "uram",
     "lut_pct", "ff_pct", "dsp_pct", "bram_pct", "uram_pct",
@@ -114,7 +113,7 @@ def to_markdown(reports: List[HLSModuleReport], out_path: Path) -> None:
             fmax = f"{r.estimated_fmax_mhz:.1f}{warn}"
             slack = f"{r.slack_ns:.3f}{warn}"
             u = r.resources.used
-            # release-plan §4.4: interval_min/interval_max express
+            # interval_min/interval_max express
             # throughput as a range — omitted (not "0-0") when the XML
             # never carried the data at all, to avoid implying a
             # fabricated 0-cycle interval.

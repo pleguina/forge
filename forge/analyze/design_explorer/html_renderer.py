@@ -1,5 +1,4 @@
-"""Self-contained, offline, interactive HTML design explorer (release-plan
-Phase 8, §8.2-§8.4).
+"""Self-contained, offline, interactive HTML design explorer.
 
 Follows the same self-contained-HTML pattern already twice-established in
 this codebase (``forge/analyze/dashboards/renderer.py``,
@@ -262,7 +261,7 @@ _APP_JS = r"""
     }
   });
 
-  // ── Collapse/expand (Defect 5, Option A) ────────────────────────────
+  // ── Collapse/expand ──────────────────────────────────────────────────
   const collapsedGroups = new Set();
 
   function isHiddenDescendant(node) {
@@ -465,7 +464,7 @@ _APP_JS = r"""
     cy.elements().removeClass("path-highlight");
   });
 
-  // ── Selected-object details panel (§8.4) ────────────────────────────
+  // ── Selected-object details panel ───────────────────────────────────
   function escapeHtml(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }

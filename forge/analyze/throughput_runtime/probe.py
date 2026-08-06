@@ -1,7 +1,6 @@
 """forge.analyze.throughput_runtime.probe — build
 :class:`~forge.verify.throughput_result.RuntimeThroughputResult` from a
-real simulation's Tier 2 probe CSV (release-plan Phase 10, slice 10.0C —
-preflight.md §5 Decision B).
+real simulation's Tier 2 probe CSV.
 
 Reuses :func:`forge.analyze.latency_runtime.probe.load_wide_probe_csv`
 directly — no new CSV parsing. A FIFO's ``full``/``empty``/``occupancy``/

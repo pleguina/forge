@@ -1,5 +1,4 @@
-"""Tests for forge.docsgen.diagnostics_registry (release-plan Phase 9,
-Defect 13)."""
+"""Tests for forge.docsgen.diagnostics_registry."""
 from __future__ import annotations
 
 from pathlib import Path

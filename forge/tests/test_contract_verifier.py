@@ -494,7 +494,7 @@ class TestProtocolSemantics:
 
 
 class TestInterfaceMembers:
-    """interface: / member: grouping (release-plan §2.5). Optional — a
+    """interface: / member: grouping. Optional — a
     role that omits them keeps today's 1:1 role-per-interface behavior."""
 
     def test_grouped_roles_with_known_members_are_valid(self, tmp_path):
@@ -570,7 +570,7 @@ class TestInterfaceMembers:
 
 
 class TestSchemaVersioning:
-    """schema_version: on *.interface.yaml (release-plan §2.7). Absence is
+    """schema_version: on *.interface.yaml. Absence is
     valid (fully backward compatible); a declared value is checked against
     INTERFACE_CONTRACT_SCHEMA_VERSION."""
 
@@ -612,7 +612,7 @@ class TestSchemaVersioning:
 
 
 class TestDeclarativeCardinality:
-    """cardinality: block structural validation (release-plan §2.4).
+    """cardinality: block structural validation.
     Design-level enforcement (does the wired design satisfy the declared
     bound) is covered separately in test_cardinality.py — ContractVerifier
     only validates one contract's cardinality: block in isolation."""

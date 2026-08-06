@@ -1,5 +1,5 @@
 """
-Declarative cardinality for interface contract roles (release-plan §2.4).
+Declarative cardinality for interface contract roles.
 
 A role may declare an optional ``cardinality:`` block bounding how many
 producers may drive it (input roles) or how many consumers it may drive
@@ -112,7 +112,7 @@ def parse_cardinality(role_spec: Dict[str, Any], *, direction: str) -> Optional[
 
     Returns ``None`` when the role declares no ``cardinality:`` at all —
     absence is valid and imposes no constraint, same convention as
-    ``protocol``/``member`` (Phase 2.2/2.5). Raises :class:`CardinalityError`
+    ``protocol``/``member``. Raises :class:`CardinalityError`
     on a structurally invalid block (unknown keys, bad bounds, or a
     direction/key mismatch such as ``consumers`` on an input role).
     """

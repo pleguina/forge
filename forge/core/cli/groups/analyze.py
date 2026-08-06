@@ -11,9 +11,9 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 def _emit_analyze_envelope(*, status: str, json_mode: bool, **kwargs) -> None:
-    """Shared tail for every `forge analyze` subcommand (release-plan
-    Phase 6, §6.7 — a lighter-touch pass than the pass/fail-gate
-    commands: `metrics`/`artifacts` matter more than `diagnostics` here,
+    """Shared tail for every `forge analyze` subcommand (a lighter-touch
+    pass than the pass/fail-gate commands: `metrics`/`artifacts` matter
+    more than `diagnostics` here,
     since these are report-generation commands, not verification gates).
     Only prints/exits in JSON mode — non-JSON output is each command's
     own pre-existing narrative prints, left untouched."""

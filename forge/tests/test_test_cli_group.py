@@ -1,6 +1,5 @@
-"""Real end-to-end coverage for `forge test` (release-plan Phase 6, §6.4) —
-the new check-only/prepare/run command group wrapping verification
-preparation and execution.
+"""Real end-to-end coverage for `forge test` — the check-only/prepare/run
+command group wrapping verification preparation and execution.
 
 Mirrors `tests/verify/test_verify_run_xsim.py`'s fixture pattern: copies
 plugins/passthrough_demo into an isolated tmp_path "consumer root" (nothing
@@ -121,7 +120,7 @@ def test_run_single_event_passes_with_real_xsim(
     assert metrics["events_run"] == 1
     assert metrics["events_passed"] == 1
     assert metrics["events_failed"] == 0
-    # Phase 7 slice 7.2: a real, non-fabricated aggregate duration.
+    # A real, non-fabricated aggregate duration.
     assert metrics["duration_s"] > 0
     assert payload["diagnostics"] == []
 
@@ -175,9 +174,9 @@ def test_run_all_events_produces_two_distinct_per_event_results(
     assert len(testcases) == 2
     assert {tc.get("name") for tc in testcases} == {"event_0", "event_1"}
     assert str(junit_path) in payload["artifacts"]
-    # Phase 7 slice 7.2: JUnit's previously-unused `time` attribute is now
-    # populated from each EventResult's real duration_s — real, non-zero,
-    # non-fabricated numbers, not just present-but-empty.
+    # JUnit's previously-unused `time` attribute is now populated from
+    # each EventResult's real duration_s — real, non-zero, non-fabricated
+    # numbers, not just present-but-empty.
     for tc in testcases:
         assert float(tc.get("time")) > 0
 
@@ -199,9 +198,9 @@ def test_run_all_events_produces_two_distinct_per_event_results(
 def test_run_results_json_has_real_backend_id_and_schema(
     capsys: pytest.CaptureFixture[str], consumer_root: Path,
 ) -> None:
-    """Phase 7 slice 7.2: --results-json writes a real, versioned FlowResult
-    — schema tag, real backend_id/duration_s per event, real waveform
-    artifact path (populated by slice 7.0's ExecutionResult.waveform_path)."""
+    """--results-json writes a real, versioned FlowResult — schema tag,
+    real backend_id/duration_s per event, real waveform artifact path
+    (populated by ExecutionResult.waveform_path)."""
     results_path = consumer_root / "results.json"
 
     result = _run(
@@ -283,9 +282,9 @@ def test_run_compile_failure_results_json_reports_compile_stage_diagnostic(
 def test_run_results_json_check_records_real_pass(
     capsys: pytest.CaptureFixture[str], consumer_root: Path,
 ) -> None:
-    """Phase 7 slice 7.3: a real passing event's CheckResult has real,
-    matching expected/observed values read from a real FORGE_CHECK| log
-    line — not inferred from the absence of a failure."""
+    """A real passing event's CheckResult has real, matching
+    expected/observed values read from a real FORGE_CHECK| log line —
+    not inferred from the absence of a failure."""
     results_path = consumer_root / "results.json"
     result = _run(
         capsys, "test", "run", str(_design_verification_yml(consumer_root)),
@@ -322,11 +321,10 @@ def test_run_results_json_check_records_real_failure(
     CheckResult with passed=False — proving the parser reads the real
     observed value, not a fabricated one, on the failure path too.
 
-    Phase 7 slice 7.4a: gen_stimulus.py now reads its golden events for
-    real from the XML dataset file (no more hardcoded Python dict) — so
-    the way to break event 0's expected value here is editing that real
-    XML file in this test's own tmp copy, exactly as slice 7.4a's own test
-    plan describes. `forge test run`'s per-event `_regenerate_stimulus_for_event`
+    gen_stimulus.py reads its golden events for real from the XML dataset
+    file (no more hardcoded Python dict) — so the way to break event 0's
+    expected value here is editing that real XML file in this test's own
+    tmp copy. `forge test run`'s per-event `_regenerate_stimulus_for_event`
     re-reads the same (edited) file on every event, so no module-cache
     trickery is needed."""
     golden_xml = (
@@ -402,9 +400,9 @@ def test_run_missing_rtl_reports_a_failed_event_not_a_false_pass(
     assert metrics["events_passed"] == 0
     assert metrics["events_failed"] == 1
     assert metrics["duration_s"] == 0.0
-    # Phase 7 slice 7.2: missing DUT RTL is caught at preflight, before any
-    # backend runs — the real stage-aware code is FWV011 (preflight), not
-    # the old hardcoded-regardless-of-cause FWV013 (simulate-stage exit).
+    # Missing DUT RTL is caught at preflight, before any backend runs —
+    # the real stage-aware code is FWV011 (preflight), not the old
+    # hardcoded-regardless-of-cause FWV013 (simulate-stage exit).
     assert payload["diagnostics"][0]["code"] == "FWV011"
 
 
@@ -412,9 +410,9 @@ def test_run_missing_rtl_reports_a_failed_event_not_a_false_pass(
 def test_run_readmemh_mode_compiles_once_across_two_events(
     capsys: pytest.CaptureFixture[str], consumer_root: Path,
 ) -> None:
-    """Phase 7 slice 7.5 acceptance bar: a real 2-event `--all-events` run
-    on the real `passthrough_readmemh` flow (stimulus_mode: readmemh) must
-    run xvlog/xelab exactly once, not twice — confirmed via the real
+    """A real 2-event `--all-events` run on the real
+    `passthrough_readmemh` flow (stimulus_mode: readmemh) must run
+    xvlog/xelab exactly once, not twice — confirmed via the real
     stdout narration (the "[xsim 1/3] Compiling" progress line, which only
     ever prints on a real xvlog invocation, vs. the real
     "[xsim 1-2/3] Reusing existing compile+elaborate" skip line) — and
@@ -480,9 +478,9 @@ def test_run_svh_include_flows_unaffected_by_readmemh_mechanism(
     capsys: pytest.CaptureFixture[str], consumer_root: Path,
 ) -> None:
     """Regression guard: the default svh_include flow (passthrough_xsim)
-    must still recompile per event, exactly as before slice 7.5 — the
-    readmemh mechanism is opt-in via stimulus_mode, never a behavior
-    change for flows that don't declare it."""
+    must still recompile per event — the readmemh mechanism is opt-in via
+    stimulus_mode, never a behavior change for flows that don't declare
+    it."""
     result = _run(
         capsys, "test", "run", str(_design_verification_yml(consumer_root)),
         "--flow", "passthrough_xsim", "--plugin", "passthrough_demo",

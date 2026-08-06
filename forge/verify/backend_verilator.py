@@ -15,7 +15,7 @@ This module owns the generic Verilator simulation lifecycle:
     same helper :class:`~forge.verify.backend_xsim.XsimBackend` uses)
   * ``verilator --binary`` build + generated-binary execution pipeline
   * Log capture and pass/fail classification (via the checker stack lifted
-    in Phase 7 slice 7.0, :mod:`forge.verify.backend_checker` — identical
+    into :mod:`forge.verify.backend_checker` — identical
     ``log_scan``/``binary``/``none`` semantics to the xsim backend)
 
 Waveform support
@@ -262,7 +262,7 @@ class VerilatorBackend(BackendAdapter):
     def run_backend(self, cfg: Any, ctx: Any) -> ExecutionResult:
         """Execute the two-stage Verilator pipeline: build, then run.
 
-        When ``cfg.stimulus_mode == "readmemh"`` (slice 7.5), the build
+        When ``cfg.stimulus_mode == "readmemh"``, the build
         step is skipped once a real, previously-successful build sentinel
         exists in ``work_dir`` — mirrors ``XsimBackend``'s identical
         compile-once-run-many-events discipline.
@@ -329,7 +329,7 @@ class VerilatorBackend(BackendAdapter):
         )
 
     def run_checker(self, cfg: Any, ctx: Any, result: ExecutionResult) -> bool:
-        """Thin delegate to the simulator-agnostic checker stack (slice 7.0)."""
+        """Thin delegate to the simulator-agnostic checker stack."""
         return backend_checker.run_checker(self, cfg, ctx, result)
 
     def checker_binary_path(self, cfg: Any) -> "Path | None":

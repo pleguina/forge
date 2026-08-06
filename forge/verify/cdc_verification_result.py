@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """``forge.cdc_verification_result.v1`` — a structured, versioned wrapper
 around :func:`forge.topgen.ip.cdc.report_all_crossings`'s structural
-clock/reset-domain-crossing check (release-plan Phase 10, slice 10.0C —
-preflight.md §8).
+clock/reset-domain-crossing check.
 
 Scope, resolved explicitly (the preflight text alone under-specifies
 this): the only real CDC verification in the repository today is

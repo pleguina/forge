@@ -6,8 +6,7 @@ data_in/data_in_valid for one cycle, then checks that data_out/data_out_valid
 carry the same value one cycle later (the DUT's entire behavior).
 
 Reads its golden events for real from ``schemas/data/passthrough_demo_golden.xml``
-via :class:`forge.verify.dataset_format.XmlDatasetLoader` (Phase 7, slice
-7.4a) — this used to be a hardcoded Python dict that nothing ever
+via :class:`forge.verify.dataset_format.XmlDatasetLoader` — this used to be a hardcoded Python dict that nothing ever
 cross-checked against the XML file, so the declared golden data and the
 simulated data could silently diverge. Now the XML file is the single
 source of truth; edit it and the simulated behavior changes accordingly.
@@ -47,7 +46,7 @@ def _ensure_bootstrapped() -> None:
     _bootstrap_mod.bootstrap()
 
 
-# ── readmemh-mode bit layout (Phase 7, slice 7.5) ──────────────────────
+# ── readmemh-mode bit layout ─────────────────────────────────────────
 # One fixed-width word per event: data_in(8) | data_in_valid(1) |
 # data_out(8) | data_out_valid(1) = 18 bits, MSB to LSB in that order.
 _MEM_FILE_NAME = "passthrough_events.mem"
@@ -68,7 +67,7 @@ def _load_events(dataset_path: Path = _DATASET_XML) -> "Dict[str, Dict[str, Any]
     """Load the real golden dataset, keyed by its real string event id.
 
     Routed through :class:`~forge.verify.dataset_service.DatasetService`
-    (release-plan Phase 10, slice 10.0A) — the same layer-A (format
+    — the same layer-A (format
     loading, dispatched by *dataset_path*'s suffix, ``.xml``/``.json``)
     plus layer-B (`passthrough.identity-xml` adapter) path
     ``generate_readmemh_stimulus`` below already uses, so the
@@ -138,7 +137,7 @@ def generate_readmemh_stimulus(
     flow_name: str, flow_dir: Path, *, dataset_path: Path = _DATASET_XML,
 ) -> "Dict[int, str]":
     """Write the fixed-shape, non-recompiling readmemh stimulus mechanism
-    (Phase 7, slice 7.5) once for *flow_dir*: a real ``.mem`` file (one
+    once for *flow_dir*: a real ``.mem`` file (one
     fixed-width hex word per event, via the layer-A/layer-B dataset
     pipeline unchanged from ``generate_for_flow``) plus a content-stable
     ``stimulus_current.svh`` that indexes into it at runtime via

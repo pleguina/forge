@@ -700,7 +700,7 @@ positional arguments:
                      contract, RTL stub)
     migrate          Migration helpers: schema-version insertion, partition->coordinates, legacy
                      plugin layout, legacy verify-contract filename, compat-mode contract
-                     inference (release-plan §2.8)
+                     inference
 
 optional arguments:
   -h, --help         show this help message and exit

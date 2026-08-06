@@ -39,8 +39,7 @@ def _run_checks() -> dict:
 
     # tool_present is the same shared presence check `forge verify doctor`
     # (verify/__main__.py) uses for xvlog/xelab/xsim — so both doctor
-    # commands agree on tool availability for the same environment
-    # (release-plan Phase 6, §6.3).
+    # commands agree on tool availability for the same environment.
     for tool in ("xvlog", "xelab", "xsim", "ghdl", "verilator"):
         found = tool_present(tool)
         checks[f"tool:{tool}"] = {
@@ -71,7 +70,7 @@ def _run_checks() -> dict:
 def _checks_to_envelope(checks: dict):
     """Reshape `_run_checks()`'s `{name: {status, detail}}` dict into a
     `CommandEnvelope` via the same `from_diagnostic_report` bridge every
-    other envelope-adopting command uses (release-plan Phase 6, §6.3) —
+    other envelope-adopting command uses —
     not a third bespoke JSON shape. Every check here is currently an
     optional extra (never `required=True`, see this module's docstring),
     so a missing one is a WARNING, not an ERROR; the `status`/`required`
@@ -120,7 +119,7 @@ def cmd_doctor(args):
 def register(sub) -> None:
     """Register the top-level ``forge doctor`` command.
 
-    Containment note (release-plan Phase 6, §6.6): this checks the
+    Containment note: this checks the
     *installation* (toolchains on PATH, optional Python extras, framework
     resource files) — plugin-agnostic. ``forge verify doctor`` checks one
     plugin's flow artifacts against a specific ``design.verification.yml``

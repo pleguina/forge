@@ -1,8 +1,8 @@
 """
 Tests for forge.ir.build.build_project_ir against real checked-in plugins
-(audit gap #1: "No canonical IR" — this is the first slice, migration steps
-1-3: topology/config loading, interface-contract loading, IP/RTL port
-metadata, plus read-only consumption of the existing matcher's output).
+— covering topology/config loading, interface-contract loading, IP/RTL
+port metadata, plus read-only consumption of the existing matcher's
+output.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def test_passthrough_demo_resolves_one_module_with_interfaces():
     assert len(d.instances) == 1
     assert d.connections  # global-net (clock/reset) fan-out at minimum
     assert d.clock_domains == [d.clock_domains[0]]
-    # Phase 3.1: domain name is the resolved net's raw port name, not a
+    # Domain name is the resolved net's raw port name, not a
     # hardcoded "default" — passthrough's contract declares clock_primary
     # on ap_clk.
     assert d.clock_domains[0].name == "ap_clk"
@@ -105,7 +105,7 @@ def test_unresolvable_module_gets_diagnostic_not_a_crash(tmp_path):
 
 def test_build_is_deterministic():
     """Identical semantic input must produce an identical IR hash — the
-    determinism property required for provenance (Phase 5) to eventually
+    determinism property required for provenance to eventually
     build on."""
     a = build_project_ir(PASSTHROUGH_DESIGN, contracts_from=PASSTHROUGH_MODULES)
     b = build_project_ir(PASSTHROUGH_DESIGN, contracts_from=PASSTHROUGH_MODULES)
@@ -113,7 +113,7 @@ def test_build_is_deterministic():
 
 
 def test_content_hash_is_independent_of_yaml_top_level_key_order(tmp_path):
-    """Release-plan Phase 5 slice 5.4 determinism test: two design.yml
+    """Determinism test: two design.yml
     fixtures that are byte-different only in top-level key order must
     still produce an identical content_hash(). Architecturally guaranteed
     already (every loader parses YAML into a plain dict, and
@@ -160,8 +160,7 @@ def test_content_hash_is_independent_of_yaml_top_level_key_order(tmp_path):
 def test_connections_carry_wiring_method_evidence():
     """Real designs exercise multiple wiring methods (contract_wiring,
     topology_group, port_map) — trigger_demo's should all be populated
-    with a known method, not left None (release-plan §3.5 "matching
-    evidence", first slice)."""
+    with a known method, not left None."""
     project = build_project_ir(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
     module_connections = [
         c for c in project.design.connections
@@ -226,12 +225,12 @@ def test_reserved_role_surfaces_as_ir_diagnostic(tmp_path):
 
 
 def test_modules_carry_latency_metadata_from_the_registry():
-    """Migration step 7: ResolvedModuleDefinition.latency_cycles/latency_hint/
+    """ResolvedModuleDefinition.latency_cycles/latency_hint/
     is_variable_latency are populated from Module.timing (the shared
     DesignConfig loader), not re-derived — trigger_demo's modules.yml
-    declares latency_hint throughout (Phase 4 slice 2: 'trig' itself was
-    migrated to the newer structured latency: {kind: fixed, cycles: 3}
-    spelling, real-design-proving the new syntax — see
+    declares latency_hint throughout ('trig' itself was migrated to the
+    newer structured latency: {kind: fixed, cycles: 3} spelling,
+    real-design-proving the new syntax — see
     ResolvedModuleDefinition.latency below)."""
     project = build_project_ir(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
     trig = next(m for m in project.design.modules if m.name == "trig")
@@ -253,7 +252,7 @@ def test_module_matching_is_unaffected_by_latency_metadata():
 
 
 def test_interfaces_carry_protocol_from_the_contract():
-    """Phase 2.2: ResolvedLogicalInterface.protocol is populated from the
+    """ResolvedLogicalInterface.protocol is populated from the
     interface contract's protocol: field (dec's raw_hit/decoded_hit
     declare protocol: valid-only in the real trigger_demo contract)."""
     project = build_project_ir(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
@@ -267,7 +266,7 @@ def test_interfaces_carry_protocol_from_the_contract():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 2.5 — interface members
+# Interface members
 # ─────────────────────────────────────────────────────────────────────────────
 
 from forge.ir.build import _build_interfaces
@@ -353,7 +352,7 @@ def test_reverse_direction_member_records_its_own_direction():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 2.4 — declarative cardinality (IR representation)
+# Declarative cardinality (IR representation)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_cardinality_is_resolved_from_the_data_members_declaration():
@@ -382,7 +381,7 @@ def test_no_cardinality_declared_stays_none():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 3.1 — clock/reset domain resolution
+# Clock/reset domain resolution
 # ─────────────────────────────────────────────────────────────────────────────
 
 from forge.ir.build import assemble_project_ir
@@ -467,7 +466,7 @@ def test_unresolvable_domain_produces_a_diagnostic():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 3.2 — named domain relationships, CDC-crossing IR fields
+# Named domain relationships, CDC-crossing IR fields
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _domain_contract(name, clock_port, reset_port="rst"):
@@ -517,7 +516,7 @@ def test_same_domain_connection_does_not_cross():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 3.3 — transformation-kind taxonomy
+# Transformation-kind taxonomy
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_register_stages_is_pipeline_register_kind():
@@ -618,7 +617,7 @@ def test_cdc_declaration_produces_cdc_synchronizer_or_async_fifo_kind():
     conn = next(c for c in project.design.connections if c.producer.instance_id == "src")
     assert [x.kind for x in conn.transformations] == ["async_fifo"]
 
-    # release-plan §10.0B: 'level_sync' (the canonical spelling) maps to
+    # 'level_sync' (the canonical spelling) maps to
     # the same 'cdc_synchronizer' kind as its '2ff_sync' alias.
     cfg.connections[0].cdc = {"kind": "level_sync"}
     conn_map, global_nets, report = auto_match_ports(cfg, ip_info)
@@ -649,7 +648,7 @@ def test_cdc_declaration_produces_cdc_synchronizer_or_async_fifo_kind():
 
 
 def test_reset_domains_sync_produces_reset_synchronizer_kind():
-    """release-plan §10.0B: reset_domains.<name>.sync: reset_sync is a
+    """reset_domains.<name>.sync: reset_sync is a
     domain-keyed transformation (ResolvedResetDomain.transformations),
     not a connection-keyed one."""
     # A custom-named reset domain needs a contract declaring its
@@ -717,11 +716,11 @@ def test_trigger_demo_real_fanout_producers_are_tagged():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 3.5 — matching evidence expansion
+# Matching evidence expansion
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_trigger_demo_real_gather_scatter_evidence():
-    """Real-design validation (release-plan §3.5): trigger_demo's
+    """Real-design validation: trigger_demo's
     decoder_to_collector topology group is a real gather pattern (scalar
     dec_i.decoded_hit/decoded_valid -> col's prefix-array in_hit_i/
     in_valid_i) — the exact 8-connection set computed independently before
@@ -756,7 +755,7 @@ def test_trigger_demo_matching_evidence_iterates_without_crashing():
 
 
 def test_matching_evidence_surfaces_width_mismatch():
-    """No width_adapter exists (release-plan §3.3) — a producer/consumer
+    """No width_adapter exists — a producer/consumer
     width mismatch would otherwise be completely silent. matching_evidence
     surfaces the two different widths instead of hiding the fact."""
     src = Module(name="src", top="src_top", src=["x.v"])
@@ -869,7 +868,7 @@ def test_matching_evidence_synthetic_scatter():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 3.3 — tie_off connections
+# tie_off connections
 # ─────────────────────────────────────────────────────────────────────────────
 
 from forge.ir.build import build_tie_off_connections

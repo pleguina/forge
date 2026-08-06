@@ -1,12 +1,10 @@
 """
-Content-hash provenance for the canonical IR (release-plan Phase 5:
-"Hash-based provenance and reproducibility").
+Content-hash provenance for the canonical IR.
 
-This is a bounded, honest slice of Phase 5 — it does **not** replace the
+This is a bounded, honest slice — it does **not** replace the
 existing mtime-based staleness checks used by `topgen gen-top`/`verify`
 (`forge/core/stale_detection.py`, `forge/verify/stale_artifact.py`), which
-are untouched this session per the "don't touch gen-top/verify's existing
-code paths" scoping established in Phase 0/1. It provides a new, parallel,
+are intentionally left untouched. It provides a new, parallel,
 content-hash-based provenance manifest attached to the canonical IR
 (`forge inspect --provenance`/`--explain-staleness`), covering:
 
@@ -18,9 +16,9 @@ content-hash-based provenance manifest attached to the canonical IR
 - the command options used;
 - an explanation of *why* two manifests differ (changed input file,
   changed IR content, changed FORGE version, changed command options,
-  missing/added input files) — release-plan §5.3.
+  missing/added input files).
 
-Slice 5.1 additive fields (all optional/empty-default, so an older
+Additive fields (all optional/empty-default, so an older
 manifest still round-trips): ``plan_hash`` (the generation plan's content
 hash, when a caller has one), ``toolchain_versions`` (best-effort tool
 version strings via ``forge.core.toolchain_versions``), ``output_hashes``
@@ -28,7 +26,7 @@ version strings via ``forge.core.toolchain_versions``), ``output_hashes``
 ``project_identity`` (the resolved consumer-root directory name, a more
 stable label than the bare design-file-stem ``project_name``).
 
-``generated_at`` is informational metadata only, per §5.2 — it is never
+``generated_at`` is informational metadata only — it is never
 compared when explaining staleness.
 """
 
@@ -58,8 +56,8 @@ class ProvenanceManifest:
     source_hashes: Dict[str, str] = field(default_factory=dict)
     command_options: Dict[str, Any] = field(default_factory=dict)
     generated_at: Optional[str] = None  # informational only — never used for staleness
-    # Everything below is additive (Phase 5 slice 5.1) — all optional/
-    # empty-default, so a slice-5.0-era manifest still round-trips.
+    # Everything below is additive — all optional/
+    # empty-default, so an older (pre-0.2.0) manifest still round-trips.
     plan_hash: Optional[str] = None
     # Toolchain versions (forge.core.toolchain_versions) — populated
     # whenever a manifest is built, since it's an environment fact, not
@@ -136,8 +134,8 @@ def _relative_key(path: Path, base_dir: Path) -> str:
 
     Deliberately keeps its own ``os.path.relpath``-based implementation
     rather than delegating to the newer, general-purpose
-    ``forge.core.utils.portable_path.portable_display_path()`` (release-
-    plan Phase 8, slice 8.0A): that utility intentionally *never* emits a
+    ``forge.core.utils.portable_path.portable_display_path()``: that
+    utility intentionally *never* emits a
     ``'../'``-laden relative path (falling back to a basename + hash
     label instead), which is the right call for a rendered, potentially-
     shared visualization artifact — but wrong here. A real, tested
@@ -229,8 +227,7 @@ def read_provenance(path: "str | Path") -> ProvenanceManifest:
 def render_markdown(manifest: ProvenanceManifest) -> str:
     """Render *manifest* as a Markdown summary — pure presentation over
     already-computed provenance data, no new hashing/comparison logic
-    (release-plan Phase 6, §6.5: `forge report`'s provenance summary
-    section)."""
+    (`forge report`'s provenance summary section)."""
     lines: List[str] = ["# Provenance summary", ""]
     lines.append(f"- **schema version**: {manifest.schema_version}")
     lines.append(f"- **forge version**: {manifest.forge_version or '(unknown)'}")
@@ -292,12 +289,12 @@ def explain_staleness(
     previous: ProvenanceManifest, current: ProvenanceManifest,
 ) -> StalenessExplanation:
     """Compare two provenance manifests and explain, in plain language,
-    every reason they differ — release-plan §5.3.
+    every reason they differ.
 
     A *previous* manifest whose ``schema_version`` predates
-    ``PROVENANCE_SCHEMA_VERSION`` (e.g. a 0.1.0-era manifest from before
-    slice 5.0's ``source_hashes`` key-format change, absolute paths
-    instead of relative ones) is flagged as unsupported and compared no
+    ``PROVENANCE_SCHEMA_VERSION`` (e.g. a 0.1.0-era manifest whose
+    ``source_hashes`` keys were absolute paths instead of relative ones)
+    is flagged as unsupported and compared no
     further — every other field below assumes both manifests share the
     current key/shape conventions, so comparing a 0.1.0 manifest's
     absolute-path keys against a 0.2.0 manifest's relative-path keys
@@ -346,7 +343,7 @@ def explain_staleness(
         if previous.source_hashes[common] != current.source_hashes[common]:
             reasons.append(f"changed input: {common}")
 
-    # Slice 5.1 made toolchain_versions real; now meaningful to diff —
+    # toolchain_versions is now real data, meaningful to diff —
     # same set-diff pattern as source_hashes above.
     prev_tools = set(previous.toolchain_versions)
     curr_tools = set(current.toolchain_versions)

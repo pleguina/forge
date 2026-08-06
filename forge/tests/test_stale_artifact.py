@@ -1,7 +1,7 @@
 """
 Tests for forge.verify.stale_artifact — verify-flow artifact staleness,
-including the Phase 5 slice 5.2 content-hash-aware confirmation layered
-on top of the existing mtime-only checks.
+including content-hash-aware confirmation layered on top of the existing
+mtime-only checks.
 """
 
 from __future__ import annotations
@@ -54,9 +54,8 @@ class TestStalenessResult:
 class TestCheckContentHashAware:
     """Direct tests of the module-private `_check` helper `check_flow_staleness`
     delegates every artifact comparison to — real for the common
-    `dut_rtl_source: gen-top/<name>` layout (release-plan Phase 5 slice
-    5.2), where the DUT RTL file lives right next to gen-top's own
-    provenance.json."""
+    `dut_rtl_source: gen-top/<name>` layout, where the DUT RTL file lives
+    right next to gen-top's own provenance.json."""
 
     def test_touched_but_unchanged_rtl_reports_fresh_with_provenance(self, tmp_path: Path):
         from forge.core.utils.content_hash import hash_file
@@ -102,7 +101,7 @@ class TestCheckContentHashAware:
     def test_no_provenance_json_falls_back_to_mtime_only(self, tmp_path: Path):
         """The common case for HLS-synthesis-sourced flows
         (`dut_rtl_source: build_hls_.../syn/verilog`) — no provenance.json
-        exists there, so behavior is unchanged from before slice 5.2."""
+        exists there, so behavior falls back to mtime-only staleness."""
         now = time.time()
         rtl = _touch(tmp_path / "hit_decoder.v", mtime=now)
         port_map = _touch(tmp_path / "port_map.yaml", mtime=now - 100)

@@ -1,5 +1,5 @@
 """``python -m forge.docsgen`` — regenerate (or check) every page under
-``docs/reference/`` (release-plan Phase 9, §9.3/§9.4).
+``docs/reference/``.
 
 Usage::
 

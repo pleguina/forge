@@ -1,5 +1,5 @@
 """
-Tests for forge.topgen.ip.cdc.verify_cdc (release-plan §3.2) — structural
+Tests for forge.topgen.ip.cdc.verify_cdc — structural
 clock/reset-domain-crossing detection against what auto_match_ports
 actually wired.
 """
@@ -131,7 +131,7 @@ class TestVerifyCdc:
 
 
 class TestReportAllCrossings:
-    """release-plan §10.0C: report_all_crossings returns one entry per
+    """report_all_crossings returns one entry per
     real crossing — passing (declared+approved) and failing (undeclared)
     alike, not just verify_cdc's failures."""
 

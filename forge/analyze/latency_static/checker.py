@@ -5,24 +5,23 @@ Detect latency mismatches at merge points in the pipeline DAG.
 A *merge point* is any node that has more than one distinct predecessor.
 By default, all inputs arriving at a merge point are expected to have
 accumulated the same total latency; otherwise the pipeline will sample
-stale data on one or more paths. As of Phase 4 slice 3 (release-plan
-§4.3), this is no longer an unconditional assumption: a merge point's
-*alignment requirement* is inferred from its predecessors' declared
-timing kinds (fixed/bounded/elastic — Phase 4 slice 2) and, best-effort,
+stale data on one or more paths. This is not an unconditional assumption:
+a merge point's *alignment requirement* is inferred from its predecessors'
+declared timing kinds (fixed/bounded/elastic) and, best-effort,
 the consuming interface's protocol — see :func:`check_merge_points`'s
 ``alignment`` field on :class:`MismatchReport`.
 
 For an ``exact_cycle`` mismatch the checker emits a suggested
 ``signal_delay`` insertion with the required depth.
 
-As of Phase 4 slice 1 (release-plan §4.1), each path's accumulated latency
+Each path's accumulated latency
 includes the connecting edge's own latency (``register_stages``/
 ``delay_cycles``/a known-depth CDC synchronizer) in addition to the
 predecessor node's latency — previously the edge contributed nothing at
 all, so the checker was blind to any latency FORGE itself inserts on a
 connection.
 
-As of Phase 4 slice 3, ``LatencyGraph`` nodes are per-instance (not
+``LatencyGraph`` nodes are per-instance (not
 per-module-group) — a real multi-instance fan-in (e.g. trigger_demo's
 ``dec`` x4 -> ``col``) now produces a genuine multi-predecessor merge
 point here, where before it collapsed to a single edge and could never
@@ -52,7 +51,7 @@ class PathLatency:
     # "inferred" is the correct provenance vocabulary entry for it
     # (forge.analyze.latency_model.LATENCY_SOURCES).
     provenance: Optional[LatencyProvenance] = None
-    # release-plan §4.3 (Phase 4 slice 3): the [lo, hi] cycle range this
+    # The [lo, hi] cycle range this
     # path contributes, populated whenever total_cycles is known — a
     # degenerate [v, v] point range for a fixed/hint/hls_report
     # predecessor, or the predecessor's real [min, max] (+ edge cycles)
@@ -70,9 +69,9 @@ class MismatchReport:
     min_latency: Optional[int]
     delta: Optional[int]          # max − min  (0 = balanced) — exact_cycle alignment only
     suggestion: Optional[str]     # e.g. "Insert signal_delay DEPTH=4 on …"
-    # release-plan §4.3: the alignment requirement this merge point was
+    # The alignment requirement this merge point was
     # inferred to have — "the checker must not assume every reconvergence
-    # requires identical scalar latency" (§4.3's own wording). One of:
+    # requires identical scalar latency". One of:
     #   exact_cycle       — every predecessor is fixed/hint/hls_report;
     #                        default, byte-identical to pre-slice-3 behavior.
     #   bounded_skew      — at least one predecessor declares `kind: bounded`;
@@ -113,8 +112,7 @@ class MismatchReport:
 
 def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[int], bool]":
     """Cumulative (cycles, is_unknown) from *name* back through any
-    straight (single-predecessor) chain of fixed-ish nodes above it —
-    release-plan Phase 10, slice 10.2 finding.
+    straight (single-predecessor) chain of fixed-ish nodes above it.
 
     Before this, a path's latency was just its *immediate* predecessor's
     own node latency + connecting edge — correct for a direct producer,
@@ -127,7 +125,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     point is single-hop, so this gap had no test surface before.
 
     Walks backward only through nodes with a single *real* predecessor
-    (release-plan Phase 10, slice 10.7B: a predecessor reached via an
+    (a predecessor reached via an
     ``unknown_cdc`` edge — mailbox_transfer/async_fifo — doesn't count
     toward this "single predecessor" test at all, since it's a legitimate
     async side-channel exempt from exact-cycle alignment, e.g. a

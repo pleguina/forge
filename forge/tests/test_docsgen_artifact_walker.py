@@ -1,4 +1,4 @@
-"""Tests for forge.docsgen.artifact_walker (release-plan Phase 9, Defect 11)."""
+"""Tests for forge.docsgen.artifact_walker."""
 from __future__ import annotations
 
 from forge.docsgen.artifact_walker import ARTIFACT_ROOTS, generate_artifacts_page

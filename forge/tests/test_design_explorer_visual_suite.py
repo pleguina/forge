@@ -1,9 +1,9 @@
-"""Release-plan Phase 8, slice 8.5 — the closing visual test suite.
+"""The closing visual test suite.
 
-Every earlier slice's own tests only prove that slice in isolation
-(8.0A/8.0B: graph_model/overlays; 8.1: dot_renderer; 8.2: html_renderer;
-8.3/8.4: functionality/details-panel data contracts). This module closes
-the loop with the cross-cutting proofs the release plan's §8.5 lists:
+Every earlier test module only proves its own piece in isolation
+(graph_model/overlays; dot_renderer; html_renderer;
+functionality/details-panel data contracts). This module closes
+the loop with the cross-cutting proofs:
 determinism (DOT + embedded JSON, byte-identical), stable identifiers,
 complete edge coverage, valid diagnostic links, a consolidated
 escaping/injection suite across every renderer, and a consolidated
@@ -95,7 +95,7 @@ def test_every_node_and_edge_id_equals_its_real_corresponding_ir_id():
     assert graph_edge_ids == real_connection_ids
 
 
-# ── Valid diagnostic links (Defect 3's direct regression guard) ─────────
+# ── Valid diagnostic links ───────────────────────────────────────────────
 
 @pytest.mark.parametrize("design,modules", [
     (PASSTHROUGH_DESIGN, PASSTHROUGH_MODULES),
@@ -117,14 +117,14 @@ def test_every_resolved_diagnostic_target_resolves_to_a_real_object_of_the_corre
         assert target.kind in object_ids_by_kind, target
         assert target.id in object_ids_by_kind[target.kind], target
         # Module-definition diagnostics resolve to the real MODULE_GROUP
-        # node — never to an arbitrary instance id (Defect 3's policy).
+        # node — never to an arbitrary instance id.
         if target.kind == "module-definition":
             module_group = next(n for n in graph.nodes if n.id == f"module:{target.id}")
             assert d.message in [pd.message for pd in module_group.diagnostics]
 
     # Neither real fixture's own validator diagnostics happen to carry a
-    # module-scoped location today (confirmed in the Phase 8
-    # investigation) — `checked_any` may legitimately be False here. The
+    # module-scoped location today — `checked_any` may legitimately be
+    # False here. The
     # real, positive "a resolvable diagnostic resolves correctly" proof is
     # test_design_explorer_overlays.py's dedicated synthetic-design test;
     # this pass is the complementary "never a false/incorrect resolution

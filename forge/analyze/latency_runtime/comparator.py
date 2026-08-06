@@ -3,7 +3,7 @@
 Compare HLS-predicted latency against simulation-observed latency and produce
 a structured comparison result per module.
 
-Release-plan §4.5 (Phase 4 slice 5) requires reports to show "predicted
+Reports must show "predicted
 latency; observed latency; discrepancy; source of each prediction;
 affected path or interface." The first three were already here
 (``hls_predicted``/``observed``/``delta``, kept exactly as-is for
@@ -32,7 +32,7 @@ class LatencyComparison:
     observed: Optional[int]        # measured from probe CSV
     delta: Optional[int]           # observed − predicted  (positive = slower than expected)
     verdict: str                   # "match" | "over" | "under" | "unknown"
-    # release-plan §4.5: the same two latency figures above, wrapped with
+    # The same two latency figures above, wrapped with
     # provenance — additive, not a replacement (hls_predicted/observed
     # stay the source of truth for reporter.py's existing table).
     predicted: Optional[LatencyValue] = None

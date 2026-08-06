@@ -1,5 +1,5 @@
 """A real, install-and-import proof that the vendored Cytoscape.js asset
-(release-plan Phase 8, slice 8.2) round-trips through an actual `pip
+round-trips through an actual `pip
 install` of the built package — not just "the file exists in the working
 tree". Matches this codebase's existing discipline of proving packaging
 claims with a real install rather than a source-tree-only check.

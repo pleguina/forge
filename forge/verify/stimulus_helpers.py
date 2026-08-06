@@ -116,7 +116,7 @@ def emit_check_record(
     """Return the unconditional ``FORGE_CHECK|...`` machine-readable log line.
 
     Printed once per check, on **both** outcomes (pass and fail) — the
-    corrected slice 7.3 design. Parsing only a fail-only ``FAIL: ...`` line
+    corrected design. Parsing only a fail-only ``FAIL: ...`` line
     cannot produce an ``observed`` value for a passing check, since no such
     line is ever printed when nothing fails; this line always carries both
     ``expected`` and ``observed``, regardless of outcome.
@@ -149,8 +149,8 @@ def emit_output_check(
 ) -> list[str]:
     """Return SV lines that check *signal* against *expected*.
 
-    Emits an unconditional ``FORGE_CHECK|...`` machine-readable record
-    (slice 7.3), then an ``if`` block that calls ``$fatal`` (and prints a
+    Emits an unconditional ``FORGE_CHECK|...`` machine-readable record,
+    then an ``if`` block that calls ``$fatal`` (and prints a
     human-readable FAIL line compatible with the framework log-scanner) on
     mismatch. The two are separate, deliberately: the human ``FAIL:`` line
     is unchanged for people reading logs directly; ``FORGE_CHECK|`` is the
@@ -234,7 +234,7 @@ def emit_event_index_read(
     into *var_name*, defaulting to ``0`` when absent.
 
     The one piece of framework-generic boilerplate every ``stimulus_mode:
-    readmemh`` plugin needs (slice 7.5) — reused verbatim rather than each
+    readmemh`` plugin needs — reused verbatim rather than each
     plugin hand-rolling its own ``$value$plusargs`` call. ``EVENT_INDEX``
     (never ``EVENT_ID``) is deliberate: it addresses a fixed-shape memory
     array by internal, always-contiguous position — an arbitrary string
@@ -259,7 +259,7 @@ def emit_runtime_output_check(
     ``$readmemh`` memory word) rather than a compile-time-known Python
     value.
 
-    Needed by the ``stimulus_mode: readmemh`` mechanism (slice 7.5): one
+    Needed by the ``stimulus_mode: readmemh`` mechanism: one
     compiled testbench services many events, so the expected value varies
     per ``+EVENT_INDEX`` at *simulation* runtime, not at *generation*
     time — ``emit_output_check``'s Python-side hex formatting has nothing
@@ -334,7 +334,7 @@ class StimulusEmitter:
     def tick(self, cycles: int = 1, clock: str = "ap_clk") -> "StimulusEmitter":
         """Append one or more positive-edge clock waits.
 
-        ``clock`` (release-plan Phase 10, slice 10.4): defaults to
+        ``clock``: defaults to
         ``ap_clk`` — every pre-existing single-clock-domain stimulus
         script is unaffected. Pass a different top-level clock net name
         (matching a ``simulation.extra_clocks`` entry the flow declares —
@@ -365,7 +365,7 @@ class StimulusEmitter:
         """Append output-check lines for *signal* against *expected*.
 
         Generates an unconditional ``FORGE_CHECK|...`` machine-readable
-        record (slice 7.3) plus an ``if`` block that emits ``FAIL: <label>``
+        record plus an ``if`` block that emits ``FAIL: <label>``
         (recognised by the framework log-scanner) and calls ``$fatal(1,
         ...)`` on mismatch. Pass *event_id* so the record's ``check_id`` is
         ``f"{event_id}:{label}"`` — deterministic and attributable to the
@@ -507,7 +507,7 @@ def write_readmemh_stimulus_svh(
     header_comment: str = "",
 ) -> None:
     """Write a complete ``stimulus_current.svh`` for ``stimulus_mode:
-    readmemh`` (slice 7.5).
+    readmemh``.
 
     Unlike :func:`write_run_stimulus_svh` (which wraps its *entire* body
     inside the task), this mechanism genuinely needs module-scope

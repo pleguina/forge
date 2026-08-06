@@ -237,7 +237,7 @@ def _render_signal_declarations(
 ) -> str:
     """Render SV signal declarations from port map entries.
 
-    ``reserved_names`` (release-plan Phase 10, slice 10.4): extra clock/reset
+    ``reserved_names``: extra clock/reset
     net names already declared by :func:`_render_extra_clocks_and_resets` —
     skipped here the same way ``ap_clk``/``ap_rst`` always have been, so a
     multi-clock-domain design's domain clock/reset ports don't get declared
@@ -294,7 +294,7 @@ def _render_input_zeroing(
 ) -> str:
     """Render initial zeroing of all input signals.
 
-    ``reserved_names``: extra clock/reset nets (slice 10.4) — these are
+    ``reserved_names``: extra clock/reset nets — these are
     driven by their own free-running generator / reset sequence
     (:func:`_render_extra_clocks_and_resets`), not zeroed as plain stimulus.
     """
@@ -317,8 +317,8 @@ def _render_extra_clocks_and_resets(
     extra_resets: "dict[str, str]",
 ) -> str:
     """Render additional free-running clocks and their own
-    reset-then-synchronously-deassert sequences (release-plan Phase 10,
-    slice 10.4 — real multi-clock-domain xsim support).
+    reset-then-synchronously-deassert sequences (real multi-clock-domain
+    xsim support).
 
     Each extra clock gets its own ``logic``/``always`` toggle pair, exactly
     like ``ap_clk``'s own generation above, just at its own declared period.
@@ -338,7 +338,7 @@ def _render_extra_clocks_and_resets(
     if not extra_clocks and not extra_resets:
         return ""
 
-    lines: list[str] = ["  // ── Additional clock domains (release-plan Phase 10, slice 10.4) ──"]
+    lines: list[str] = ["  // ── Additional clock domains ──"]
     for name, period_ns in sorted(extra_clocks.items()):
         lines.append(f"  logic {name};")
         lines.append(f"  initial {name} = 1'b0;")
@@ -435,9 +435,9 @@ def render_tb_sv(
         clk_period_ns, reset_cycles, idle_cycles_after_reset,
         post_stimulus_drain_cycles:  Simulation timing parameters.
         port_map_path:  Optional path to port_map.yaml (gen-top output).
-        extra_clocks, extra_resets:  Multi-clock-domain designs
-            (release-plan Phase 10, slice 10.4) — additional top-level
-            clock/reset nets beyond the primary ap_clk/ap_rst. See
+        extra_clocks, extra_resets:  Multi-clock-domain designs —
+            additional top-level clock/reset nets beyond the primary
+            ap_clk/ap_rst. See
             forge.verify.design_contract.SimulationDefaults's own
             extra_clocks/extra_resets fields for the {net_name: value}
             shape. Empty/None (the default) reproduces the exact

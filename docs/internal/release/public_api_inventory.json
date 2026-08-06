@@ -277,7 +277,7 @@
       "kind": "class",
       "module": "forge.ir",
       "name": "ResolvedVerificationPlan",
-      "summary": "Placeholder for verification planning/bindings (migration step 9)."
+      "summary": "Placeholder for verification planning/bindings."
     },
     {
       "kind": "class",

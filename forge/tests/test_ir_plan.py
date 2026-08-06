@@ -1,7 +1,7 @@
 """
-Tests for forge.ir.plan (release-plan §3.4 — deterministic generation-plan
-artifact) in isolation, with synthetic ResolvedProject/MatchReport
-fixtures — no CLI involved. Real end-to-end coverage (against
+Tests for forge.ir.plan — the deterministic generation-plan artifact — in
+isolation, with synthetic ResolvedProject/MatchReport fixtures — no CLI
+involved. Real end-to-end coverage (against
 plugins/trigger_demo/passthrough_demo) lives in test_build_cli_group.py.
 """
 

@@ -1,5 +1,4 @@
-"""Staleness checks for generated/mirrored documentation (release-plan
-Phase 9, slice 9.4, Defects 7 and 13).
+"""Staleness checks for generated/mirrored documentation.
 
 Two independent kinds of drift this guards against:
 

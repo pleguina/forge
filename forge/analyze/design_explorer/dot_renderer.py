@@ -1,11 +1,10 @@
-"""Deterministic Graphviz DOT + SVG rendering from a ``DesignGraph``
-(release-plan Phase 8, §8.1).
+"""Deterministic Graphviz DOT + SVG rendering from a ``DesignGraph``.
 
 Plain Python string templating — no ``graphviz``/``pydot`` binding is
 installed or declared as a dependency (DOT is a text format; none is
 needed). Rendering SVG shells out to the real ``dot`` binary, matching
 this codebase's own established pattern of shelling out to a real
-external tool (Phase 7's ``subprocess_wrapper.py``) rather than adding a
+external tool (``subprocess_wrapper.py``) rather than adding a
 Python binding dependency.
 """
 from __future__ import annotations
@@ -101,8 +100,8 @@ def _edge_dot(edge: GraphEdge) -> str:
     # `id=` carries the real, real ResolvedConnection.id verbatim into the
     # rendered DOT/SVG (mapped straight through to the SVG element's own
     # id attribute by `dot`) — the direct, literal "every real connection
-    # id appears in the rendered artifact" proof (release-plan §8.5), and
-    # a real hook for future click-through interactivity.
+    # id appears in the rendered artifact" proof, and a real hook for
+    # future click-through interactivity.
     attrs = [f"id={dot_id(edge.id)}", f'color="{color}"']
     if label_parts:
         attrs.append(f"label={dot_label(chr(10).join(label_parts))}")
@@ -116,7 +115,7 @@ def _edge_dot(edge: GraphEdge) -> str:
 def render_dot(graph: DesignGraph) -> str:
     """Render *graph* as deterministic Graphviz DOT text.
 
-    Default view (release-plan §8.1): module-definition grouping via real
+    Default view: module-definition grouping via real
     ``subgraph cluster_*`` blocks (from real ``MODULE_GROUP`` nodes' real
     ``members``), external ports as visually distinct nodes, one edge per
     real ``GraphEdge`` (including every external-port connection — no
@@ -128,7 +127,7 @@ def render_dot(graph: DesignGraph) -> str:
     Clock/reset-domain grouping is not rendered as a second, nested
     cluster hierarchy here (Graphviz clusters are not well-suited to a
     node belonging to two independent groupings at once) — that toggle is
-    the interactive HTML explorer's job (§8.3), which can freely re-parent
+    the interactive HTML explorer's job, which can freely re-parent
     nodes client-side. The static view's module-definition grouping is
     the load-bearing, always-on default.
     """

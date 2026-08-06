@@ -1,6 +1,6 @@
-"""Unit tests for the FORGE_CHECK machine-readable check-record mechanism
-(Phase 7, slice 7.3): SV emission (stimulus_helpers.py) and log parsing
-(results.py). Real end-to-end proof against actual xsim output lives in
+"""Unit tests for the FORGE_CHECK machine-readable check-record mechanism:
+SV emission (stimulus_helpers.py) and log parsing (results.py). Real
+end-to-end proof against actual xsim output lives in
 tests/test_test_cli_group.py.
 """
 

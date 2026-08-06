@@ -1,15 +1,14 @@
 """
 forge.core.provenance_staleness — content-hash confirmation for the
-existing mtime-based staleness checkers (release-plan Phase 5 slice 5.2:
-"Modification times may remain an optimization, but must not be the
-source of truth").
+existing mtime-based staleness checkers ("Modification times may remain
+an optimization, but must not be the source of truth").
 
 ``forge/core/stale_detection.py`` (``gen-top``'s own staleness check) and
 ``forge/verify/stale_artifact.py`` (verify-flow artifact staleness) both
 compare source/artifact modification times only. This module adds an
 optional *confirmation* step on top, without replacing either checker's
 own logic or call sites: when a ``provenance.json`` (written by
-``gen-top`` as of Phase 5 slice 5.1, see ``forge/ir/provenance.py``) is
+``gen-top``, see ``forge/ir/provenance.py``) is
 available next to a source file mtime flagged as newer, and that
 manifest already recorded a content hash for the exact same file, compare
 it against a freshly computed one. A touched-but-unchanged source no
@@ -100,8 +99,8 @@ def confirms_fresh(source_path: "str | Path", provenance_dir: "str | Path") -> O
 
 def describe_staleness_basis(content_confirmed_fresh: Optional[bool]) -> str:
     """A short, human-readable clause describing *why* a stale verdict is
-    trusted — release-plan Phase 5 slice 5.3: "surface a real reason
-    string, not just stale: yes/no", reusing
+    trusted — surfacing a real reason
+    string, not just stale: yes/no, reusing
     ``forge.ir.provenance.explain_staleness``'s reason-formatting
     convention (a short declarative clause, no trailing punctuation) so
     the IR-level (`forge inspect --explain-staleness`) and artifact-level

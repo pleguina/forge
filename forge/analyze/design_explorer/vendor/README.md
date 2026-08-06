@@ -1,7 +1,7 @@
 # Vendored: Cytoscape.js (core)
 
-Release-plan Phase 8, slice 8.2 — the self-contained interactive HTML
-design explorer's client-side graph rendering/pan/zoom/layout engine.
+The self-contained interactive HTML design explorer's client-side graph
+rendering/pan/zoom/layout engine.
 
 - **Package**: `cytoscape` (npm), **core build only** — no plugins/
   extensions vendored (see "Why core-only" below).
@@ -19,9 +19,9 @@ design explorer's client-side graph rendering/pan/zoom/layout engine.
 
 ## Why core-only (not the expand-collapse extension)
 
-Cytoscape.js core's compound-node feature is sufficient for this phase's
-module-definition/clock-domain grouping. Collapse/expand interactivity
-(§8.3) is implemented as small, local JavaScript in the explorer's own
+Cytoscape.js core's compound-node feature is sufficient for this design
+explorer's module-definition/clock-domain grouping. Collapse/expand
+interactivity is implemented as small, local JavaScript in the explorer's own
 inline script instead of vendoring the official
 `cytoscape.js-expand-collapse` extension — the reference designs are
 small (≤45 edges), and a second vendored JS dependency (its own license/

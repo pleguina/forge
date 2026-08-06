@@ -1,5 +1,5 @@
-"""forge.verify.junit_xml — minimal JUnit XML writer (release-plan Phase
-6, §6.4). Consumes the per-event result list `forge test run` builds by
+"""forge.verify.junit_xml — minimal JUnit XML writer. Consumes the
+per-event result list `forge test run` builds by
 looping the existing single-run verification path (`_build_runtime_context`/
 `_run_one_loaded_flow`) once per event — this module only renders that
 already-computed data as `<testsuite><testcase>` XML, stdlib
@@ -53,9 +53,9 @@ def write_junit_xml(
 def render_markdown(path: "Path | str") -> str:
     """Render a JUnit XML file (as written by :func:`write_junit_xml`) as
     a Markdown summary — pure presentation over already-written data, no
-    re-running of any test (release-plan Phase 6, §6.5: `forge report`'s
-    verification-results section reuses a prior `forge test run
-    --junit-xml`'s output rather than recomputing it)."""
+    re-running of any test (`forge report`'s verification-results section
+    reuses a prior `forge test run --junit-xml`'s output rather than
+    recomputing it)."""
     testsuite = ET.parse(path).getroot()
     testcases = testsuite.findall("testcase")
     n_tests = testsuite.get("tests", str(len(testcases)))

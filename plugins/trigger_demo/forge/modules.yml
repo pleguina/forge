@@ -69,7 +69,7 @@ modules:
   # HLS LATENCY min=3 max=3 (confirmed by HLS report HLS_SYN_LAT=3) — a
   # real fixed latency, not a rough estimate, so this is now the
   # structured, first-class latency: {kind: fixed, ...} declaration
-  # (release-plan §4.2) rather than the older latency_hint: 3 spelling.
+  # rather than the older latency_hint: 3 spelling.
   latency:
     kind: fixed
     cycles: 3

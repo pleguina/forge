@@ -1,4 +1,4 @@
-"""forge build — deterministic generation plan (release-plan §3.4).
+"""forge build — deterministic generation plan.
 
 ``forge build design.yml`` computes and prints a ``GenerationPlan``
 (inferred/explicit connections, generated transformations, latency
@@ -55,7 +55,7 @@ def _strict_violations(ctx) -> List[str]:
     (`core/cli/groups/topgen.py::cmd_gen_top`), computed here as plain
     description strings instead of print+`sys.exit` — presentation only,
     reusing *ctx*'s already-computed `match_report`/`topology_group_issues`/
-    `cardinality_issues`/`cdc_issues` (release-plan Phase 6, §6.2). Called
+    `cardinality_issues`/`cdc_issues`. Called
     only when `--strict` is set; an empty result means no violations."""
     violations: List[str] = []
     match_report = ctx.match_report
@@ -306,8 +306,8 @@ def _gen_top_namespace_from_build_args(args):
     module's docstring "Scope note") with gen-top's own defaults."""
     ns = argparse.Namespace(**vars(args))
     ns.dry_run = False
-    # `strict` is already a real `forge build` flag (release-plan Phase 6,
-    # §6.2) and so is always present on `args`/`ns` here — no hardcoded
+    # `strict` is already a real `forge build` flag and so is always
+    # present on `args`/`ns` here — no hardcoded
     # fallback needed for it (unlike the gen-top-only knobs below, which
     # `forge build` deliberately doesn't expose; see this module's
     # docstring "Scope note").

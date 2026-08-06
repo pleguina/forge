@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""passthrough_demo's layer-B dataset adapter (Phase 7, slice 7.4b).
+"""passthrough_demo's layer-B dataset adapter.
 
 passthrough_demo's dataset genuinely needs no domain transformation — its
 XML file is already FORGE-shaped (layer-A's ``XmlDatasetLoader`` reads it

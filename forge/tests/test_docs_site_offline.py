@@ -1,5 +1,4 @@
-"""No-external-runtime-asset test for the built MkDocs site (release-plan
-Phase 9, slice 9.4, Defect 15).
+"""No-external-runtime-asset test for the built MkDocs site.
 
 The site must build and load fully offline: `mkdocs.yml` disables webfont
 loading (`theme.font: false`) and any analytics/social-card plugin, and

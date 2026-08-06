@@ -1,5 +1,5 @@
-"""Tests for forge.verify.golden_model (release-plan Phase 10, slice
-10.0A — the GoldenModelProvider protocol/registry/runner)."""
+"""Tests for forge.verify.golden_model (the GoldenModelProvider
+protocol/registry/runner)."""
 from __future__ import annotations
 
 import pytest

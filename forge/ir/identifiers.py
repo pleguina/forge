@@ -9,7 +9,7 @@ multi-instance module: the IR used ``"dec_0"`` while the latency graph used
 ``"dec[0]"``. Both reference plugins' committed fixtures are dominated by
 single-instance modules, so this was never caught — until ``trigger_demo``'s
 one multi-instance module (``dec``, 4 instances) needed to join latency
-data by instance id for the visual design explorer (release-plan Phase 8).
+data by instance id for the visual design explorer.
 
 This is the one real implementation of the convention; every caller that
 needs an instance id calls this instead of re-deriving its own.

@@ -30,8 +30,7 @@ class RejectedMatch:
     *before* any wire was ever proposed — i.e. no ``ResolvedConnection``
     exists to hang this evidence on, unlike ``MatchReport.rejected_fanin``
     (which records losing candidates for a sink pin that *did* get wired
-    to someone else). Release-plan §3.5 "rejected candidates and rejection
-    reasons"."""
+    to someone else)."""
     module_pair: Tuple[str, str]        # (src_module_name, dst_module_name)
     scope: str                          # 'contract_role' | 'auto_match_group'
     src_ref: Optional[str] = None       # wiring_kind, or src group base-name
@@ -61,18 +60,17 @@ class MatchReport:
         expands into several instance pairs and pin pairs attributes the
         same wiring-method label to every pair it produced — matching the
         existing per-connection classification in ``wiring_method_counts``,
-        not a finer-grained per-pin classification. This was the first
-        slice of "matching evidence" (canonical-IR audit §7.2 / release-plan
-        §3.5); ``rejected_matches``/``gather_scatter_evidence`` below are a
-        later slice of the same effort.
+        not a finer-grained per-pin classification. ``rejected_matches``/
+        ``gather_scatter_evidence`` below are part of this same
+        matching-evidence effort.
     ``rejected_fanin``: sinks for which more than one candidate pin wanted
         to drive them. Keyed by ``(dst_instance, dst_port)``; the value is
         the list of ``(src_instance, src_port)`` pairs that lost to the
         first-match-wins guard (i.e. every candidate *after* the one that
         was actually wired). Populated by the same first-driver-wins guard
-        that has always silently dropped these — Phase 2.4 (release-plan
-        §2.4) is the first consumer, via
-        ``forge.topgen.ip.contract_verifier.verify_cardinality``.
+        that has always silently dropped these —
+        ``forge.topgen.ip.contract_verifier.verify_cardinality`` is the
+        first consumer.
     ``rejected_matches``: semantic candidate rejections that never produced
         any wire at all (so there's no sink pin / ``ResolvedConnection`` to
         attach ``rejected_fanin``-style evidence to) — an ambiguous
@@ -791,11 +789,11 @@ def auto_match_ports(
     # ─────────────────────────────────────────────────────────────────────────
     # Global nets (clk / rst)
     #
-    # Contract-driven path (Phase 5):
+    # Contract-driven path:
     #   For contract-supported modules, the clock_primary / reset_primary
     #   raw_port from the contract is used directly — no name-scanning.
     #
-    # Heuristic compatibility path (Phase 6):
+    # Heuristic compatibility path:
     #   For modules without a contract, fall back to scanning common port
     #   names (ap_clk, clk, …).  A compatibility warning is emitted.
     # ─────────────────────────────────────────────────────────────────────────

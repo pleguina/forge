@@ -70,11 +70,11 @@ def test_validate_strict_fails_on_warnings(capsys: pytest.CaptureFixture[str]) -
 
 
 def test_validate_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
-    """Release-plan Phase 6 §6.7: the bespoke `{"passed","registry","design",
-    "stale"}` shape is now a CommandEnvelope — passthrough_demo's real
-    design genuinely has 2 warning-severity diagnostics (a non-evenly-
-    dividing clock period, no `connections:` section) and 0 errors, so
-    `status` is genuinely `"warn"`."""
+    """The bespoke `{"passed","registry","design","stale"}` shape is a
+    CommandEnvelope — passthrough_demo's real design genuinely has 2
+    warning-severity diagnostics (a non-evenly-dividing clock period, no
+    `connections:` section) and 0 errors, so `status` is genuinely
+    `"warn"`."""
     result = _run_topgen(capsys, "validate", str(DESIGN_YML), "--json")
 
     assert result.returncode == 0
@@ -181,12 +181,12 @@ def test_gen_top_verilog_full_pipeline(capsys: pytest.CaptureFixture[str], tmp_p
         assert (tmp_path / artifact).exists(), f"missing {artifact}"
 
     ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
-    assert ir_payload["schema_version"] == "0.2.0"  # release-plan §3.3 kind-vocabulary expansion
+    assert ir_payload["schema_version"] == "0.2.0"  # kind-vocabulary expansion
     assert len(ir_payload["design"]["modules"]) == 1
 
-    # Migration step 6: design.ir.json's top_ports must be a real,
-    # non-empty cross-check against port_map.yaml's port list from the
-    # same run — same names, same count.
+    # design.ir.json's top_ports must be a real, non-empty cross-check
+    # against port_map.yaml's port list from the same run — same names,
+    # same count.
     top_port_names = {p["name"] for p in ir_payload["design"]["top_ports"]}
     assert top_port_names
     port_map = yaml.safe_load((tmp_path / "port_map.yaml").read_text())
@@ -202,9 +202,9 @@ def test_gen_top_verilog_full_pipeline(capsys: pytest.CaptureFixture[str], tmp_p
 def test_gen_top_verilog_emits_tie_off_connection_for_an_open_input(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """release-plan §3.3: a tied-to-zero input must appear in the emitted
-    design.ir.json as a real `tie_off` connection (`$tie_off` producer
-    sentinel), not silently invisible to the IR."""
+    """A tied-to-zero input must appear in the emitted design.ir.json as a
+    real `tie_off` connection (`$tie_off` producer sentinel), not
+    silently invisible to the IR."""
     (tmp_path / "interfaces").mkdir()
     (tmp_path / "interfaces" / "src.interface.yaml").write_text(
         "ip_interface:\n"
@@ -263,9 +263,9 @@ def test_gen_top_verilog_emits_tie_off_connection_for_an_open_input(
         "emission_order": 0,
         "crosses_clock_domain": False,
         "crosses_reset_domain": False,
-        # Slice 5 (release-plan §3.5): matching_evidence is only sourced
-        # for conn_map-derived connections, not tie_off's synthetic
-        # post-generation ones — stays None here, correctly.
+        # matching_evidence is only sourced for conn_map-derived
+        # connections, not tie_off's synthetic post-generation ones —
+        # stays None here, correctly.
         "matching_evidence": None,
     }]
 
@@ -340,11 +340,11 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
 def test_gen_top_run_twice_produces_stable_plan_hash_and_output_bytes(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Release-plan Phase 5 slice 5.4 determinism test: "identical plan
-    produces stable generated output" — chains
-    forge.ir.plan.plan_hash() to real generated file bytes for the first
-    time (previously proven only in isolation with synthetic fixtures,
-    test_ir_plan.py::test_plan_hash_is_deterministic). Two `gen-top` runs
+    """Determinism test: "identical plan produces stable generated
+    output" — chains forge.ir.plan.plan_hash() to real generated file
+    bytes for the first time (previously proven only in isolation with
+    synthetic fixtures, test_ir_plan.py::test_plan_hash_is_deterministic).
+    Two `gen-top` runs
     on the same real design must agree on plan_hash and produce
     byte-identical algo_top.v/design.ir.json.
 
@@ -402,11 +402,10 @@ def test_gen_top_run_twice_produces_stable_plan_hash_and_output_bytes(
 def test_gen_top_writes_provenance_manifest_alongside_design_ir(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Release-plan Phase 5 slice 5.1: `gen-top` writes `provenance.json`
-    as a sibling of `design.ir.json`, with real (not placeholder)
-    `output_hashes` matching the actual bytes it just wrote and a real
-    `plan_hash` matching what `forge build` would compute for the same
-    design."""
+    """`gen-top` writes `provenance.json` as a sibling of `design.ir.json`,
+    with real (not placeholder) `output_hashes` matching the actual bytes
+    it just wrote and a real `plan_hash` matching what `forge build`
+    would compute for the same design."""
     output = tmp_path / "algo_top.v"
 
     result = _run_topgen(
@@ -436,8 +435,8 @@ def test_gen_top_writes_provenance_manifest_alongside_design_ir(
     from forge.core.utils.content_hash import hash_file
 
     # output_hashes keys are relative to design.yml's own directory (same
-    # convention as source_hashes, slice 5.0) — not relative to tmp_path,
-    # since the design and --output can live in entirely different trees.
+    # convention as source_hashes) — not relative to tmp_path, since the
+    # design and --output can live in entirely different trees.
     for rel_key, digest in manifest.output_hashes.items():
         candidate = (DESIGN_YML.parent / rel_key).resolve()
         assert candidate.exists(), rel_key
@@ -488,11 +487,11 @@ def _copy_passthrough_demo_forge_tree(dest_root: Path) -> Path:
 def test_check_stale_reports_fresh_after_real_gen_top_run(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Real-design end-to-end proof for release-plan Phase 5 slices 5.2/5.3:
-    a real `gen-top` run followed immediately by `forge topgen validate
-    --check-stale` on the same design/output directory reports fresh —
-    the content-hash-aware path confirms freshness via the provenance.json
-    `gen-top` just wrote, not just a lucky mtime ordering."""
+    """Real-design end-to-end proof: a real `gen-top` run followed
+    immediately by `forge topgen validate --check-stale` on the same
+    design/output directory reports fresh — the content-hash-aware path
+    confirms freshness via the provenance.json `gen-top` just wrote, not
+    just a lucky mtime ordering."""
     design_copy = _copy_passthrough_demo_forge_tree(tmp_path)
 
     result = _run_topgen(
@@ -515,9 +514,9 @@ def test_check_stale_reports_fresh_after_real_gen_top_run(
 def test_check_stale_surfaces_a_specific_reason_not_just_a_verdict(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Release-plan Phase 5 slice 5.3: a genuinely stale artifact's report
-    must carry a specific "reason:" line (content-hash-confirmed change,
-    or an honest "mtime-only" disclaimer), not just stale: yes/no."""
+    """A genuinely stale artifact's report must carry a specific "reason:"
+    line (content-hash-confirmed change, or an honest "mtime-only"
+    disclaimer), not just stale: yes/no."""
     design_copy = _copy_passthrough_demo_forge_tree(tmp_path)
 
     result = _run_topgen(
@@ -528,8 +527,8 @@ def test_check_stale_surfaces_a_specific_reason_not_just_a_verdict(
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
-    # A genuine edit — not just a touch — so this must still report stale
-    # even with a provenance.json present (slice 5.2's regression guard).
+    # A genuine edit — not just a touch — so this must still report
+    # stale even with a provenance.json present (regression guard).
     design_copy.write_text(design_copy.read_text() + "\n# a real edit\n")
 
     result = _run_topgen(

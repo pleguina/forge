@@ -1,5 +1,5 @@
 """
-Clock/reset domain resolution (release-plan §3.1/§3.2).
+Clock/reset domain resolution.
 
 Resolves which net (raw port name) drives each module's clock/reset —
 the shared algorithm both the canonical IR (``forge/ir/build.py``, for
@@ -17,8 +17,8 @@ back to the same conservative name heuristics
 ``forge.topgen.ip.matcher.auto_match_ports`` itself uses for compat-mode
 wiring. A module that needs a clock/reset (no contract,
 ``connect_clock``/``connect_reset`` is on) but resolves to nothing is
-reported in ``unresolved`` — the "unknown domain" case release-plan §3.1
-requires. The "contract declares a role but its raw_port wasn't found in
+reported in ``unresolved`` — the "unknown domain" case this module
+handles. The "contract declares a role but its raw_port wasn't found in
 ip_info" case already produces a warning in ``MatchReport.warnings``
 (surfaced as a diagnostic by callers) — not duplicated here.
 """

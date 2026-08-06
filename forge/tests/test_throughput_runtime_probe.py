@@ -1,5 +1,4 @@
-"""Tests for forge.analyze.throughput_runtime.probe (release-plan Phase
-10, slice 10.0C).
+"""Tests for forge.analyze.throughput_runtime.probe.
 """
 from __future__ import annotations
 

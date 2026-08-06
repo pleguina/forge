@@ -17,8 +17,7 @@ This autouse fixture clears both the module cache and the plugin
 registry's bootstrap-declaration state around every test, so each test's
 tmp_path-scoped plugin tooling is always loaded fresh.
 
-``sys.path`` itself needs the same treatment (release-plan Phase 10,
-slice 10.0C): ``forge/verify/__main__.py``'s ``_bootstrap()`` does
+``sys.path`` itself needs the same treatment: ``forge/verify/__main__.py``'s ``_bootstrap()`` does
 ``sys.path.insert(0, tools_dir)`` per test but this fixture never undid
 it, so a real plugin's real (not tmp_path-copied) ``tools/`` directory —
 e.g. ``plugins/vision_pipeline_demo/forge/verify/tools`` — stays in

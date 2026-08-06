@@ -48,7 +48,7 @@ _ALWAYS_REQUIRED = {"clock_primary", "reset_primary"}
 # absent means unspecified, not a validation failure.
 KNOWN_PROTOCOLS = frozenset({"combinational", "valid-only", "ready-valid", "fixed-frame"})
 
-# Recognized interface-member names (release-plan §2.5). A role opts into
+# Recognized interface-member names. A role opts into
 # member grouping by declaring both `interface:` (the shared group name)
 # and `member:` (its role within that group). See
 # docs/IP_INTERFACE_POLICY.md "Interface members".

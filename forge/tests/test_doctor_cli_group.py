@@ -40,7 +40,7 @@ def test_doctor_text_mode_runs_cleanly(capsys: pytest.CaptureFixture[str]) -> No
 
 
 def test_doctor_json_mode_has_expected_structure(capsys: pytest.CaptureFixture[str]) -> None:
-    """Release-plan Phase 6 §6.3: the bespoke `{"checks", "ok"}` dict is
+    """The bespoke `{"checks", "ok"}` dict is
     now a `CommandEnvelope` — `metrics["checks"]` carries the same
     per-check `{status, detail}` data, reshaped via the same
     `from_diagnostic_report` bridge every other envelope-adopting command
@@ -76,7 +76,7 @@ def test_doctor_reports_real_resource_paths(capsys: pytest.CaptureFixture[str]) 
 
 
 def test_doctor_strict_fails_on_missing_optional_extra(capsys: pytest.CaptureFixture[str]) -> None:
-    """Release-plan Phase 6 §6.3: unlike the pre-envelope `--strict`
+    """Unlike the pre-envelope `--strict`
     (dead code, since no check was ever `required=True`), `--strict` now
     promotes any missing check — including optional extras — to a
     failure, via the same envelope `--strict` semantics every other
@@ -99,7 +99,7 @@ def test_doctor_never_fails_without_strict(capsys: pytest.CaptureFixture[str]) -
 def test_doctor_and_verify_doctor_agree_on_tool_availability(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The de-duplication proof (release-plan Phase 6, §6.3): `forge
+    """The de-duplication proof: `forge
     doctor` and `forge verify doctor` both check xvlog/xelab/xsim
     presence via the same shared `forge.core.toolchain_versions.tool_present`
     helper now — they must report identically for the same environment,

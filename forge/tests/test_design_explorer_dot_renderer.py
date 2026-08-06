@@ -1,6 +1,6 @@
-"""Tests for forge.analyze.design_explorer.dot_renderer (release-plan
-Phase 8, §8.1) — DOT text generation, real SVG rendering, and the
---dot/--svg CLI split's honest-failure behavior.
+"""Tests for forge.analyze.design_explorer.dot_renderer — DOT text
+generation, real SVG rendering, and the --dot/--svg CLI split's
+honest-failure behavior.
 """
 from __future__ import annotations
 

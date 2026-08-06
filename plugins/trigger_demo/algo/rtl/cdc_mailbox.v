@@ -5,7 +5,7 @@
 // guarantees per-bit metastability safety, not a coherent multi-bit
 // value — see cdc_sync2ff.v's own doc comment). Used by
 // topgen-generated algo_top.v to implement `cdc: {kind: mailbox_transfer}`
-// connections (release-plan §10.0B, §5 Decision A).
+// connections.
 //
 // Like every other connection in FORGE's structural port_map wiring
 // (which has no generic valid/ready concept), the source side is
