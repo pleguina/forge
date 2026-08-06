@@ -52,7 +52,7 @@ whether FORGE's *core* (`forge/`) hardcodes any detector- or
 algorithm-specific assumptions — it doesn't, and that's a real,
 CI-enforced property, not just a stated intention.
 `ci/agnosticism_check.sh` greps `forge/core`, `forge/topgen`, `forge/hls`,
-`forge/verify`, `forge/analyze`, and `forge/framework` for a blocklist of
+`forge/verify`, `forge/analyze`, and `forge/integration` for a blocklist of
 CMS/OMTF-specific vocabulary and fails CI if it finds any — see
 [extension APIs](extension-apis.md) for the two concrete override points
 (`detector_input_roles`, `reference_period_ns`) that let a plugin bring

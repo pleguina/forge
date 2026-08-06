@@ -13,7 +13,7 @@ from pathlib import Path
 
 def cmd_import(args):
     """Load and validate a Blobfish (or other) framework ABI + endpoint manifest."""
-    from forge.framework.importer import load, FrameworkImportError
+    from forge.integration.importer import load, FrameworkImportError
 
     abi_path = Path(args.abi)
     ep_path  = Path(args.endpoints)
@@ -58,8 +58,8 @@ def cmd_import(args):
 
 def cmd_io_resolve(args):
     """Resolve detector_io.yml against a framework import."""
-    from forge.framework.importer import load, FrameworkImportError
-    from forge.framework.io_resolver import resolve, write_resolved, DetectorIOError
+    from forge.integration.importer import load, FrameworkImportError
+    from forge.integration.io_resolver import resolve, write_resolved, DetectorIOError
 
     # --- Load framework import ---
     import_path = Path(args.framework) / "framework_import.json"
@@ -118,8 +118,8 @@ def cmd_io_resolve(args):
 def cmd_emit_payload(args):
     """Generate a Blobfish-compatible payload.v from resolved I/O."""
     import json as _json
-    from forge.framework.importer import load, FrameworkImportError
-    from forge.framework.payload_generator import (
+    from forge.integration.importer import load, FrameworkImportError
+    from forge.integration.payload_generator import (
         generate_payload_verilog, ControlPolicies,
     )
 
@@ -151,14 +151,14 @@ def cmd_emit_payload(args):
                   file=sys.stderr)
             sys.exit(1)
         # Reconstruct a minimal DetectorIOResolved from the JSON for port wiring
-        from forge.framework.io_resolver import (
+        from forge.integration.io_resolver import (
             DetectorIOResolved, ResolvedInput, ResolvedOutput
         )
         with resolved_io_path.open() as fh:
             rio_data = _json.load(fh)
 
         def _ep_from_dict(d):
-            from forge.framework.importer import Endpoint
+            from forge.integration.importer import Endpoint
             return Endpoint(
                 endpoint_id          = d["endpoint_id"],
                 direction            = d["direction"],

@@ -46,6 +46,7 @@ dev = [
     "black>=23.0",
     "mypy>=1.0",
     "types-PyYAML",
+    "tomli>=2.0; python_version<'3.11'",
 ]
 parser = [
     "pyverilog>=1.3.0",
@@ -81,7 +82,7 @@ packages = [
     "forge",
     "forge.core", "forge.core.cli", "forge.core.cli.groups", "forge.core.utils",
     "forge.docsgen",
-    "forge.framework",
+    "forge.integration",
     "forge.ir",
     "forge.topgen", "forge.topgen.generators", "forge.topgen.ip",
     "forge.hls",

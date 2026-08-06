@@ -1,4 +1,4 @@
-"""Tests for forge.framework.io_resolver (Milestone 2 — Detector I/O resolution)."""
+"""Tests for forge.integration.io_resolver (Milestone 2 — Detector I/O resolution)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.framework.importer import load
-from forge.framework.io_resolver import resolve, DetectorIOError, to_json
+from forge.integration.importer import load
+from forge.integration.io_resolver import resolve, DetectorIOError, to_json
 
 
 # ---------------------------------------------------------------------------

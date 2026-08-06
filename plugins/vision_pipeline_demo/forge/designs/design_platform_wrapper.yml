@@ -31,7 +31,7 @@
 # The Blobfish-specific `forge framework emit-payload` path (payload.v
 # generation) does not apply here -- its generator hardcodes
 # GT-transceiver/CSP-framing/single-clock semantics into its own control
-# flow (forge/framework/payload_generator.py), not just its fixture
+# flow (forge/integration/payload_generator.py), not just its fixture
 # content, and is structurally incompatible with this plugin's real
 # 256-bit packet_stream output and genuine multi-clock-domain topology.
 # `forge topgen gen-top` (the same mechanism already used for every

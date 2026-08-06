@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from forge.framework.importer import AbiPort, Endpoint, FrameworkImport
+from forge.integration.importer import AbiPort, Endpoint, FrameworkImport
 
 
 # ---------------------------------------------------------------------------

@@ -75,7 +75,7 @@ _check() {
 echo "--- Rule 1: nothing outside forge/core/cli/ imports forge.core.cli ---"
 _check "no cross-import of forge.core.cli outside forge/core/cli/" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
-    forge/topgen forge/hls forge/analyze forge/framework forge/ir
+    forge/topgen forge/hls forge/analyze forge/integration forge/ir
 
 # forge/verify is checked separately: forge.core.cli.envelope is a
 # deliberate, documented exception (see comment above) — every other

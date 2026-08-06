@@ -31,7 +31,7 @@ try:
 except ImportError as exc:
     raise ImportError("PyYAML is required: pip install pyyaml") from exc
 
-from forge.framework.importer import Endpoint, FrameworkImport
+from forge.integration.importer import Endpoint, FrameworkImport
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ def resolve(
     detector_io_path:
         Path to the plugin's detector_io.yml.
     framework:
-        Loaded FrameworkImport (from forge.framework.importer.load).
+        Loaded FrameworkImport (from forge.integration.importer.load).
     registry_modules:
         Optional set of known module names (from modules.yml).
         When provided, frontend modules are validated against it.

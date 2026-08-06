@@ -1,4 +1,4 @@
-"""Tests for forge.framework.importer (Milestone 2 — FORGE framework import)."""
+"""Tests for forge.integration.importer (Milestone 2 — FORGE framework import)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.framework.importer import load, FrameworkImportError, AbiPort, Endpoint
+from forge.integration.importer import load, FrameworkImportError, AbiPort, Endpoint
 
 
 # ---------------------------------------------------------------------------

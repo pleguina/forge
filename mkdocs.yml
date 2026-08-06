@@ -146,3 +146,4 @@ nav:
           - CDC primitive semantics: development/adr/0002-cdc-primitive-semantics.md
           - Vision packet record format: development/adr/0003-vision-packet-format.md
           - Golden-model provider boundary: development/adr/0004-golden-model-provider-boundary.md
+          - Package ownership and naming: development/adr/0005-package-and-cli-naming.md

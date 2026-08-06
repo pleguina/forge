@@ -1,4 +1,4 @@
-"""Tests for forge.framework.payload_generator (Milestone 3 — payload.v generation)."""
+"""Tests for forge.integration.payload_generator (Milestone 3 — payload.v generation)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from forge.framework.importer import load
-from forge.framework.io_resolver import resolve
-from forge.framework.payload_generator import (
+from forge.integration.importer import load
+from forge.integration.io_resolver import resolve
+from forge.integration.payload_generator import (
     generate_payload_verilog, ControlPolicies, PayloadWrapperGenerator,
 )
 

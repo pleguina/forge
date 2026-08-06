@@ -9,7 +9,7 @@ rather than as an unenforced aspiration.
 
 ## `detector_input_roles`: overriding an endpoint-role naming convention
 
-`forge.framework.io_resolver.resolve()` validates a plugin's
+`forge.integration.io_resolver.resolve()` validates a plugin's
 `detector_io.yml` against an imported `FrameworkImport` — checking, among
 other things, that each detector input's endpoint role is compatible with
 its declared detector type. FORGE places no restriction on detector type
@@ -50,7 +50,7 @@ Both patterns above only mean something if `forge/` core doesn't quietly
 grow a second, hardcoded assumption alongside them. `ci/agnosticism_check.sh`
 is the real, running guard against that: it greps `forge/core`,
 `forge/topgen`, `forge/hls`, `forge/verify`, `forge/analyze`, and
-`forge/framework` (deliberately excluding `plugins/` — plugins are
+`forge/integration` (deliberately excluding `plugins/` — plugins are
 expected to use domain-specific vocabulary freely, and `forge/tests/`,
 whose fixtures intentionally exercise one concrete example without that
 implying the mechanism itself is hardcoded) for a blocklist of

@@ -3,7 +3,7 @@
 Same recipe as test_topgen_cli_commands.py: drive the real argparse entry
 point in-process (via build_parser()) against the same minimal ABI /
 endpoints / detector_io fixtures already used to unit-test
-forge.framework.importer and forge.framework.io_resolver directly
+forge.integration.importer and forge.integration.io_resolver directly
 (test_framework_import.py, test_detector_io_resolution.py) — this file
 drives the CLI wrapper around them instead.
 """
