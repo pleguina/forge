@@ -268,13 +268,18 @@ forge:docs-build:
     - pip install --quiet --cache-dir .pip-cache -e "forge[docs]"
   script:
     - mkdir -p ci-logs
-    - mkdocs build --strict 2>&1 | tee ci-logs/docs-build.log
+    - |
+      echo "--- vision-pipeline tutorial reference-asset staleness ---" | tee ci-logs/docs-build.log
+      python3 plugins/vision_pipeline_demo/tutorial/generate_reference_assets.py --check \
+        2>&1 | tee -a ci-logs/docs-build.log
+    - mkdocs build --strict 2>&1 | tee -a ci-logs/docs-build.log
     - |
       python3 -m pytest \
         forge/tests/test_docs_site_build.py \
         forge/tests/test_docs_site_links.py \
         forge/tests/test_docs_site_offline.py \
         forge/tests/test_docs_staleness.py \
+        forge/tests/test_docs_visual_language.py \
         --tb=short -q 2>&1 | tee -a ci-logs/docs-build.log
   artifacts:
     name: "forge-docs-build-${CI_COMMIT_SHORT_SHA}"

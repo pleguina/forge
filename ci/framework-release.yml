@@ -80,6 +80,15 @@ forge:vision-pipeline-release-gate:
   script:
     - mkdir -p ci-logs
     - bash run_vision_pipeline_demo.sh --jobs=4 2>&1 | tee ci-logs/vision-pipeline-release-gate.log
+    - |
+      echo "--- forge report --plugin vision_pipeline_demo (final offline report bundle, fresh artifacts) ---" \
+        | tee -a ci-logs/vision-pipeline-release-gate.log
+      forge report plugins/vision_pipeline_demo/forge/designs/design_platform_wrapper.yml \
+        --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
+        --hls-build-root build_hls_vision_pipeline_demo \
+        --plugin vision_pipeline_demo \
+        --output build/vision_pipeline_demo/report \
+        2>&1 | tee -a ci-logs/vision-pipeline-release-gate.log
   after_script:
     - echo "Release gate exit code $CI_JOB_STATUS"
   artifacts:
@@ -88,3 +97,4 @@ forge:vision-pipeline-release-gate:
     expire_in: 30 days
     paths:
       - ci-logs/vision-pipeline-release-gate.log
+      - build/vision_pipeline_demo/report/

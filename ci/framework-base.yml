@@ -46,10 +46,18 @@ default:
 #     - !reference [.forge_python_setup, before_script]
 #
 # Installs the forge package (topgen + hls + verify subpackages) from source
-# into the CI container.
+# into the CI container. Pillow is here (not just forge[docs]) because
+# forge:python-unit-tests -- the job that runs this before_script and then
+# runs every reference plugin's own test suite -- exercises
+# vision_pipeline_demo's real image_folder.py dataset adapter and its
+# image_panels.py figure renderer, both genuine `from PIL import Image`
+# dependencies, not merely a docs-build concern. A clean-checkout run
+# without this (T8 productization audit) hit a hard ModuleNotFoundError
+# collecting those test files -- it had only ever worked locally because
+# Pillow happened to already be installed in every dev environment tried.
 # ---------------------------------------------------------------------------
 .forge_python_setup:
   before_script:
     - pip install --quiet --cache-dir .pip-cache
         -e forge
-        pytest pytest-cov pyyaml yamllint flake8
+        pytest pytest-cov pyyaml yamllint flake8 "Pillow>=10.0"

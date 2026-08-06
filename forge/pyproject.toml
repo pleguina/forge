@@ -54,6 +54,9 @@ docs = [
     "mkdocs>=1.6,<2.0",
     "mkdocs-material>=9.7,<10.0",
     "mike>=2.2,<3.0",
+    # Needed by plugins/vision_pipeline_demo/tutorial/generate_reference_assets.py
+    # (and its image_panels.py renderer) to build the tutorial's figure assets.
+    "Pillow>=10.0",
 ]
 all = [
     "forge[dev,parser,docs]",

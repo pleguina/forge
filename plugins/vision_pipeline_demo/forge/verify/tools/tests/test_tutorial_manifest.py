@@ -207,3 +207,40 @@ def test_every_step_has_a_real_next_chapter_page(manifest):
             f"step {step['id']!r}: next page {page} should point into the chapter "
             "tree, not a redirect stub"
         )
+
+
+# ── _clean() preserves curated, non-regenerated evidence ─────────────────
+
+def test_clean_preserves_throughput_result_json_but_wipes_everything_else(tmp_path, monkeypatch):
+    """Regression test for a real bug found running a genuine from-scratch
+    checkout for T8: `throughput_result.json` is a curated VERIFICATION
+    RESULT file (produced by a separate, deliberately manual
+    render_throughput_result*.py, not by this runner's own pipeline) that
+    lives inside a flow's output directory alongside files the pipeline
+    *does* regenerate every run. `_clean()`'s blanket rmtree of that
+    directory silently deleted it with nothing to put it back -- a real
+    external user following the documented `--step packetizer` command
+    would have watched their own checked-in evidence disappear.
+    """
+    fake_forge_root = tmp_path / "forge"
+    flow_dir = fake_forge_root / "verify" / "packetizer_xsim"
+    flow_dir.mkdir(parents=True)
+    (flow_dir / "throughput_result.json").write_text('{"high_water_mark": 28}')
+    (flow_dir / "tb_algo_top.sv").write_text("// regenerated every run")
+    (flow_dir / "xsim_work").mkdir()
+    (flow_dir / "xsim_work" / "simulate.log").write_text("stale toolchain output")
+
+    monkeypatch.setattr(runner, "_FORGE_ROOT", fake_forge_root)
+    monkeypatch.setattr(runner, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(runner, "_DESIGNS_DIR", fake_forge_root / "designs")
+
+    plan = runner.Plan(
+        steps=[{"kind": "design", "gen_top_outdir": "unused",
+                "flows": [{"name": "packetizer_xsim"}]}],
+        hls_modules=[], needs_csim=False, full_selection=True,
+    )
+    runner._clean(plan)
+
+    assert (flow_dir / "throughput_result.json").read_text() == '{"high_water_mark": 28}'
+    assert not (flow_dir / "tb_algo_top.sv").exists()
+    assert not (flow_dir / "xsim_work").exists()
