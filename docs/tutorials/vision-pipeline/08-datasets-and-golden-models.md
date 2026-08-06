@@ -1,5 +1,11 @@
 # 08 — Datasets and golden models
 
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+[01](01-quickstart.md) [02](02-project-structure-and-contracts.md) [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) **08** [09](09-full-functional-design.md) [10](10-platform-integration.md) [11](11-inspect-report-and-reproduce.md) [12](12-diagnostics-and-negative-fixtures.md)
+</nav>
+
+*Step 8 of 12*
+
 **Step in this chapter:** *(none — reading chapter, uses the datasets CLI directly)* · **Tools needed:** Python
 
 ## Goal
@@ -26,8 +32,8 @@ Nothing new is built. You generate a dataset and read a golden model.
 
 | File | Ownership |
 |---|---|
-| `plugins/vision_pipeline_demo/datasets/adapters/synthetic.py`, `image_folder.py`, `numpy_array.py` | **PROJECT SOURCE** |
-| `plugins/vision_pipeline_demo/forge/verify/tools/golden_model_provider.py` | **PROJECT SOURCE** |
+| `plugins/vision_pipeline_demo/datasets/adapters/synthetic.py`, `image_folder.py`, `numpy_array.py` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/forge/verify/tools/golden_model_provider.py` | <span class="badge badge-source">PROJECT SOURCE</span> |
 
 ## What FORGE generates
 

@@ -1,16 +1,25 @@
 # The Vision Pipeline Tutorial
 
-A progressive, hands-on tour of FORGE built entirely around one real
-mixed HLS/RTL project: `vision_pipeline_demo`. You start with two module
-instances and one clock, and finish with a real three-domain platform —
-control, pixel, and output clocks, all five clock-domain-crossing kinds,
-a runtime-configurable threshold, and an output packetizer with real
-backpressure telemetry.
+<div class="forge-hero" markdown>
+
+<p class="forge-hero-tagline">Learn FORGE by building one real mixed HLS/RTL vision pipeline, from two modules and one clock to a full three-domain platform.</p>
+
+You start with two module instances and one clock, and finish with a
+real three-domain platform — control, pixel, and output clocks, all
+five clock-domain-crossing kinds, a runtime-configurable threshold, and
+an output packetizer with real backpressure telemetry.
 
 Every design and command in this tutorial is real and CI-exercised
 today (`.gitlab-ci.yml`'s `forge:vision-pipeline-release-gate` job runs
 the exact same designs and flows). Nothing here is a preview of unbuilt
-work.
+work. 12 chapters, 27 distinct FORGE capabilities, 8 real designs.
+
+<span class="forge-hero-actions">
+[Run the quickstart →](01-quickstart.md){ .md-button .md-button--primary }
+[See the full chapter list ↓](#capability-map){ .md-button }
+</span>
+
+</div>
 
 ## What you will build
 
@@ -48,11 +57,11 @@ to the files it introduces.
 
 | Label | Meaning |
 |---|---|
-| **PROJECT SOURCE** | Files you own and edit: RTL, HLS, `modules.yml`, `design.yml`, interface contracts, datasets, golden models. |
-| **FORGE GENERATED** | Written by FORGE from your source: generated top-level RTL, verify-flow YAML/testbenches, stimulus, DOT/SVG/explorer, provenance. |
-| **TOOLCHAIN OUTPUT** | Written by Vitis HLS, Vivado, or XSim: synthesis reports, generated HLS RTL, simulation work libraries. |
-| **VERIFICATION RESULT** | Produced by running the design and comparing behavior: golden-comparison records, throughput results, CDC verification results. |
-| **TUTORIAL ASSET** | Small fixtures and metadata that exist only to teach the workflow: `README.md`, `tutorial.yml`. |
+| <span class="badge badge-source">PROJECT SOURCE</span> | Files you own and edit: RTL, HLS, `modules.yml`, `design.yml`, interface contracts, datasets, golden models. |
+| <span class="badge badge-generated">FORGE GENERATED</span> | Written by FORGE from your source: generated top-level RTL, verify-flow YAML/testbenches, stimulus, DOT/SVG/explorer, provenance. |
+| <span class="badge badge-toolchain">TOOLCHAIN OUTPUT</span> | Written by Vitis HLS, Vivado, or XSim: synthesis reports, generated HLS RTL, simulation work libraries. |
+| <span class="badge badge-verification">VERIFICATION RESULT</span> | Produced by running the design and comparing behavior: golden-comparison records, throughput results, CDC verification results. |
+| <span class="badge badge-tutorial">TUTORIAL ASSET</span> | Small fixtures and metadata that exist only to teach the workflow: `README.md`, `tutorial.yml`. |
 
 This vocabulary is enforced in code, not just prose — see
 `plugins/vision_pipeline_demo/tutorial/ownership.py`, which classifies

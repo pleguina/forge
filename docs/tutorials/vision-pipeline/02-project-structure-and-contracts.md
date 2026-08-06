@@ -1,5 +1,11 @@
 # 02 — Project structure and contracts
 
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+[01](01-quickstart.md) **02** [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) [08](08-datasets-and-golden-models.md) [09](09-full-functional-design.md) [10](10-platform-integration.md) [11](11-inspect-report-and-reproduce.md) [12](12-diagnostics-and-negative-fixtures.md)
+</nav>
+
+*Step 2 of 12*
+
 **Step in this chapter:** *(none — reading chapter, revisits `quickstart`)* · **Tools needed:** Python
 
 ## Goal
@@ -28,9 +34,9 @@ You don't edit anything in this chapter, but you should open:
 
 | File | Ownership | What it is |
 |---|---|---|
-| `plugins/vision_pipeline_demo/forge/modules.yml` | **PROJECT SOURCE** | The module registry — every HLS/RTL module this project can instantiate, in one shared file. |
-| `plugins/vision_pipeline_demo/forge/interfaces/pixel_normalizer_ip.interface.yaml` | **PROJECT SOURCE** | `pixel_normalizer`'s interface contract. |
-| `plugins/vision_pipeline_demo/forge/designs/design.yml` | **PROJECT SOURCE** | The quickstart topology from chapter 01. |
+| `plugins/vision_pipeline_demo/forge/modules.yml` | <span class="badge badge-source">PROJECT SOURCE</span> | The module registry — every HLS/RTL module this project can instantiate, in one shared file. |
+| `plugins/vision_pipeline_demo/forge/interfaces/pixel_normalizer_ip.interface.yaml` | <span class="badge badge-source">PROJECT SOURCE</span> | `pixel_normalizer`'s interface contract. |
+| `plugins/vision_pipeline_demo/forge/designs/design.yml` | <span class="badge badge-source">PROJECT SOURCE</span> | The quickstart topology from chapter 01. |
 
 ## What FORGE generates
 

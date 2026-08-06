@@ -1,5 +1,11 @@
 # 12 — Diagnostics and negative fixtures
 
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+[01](01-quickstart.md) [02](02-project-structure-and-contracts.md) [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) [08](08-datasets-and-golden-models.md) [09](09-full-functional-design.md) [10](10-platform-integration.md) [11](11-inspect-report-and-reproduce.md) **12**
+</nav>
+
+*Step 12 of 12*
+
 **Steps in this chapter:** `invalid_direct_bus_cdc`, `invalid_fifo_depth` · **Tools needed:** Python, Vitis HLS, Vivado XSim
 
 ## Goal

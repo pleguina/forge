@@ -29,6 +29,8 @@ exclude_docs: |
 theme:
   name: material
   font: false
+  logo: assets/images/forge-logo.png
+  favicon: assets/images/favicon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -44,13 +46,22 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.tracking
     - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - search.highlight
     - toc.follow
 
 # No analytics/social-card plugins, no CDN fonts (font: false above) — the
 # built site must load fully offline. See forge/tests/test_docs_site_offline.py.
 plugins:
   - search
+
+# Local-only stylesheet (docs/assets/stylesheets/forge.css) — no CDN, no
+# external fonts, checked by forge/tests/test_docs_site_offline.py.
+extra_css:
+  - assets/stylesheets/forge.css
 
 extra:
   version:

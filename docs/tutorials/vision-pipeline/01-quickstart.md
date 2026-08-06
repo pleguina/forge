@@ -1,5 +1,11 @@
 # 01 — Quickstart
 
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+**01** [02](02-project-structure-and-contracts.md) [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) [08](08-datasets-and-golden-models.md) [09](09-full-functional-design.md) [10](10-platform-integration.md) [11](11-inspect-report-and-reproduce.md) [12](12-diagnostics-and-negative-fixtures.md)
+</nav>
+
+*Step 1 of 12*
+
 **Step in this chapter:** `quickstart` · **Tools needed:** Python, Vitis HLS, Vivado XSim
 
 ## Goal
@@ -33,18 +39,18 @@ Two module instances, one clock domain, no CDC, no tiling.
 
 | File | Ownership |
 |---|---|
-| `plugins/vision_pipeline_demo/algo/normalizer/pixel_normalizer.cpp` | **PROJECT SOURCE** |
-| `plugins/vision_pipeline_demo/algo/rtl/threshold_rtl.v` | **PROJECT SOURCE** |
-| `plugins/vision_pipeline_demo/forge/modules.yml` | **PROJECT SOURCE** |
-| `plugins/vision_pipeline_demo/forge/designs/design.yml` | **PROJECT SOURCE** |
+| `plugins/vision_pipeline_demo/algo/normalizer/pixel_normalizer.cpp` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/algo/rtl/threshold_rtl.v` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/forge/modules.yml` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/forge/designs/design.yml` | <span class="badge badge-source">PROJECT SOURCE</span> |
 
 ## What FORGE generates
 
 | Artifact | Ownership |
 |---|---|
-| `gen-top/design_vision_pipeline_quickstart/algo_top.v` | **FORGE GENERATED** |
-| `plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml`, `tb_algo_top.sv`, `stimulus_current.svh` | **FORGE GENERATED** |
-| `build_hls_vision_pipeline_demo/pixel_normalizer/solution1/` | **TOOLCHAIN OUTPUT** |
+| `gen-top/design_vision_pipeline_quickstart/algo_top.v` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| `plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml`, `tb_algo_top.sv`, `stimulus_current.svh` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| `build_hls_vision_pipeline_demo/pixel_normalizer/solution1/` | <span class="badge badge-toolchain">TOOLCHAIN OUTPUT</span> |
 
 ## Command to run
 
@@ -113,20 +119,24 @@ normalized pixel, threshold mask, valid — matched the RTL exactly.
 Rendered directly from the real golden dataset and this plugin's own
 `GoldenModelProvider` — not invented pixel values:
 
+<div class="forge-figure-grid" markdown>
+
 <figure markdown>
-  ![Input pixel grid: an 8x8 synthetic ramp frame, darkest at the top-left corner and brightest at the bottom-right](../../assets/generated/vision-pipeline/figures/quickstart-input.png){ width=180 }
+  ![Input pixel grid: an 8x8 synthetic ramp frame, darkest at the top-left corner and brightest at the bottom-right](../../assets/generated/vision-pipeline/figures/quickstart-input.png)
   <figcaption>Input: 8x8 synthetic ramp frame (pixel = (i*4) &amp; 0xFF).</figcaption>
 </figure>
 
 <figure markdown>
-  ![Normalized pixel grid after pixel_normalizer's clamp(scale*pixel + offset, 0, 255)](../../assets/generated/vision-pipeline/figures/quickstart-normalized.png){ width=180 }
+  ![Normalized pixel grid after pixel_normalizer's clamp(scale*pixel + offset, 0, 255)](../../assets/generated/vision-pipeline/figures/quickstart-normalized.png)
   <figcaption>Normalized: after pixel_normalizer's clamp(scale*pixel + offset, 0, 255).</figcaption>
 </figure>
 
 <figure markdown>
-  ![Threshold mask: black where normalized pixel is below THRESHOLD, white where at or above it](../../assets/generated/vision-pipeline/figures/quickstart-mask.png){ width=180 }
+  ![Threshold mask: black where normalized pixel is below THRESHOLD, white where at or above it](../../assets/generated/vision-pipeline/figures/quickstart-mask.png)
   <figcaption>Threshold mask: black below THRESHOLD, white at or above it.</figcaption>
 </figure>
+
+</div>
 
 Topology (rendered by FORGE core's generic `forge inspect --svg`, not project-specific code):
 

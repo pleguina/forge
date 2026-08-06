@@ -1,5 +1,11 @@
 # 10 — Platform integration
 
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+[01](01-quickstart.md) [02](02-project-structure-and-contracts.md) [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) [08](08-datasets-and-golden-models.md) [09](09-full-functional-design.md) **10** [11](11-inspect-report-and-reproduce.md) [12](12-diagnostics-and-negative-fixtures.md)
+</nav>
+
+*Step 10 of 12*
+
 **Step in this chapter:** `platform_wrapper` · **Tools needed:** Python, Vitis HLS, Vivado XSim
 
 ## Goal
@@ -48,16 +54,16 @@ different literal clock port name — see
 
 | File | Ownership |
 |---|---|
-| `plugins/vision_pipeline_demo/algo/rtl/threshold_configurable_rtl.v` | **PROJECT SOURCE** |
-| `plugins/vision_pipeline_demo/algo/rtl/ctrl_mailbox_platform_rtl.v` | **PROJECT SOURCE** |
-| `plugins/vision_pipeline_demo/forge/designs/design_platform_wrapper.yml` | **PROJECT SOURCE** |
+| `plugins/vision_pipeline_demo/algo/rtl/threshold_configurable_rtl.v` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/algo/rtl/ctrl_mailbox_platform_rtl.v` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/forge/designs/design_platform_wrapper.yml` | <span class="badge badge-source">PROJECT SOURCE</span> |
 
 ## What FORGE generates
 
 | Artifact | Ownership |
 |---|---|
-| `gen-top/design_vision_pipeline_platform_wrapper/algo_top.v` | **FORGE GENERATED** |
-| `plugins/vision_pipeline_demo/forge/verify/platform_wrapper_xsim/` | **FORGE GENERATED** + **TOOLCHAIN OUTPUT** |
+| `gen-top/design_vision_pipeline_platform_wrapper/algo_top.v` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| `plugins/vision_pipeline_demo/forge/verify/platform_wrapper_xsim/` | <span class="badge badge-generated">FORGE GENERATED</span> + <span class="badge badge-toolchain">TOOLCHAIN OUTPUT</span> |
 
 ## Command to run
 

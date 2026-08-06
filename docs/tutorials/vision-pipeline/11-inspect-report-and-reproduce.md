@@ -1,5 +1,11 @@
 # 11 — Inspect, report, and reproduce
 
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+[01](01-quickstart.md) [02](02-project-structure-and-contracts.md) [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) [08](08-datasets-and-golden-models.md) [09](09-full-functional-design.md) [10](10-platform-integration.md) **11** [12](12-diagnostics-and-negative-fixtures.md)
+</nav>
+
+*Step 11 of 12*
+
 **Step in this chapter:** *(none — analysis commands over `design_full_functional.yml`/`design_platform_wrapper.yml`)* · **Tools needed:** Python, Graphviz (optional, for `--svg`)
 
 ## Goal
@@ -31,10 +37,10 @@ None.
 
 | Artifact | Ownership |
 |---|---|
-| a `.dot`/`.svg` topology rendering | **FORGE GENERATED** |
-| a self-contained interactive explorer `.html` | **FORGE GENERATED** |
-| a provenance manifest `.json` | **FORGE GENERATED** |
-| an offline report bundle (`dashboard.html`, `topology.svg`, `maturity.md`, `latency_check.md`, `hls_summary.md`, `verification_results.md`, `summary.md`) | **FORGE GENERATED** |
+| a `.dot`/`.svg` topology rendering | <span class="badge badge-generated">FORGE GENERATED</span> |
+| a self-contained interactive explorer `.html` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| a provenance manifest `.json` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| an offline report bundle (`dashboard.html`, `topology.svg`, `maturity.md`, `latency_check.md`, `hls_summary.md`, `verification_results.md`, `summary.md`) | <span class="badge badge-generated">FORGE GENERATED</span> |
 
 ## Command to run
 
