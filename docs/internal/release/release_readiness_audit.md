@@ -78,33 +78,36 @@ guessed at.
 
 ## P1 — must fix before stable
 
-### P1-1: `ci/stale_reference_check.sh` currently fails on this branch's HEAD
+### P1-1: `ci/stale_reference_check.sh` currently fails on this branch's HEAD (FIXED)
 
-This is a real, blocking CI job (`.gitlab-ci.yml` `forge:stale-reference-
-check`, stage `validate`, no `allow_failure`) that fails right now,
-independent of this session's edits (reproduced on a clean `git stash` of
-the pre-session tree too). Confirmed causes, all false positives in
-**tracked** files (would reproduce in real CI, not just locally):
+This was a real, blocking CI job (`.gitlab-ci.yml` `forge:stale-reference-
+check`, stage `validate`, no `allow_failure`) that failed independent of
+this session's edits (reproduced on a clean `git stash` of the
+pre-session tree too). Root causes, all false positives in **tracked**
+files (would reproduce in real CI, not just locally) — fixed by
+extending the script's own existing exclusion philosophy
+(`MIGRATION.md`/`CHANGELOG.md` are excluded because "their purpose is
+documenting the old, dead names for historical/migration reference, not
+using them live"):
 
-- `docs/development/migration.md` mirrors root `MIGRATION.md` (documented,
-  intentional — see `docs/development/cli_exit_codes.md`'s own "Pointer
-  pages" pattern) but the script's exclusion list only names the root
-  `MIGRATION.md`/`CHANGELOG.md`, not their `docs/development/` mirrors —
-  so the mirror's legitimate historical `fw_verify` mentions trip the
-  guard.
-- `forge/topgen/migrate.py` and its tests (`test_migrate.py`,
-  `test_topgen_migrate_cli.py`) exist specifically to detect and rewrite
-  the legacy `framework/verify/python` sys.path pattern — they necessarily
-  contain the literal string they're built to find, the same class of
-  false positive the script's own header already excuses for
-  `MIGRATION.md`/`CHANGELOG.md`, just not extended to these files.
-  `docs/development/migration.md` trips this pattern too, same root cause
-  as above.
-- The "bare `topgen <subcommand>`" regex flags **prose** mentions in
-  backticks (README.md, several docstrings) that describe the command,
-  not actual bare invocations — the negative-lookbehind only excludes a
-  literal preceding `` forge `` / `` forge --debug ``, not backtick-quoted
-  documentation context.
+- `docs/development/migration.md` mirrors root `MIGRATION.md` but wasn't
+  itself excluded — added.
+- `forge/generation/migrate.py` (moved from `forge/topgen/migrate.py`
+  during the later package-rename work — see below) and its tests
+  (`test_migrate.py`, `test_topgen_migrate_cli.py`) exist specifically to
+  detect and rewrite the legacy `framework/verify/python` sys.path
+  pattern — they necessarily contain the literal string they're built to
+  find — added to the exclusion list.
+- `docs/internal/` and `docs/plan/` discuss these same dead patterns as
+  audit findings, in prose — added to the exclusion list.
+- The bare-`topgen`-invocation regex's negative lookbehind only excluded
+  a literal preceding `` forge `` / `` forge --debug ``, not
+  backtick-quoted prose (`` `topgen gen-top` ``) — extended with a
+  `(?<!\`)` lookbehind; the two remaining genuine (non-backtick) prose
+  hits were fixed by quoting them properly instead of further
+  complicating the regex.
+
+Verified: `bash ci/stale_reference_check.sh` passes clean.
 
 **Not fixed this session** (out of the approved scope for this pass —
 this is a pre-existing bug in an unrelated CI script, not part of the
@@ -271,11 +274,46 @@ any generation logic.
   Python API to that same generated-freeze system (66 public symbols
   across 5 modules; see `release_scope.md`).
 
-## Not attempted this session (explicitly out of scope — see conversation)
+## Later session update: package-naming cleanup (post-audit)
 
-Per the agreed session boundary: no release branch/tag was created, no
-package was published anywhere, and the `<org>` public-host placeholder
-was not resolved. External fresh-user validation was performed via a real
-clean venv + a real independent CI-equivalent script in this sandbox, but
-not on a genuinely separate machine/account — that remains a real gap
-against plan §14 for the actual go/no-go decision.
+After this audit was written, a separate, deliberate cleanup landed on
+top of it (5 more commits): `forge/framework` → `forge/integration`,
+`forge/verify` → `forge/verification`, `forge/analyze` →
+`forge/analysis` (both permanent compat shims — real plugin `bootstrap.py`
+files import these submodules directly), and `forge/topgen` split into
+`forge/contracts` + `forge/generation` (deprecation-window shim, since
+`forge.topgen.generators`/`forge.topgen.ip` are in the frozen public
+API). See `docs/development/adr/0005-package-and-cli-naming.md` for the
+full rationale and target tree. Also fixed as part of this pass: **P1-1
+above** (`ci/stale_reference_check.sh`, now passing), plus a real P0-class
+bug found mid-rename (`ModuleNotFoundError` from a lazy import missed by
+the initial sweep — caught by actually running the test suite, not by
+inspection). Every rename was independently verified with the full suite,
+a clean-venv wheel install, and — for the two plugin-facing renames — a
+real, unmodified reference plugin's `bootstrap.py` actually running.
+Current test count: **1286 passed, 12 skipped, 0 failed** (up from 1274
+at the original audit, net of intentional test removals/additions along
+the way).
+
+## Not attempted this session (still open — real decisions, not more cleaning)
+
+- **P0-2 is still open**: the `<org>` public-host placeholder
+  (`forge/pyproject.toml [project.urls]`, `README.md`, `CONTRIBUTING.md`)
+  is unresolved — this blocks stable publication specifically (plan
+  §15's "public hosting targets are ready" go/no-go criterion), not
+  RC-candidate work. This is a real decision (which org, whether the
+  CERN GitLab origin migrates or a new host is chosen) only you can make.
+- No release branch/tag was created, no package was published anywhere.
+- External fresh-user validation was performed via a real clean venv +
+  a real independent CI-equivalent script in this sandbox, but not on a
+  genuinely separate machine/account — a real gap against plan §14 for
+  the actual go/no-go decision.
+- No dependency/license audit beyond a targeted secrets grep and
+  confirming the one vendored JS asset's attribution — plan §12's full
+  dependency inventory (known vulnerabilities, abandoned packages) was
+  not run. Current runtime dependency surface is minimal (`pyyaml`,
+  `jinja2` only), which lowers the real risk here, but the audit itself
+  wasn't performed.
+- No `THIRD_PARTY_NOTICES.md` — still just a P2, per the original
+  finding (the vendored asset's own `LICENSE`/`README.md` already carry
+  attribution at the point of use).
