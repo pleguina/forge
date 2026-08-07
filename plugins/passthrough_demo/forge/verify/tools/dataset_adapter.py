@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from forge.verify.dataset_adapter import (
+from forge.verification.dataset_adapter import (
     CanonicalDataset,
     DatasetSource,
     register_dataset_adapter,

@@ -1255,7 +1255,7 @@ def cmd_validate(args):
 
                         from forge.core.utils.content_hash import hash_file
                         from forge.topgen.ip.cdc import report_all_crossings
-                        from forge.verify.cdc_verification_result import build_cdc_verification_result
+                        from forge.verification.cdc_verification_result import build_cdc_verification_result
 
                         _crossings = report_all_crossings(
                             cfg, _cdc_contracts, _match_report, _conn_map, _global_nets,
@@ -2201,7 +2201,7 @@ def _run_verilog_lint(output: Path, top_name: str) -> None:
 # ---------------------------------------------------------------------------
 # init-plugin command — scaffold the topgen side of a new plugin capsule
 # ---------------------------------------------------------------------------
-# Mirrors forge.verify.__main__._cmd_init_plugin's shape (template-string
+# Mirrors forge.verification.__main__._cmd_init_plugin's shape (template-string
 # constants, files_to_create dict, --dry-run lists without writing, skip
 # already-existing files on a real run). This scaffolds the *topgen* half
 # (modules.yml, designs/design.yml, interfaces/*.yaml, an RTL stub);

@@ -31,8 +31,8 @@ Golden-model computation is split across a clean boundary:
   implements in RTL, kept in sync by convention (each provider's module
   docstring names the RTL/HLS files it must match).
 - **Invocation determinism and hashing are FORGE-owned.** Providers
-  register via `forge.verify.golden_model.register_golden_model_provider`
-  and are invoked by `forge.verify.golden_model.run_golden_model`, which
+  register via `forge.verification.golden_model.register_golden_model_provider`
+  and are invoked by `forge.verification.golden_model.run_golden_model`, which
   owns running the provider deterministically and hashing its output —
   never the provider module itself. A provider only computes values; it
   never decides how those values get compared, hashed, or cached.

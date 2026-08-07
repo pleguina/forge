@@ -20,11 +20,11 @@ from argparse import ArgumentParser, _SubParsersAction
 import pytest
 
 from forge.core.cli.main import build_parser
-from forge.verify.__main__ import build_parser as build_verify_parser
+from forge.verification.__main__ import build_parser as build_verify_parser
 
 # `forge verify` doesn't build its sub-commands directly under the top-level
 # parser: it swallows everything after "verify" into a REMAINDER positional
-# and hands off to forge.verify.__main__'s own parser (see
+# and hands off to forge.verification.__main__'s own parser (see
 # core/cli/groups/verify.py::cmd_verify_dispatch). Use the real delegate
 # parser when validating "verify" examples/flags.
 _DELEGATED_GROUP_PARSERS = {"verify": build_verify_parser}

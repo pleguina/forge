@@ -1,4 +1,4 @@
-"""Tests for forge.verify.manifest_compile — builds compile.prj (and
+"""Tests for forge.verification.manifest_compile — builds compile.prj (and
 include_dirs.txt / dat_files.txt) from a build_manifest.json for the xsim
 backend. This is real logic exercised by every xsim run this session.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.manifest_compile import prepare_from_manifest
+from forge.verification.manifest_compile import prepare_from_manifest
 
 
 def _write_manifest(tmp_path: Path, **fields) -> Path:

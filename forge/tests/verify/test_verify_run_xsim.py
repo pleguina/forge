@@ -6,7 +6,7 @@ simulator — this file is that follow-up. It copies
 plugins/passthrough_demo into an isolated tmp_path "consumer root" (so nothing
 tracked in git is ever touched or mutated), regenerates its topology and
 verify artifacts there, and drives an actual xvlog → xelab → xsim run
-through forge.verify.__main__.main(), in-process so pytest-cov credits the
+through forge.verification.__main__.main(), in-process so pytest-cov credits the
 executed lines. Skipped automatically when Vivado's xsim toolchain isn't on
 PATH.
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from forge.core.cli.main import build_parser
-import forge.verify.__main__ as verify_cli
+import forge.verification.__main__ as verify_cli
 
 pytestmark = pytest.mark.integration
 
@@ -162,10 +162,10 @@ def test_run_backend_populates_enriched_execution_result_fields(
         / "plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml"
     )
 
-    from forge.verify.backend_registry import get_adapter
-    from forge.verify.execution_stage import ExecutionStage
-    from forge.verify.flow_loader import load_generic_flow
-    from forge.verify.runtime_context import RuntimeContext
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.execution_stage import ExecutionStage
+    from forge.verification.flow_loader import load_generic_flow
+    from forge.verification.runtime_context import RuntimeContext
 
     assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
@@ -205,10 +205,10 @@ def test_run_backend_compile_failure_reports_compile_stage(
     original = tb_sv.read_text()
     tb_sv.write_text(original + "\nthis is not valid systemverilog {{{\n")
 
-    from forge.verify.backend_registry import get_adapter
-    from forge.verify.execution_stage import ExecutionStage
-    from forge.verify.flow_loader import load_generic_flow
-    from forge.verify.runtime_context import RuntimeContext
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.execution_stage import ExecutionStage
+    from forge.verification.flow_loader import load_generic_flow
+    from forge.verification.runtime_context import RuntimeContext
 
     assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
@@ -327,8 +327,8 @@ def test_identity_dataset_adapter_drives_a_real_passing_run(
 
     assert verify_cli._bootstrap("passthrough_demo", str(flow_dir / "verify.flow.yml"))
 
-    from forge.verify.dataset_adapter import DatasetSource, get_dataset_adapter
-    from forge.verify.dataset_format import XmlDatasetLoader
+    from forge.verification.dataset_adapter import DatasetSource, get_dataset_adapter
+    from forge.verification.dataset_format import XmlDatasetLoader
 
     direct = XmlDatasetLoader().load(golden_xml)
     adapter = get_dataset_adapter("passthrough.identity-xml")
@@ -344,7 +344,7 @@ def test_identity_dataset_adapter_drives_a_real_passing_run(
     # the same field extraction gen_stimulus.py uses, but built here from
     # `canonical.events` specifically, to prove the adapter's own output
     # (not just the direct loader's) is what generated this real pass.
-    from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
+    from forge.verification.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
     ev = dict(zip(canonical.metadata.event_ids, canonical.events))["0"]
     data_in       = int(ev["in"]["data_in"], 0)

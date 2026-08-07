@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.backend_checker.
+"""Unit tests for forge.verification.backend_checker.
 
 The checker stack was lifted verbatim out of XsimBackend into module-level
 functions — these tests exercise the lifted functions directly against
@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from forge.verify import backend_checker
-from forge.verify.backend_base import ExecutionResult
+from forge.verification import backend_checker
+from forge.verification.backend_base import ExecutionResult
 
 
 class _FakeAdapter:

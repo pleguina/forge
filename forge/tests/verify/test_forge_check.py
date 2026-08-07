@@ -6,8 +6,8 @@ tests/test_test_cli_group.py.
 
 from __future__ import annotations
 
-from forge.verify.results import CheckResult, parse_forge_check_lines
-from forge.verify.stimulus_helpers import StimulusEmitter, emit_output_check
+from forge.verification.results import CheckResult, parse_forge_check_lines
+from forge.verification.stimulus_helpers import StimulusEmitter, emit_output_check
 
 
 # ── SV emission ──────────────────────────────────────────────────────────

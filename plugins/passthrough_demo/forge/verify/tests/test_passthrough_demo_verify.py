@@ -17,7 +17,7 @@ sys.path.insert(0, str(_TOOLS))
 import bootstrap as _bootstrap  # noqa: E402
 _bootstrap.bootstrap()
 
-from forge.verify.design_contract import load_verify_design  # noqa: E402
+from forge.verification.design_contract import load_verify_design  # noqa: E402
 
 _VERIFY_ROOT = Path(__file__).resolve().parents[1]
 _DESIGN_YML = _VERIFY_ROOT / "design.verification.yml"

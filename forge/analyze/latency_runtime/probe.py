@@ -17,7 +17,7 @@ column contract above.
 
 Wide probe CSV format
 -----------------------
-``forge.verify.gen_sim``'s real Tier-2 probe mechanism
+``forge.verification.gen_sim``'s real Tier-2 probe mechanism
 (``_render_probe_open``/``_render_probe_fwrite``, emitted by XSIM
 testbenches under ``--probe-log``/``PROBE_LOG=1``) writes a *wide*-format
 CSV instead — one row per cycle, one column per probe::
@@ -85,7 +85,7 @@ def load_probe_csv(probe_csv: Path) -> List[ProbeEvent]:
 def load_wide_probe_csv(probe_csv: Path) -> List[ProbeEvent]:
     """Load a WIDE-format probe CSV (``cycle,<probe1>,<probe2>,...`` — one
     row per cycle, one column per probe — the exact format
-    ``forge.verify.gen_sim``'s real Tier-2 probe emission produces) and
+    ``forge.verification.gen_sim``'s real Tier-2 probe emission produces) and
     melt it into the same ``ProbeEvent`` list :func:`load_probe_csv`
     (the long ``cycle,signal,value`` format) already produces. Additive:
     :func:`load_probe_csv` is completely unchanged for existing

@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.dataset_format.
+"""Unit tests for forge.verification.dataset_format.
 
 Covers both real format loaders against real fixture files (the real
 passthrough_demo golden XML, and a real generated JSON sibling), the
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.dataset_format import (
+from forge.verification.dataset_format import (
     DATASET_SCHEMA,
     DatasetMetadata,
     EnvironmentMetadata,
@@ -27,7 +27,7 @@ from forge.verify.dataset_format import (
     get_format_loader,
     register_format_loader,
 )
-from forge.verify.exceptions import DatasetContentHashError
+from forge.verification.exceptions import DatasetContentHashError
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_XML = REPO_ROOT / "plugins/passthrough_demo/forge/verify/schemas/data/passthrough_demo_golden.xml"

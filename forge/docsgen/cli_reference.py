@@ -16,7 +16,7 @@ from argparse import ArgumentParser, _SubParsersAction
 from typing import Iterator, Tuple
 
 from forge.core.cli.main import build_parser
-from forge.verify.__main__ import build_parser as build_verify_parser
+from forge.verification.__main__ import build_parser as build_verify_parser
 
 # forge verify delegates its own subcommand tree to a separate parser via
 # REMAINDER (forge/core/cli/groups/verify.py::cmd_verify_dispatch) — it's a

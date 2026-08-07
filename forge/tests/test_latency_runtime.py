@@ -1,7 +1,7 @@
 """
 Tests for forge.analyze.latency_runtime's additions:
   - probe.load_wide_probe_csv, the fix for the previously-broken pipe
-    between forge.verify.gen_sim's real Tier-2 probe emission (wide CSV)
+    between forge.verification.gen_sim's real Tier-2 probe emission (wide CSV)
     and this package's consumer (which only accepted long-format CSV).
   - comparator.LatencyComparison's predicted/observed_value/path fields.
 """
@@ -20,7 +20,7 @@ from analyze.latency_runtime.probe import (
 
 
 def test_load_wide_probe_csv_matches_gen_sim_emitted_format(tmp_path):
-    """Fixture built from forge.verify.gen_sim._render_probe_open/
+    """Fixture built from forge.verification.gen_sim._render_probe_open/
     _render_probe_fwrite's actual format strings (header:
     'cycle,<name1>,<name2>,...'; rows: '<cycle_count>,<val1>,<val2>,...'),
     not guessed."""

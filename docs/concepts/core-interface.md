@@ -15,7 +15,7 @@ It does not cover optional HLS convenience tooling or implementation details ins
 The current public Layer 1 surface is:
 
 - `forge verify` installed CLI sub-commands
-- `python -m forge.verify` module entrypoint
+- `python -m forge.verification` module entrypoint
 - `plugins/<plugin>/forge/verify/include/` and `.../src/` — plugin-owned verification headers and runtime implementation, built via the plugin's own CMake target
 - [How to Integrate Verification](../how-to/integrate-verification.md)
 - [Quickstart](../getting-started/quickstart.md)

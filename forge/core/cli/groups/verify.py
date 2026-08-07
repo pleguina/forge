@@ -1,6 +1,6 @@
 """forge verify — simulation and verification orchestration.
 
-Delegates all sub-commands transparently to :mod:`forge.verify.__main__`.
+Delegates all sub-commands transparently to :mod:`forge.verification.__main__`.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ import sys
 # ---------------------------------------------------------------------------
 
 def _dispatch_verify(remaining: list) -> None:
-    """Delegate ``forge verify <subcommand> [args]`` to :mod:`forge.verify.__main__`."""
-    from forge.verify.__main__ import main as _verify_main
+    """Delegate ``forge verify <subcommand> [args]`` to :mod:`forge.verification.__main__`."""
+    from forge.verification.__main__ import main as _verify_main
 
     old_argv = sys.argv[:]
     sys.argv = ["forge verify"] + list(remaining)

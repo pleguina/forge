@@ -1,5 +1,5 @@
 """Tests for multi-clock-domain testbench generation in
-forge.verify.gen_sim.render_tb_sv.
+forge.verification.gen_sim.render_tb_sv.
 
 Every pre-existing flow declares no extra_clocks/extra_resets at all — the
 first class of tests here locks in that the single-clock path is completely
@@ -11,7 +11,7 @@ requires.
 """
 from __future__ import annotations
 
-from forge.verify.gen_sim import render_tb_sv
+from forge.verification.gen_sim import render_tb_sv
 
 
 def _render(**overrides):

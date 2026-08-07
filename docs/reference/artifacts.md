@@ -28,7 +28,7 @@ schema-versioning policy each of these artifacts actually follows.
 
 ### `ArtifactRef`
 
-*Defined in `forge.verify.results`.*
+*Defined in `forge.verification.results`.*
 
 One artifact produced by a backend run, with its provenance.
 
@@ -75,7 +75,7 @@ The resolved cardinality bound an endpoint's interface declared,
 
 ### `CheckResult`
 
-*Defined in `forge.verify.results`.*
+*Defined in `forge.verification.results`.*
 
 One parsed ``FORGE_CHECK|...`` log record.
 
@@ -97,7 +97,7 @@ One parsed ``FORGE_CHECK|...`` log record.
 
 ### `DatasetMetadata`
 
-*Defined in `forge.verify.dataset_format`.*
+*Defined in `forge.verification.dataset_format`.*
 
 Real dataset metadata: schema version, event ids, provenance, units,
     seed, generator version.
@@ -143,7 +143,7 @@ DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir
 
 ### `Diagnostic`
 
-*Defined in `forge.verify.diagnostics`.*
+*Defined in `forge.verification.diagnostics`.*
 
 A single classified finding from a framework health check.
 
@@ -184,7 +184,7 @@ A diagnostic attached to a specific IR object, so tooling (CLI,
 
 ### `EnvironmentMetadata`
 
-*Defined in `forge.verify.dataset_format`.*
+*Defined in `forge.verification.dataset_format`.*
 
 Where/when this envelope was produced — excluded from the content
     hash on purpose (see :class:`SemanticMetadata`).
@@ -197,7 +197,7 @@ Where/when this envelope was produced — excluded from the content
 
 ### `EventResult`
 
-*Defined in `forge.verify.results`.*
+*Defined in `forge.verification.results`.*
 
 The real, structured result of simulating one event.
 
@@ -228,7 +228,7 @@ The real, structured result of simulating one event.
 
 ### `FlowResult`
 
-*Defined in `forge.verify.results`.*
+*Defined in `forge.verification.results`.*
 
 The real, structured result of one ``forge test run`` invocation —
     every event it simulated, plus the schema tag every consumer should
@@ -782,7 +782,7 @@ Placeholder for verification planning/bindings.
 
 ### `SemanticMetadata`
 
-*Defined in `forge.verify.dataset_format`.*
+*Defined in `forge.verification.dataset_format`.*
 
 The part of a dataset's identity that the content hash covers.
 
@@ -800,7 +800,7 @@ The part of a dataset's identity that the content hash covers.
 
 ### `SerializedDataset`
 
-*Defined in `forge.verify.dataset_format`.*
+*Defined in `forge.verification.dataset_format`.*
 
 The neutral envelope layer A produces.
 
@@ -830,7 +830,7 @@ A source reference, file-level only in this slice (no line/column
 
 ### `VerificationTarget`
 
-*Defined in `forge.verify.results`.*
+*Defined in `forge.verification.results`.*
 
 A real, provable claim about what one event's simulation actually
     covered, keyed into the same ``ObjectReference`` kind vocabulary the
@@ -854,7 +854,7 @@ A real, provable claim about what one event's simulation actually
 
 ### `ExecutionStage`
 
-*Defined in `forge.verify.execution_stage`.*
+*Defined in `forge.verification.execution_stage`.*
 
 A stage in a backend's execution pipeline.
 
@@ -895,7 +895,7 @@ An enumeration.
 
 ### `Severity`
 
-*Defined in `forge.verify.diagnostics`.*
+*Defined in `forge.verification.diagnostics`.*
 
 Ordered severity levels for diagnostics.
 

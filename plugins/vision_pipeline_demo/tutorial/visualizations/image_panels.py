@@ -5,7 +5,7 @@ Every figure this module produces is rendered directly from a real
 golden dataset (`forge/verify/schemas/data/*.xml`) and this plugin's own
 `GoldenModelProvider` implementations
 (`forge/verify/tools/golden_model_provider.py`) — never from invented or
-hand-typed pixel values. `forge.verify.dataset_format.XmlDatasetLoader`
+hand-typed pixel values. `forge.verification.dataset_format.XmlDatasetLoader`
 (FORGE core) does the raw XML parsing; everything downstream of that —
 reconstructing a 2D grid, choosing a color scale, drawing a tile
 overlay — is vision-domain-specific and belongs entirely to this
@@ -45,7 +45,7 @@ def _load_golden_model_provider_module():
 def load_dataset(xml_path: Path):
     """Load a real golden dataset XML via FORGE's own loader (no
     project-local XML parsing duplicated here)."""
-    from forge.verify.dataset_format import XmlDatasetLoader
+    from forge.verification.dataset_format import XmlDatasetLoader
     return XmlDatasetLoader().load(str(xml_path))
 
 

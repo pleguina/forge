@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.design_contract import load_verify_design
-from forge.verify.exceptions import DesignContractError
+from forge.verification.design_contract import load_verify_design
+from forge.verification.exceptions import DesignContractError
 
 
 def test_load_verify_design_missing_file_raises_typed_error(tmp_path: Path) -> None:
@@ -75,14 +75,14 @@ def _write_contract(tmp_path: Path, *, schema_version: str | None = None) -> Pat
 def test_no_schema_version_loads_fine_and_defaults_to_supported(tmp_path: Path) -> None:
     """Absence is silent — the file loads unchanged, and the resolved
     contract still carries the current supported version."""
-    from forge.verify.design_contract import VERIFY_CONTRACT_SCHEMA_VERSION
+    from forge.verification.design_contract import VERIFY_CONTRACT_SCHEMA_VERSION
 
     contract = load_verify_design(_write_contract(tmp_path))
     assert contract.schema_version == VERIFY_CONTRACT_SCHEMA_VERSION
 
 
 def test_matching_schema_version_loads_fine(tmp_path: Path) -> None:
-    from forge.verify.design_contract import VERIFY_CONTRACT_SCHEMA_VERSION
+    from forge.verification.design_contract import VERIFY_CONTRACT_SCHEMA_VERSION
 
     contract = load_verify_design(_write_contract(tmp_path, schema_version=VERIFY_CONTRACT_SCHEMA_VERSION))
     assert contract.schema_version == VERIFY_CONTRACT_SCHEMA_VERSION

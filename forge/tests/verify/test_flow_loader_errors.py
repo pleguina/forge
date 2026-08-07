@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.exceptions import FlowConfigError, MissingArtifactError
-from forge.verify.flow_loader import load_generic_flow
+from forge.verification.exceptions import FlowConfigError, MissingArtifactError
+from forge.verification.flow_loader import load_generic_flow
 
 
 def test_load_generic_flow_missing_file_raises_typed_error(tmp_path: Path) -> None:

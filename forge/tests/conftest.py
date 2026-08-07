@@ -52,24 +52,24 @@ def _clear_plugin_bootstrap_state() -> None:
     for name in _PLUGIN_TOOL_MODULE_NAMES:
         sys.modules.pop(name, None)
     try:
-        import forge.verify.plugin_registry as _pr
+        import forge.verification.plugin_registry as _pr
     except ImportError:
         return
     _pr._reset_for_testing()
     _pr._PLUGIN_BOOTSTRAP_MODULES.clear()
 
     # _reset_for_testing() also clears the backend registry
-    # (forge.verify.backend_registry._BACKEND_MODULE_NAMES) — including the
+    # (forge.verification.backend_registry._BACKEND_MODULE_NAMES) — including the
     # framework-owned xsim/csim defaults that forge/verify/__init__.py only
     # registers once, at first import. Since that import already happened
     # earlier in the session, it never re-runs — re-register those defaults
     # here exactly as forge/verify/__init__.py does, or every xsim/csim flow
     # in every later test would fail with "flow.backend must be one of ()".
-    from forge.verify.backend_registry import register_backend
+    from forge.verification.backend_registry import register_backend
 
-    register_backend("xsim", "forge.verify.backend_xsim")
-    register_backend("csim", "forge.verify.backend_csim")
-    register_backend("verilator", "forge.verify.backend_verilator")
+    register_backend("xsim", "forge.verification.backend_xsim")
+    register_backend("csim", "forge.verification.backend_csim")
+    register_backend("verilator", "forge.verification.backend_verilator")
 
 
 @pytest.fixture(autouse=True)

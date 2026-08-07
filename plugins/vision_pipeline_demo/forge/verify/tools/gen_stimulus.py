@@ -6,8 +6,8 @@ flow: drives one pixel event's full ``forge.pixel_stream.v1``-shaped
 input, waits out the pipeline's total latency (3 HLS cycles +
 2 RTL cycles = 5), then checks ``out_pixel``/``threshold_mask``/
 ``out_valid`` against a real, live-computed golden-model result — routed
-through :class:`~forge.verify.dataset_service.DatasetService` and
-:func:`~forge.verify.golden_model.run_golden_model`, never a hand-typed
+through :class:`~forge.verification.dataset_service.DatasetService` and
+:func:`~forge.verification.golden_model.run_golden_model`, never a hand-typed
 expected value.
 
 Usage::
@@ -20,10 +20,10 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict
 
-from forge.verify.dataset_adapter import DatasetSource
-from forge.verify.dataset_service import DatasetService
-from forge.verify.golden_model import run_golden_model, write_provider_provenance
-from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
+from forge.verification.dataset_adapter import DatasetSource
+from forge.verification.dataset_service import DatasetService
+from forge.verification.golden_model import run_golden_model, write_provider_provenance
+from forge.verification.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
 _DATASET_XML = Path(__file__).resolve().parents[1] / "schemas/data/vision_pipeline_quickstart_golden.xml"
 
@@ -133,7 +133,7 @@ def generate_for_flow(
     # Persist the golden-model provider's identity and hashes next to
     # the stimulus it drove — otherwise this only ever lived in this
     # process's memory. Consumed later by
-    # forge.verify.golden_comparison_result.build_golden_comparison_result
+    # forge.verification.golden_comparison_result.build_golden_comparison_result
     # to join with a real simulation's per-event checks.
     provenance_path = out_path.parent / "golden_model_provenance.json"
     write_provider_provenance(expected, provenance_path)

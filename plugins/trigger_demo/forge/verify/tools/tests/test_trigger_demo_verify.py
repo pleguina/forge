@@ -16,11 +16,11 @@ from pathlib import Path
 import pytest
 
 # conftest.py already bootstrapped trigger_demo.
-from forge.verify.backend_base import BackendAdapter, BackendCapabilities
-from forge.verify.backend_registry import get_adapter, list_supported_backends
-from forge.verify.design_contract import load_verify_design
-from forge.verify.flow_loader import FlowConfig, load_generic_flow
-from forge.verify.plugin_registry import is_plugin_bootstrapped
+from forge.verification.backend_base import BackendAdapter, BackendCapabilities
+from forge.verification.backend_registry import get_adapter, list_supported_backends
+from forge.verification.design_contract import load_verify_design
+from forge.verification.flow_loader import FlowConfig, load_generic_flow
+from forge.verification.plugin_registry import is_plugin_bootstrapped
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 

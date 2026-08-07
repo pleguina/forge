@@ -1,5 +1,5 @@
 """forge.analyze.throughput_runtime.probe — build
-:class:`~forge.verify.throughput_result.RuntimeThroughputResult` from a
+:class:`~forge.verification.throughput_result.RuntimeThroughputResult` from a
 real simulation's Tier 2 probe CSV.
 
 Reuses :func:`forge.analyze.latency_runtime.probe.load_wide_probe_csv`
@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from forge.analyze.latency_runtime.probe import ProbeEvent, load_wide_probe_csv
-from forge.verify.throughput_result import RuntimeThroughputResult
+from forge.verification.throughput_result import RuntimeThroughputResult
 
 _ASSERTED = {"1", "1'b1", "high", "true", "yes"}
 

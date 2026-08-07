@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.verify.supported_path_validator import validate_supported_path
+from forge.verification.supported_path_validator import validate_supported_path
 
 
 def test_supported_path_includes_typed_contract_action(tmp_path: Path) -> None:

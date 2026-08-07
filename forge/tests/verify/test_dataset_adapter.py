@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.dataset_adapter (adapter layer B).
+"""Unit tests for forge.verification.dataset_adapter (adapter layer B).
 
 Covers the registry (explicit adapter_id selection, never suffix) and
 CanonicalDataset/DatasetSource shapes. Real end-to-end coverage of
@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.dataset_adapter import (
+from forge.verification.dataset_adapter import (
     CanonicalDataset,
     DatasetSource,
     get_dataset_adapter,
     list_registered_dataset_adapters,
     register_dataset_adapter,
 )
-from forge.verify.dataset_format import (
+from forge.verification.dataset_format import (
     DATASET_SCHEMA,
     DatasetMetadata,
     EnvironmentMetadata,
@@ -132,7 +132,7 @@ def test_real_passthrough_demo_design_declares_its_adapter():
     """The real, committed passthrough_demo design.verification.yml
     declares `dataset.adapter: passthrough.identity-xml` for real — not a
     synthetic fixture."""
-    from forge.verify.design_contract import load_verify_design
+    from forge.verification.design_contract import load_verify_design
 
     design_yml = REPO_ROOT / "plugins/passthrough_demo/forge/verify/design.verification.yml"
     contract = load_verify_design(design_yml)
@@ -144,7 +144,7 @@ def test_real_passthrough_demo_design_declares_its_adapter():
 def test_dataset_adapter_field_defaults_to_none_when_absent(tmp_path: Path):
     import textwrap
 
-    from forge.verify.design_contract import load_verify_design
+    from forge.verification.design_contract import load_verify_design
 
     design_yml = tmp_path / "design.verification.yml"
     design_yml.write_text(textwrap.dedent("""

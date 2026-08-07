@@ -34,10 +34,10 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict
 
-from forge.verify.dataset_adapter import DatasetSource
-from forge.verify.dataset_service import DatasetService
-from forge.verify.golden_model import run_golden_model, write_provider_provenance
-from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
+from forge.verification.dataset_adapter import DatasetSource
+from forge.verification.dataset_service import DatasetService
+from forge.verification.golden_model import run_golden_model, write_provider_provenance
+from forge.verification.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
 _DATASET_XML = Path(__file__).resolve().parents[1] / "schemas/data/vision_pipeline_quickstart_golden.xml"
 

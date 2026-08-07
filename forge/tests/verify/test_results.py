@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.results.
+"""Unit tests for forge.verification.results.
 
 Fast, non-simulator unit coverage for the dataclasses, their `to_dict()`
 serialisation, the stage-aware diagnostic-code selection, and Markdown
@@ -8,9 +8,9 @@ rendering. Real end-to-end xsim/verilator coverage of the wiring into
 
 from __future__ import annotations
 
-from forge.verify.diagnostics import Severity
-from forge.verify.execution_stage import ExecutionStage
-from forge.verify.results import (
+from forge.verification.diagnostics import Severity
+from forge.verification.execution_stage import ExecutionStage
+from forge.verification.results import (
     RESULTS_SCHEMA,
     ArtifactRef,
     ArtifactSchema,

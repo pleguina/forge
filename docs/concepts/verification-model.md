@@ -10,7 +10,7 @@ and [Integrating verification](../how-to/integrate-verification.md).
 
 A **flow** is one entry under `flows:` in a plugin's
 `design.verification.yml` (the schema owned by
-`forge.verify.design_contract`) — it names a `kind`, a `backend`, a DUT
+`forge.verification.design_contract`) — it names a `kind`, a `backend`, a DUT
 (RTL source, top module, testbench module), a dataset, and simulation
 timing defaults. `forge verify generate` turns a flow declaration into a
 concrete, runnable artifact set (`verify.flow.yml`, a generated
@@ -28,9 +28,9 @@ module *is* the whole design.
 ## The backend abstraction
 
 A flow's `backend` (`csim`, `xsim`, or `verilator`) is dispatched through
-one shared interface: `forge.verify.backend_base.BackendAdapter`. Every
-backend adapter — `forge.verify.backend_csim.CsimBackend`,
-`forge.verify.backend_xsim.XsimBackend`, and a Verilator adapter — must
+one shared interface: `forge.verification.backend_base.BackendAdapter`. Every
+backend adapter — `forge.verification.backend_csim.CsimBackend`,
+`forge.verification.backend_xsim.XsimBackend`, and a Verilator adapter — must
 implement the same four-step contract, called in this order:
 
 1. `validate_backend_requirements(cfg)` — check prerequisites (toolchain
@@ -54,7 +54,7 @@ backends (`xsim`, `csim`, `verilator`) auto-register on import
 
 ## `FlowResult`: what a run actually produced
 
-`forge.verify.results.FlowResult` is the structured, schema-tagged result
+`forge.verification.results.FlowResult` is the structured, schema-tagged result
 of one `forge test run`/`forge verify run` invocation: the flow name, the
 backend that ran it, and a list of per-event `EventResult`s (each with its
 own success flag, diagnostics, checks, artifacts, and duration).
@@ -69,7 +69,7 @@ deliberately doesn't re-list its fields.
 
 Not every `(kind, backend)` combination is production-ready, and FORGE is
 explicit about which is which rather than silently accepting anything
-that parses. `forge.verify.supported_matrix` is the single authoritative
+that parses. `forge.verification.supported_matrix` is the single authoritative
 source: every command that processes a flow declaration
 (`generate`/`prepare`/`run`/`doctor`) calls `validate_flow_matrix()`
 before doing further work.

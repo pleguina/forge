@@ -8,7 +8,7 @@ Computes the exact expected output for each pixel event:
 
 The identical closed-form formula ``pixel_normalizer.cpp`` implements in
 HLS and ``threshold_rtl.v`` implements in RTL — this is the project-owned
-algorithm; FORGE's :func:`forge.verify.golden_model.run_golden_model`
+algorithm; FORGE's :func:`forge.verification.golden_model.run_golden_model`
 owns invocation determinism and hashing (never this module). See
 ``docs/development/adr/0004-golden-model-provider-boundary.md`` for why
 this split exists.
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from forge.verify.dataset_adapter import CanonicalDataset
-from forge.verify.golden_model import (
+from forge.verification.dataset_adapter import CanonicalDataset
+from forge.verification.golden_model import (
     EXPECTED_DATASET_SCHEMA,
     ExpectedDataset,
     register_golden_model_provider,

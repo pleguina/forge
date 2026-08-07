@@ -126,7 +126,7 @@ pass "Scaffolded bootstrap.py imports and runs standalone"
 python3 - "${SCAFFOLDED_VERIFY}/design.verification.yml" "${PLUGIN_ID}" <<'EOF'
 import sys
 from pathlib import Path
-from forge.verify.design_contract import load_verify_design
+from forge.verification.design_contract import load_verify_design
 
 yml, expected_plugin = sys.argv[1], sys.argv[2]
 contract = load_verify_design(Path(yml))

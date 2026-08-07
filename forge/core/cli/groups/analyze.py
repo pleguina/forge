@@ -440,7 +440,7 @@ def register(sub) -> None:
         help=(
             "'long' (default): cycle,signal,value rows, one event per row. "
             "'wide': cycle,<probe1>,<probe2>,... — one row per cycle, one "
-            "column per probe (the format forge.verify.gen_sim's real "
+            "column per probe (the format forge.verification.gen_sim's real "
             "Tier-2 probe emission produces under --probe-log/PROBE_LOG=1)."
         ),
     )

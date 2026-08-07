@@ -31,10 +31,10 @@ import yaml
 from .config import DESIGN_SCHEMA_VERSION, MODULE_REGISTRY_SCHEMA_VERSION
 from .ip.contract_loader import INTERFACE_CONTRACT_SCHEMA_VERSION
 
-# forge.topgen must not depend on forge.verify (no such import exists
+# forge.topgen must not depend on forge.verification (no such import exists
 # anywhere else in the codebase — the two subsystems are kept
 # independent). This value is kept manually
-# in sync with forge.verify.design_contract.VERIFY_CONTRACT_SCHEMA_VERSION
+# in sync with forge.verification.design_contract.VERIFY_CONTRACT_SCHEMA_VERSION
 # rather than importing it.
 _VERIFY_CONTRACT_SCHEMA_VERSION = "1.0"
 

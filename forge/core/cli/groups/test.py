@@ -53,7 +53,7 @@ def _maybe_quiet_stdout(json_mode: bool):
 
 def _run_prepare(args, *, mode: str) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.verify.__main__ import _cmd_prepare
+    from forge.verification.__main__ import _cmd_prepare
 
     json_mode = getattr(args, "json", False)
     prepare_ns = argparse.Namespace(
@@ -112,15 +112,15 @@ def _parse_event_list(event_list: str) -> List[int]:
 
 def _enumerate_xml_event_ids(xml_path: Path) -> List[int]:
     """Every event id in *xml_path*, routed through
-    :class:`~forge.verify.dataset_service.DatasetService` instead of
+    :class:`~forge.verification.dataset_service.DatasetService` instead of
     parsing the XML directly — the
     real `XmlDatasetLoader` this now goes through was itself written to
     be tag-name-agnostic on the root element (passthrough_demo's root is
     `<passthrough_events>`, trigger_demo's is `<trigger_events>` — both
     real reference plugins use plain `<event id="N">` children), so this
     is a same-output substitution, not a behavior change."""
-    from forge.verify.dataset_adapter import DatasetSource
-    from forge.verify.dataset_service import DatasetService
+    from forge.verification.dataset_adapter import DatasetSource
+    from forge.verification.dataset_service import DatasetService
 
     serialized = DatasetService().load(DatasetSource(raw_path=xml_path))
     return sorted(int(eid) for eid in serialized.metadata.event_ids)
@@ -167,7 +167,7 @@ def _build_event_artifacts(exec_result: Any, outputs: Dict[str, Any]) -> List[An
     ``exec_result.log_path`` with the real stage that produced it — the
     rest carry ``stage=None`` (honestly unknown at this granularity, never
     guessed)."""
-    from forge.verify.results import ArtifactRef
+    from forge.verification.results import ArtifactRef
 
     refs: List[ArtifactRef] = []
     result_log = getattr(exec_result, "log_path", None) if exec_result is not None else None
@@ -191,7 +191,7 @@ def _parse_event_checks(outputs: Dict[str, Any]) -> List[Any]:
     — always ``simulate_log`` specifically, since that's where
     the SV stimulus (and its checks) actually runs, never whichever log
     happened to be the one a compile/elaborate failure returned."""
-    from forge.verify.results import parse_forge_check_lines
+    from forge.verification.results import parse_forge_check_lines
 
     log_path = outputs.get("simulate_log")
     if log_path is None or not Path(log_path).exists():
@@ -244,7 +244,7 @@ def _load_flow_cfg(flow_path: Path, consumer_root):
         cfg = _flow_mod.load_flow(flow_path, consumer_root=consumer_root)
         return cfg, _il
     except (ImportError, AttributeError):
-        from forge.verify.flow_loader import load_generic_flow
+        from forge.verification.flow_loader import load_generic_flow
 
         cfg = load_generic_flow(flow_path, consumer_root)
         return cfg, None
@@ -252,7 +252,7 @@ def _load_flow_cfg(flow_path: Path, consumer_root):
 
 def cmd_run(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.verify.__main__ import (
+    from forge.verification.__main__ import (
         XmlRunSelection,
         _bootstrap,
         _build_runtime_context,
@@ -262,9 +262,9 @@ def cmd_run(args) -> None:
         _run_dataset_parts,
         _run_one_loaded_flow,
     )
-    from forge.verify.backend_registry import get_adapter
-    from forge.verify.design_contract import load_verify_design
-    from forge.verify.layout import canonical_flow_dir
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.design_contract import load_verify_design
+    from forge.verification.layout import canonical_flow_dir
 
     json_mode = getattr(args, "json", False)
     strict = getattr(args, "strict", False)
@@ -352,7 +352,7 @@ def cmd_run(args) -> None:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
         return
 
-    from forge.verify.results import RESULTS_SCHEMA, EventResult, FlowResult, diagnostic_for_event_failure
+    from forge.verification.results import RESULTS_SCHEMA, EventResult, FlowResult, diagnostic_for_event_failure
 
     # ── stimulus_mode == "readmemh" ──────────────────────────────────────────
     # Fixed-shape, non-recompiling stimulus: the plugin's gen_stimulus.py
@@ -475,7 +475,7 @@ def cmd_run(args) -> None:
 
     artifacts: List[str] = []
     if junit_xml_path:
-        from forge.verify.junit_xml import write_junit_xml
+        from forge.verification.junit_xml import write_junit_xml
 
         junit_path = Path(junit_xml_path).expanduser().resolve()
         write_junit_xml(
@@ -517,7 +517,7 @@ def cmd_run(args) -> None:
 
         sidecar_path = flow_dir / "golden_model_provenance.json"
         if sidecar_path.exists():
-            from forge.verify.golden_comparison_result import build_golden_comparison_result
+            from forge.verification.golden_comparison_result import build_golden_comparison_result
 
             comparison = build_golden_comparison_result(flow_result, sidecar_path)
             comparison_path = Path(golden_comparison_json_path).expanduser().resolve()

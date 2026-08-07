@@ -1,7 +1,7 @@
 """Coverage for forge/verify/port_parser.py (previously 0%).
 
 This module is a documented backward-compatibility shim that delegates
-entirely to forge.verify.rtl_introspection — kept for external plugin
+entirely to forge.verification.rtl_introspection — kept for external plugin
 callers that haven't migrated their imports yet, not itself dead code.
 """
 
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.port_parser import parse_hls_verilog_ports, write_port_map_yaml
-from forge.verify.rtl_introspection import RegexFallbackUnsupported
+from forge.verification.port_parser import parse_hls_verilog_ports, write_port_map_yaml
+from forge.verification.rtl_introspection import RegexFallbackUnsupported
 
 # Non-ANSI, one-declaration-per-statement style — what the regex fallback
 # (and real Vitis HLS ap_ctrl_none output) actually produces.

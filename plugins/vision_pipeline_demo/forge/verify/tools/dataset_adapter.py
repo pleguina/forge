@@ -11,7 +11,7 @@ placeholder standing in for missing work.
 
 ``SyntheticDatasetAdapter``/``ImageFolderDatasetAdapter``/
 ``NumpyArrayDatasetAdapter``: thin
-:class:`~forge.verify.dataset_adapter.ProjectDatasetAdapter` wrappers
+:class:`~forge.verification.dataset_adapter.ProjectDatasetAdapter` wrappers
 around the real adapter logic in
 ``plugins/vision_pipeline_demo/datasets/adapters/`` — see
 docs/development/adr/0001-dataset-ownership-boundary.md for why dataset
@@ -30,12 +30,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from forge.verify.dataset_adapter import (
+from forge.verification.dataset_adapter import (
     CanonicalDataset,
     DatasetSource,
     register_dataset_adapter,
 )
-from forge.verify.dataset_format import (
+from forge.verification.dataset_format import (
     DATASET_SCHEMA,
     DatasetMetadata,
     EnvironmentMetadata,
@@ -57,9 +57,9 @@ from forge.verify.dataset_format import (
 # package rooted there instead, since PathFinder runs before the real
 # `forge` editable-install's own meta-path finder (registered via
 # `sys.meta_path.append(...)`, i.e. strictly after PathFinder) ever gets
-# asked -- so `import forge.verify.results` then fails with
-# ``ModuleNotFoundError: No module named 'forge.verify.results'``
-# (`forge.verify` resolves to the asset directory, which has no
+# asked -- so `import forge.verification.results` then fails with
+# ``ModuleNotFoundError: No module named 'forge.verification.results'``
+# (`forge.verification` resolves to the asset directory, which has no
 # `results.py`), even though the same import works fine from any other
 # entry point. Loading `datasets` via `importlib.util.spec_from_file_location`
 # with an explicit `submodule_search_locations` sidesteps sys.path (and

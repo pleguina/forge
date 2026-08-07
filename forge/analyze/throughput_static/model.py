@@ -1,5 +1,5 @@
 """forge.analyze.throughput_static.model — build
-:class:`~forge.verify.throughput_result.StaticThroughputAnalysis` records
+:class:`~forge.verification.throughput_result.StaticThroughputAnalysis` records
 from real HLS synthesis reports.
 
 No simulation is needed for any of this — every field is derived from a
@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from forge.analyze.hls_reports.extractor import HLSModuleReport
-from forge.verify.throughput_result import StaticThroughputAnalysis
+from forge.verification.throughput_result import StaticThroughputAnalysis
 
 
 def build_static_throughput_analysis(

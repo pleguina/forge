@@ -41,7 +41,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from forge.verify.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
+from forge.verification.stimulus_helpers import StimulusEmitter, write_run_stimulus_svh
 
 # Constant config values, driven from just after reset and held for the
 # whole run.

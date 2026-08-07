@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.supported_matrix.
+"""Unit tests for forge.verification.supported_matrix.
 
 MatrixEntry was reshaped from a single ``canonical_backend`` string to
 ``default_backend`` + always-populated ``allowed_backends`` — these tests
@@ -12,7 +12,7 @@ from types import MappingProxyType
 
 import pytest
 
-from forge.verify.supported_matrix import (
+from forge.verification.supported_matrix import (
     EXPERIMENTAL_KINDS,
     MATRIX,
     SUPPORTED_MATRIX,

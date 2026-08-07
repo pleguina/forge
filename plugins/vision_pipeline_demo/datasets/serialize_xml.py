@@ -2,7 +2,7 @@
 """Canonical-event -> FORGE-XML serialization.
 
 The framework's per-pixel event-dict shape (what
-``forge.verify.dataset_format.XmlDatasetLoader`` produces, and what
+``forge.verification.dataset_format.XmlDatasetLoader`` produces, and what
 ``golden_model_provider.py``/``gen_stimulus.py`` already consume via
 ``ev["in"]["pixel"]`` etc.) is flatter than :class:`DatasetEvent` — one
 ``<event>`` per *pixel transaction*, not per frame. :func:`flatten_events`
@@ -26,9 +26,9 @@ def flatten_events(events: "Sequence[DatasetEvent]") -> "list[dict[str, Any]]":
     """Flatten *events* (frames of pixel transactions) into FORGE's
     per-pixel event-dict shape: ``[{"in": {"pixel": "0x..", "x": "0", ...}}, ...]``
     — string-valued attrs, matching exactly what
-    :class:`~forge.verify.dataset_format.XmlDatasetLoader` produces when it
+    :class:`~forge.verification.dataset_format.XmlDatasetLoader` produces when it
     parses ``<in pixel="0x.." .../>`` attributes from a real XML file, so a
-    :class:`~forge.verify.dataset_adapter.CanonicalDataset` built directly
+    :class:`~forge.verification.dataset_adapter.CanonicalDataset` built directly
     from this is byte-identical to one loaded from this module's own
     XML output.
     """
@@ -52,7 +52,7 @@ def flatten_events(events: "Sequence[DatasetEvent]") -> "list[dict[str, Any]]":
 
 def event_ids_for(flat_events: "Sequence[dict[str, Any]]") -> "list[str]":
     """Contiguous string ids for a flattened event list -- ``"0", "1", ...``,
-    matching :class:`~forge.verify.dataset_format.XmlDatasetLoader`'s own
+    matching :class:`~forge.verification.dataset_format.XmlDatasetLoader`'s own
     ``<event id="N">`` numbering convention."""
     return [str(i) for i in range(len(flat_events))]
 

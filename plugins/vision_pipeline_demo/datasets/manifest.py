@@ -29,7 +29,7 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 from forge.core.utils.content_hash import compute_preprocessing_hash, hash_bytes, hash_file
-from forge.verify.results import ArtifactSchema
+from forge.verification.results import ArtifactSchema
 
 from .model import DatasetEvent, dataset_event_to_dict
 
@@ -38,7 +38,7 @@ MANIFEST_SCHEMA = ArtifactSchema("forge.dataset_manifest", "1.0")
 
 def compute_canonical_events_hash(events: "Sequence[DatasetEvent]") -> str:
     """Content hash over the canonical (pre-flatten) event model itself —
-    distinct from :func:`~forge.verify.dataset_format.compute_events_content_hash`,
+    distinct from :func:`~forge.verification.dataset_format.compute_events_content_hash`,
     which hashes the *flattened*, per-pixel FORGE event-dict shape. Both
     are recorded in the manifest (``canonical_events`` vs
     ``serialized_dataset``) because they answer different questions: did
@@ -49,8 +49,8 @@ def compute_canonical_events_hash(events: "Sequence[DatasetEvent]") -> str:
     ``ImageFolderAdapter``) populate it with the absolute local source
     path, which must never affect a *semantic* content hash: relocating
     a source directory must not change a dataset's semantic identity,
-    the same principle :class:`~forge.verify.dataset_format.SemanticMetadata`
-    already applies by excluding :class:`~forge.verify.dataset_format.EnvironmentMetadata`.
+    the same principle :class:`~forge.verification.dataset_format.SemanticMetadata`
+    already applies by excluding :class:`~forge.verification.dataset_format.EnvironmentMetadata`.
     A real, reproducible bug was found here during development: without
     this exclusion, copying a source image directory to a new path
     changed ``canonical_events_hash`` even though every pixel was

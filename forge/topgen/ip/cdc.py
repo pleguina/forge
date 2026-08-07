@@ -184,7 +184,7 @@ def report_all_crossings(
     global_nets: Dict[str, Any],
 ) -> "List[Dict[str, Any]]":
     """Return one plain dict (the same field shape
-    ``forge.verify.cdc_verification_result.CdcCrossingResult`` uses) per
+    ``forge.verification.cdc_verification_result.CdcCrossingResult`` uses) per
     module-pair connection that is actually a clock- or reset-domain
     crossing (both domains known and differing), or that explicitly
     declares a ``cdc:`` adapter regardless — passing entries included,
@@ -193,13 +193,13 @@ def report_all_crossings(
     A same-domain pair with no ``cdc:`` declared is not a crossing at
     all and is skipped entirely — there is nothing to verify.
 
-    Returns plain dicts, not a ``forge.verify`` dataclass — ``forge.topgen``
-    and ``forge.verify`` must never cross-import each other
+    Returns plain dicts, not a ``forge.verification`` dataclass — ``forge.topgen``
+    and ``forge.verification`` must never cross-import each other
     (``ci/import_direction_check.sh`` enforces this; they're independent
     subsystems composed by the CLI layer, not by each other). A caller in
     the CLI layer (e.g. ``forge/core/cli/groups/topgen.py``) passes this
     return value into
-    ``forge.verify.cdc_verification_result.build_cdc_verification_result``.
+    ``forge.verification.cdc_verification_result.build_cdc_verification_result``.
     """
     results: "List[Dict[str, Any]]" = []
     for pair in _resolve_pairs(design_cfg, contracts, match_report, conn_map, global_nets):

@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-import forge.verify.__main__ as cli
+import forge.verification.__main__ as cli
 
 
 def test_debug_mode_prints_traceback_for_unexpected_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

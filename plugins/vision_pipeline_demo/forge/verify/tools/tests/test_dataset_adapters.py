@@ -34,7 +34,7 @@ from datasets.manifest import build_manifest, check_staleness, compute_canonical
 from datasets.model import tile_id_for
 from datasets.serialize_xml import flatten_events, write_xml
 
-from forge.verify.dataset_format import XmlDatasetLoader
+from forge.verification.dataset_format import XmlDatasetLoader
 
 
 # ── SyntheticPatternAdapter ──────────────────────────────────────────────
@@ -302,8 +302,8 @@ def test_staleness_detects_missing_file(tmp_path):
 # ── FORGE-registered ProjectDatasetAdapter wrappers (real DatasetService path) ──
 
 def test_forge_synthetic_adapter_via_dataset_service():
-    from forge.verify.dataset_adapter import DatasetSource
-    from forge.verify.dataset_service import DatasetService
+    from forge.verification.dataset_adapter import DatasetSource
+    from forge.verification.dataset_service import DatasetService
 
     service = DatasetService()
     canonical = service.materialize(
@@ -316,8 +316,8 @@ def test_forge_synthetic_adapter_via_dataset_service():
 
 
 def test_forge_image_folder_adapter_via_dataset_service(tmp_path):
-    from forge.verify.dataset_adapter import DatasetSource
-    from forge.verify.dataset_service import DatasetService
+    from forge.verification.dataset_adapter import DatasetSource
+    from forge.verification.dataset_service import DatasetService
 
     _write_png(tmp_path / "a.png", 42)
     service = DatasetService()
@@ -329,8 +329,8 @@ def test_forge_image_folder_adapter_via_dataset_service(tmp_path):
 
 
 def test_forge_numpy_array_adapter_via_dataset_service(tmp_path):
-    from forge.verify.dataset_adapter import DatasetSource
-    from forge.verify.dataset_service import DatasetService
+    from forge.verification.dataset_adapter import DatasetSource
+    from forge.verification.dataset_service import DatasetService
 
     arr = np.zeros((1, 4, 4), dtype=np.uint8)
     np.save(tmp_path / "frames.npy", arr)
@@ -343,8 +343,8 @@ def test_forge_numpy_array_adapter_via_dataset_service(tmp_path):
 
 
 def test_forge_image_folder_adapter_requires_raw_path():
-    from forge.verify.dataset_adapter import DatasetSource
-    from forge.verify.dataset_service import DatasetService
+    from forge.verification.dataset_adapter import DatasetSource
+    from forge.verification.dataset_service import DatasetService
 
     service = DatasetService()
     with pytest.raises(ValueError, match="requires DatasetSource.raw_path"):

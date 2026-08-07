@@ -5,7 +5,7 @@ probe CSV (``algo_top_probe.csv``, produced by ``forge verify run
 --probe-log``).
 
 Known, honestly-stated limitation (found running this exact design, not
-assumed): ``forge.verify.gen_sim``'s Tier 2 probe CSV sampling is tied to
+assumed): ``forge.verification.gen_sim``'s Tier 2 probe CSV sampling is tied to
 a single clock (``ap_clk``) regardless of a given probe's own native
 domain -- no earlier flow in this plugin measured a FIFO's *read*-domain
 signals across a genuinely different, slower clock (``clk_output``, 8ns,
@@ -18,7 +18,7 @@ real ``clk_output`` edges, so ``emitted_transactions``/``empty_events``/
 the read-domain share of ``stall_cycles``/``measured_rate_records_per_sec``
 are approximate, not exact -- a real, pre-existing single-clock probe
 sampling limitation, not a new bug. A per-probe sampling-clock extension
-to ``forge.verify.gen_sim`` would fix this properly; that's a
+to ``forge.verification.gen_sim`` would fix this properly; that's a
 FORGE-core change, out of scope for a single plugin's render script --
 functional correctness does not depend on it at all (packetizer_rtl's
 own toggle-in-payload novelty detection, verified exhaustively by
@@ -56,7 +56,7 @@ from pathlib import Path
 from forge.analyze.hls_reports.extractor import collect_reports
 from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
 from forge.analyze.throughput_static.model import build_design_throughput_analysis
-from forge.verify.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
+from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
 
 # Real, exactly-known record counts from this design's own functional
 # verification (gen_stimulus_packetizer.py's conservation-invariant

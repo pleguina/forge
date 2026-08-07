@@ -1,4 +1,4 @@
-"""Tests for forge.verify.dataset_service.DatasetService.
+"""Tests for forge.verification.dataset_service.DatasetService.
 
 Uses passthrough_demo's real golden XML fixture and its real
 IdentityXmlDatasetAdapter, matching the convention already established by
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.dataset_adapter import DatasetSource
-from forge.verify.dataset_service import DatasetService
+from forge.verification.dataset_adapter import DatasetSource
+from forge.verification.dataset_service import DatasetService
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PASSTHROUGH_GOLDEN_XML = (
@@ -36,7 +36,7 @@ def _passthrough_identity_adapter_registered():
 
 
 def test_load_from_raw_path_matches_direct_format_loader():
-    from forge.verify.dataset_format import get_format_loader
+    from forge.verification.dataset_format import get_format_loader
     direct = get_format_loader(PASSTHROUGH_GOLDEN_XML).load(PASSTHROUGH_GOLDEN_XML)
 
     via_service = DatasetService().load(DatasetSource(raw_path=PASSTHROUGH_GOLDEN_XML))
@@ -45,7 +45,7 @@ def test_load_from_raw_path_matches_direct_format_loader():
 
 
 def test_load_passes_through_already_serialized():
-    from forge.verify.dataset_format import get_format_loader
+    from forge.verification.dataset_format import get_format_loader
     serialized = get_format_loader(PASSTHROUGH_GOLDEN_XML).load(PASSTHROUGH_GOLDEN_XML)
     result = DatasetService().load(DatasetSource(serialized=serialized))
     assert result is serialized
@@ -135,13 +135,13 @@ def test_materialize_preserves_real_adapter_events():
 
 
 def get_dataset_adapter_result(serialized):
-    from forge.verify.dataset_adapter import get_dataset_adapter
+    from forge.verification.dataset_adapter import get_dataset_adapter
     adapter = get_dataset_adapter("passthrough.identity-xml")
     return adapter.materialize(DatasetSource(serialized=serialized), {})
 
 
 def test_compute_identity_matches_compute_events_content_hash():
-    from forge.verify.dataset_format import compute_events_content_hash
+    from forge.verification.dataset_format import compute_events_content_hash
     service = DatasetService()
     serialized = service.load(DatasetSource(raw_path=PASSTHROUGH_GOLDEN_XML))
     canonical = service.materialize(

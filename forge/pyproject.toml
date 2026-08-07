@@ -87,6 +87,7 @@ packages = [
     "forge.topgen", "forge.topgen.generators", "forge.topgen.ip",
     "forge.hls",
     "forge.verify",
+    "forge.verification",
     "forge.analyze",
     "forge.analyze.hls_reports",
     "forge.analyze.latency_static",

@@ -8,7 +8,7 @@ bundled image corpus. This is a *generator* adapter, not a source-file
 reader: :class:`DatasetSource` carries no meaningful
 ``raw_path``/``serialized`` for it (see the FORGE-registered wrapper in
 ``forge/verify/tools/dataset_adapter.py`` for how that's reconciled with
-:class:`~forge.verify.dataset_adapter.ProjectDatasetAdapter`'s protocol).
+:class:`~forge.verification.dataset_adapter.ProjectDatasetAdapter`'s protocol).
 
 Traversal order is row-major (frozen) — the only order consistent with
 ``end_of_line``/``end_of_frame`` semantics.

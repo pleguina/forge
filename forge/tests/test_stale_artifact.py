@@ -1,5 +1,5 @@
 """
-Tests for forge.verify.stale_artifact — verify-flow artifact staleness,
+Tests for forge.verification.stale_artifact — verify-flow artifact staleness,
 including content-hash-aware confirmation layered on top of the existing
 mtime-only checks.
 """
@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from forge.ir.provenance import ProvenanceManifest, write_provenance
-from forge.verify.stale_artifact import (
+from forge.verification.stale_artifact import (
     StalenessResult,
     StaleArtifactReport,
     _check,

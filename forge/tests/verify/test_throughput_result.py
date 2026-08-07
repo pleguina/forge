@@ -1,10 +1,10 @@
-"""Tests for forge.verify.throughput_result (construction/serialization
+"""Tests for forge.verification.throughput_result (construction/serialization
 only; builders are tested separately in
 forge.analyze.throughput_static/throughput_runtime's own test files).
 """
 from __future__ import annotations
 
-from forge.verify.throughput_result import (
+from forge.verification.throughput_result import (
     THROUGHPUT_RESULT_SCHEMA,
     RuntimeThroughputResult,
     StaticThroughputAnalysis,

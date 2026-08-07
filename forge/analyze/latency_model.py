@@ -9,7 +9,7 @@ elastic declarations. Kept as its own module — not nested inside
 wrong-direction package dependency between analysis sibling packages.
 
 Deliberately minimal: this module defines *data*, not analysis logic. It
-has no dependency on ``forge.topgen``/``forge.ir``/``forge.verify`` so it
+has no dependency on ``forge.topgen``/``forge.ir``/``forge.verification`` so it
 stays freely importable from any of them.
 """
 

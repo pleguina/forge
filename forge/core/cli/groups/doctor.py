@@ -27,7 +27,7 @@ def _run_checks() -> dict:
     from forge import __version__ as forge_version
     from forge.core.cli.groups.core import resolve_framework_resources
     from forge.core.toolchain_versions import tool_present
-    from forge.verify.rtl_introspection import _pyverilog_available
+    from forge.verification.rtl_introspection import _pyverilog_available
 
     checks: dict[str, dict[str, object]] = {}
 
@@ -77,7 +77,7 @@ def _checks_to_envelope(checks: dict):
     split stays in `_check_status` for forward compatibility if a future
     check ever needs to be mandatory."""
     from forge.core.cli.envelope import from_diagnostic_report
-    from forge.verify.diagnostics import DiagnosticReport
+    from forge.verification.diagnostics import DiagnosticReport
 
     report = DiagnosticReport(label="forge doctor")
     for name, c in checks.items():

@@ -7,7 +7,7 @@ diagnostic path a real design would hit if a fast producer were wired
 directly into a slower consumer with no buffering.
 
 No new core-framework diagnostic code is needed for this: FORGE already
-computes real per-module :class:`~forge.verify.throughput_result.StaticThroughputAnalysis`
+computes real per-module :class:`~forge.verification.throughput_result.StaticThroughputAnalysis`
 records from real HLS synthesis reports -- this script is the same kind
 of release-gate check a real design's own release-acceptance step would
 run over them, comparing an unbuffered/non-backpressured producer/
@@ -42,7 +42,7 @@ from pathlib import Path
 
 from forge.analyze.hls_reports.extractor import collect_reports
 from forge.analyze.throughput_static.model import build_static_throughput_analysis
-from forge.verify.throughput_result import StaticThroughputAnalysis
+from forge.verification.throughput_result import StaticThroughputAnalysis
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 _HLS_BUILD_ROOT = _REPO_ROOT / "build_hls_vision_pipeline_demo"

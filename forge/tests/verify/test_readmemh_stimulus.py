@@ -1,4 +1,4 @@
-"""Unit tests for forge.verify.readmemh_stimulus and the readmemh-mode SV
+"""Unit tests for forge.verification.readmemh_stimulus and the readmemh-mode SV
 emission helpers in stimulus_helpers.py.
 
 Real end-to-end proof (single real compile across 2 real events, real
@@ -12,15 +12,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.verify.dataset_adapter import CanonicalDataset
-from forge.verify.dataset_format import (
+from forge.verification.dataset_adapter import CanonicalDataset
+from forge.verification.dataset_format import (
     DATASET_SCHEMA,
     DatasetMetadata,
     EnvironmentMetadata,
     SemanticMetadata,
 )
-from forge.verify.readmemh_stimulus import write_event_memory_file
-from forge.verify.stimulus_helpers import (
+from forge.verification.readmemh_stimulus import write_event_memory_file
+from forge.verification.stimulus_helpers import (
     emit_event_index_read,
     emit_runtime_output_check,
     write_readmemh_stimulus_svh,
@@ -143,7 +143,7 @@ def test_write_readmemh_stimulus_svh_preamble_before_task(tmp_path: Path):
 def test_write_readmemh_stimulus_svh_satisfies_real_stimulus_contract(tmp_path: Path):
     """The exact real contract check used by the backends — a module-scope
     preamble ahead of the task must not trip any of the 9 regex checks."""
-    from forge.verify.stimulus_contract import validate_stimulus
+    from forge.verification.stimulus_contract import validate_stimulus
 
     out_path = tmp_path / "stimulus_current.svh"
     write_readmemh_stimulus_svh(

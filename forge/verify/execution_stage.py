@@ -1,31 +1,9 @@
-#!/usr/bin/env python3
-"""Execution-stage enum shared by all backend adapters.
+"""Compatibility alias for :mod:`forge.verification.execution_stage`.
 
-Replaces free-form ``backend_metadata["step"]`` strings as the mechanism
-for recording *which stage of a simulation run* produced a given
-:class:`~forge.verify.backend_base.ExecutionResult`.  Downstream consumers
-(log selection, diagnostics) branch on this enum instead of deriving stage
-identity from a hand-written string.
+.. deprecated::
+    Import from :mod:`forge.verification.execution_stage` instead. This alias is
+    kept working indefinitely (not on a deprecation timer) — existing
+    plugin code may import ``forge.verify.*`` directly and FORGE doesn't
+    control when those get updated.
 """
-from __future__ import annotations
-
-from enum import Enum
-
-
-class ExecutionStage(str, Enum):
-    """A stage in a backend's execution pipeline.
-
-    Not every backend uses every stage — e.g. Verilator has no separate
-    ``ELABORATE`` step (compile and elaborate are one invocation), so it
-    only ever reports ``COMPILE``/``SIMULATE``.  ``PREFLIGHT`` is reserved
-    for failures caught before any tool invocation (missing artifacts,
-    missing tools). ``RESULT_PARSE`` is reserved for failures while
-    interpreting a backend's own output after a successful run.
-    """
-
-    PREFLIGHT    = "preflight"
-    COMPILE      = "compile"
-    ELABORATE    = "elaborate"
-    SIMULATE     = "simulate"
-    POST_CHECK   = "post_check"
-    RESULT_PARSE = "result_parse"
+from forge.verification.execution_stage import *  # noqa: F401,F403

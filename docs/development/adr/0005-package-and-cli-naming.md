@@ -2,12 +2,18 @@
 
 ## Status
 
-Accepted. `forge/framework/` → `forge/integration/` has been renamed
-under this decision. The remaining renames it calls for
-(`forge/verify` → `forge/verification`, `forge/analyze` → `forge/analysis`,
-`forge/topgen` split into `forge/contracts` + `forge/generation`) are
+Accepted. `forge/framework/` → `forge/integration/` and
+`forge/verify/` → `forge/verification/` (permanent compatibility shim at
+the old path) have been executed under this decision.
+`forge/analyze` → `forge/analysis` and the `forge/topgen` split are
 **not yet done** — see "Deferred renames" below for why, and what has to
-be true before each one lands.
+be true before each one lands. One correction found while executing the
+`verify` rename: `forge.analyze` turns out to have the **same**
+plugin-facing dependency `forge.verify` did — `plugins/vision_pipeline_demo/forge/verify/tools/bootstrap.py`
+itself imports `forge.analyze.dashboards.attachments` directly — so
+`analyze` needs the same permanent-shim treatment as `verify`, not a
+lighter one (an earlier version of this ADR claimed otherwise; that was
+wrong).
 
 ## Context
 
@@ -83,24 +89,30 @@ forge/
   docsgen/          keep
 ```
 
+## `forge/verify` → `forge/verification` (done)
+
+`forge/verify/__init__.py` ran a real import-time side effect
+(`_register_framework_backends()`, registering xsim/csim/verilator into
+a global registry) — the shim's `__init__.py` triggers this exactly once
+by importing `forge.verification` rather than re-implementing the
+registration. Every plugin's `bootstrap.py` does `from
+forge.verify.plugin_registry import declare_plugin_bootstrap` directly;
+the shim is a real package at `forge/verify/` (one thin
+`from forge.verification.X import *` file per real submodule, generated
+programmatically), kept **permanently**, not on a deprecation timer —
+verified by an identity check (`forge.verify.plugin_registry.declare_plugin_bootstrap
+is forge.verification.plugin_registry.declare_plugin_bootstrap`) and a
+real `python -m forge.verify --help` invocation, both passing.
+
 ## Deferred renames
 
-`forge/verify` → `forge/verification`, `forge/analyze` → `forge/analysis`,
-and the `forge/topgen` split are **not executed by this ADR**. Each has a
-real blast radius (65–134 files touching the old dotted path) and, more
-importantly, real compatibility obligations this repo doesn't get to
-skip:
+`forge/analyze` → `forge/analysis` and the `forge/topgen` split are
+**not yet executed**. Each has a real blast radius (65–92 files touching
+the old dotted path) and real compatibility obligations:
 
-- `forge/verify/__init__.py` runs a real import-time side effect
-  (`_register_framework_backends()`, registering xsim/csim/verilator into
-  a global registry). A renamed package's compat shim must trigger this
-  exactly once — not zero, not twice.
-- Every plugin's `bootstrap.py` (`plugins/*/forge/verify/tools/bootstrap.py`)
-  does `from forge.verify.plugin_registry import declare_plugin_bootstrap`
-  directly — this is the plugin-author entry point `forge init` itself
-  scaffolds onto every new plugin. Renaming `forge.verify` without a
-  **permanent** (not time-boxed) compat shim breaks every already-scaffolded
-  plugin FORGE doesn't control the update timing of.
+- `forge.analyze` needs the same **permanent** compat-shim treatment as
+  `forge.verify` got (see correction in Status above) — plugin tool files
+  import `forge.analyze.*` submodules directly.
 - `forge.topgen.generators` and `forge.topgen.ip` are both part of the
   frozen public Python API (`docs/reference/public-python-api.md`) today.
   Splitting them requires a shim carrying a `DeprecationWarning` for at
@@ -108,11 +120,11 @@ skip:
   and the public-API freeze must be regenerated *after* the shim lands,
   not touched mid-rename.
 
-Each deferred rename should be its own session: do the rename, add the
-compat shim, regenerate the public-API freeze, and prove it with the full
-test suite **plus** a clean-venv wheel install **plus** a real plugin
-bootstrap smoke test (import an existing plugin's `bootstrap.py`
-unmodified against the renamed package) before moving to the next one.
+Each deferred rename should be its own reviewed unit: do the rename, add
+the compat shim, regenerate the public-API freeze, and prove it with the
+full test suite **plus** a clean-venv wheel install **plus** a real
+plugin-facing smoke test before moving to the next one — the same recipe
+`verify` just went through.
 
 ## Consequences
 

@@ -16,8 +16,8 @@ from forge.docsgen._type_resolution import (
     _strip_redundant_quotes,
     resolve_dataclass_field_types,
 )
-from forge.verify.results import ArtifactRef, EventResult
-from forge.verify.dataset_format import DatasetMetadata
+from forge.verification.results import ArtifactRef, EventResult
+from forge.verification.dataset_format import DatasetMetadata
 
 
 def test_strip_redundant_quotes_single_layer() -> None:

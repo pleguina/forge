@@ -11,7 +11,7 @@ different reasons.
 A FORGE verification dataset is XML-backed data describing one or more
 "events" (stimulus + expected output) that a flow's testbench replays. The
 neutral, in-memory representation FORGE loads such a file into is
-`forge.verify.dataset_format.SerializedDataset` — a schema-tagged envelope
+`forge.verification.dataset_format.SerializedDataset` — a schema-tagged envelope
 (`ArtifactSchema("forge.dataset", "1.0")`) pairing the raw list of event
 dicts with `DatasetMetadata` (schema, event ids, semantic and environment
 metadata, optional units/seed/generator version).
@@ -21,7 +21,7 @@ answers "how does FORGE read an already-FORGE-shaped file (XML or JSON)
 into this neutral envelope" — it says nothing about interpreting
 arbitrary external raw data (ROOT files, image folders, PCAP captures).
 Making sense of what loaded (or raw external) data actually *means*
-domain-wise is layer B (`forge.verify.dataset_adapter`), a deliberately
+domain-wise is layer B (`forge.verification.dataset_adapter`), a deliberately
 separate, project-owned protocol — a dataset's *shape* is inherently
 per-plugin (`passthrough_demo`'s and `trigger_demo`'s XML schemas are
 completely disjoint), so layer A's job is loading and metadata, never
@@ -61,7 +61,7 @@ a bare "different" boolean.
 
 This is a genuinely separate mechanism from FORGE's pre-existing,
 mtime-based staleness checks (`forge/core/stale_detection.py`,
-`forge.verify.stale_artifact` — which compare generated artifacts'
+`forge.verification.stale_artifact` — which compare generated artifacts'
 modification times against their declared sources, e.g. detecting that
 `design.verification.yml` changed since `verify.flow.yml` was last
 generated). The two coexist deliberately; the content-hash manifest adds

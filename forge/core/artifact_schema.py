@@ -3,7 +3,7 @@
 Shared by every structured artifact FORGE emits (verification results,
 dataset envelopes, the visual-design-explorer's ``DesignGraph``) so a
 future reader can tell which shape it is looking at before assuming field
-names. Lives here — not in ``forge.verify.results``, where it was first
+names. Lives here — not in ``forge.verification.results``, where it was first
 introduced — because a schema-tag concept has
 nothing to do with verification specifically, and an analysis-only
 consumer (``forge.analyze.design_explorer``) should not have to depend on

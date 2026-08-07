@@ -1,4 +1,4 @@
-"""Tests for forge.verify.stimulus_contract — validates stimulus_current.svh
+"""Tests for forge.verification.stimulus_contract — validates stimulus_current.svh
 files against the framework's task-signature/no-$finish/closed-task contract
 before a simulator is ever launched.
 """
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.verify.stimulus_contract import (
+from forge.verification.stimulus_contract import (
     STIMULUS_TASK_SIGNATURE,
     StimulusContractResult,
     validate_stimulus,

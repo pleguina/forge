@@ -1,4 +1,4 @@
-"""Tests for forge.verify.cdc_verification_result. report_all_crossings'
+"""Tests for forge.verification.cdc_verification_result. report_all_crossings'
 own crossing-detection logic is tested in forge/tests/test_cdc.py
 alongside verify_cdc; this file covers construction/serialization plus
 build_cdc_verification_result's join.
@@ -10,7 +10,7 @@ from pathlib import Path
 from forge.topgen.config import Connection, DesignConfig, Module
 from forge.topgen.ip.contract_loader import LoadedContract
 from forge.topgen.ip.matcher import auto_match_ports
-from forge.verify.cdc_verification_result import (
+from forge.verification.cdc_verification_result import (
     CDC_VERIFICATION_RESULT_SCHEMA,
     CdcCrossingResult,
     CdcVerificationResult,
@@ -101,7 +101,7 @@ def _port(name, direction, width=8):
 
 
 def test_build_cdc_verification_result_wraps_report_all_crossings():
-    # forge/tests/ is exempt from the forge.topgen<->forge.verify
+    # forge/tests/ is exempt from the forge.topgen<->forge.verification
     # cross-import rule (ci/import_direction_check.sh) — real production
     # code never imports both directly; the CLI layer composes them (see
     # forge/core/cli/groups/topgen.py's cmd_validate).

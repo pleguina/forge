@@ -71,7 +71,7 @@ reset_domains:
 # Tier 2 probes: real occupancy/backpressure telemetry from both async_fifo
 # crossings, generated but not routed to any module port (see
 # packetizer_rtl's own header for why functional correctness doesn't
-# depend on these) -- bound here via forge.verify.gen_sim's Tier 2 probe
+# depend on these) -- bound here via forge.verification.gen_sim's Tier 2 probe
 # mechanism directly to algo_top's internal `sync_net_*` wires (hierarchical
 # `dut.<net>` references, real net names confirmed against a real
 # `forge topgen gen-top` run of this exact design), for

@@ -2,6 +2,24 @@
 
 # Migration Notes
 
+## `forge.verify` → `forge.verification` package rename
+
+Per `docs/development/adr/0005-package-and-cli-naming.md`,
+`forge/verify/` was renamed to `forge/verification/` (packages are
+nouns; CLI commands are verbs). Unlike the ARC → FORGE rename below,
+**this one ships a permanent compatibility shim** — `forge.verify` keeps
+working indefinitely as a thin alias re-exporting everything from
+`forge.verification`, since existing plugin `bootstrap.py` files import
+`forge.verify.plugin_registry` directly and FORGE doesn't control when
+those get updated. Nothing breaks; new code should just prefer the new
+name.
+
+| Old | New |
+|---|---|
+| `forge.verify` (module) | `forge.verification` (module; `forge.verify` still works, permanently) |
+| `python -m forge.verify` | `python -m forge.verification` (old form still works) |
+| `forge verify` (CLI command) | unchanged — CLI names don't change with package renames |
+
 ## ARC → FORGE rename
 
 The framework was renamed from **ARC** ("Algorithm Runtime & Contract") to

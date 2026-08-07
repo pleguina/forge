@@ -1,7 +1,7 @@
 """Tests for forge.docsgen.support_matrix_reference."""
 from __future__ import annotations
 
-from forge.verify.supported_matrix import MATRIX
+from forge.verification.supported_matrix import MATRIX
 from forge.docsgen.support_matrix_reference import generate_support_matrix_page
 
 

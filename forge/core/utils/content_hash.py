@@ -68,7 +68,7 @@ def compute_preprocessing_hash(config: "Mapping[str, object]") -> str:
     since this function has no way to distinguish a meaningful key from
     an environmental one.
 
-    Canonicalized the same way ``forge.verify.dataset_format``'s
+    Canonicalized the same way ``forge.verification.dataset_format``'s
     ``compute_events_content_hash`` canonicalizes events (sorted-key,
     separator-normalized JSON) before hashing via :func:`hash_bytes` — no
     new hashing scheme, same "canonicalize, then hash" shape as

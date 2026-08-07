@@ -2,7 +2,7 @@
 
 verify/__main__.py is a ~720-line, ~15%-covered CLI surface, only
 exercised indirectly through integration scripts. These tests call
-forge.verify.__main__.main() in-process (subprocess-based CLI tests, like
+forge.verification.__main__.main() in-process (subprocess-based CLI tests, like
 tests/verify/test_cli_error_handling.py, run in a child interpreter that
 --cov=forge in the parent pytest process can't see, so they never counted
 towards coverage) against plugins/passthrough_demo, a real, tiny, checked-in
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-import forge.verify.__main__ as cli
+import forge.verification.__main__ as cli
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DESIGN_VERIFICATION_YML = (

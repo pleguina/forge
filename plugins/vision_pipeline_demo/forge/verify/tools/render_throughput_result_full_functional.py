@@ -32,7 +32,7 @@ from pathlib import Path
 from forge.analyze.hls_reports.extractor import collect_reports
 from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
 from forge.analyze.throughput_static.model import build_design_throughput_analysis
-from forge.verify.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
+from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
 
 # Real, exactly-known record counts from this design's own functional
 # verification (gen_stimulus_full_functional.py's conservation-invariant

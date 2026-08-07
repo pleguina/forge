@@ -4,7 +4,7 @@ Mirrors test_verify_run_xsim.py's convention exactly: tool-gated skip (real
 `shutil.which`, never mocked), a `shutil.copytree` of plugins/passthrough_demo
 into an isolated tmp_path "consumer root", real `gen-top` + real `generate` +
 real `gen_stimulus.py` + a real verilator build-and-run through
-forge.verify.__main__.main() in-process.
+forge.verification.__main__.main() in-process.
 
 passthrough_demo's design.verification.yml declares a second flow,
 `passthrough_verilator` (same DUT/TB/dataset as `passthrough_xsim`, only the
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from forge.core.cli.main import build_parser
-import forge.verify.__main__ as verify_cli
+import forge.verification.__main__ as verify_cli
 
 pytestmark = pytest.mark.integration
 
@@ -185,10 +185,10 @@ def test_run_backend_populates_enriched_execution_result_fields(
     False and waveform_path stays None — never fabricated."""
     flow_yml = _generate_and_write_stimulus(monkeypatch, capsys, consumer_root)
 
-    from forge.verify.backend_registry import get_adapter
-    from forge.verify.execution_stage import ExecutionStage
-    from forge.verify.flow_loader import load_generic_flow
-    from forge.verify.runtime_context import RuntimeContext
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.execution_stage import ExecutionStage
+    from forge.verification.flow_loader import load_generic_flow
+    from forge.verification.runtime_context import RuntimeContext
 
     assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
@@ -226,10 +226,10 @@ def test_run_backend_compile_failure_reports_compile_stage(
     original = tb_sv.read_text()
     tb_sv.write_text(original + "\nthis is not valid systemverilog {{{\n")
 
-    from forge.verify.backend_registry import get_adapter
-    from forge.verify.execution_stage import ExecutionStage
-    from forge.verify.flow_loader import load_generic_flow
-    from forge.verify.runtime_context import RuntimeContext
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.execution_stage import ExecutionStage
+    from forge.verification.flow_loader import load_generic_flow
+    from forge.verification.runtime_context import RuntimeContext
 
     assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)

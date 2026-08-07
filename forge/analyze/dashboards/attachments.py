@@ -11,8 +11,8 @@ any other domain semantic; that stays entirely in the project's own
 provider implementation.
 
 Provider registration mirrors this codebase's existing plugin-extension
-pattern (``forge.verify.golden_model.register_golden_model_provider``,
-``forge.verify.dataset_service``'s adapter registry): a project's own
+pattern (``forge.verification.golden_model.register_golden_model_provider``,
+``forge.verification.dataset_service``'s adapter registry): a project's own
 ``bootstrap.py`` calls :func:`register_report_attachment_provider` at
 import time, and ``forge report --plugin <id>`` bootstraps that plugin
 before collecting attachments — the same bootstrap mechanism

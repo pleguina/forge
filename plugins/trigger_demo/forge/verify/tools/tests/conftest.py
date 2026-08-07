@@ -4,7 +4,7 @@ Loads all plugin-local modules (bootstrap, gen_stimulus) by file path so
 that sys.modules["bootstrap"] and sys.modules["gen_stimulus"] are always
 this plugin's versions — regardless of order or other plugin suites in
 the session. Assumes the ``forge`` package is installed (pip install -e
-forge/), so forge.verify is importable without any sys.path surgery.
+forge/), so forge.verification is importable without any sys.path surgery.
 """
 import importlib.util as _ilu
 import sys

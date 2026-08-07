@@ -1,18 +1,18 @@
-"""Tests for forge.verify.golden_comparison_result.
+"""Tests for forge.verification.golden_comparison_result.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from forge.verify.golden_comparison_result import (
+from forge.verification.golden_comparison_result import (
     GOLDEN_COMPARISON_RESULT_SCHEMA,
     GoldenComparisonResult,
     GoldenEventComparison,
     build_golden_comparison_result,
     render_golden_comparison_markdown,
 )
-from forge.verify.results import RESULTS_SCHEMA, CheckResult, EventResult, FlowResult
+from forge.verification.results import RESULTS_SCHEMA, CheckResult, EventResult, FlowResult
 
 
 def test_schema_tag():

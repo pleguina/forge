@@ -51,7 +51,7 @@ tier2_probes:
   # real top-level port names already listed above (dec_0_raw_valid,
   # tout_out_valid — the same input/output valid pair
   # forge.analyze.latency_runtime.measure_latency needs to measure
-  # end-to-end pipeline latency). forge.verify.gen_sim's
+  # end-to-end pipeline latency). forge.verification.gen_sim's
   # _render_probe_open/_render_probe_fwrite will emit these into
   # algo_top_probe.csv in the WIDE format (cycle,<name1>,<name2>,...)
   # under --probe-log/PROBE_LOG=1 — consumed by

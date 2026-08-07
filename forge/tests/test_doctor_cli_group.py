@@ -109,7 +109,7 @@ def test_doctor_and_verify_doctor_agree_on_tool_availability(
     import json as _json
     import sys as _sys
 
-    import forge.verify.__main__ as verify_cli
+    import forge.verification.__main__ as verify_cli
 
     _code, doctor_out, _err = _run_doctor(capsys, "--json")
     doctor_checks = _json.loads(doctor_out)["metrics"]["checks"]

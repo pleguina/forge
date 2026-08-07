@@ -1,17 +1,17 @@
-"""Tests for forge.verify.golden_model (the GoldenModelProvider
+"""Tests for forge.verification.golden_model (the GoldenModelProvider
 protocol/registry/runner)."""
 from __future__ import annotations
 
 import pytest
 
-from forge.verify.dataset_adapter import CanonicalDataset
-from forge.verify.dataset_format import (
+from forge.verification.dataset_adapter import CanonicalDataset
+from forge.verification.dataset_format import (
     DATASET_SCHEMA,
     DatasetMetadata,
     EnvironmentMetadata,
     SemanticMetadata,
 )
-from forge.verify.golden_model import (
+from forge.verification.golden_model import (
     EXPECTED_DATASET_SCHEMA,
     ExpectedDataset,
     get_golden_model_provider,

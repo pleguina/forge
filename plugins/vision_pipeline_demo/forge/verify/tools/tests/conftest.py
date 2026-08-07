@@ -5,7 +5,7 @@ Loads this plugin's own ``bootstrap``/``dataset_adapter``/
 plugins/trigger_demo/forge/verify/tools/tests/conftest.py's own precedent)
 so they are always THIS plugin's versions, regardless of import order or
 other plugin suites in the same pytest session. Assumes the ``forge``
-package is installed (``pip install -e forge/``), so ``forge.verify`` is
+package is installed (``pip install -e forge/``), so ``forge.verification`` is
 importable without any sys.path surgery.
 """
 import importlib.util as _ilu

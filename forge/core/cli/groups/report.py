@@ -14,7 +14,7 @@ renderer that already exists elsewhere in the codebase —
   `--probe-csv` is given.
 - provenance summary: `forge.ir.provenance.render_markdown` — only when
   `--provenance` points at an existing manifest.
-- verification results: `forge.verify.junit_xml.render_markdown` — only
+- verification results: `forge.verification.junit_xml.render_markdown` — only
   when `--junit-xml` points at a file a prior `forge test run
   --junit-xml` already wrote (reused, not recomputed).
 - dashboard.html/summary.md: `forge.analyze.dashboards.aggregator.collect`/
@@ -172,13 +172,13 @@ def cmd_report(args) -> None:
     if results_json_path and Path(results_json_path).exists():
         import json
 
-        from forge.verify.results import render_results_markdown
+        from forge.verification.results import render_results_markdown
 
         payload = json.loads(Path(results_json_path).read_text())
         (output_dir / "verification_results.md").write_text(render_results_markdown(payload))
         artifacts.append(str(output_dir / "verification_results.md"))
     elif junit_xml_path and Path(junit_xml_path).exists():
-        from forge.verify.junit_xml import render_markdown as render_junit_markdown
+        from forge.verification.junit_xml import render_markdown as render_junit_markdown
 
         (output_dir / "verification_results.md").write_text(
             render_junit_markdown(Path(junit_xml_path))
@@ -213,7 +213,7 @@ def cmd_report(args) -> None:
     if cdc_result_json_path and Path(cdc_result_json_path).exists():
         import json
 
-        from forge.verify.cdc_verification_result import render_cdc_verification_markdown
+        from forge.verification.cdc_verification_result import render_cdc_verification_markdown
 
         payload = json.loads(Path(cdc_result_json_path).read_text())
         (output_dir / "cdc_verification.md").write_text(render_cdc_verification_markdown(payload))
@@ -231,7 +231,7 @@ def cmd_report(args) -> None:
     if golden_comparison_json_path and Path(golden_comparison_json_path).exists():
         import json
 
-        from forge.verify.golden_comparison_result import render_golden_comparison_markdown
+        from forge.verification.golden_comparison_result import render_golden_comparison_markdown
 
         payload = json.loads(Path(golden_comparison_json_path).read_text())
         (output_dir / "golden_comparison.md").write_text(render_golden_comparison_markdown(payload))
@@ -396,8 +396,8 @@ def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
     """
     import json
 
-    from forge.verify.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
-    from forge.verify.throughput_result import render_throughput_markdown
+    from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
+    from forge.verification.throughput_result import render_throughput_markdown
 
     static_analyses = []
     bottleneck = None
@@ -470,7 +470,7 @@ def _write_project_attachments(
     import sys as _sys
 
     from forge.analyze.dashboards.attachments import get_report_attachment_providers
-    from forge.verify.plugin_registry import bootstrap_plugin
+    from forge.verification.plugin_registry import bootstrap_plugin
 
     tools_dir = design_path.parent.parent / "verify" / "tools"
     if tools_dir.is_dir() and str(tools_dir) not in _sys.path:

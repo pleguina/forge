@@ -6,7 +6,7 @@ data_in/data_in_valid for one cycle, then checks that data_out/data_out_valid
 carry the same value one cycle later (the DUT's entire behavior).
 
 Reads its golden events for real from ``schemas/data/passthrough_demo_golden.xml``
-via :class:`forge.verify.dataset_format.XmlDatasetLoader` — this used to be a hardcoded Python dict that nothing ever
+via :class:`forge.verification.dataset_format.XmlDatasetLoader` — this used to be a hardcoded Python dict that nothing ever
 cross-checked against the XML file, so the declared golden data and the
 simulated data could silently diverge. Now the XML file is the single
 source of truth; edit it and the simulated behavior changes accordingly.
@@ -21,10 +21,10 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict
 
-from forge.verify.dataset_adapter import DatasetSource
-from forge.verify.dataset_service import DatasetService
-from forge.verify.readmemh_stimulus import write_event_memory_file
-from forge.verify.stimulus_helpers import (
+from forge.verification.dataset_adapter import DatasetSource
+from forge.verification.dataset_service import DatasetService
+from forge.verification.readmemh_stimulus import write_event_memory_file
+from forge.verification.stimulus_helpers import (
     StimulusEmitter,
     emit_event_index_read,
     emit_runtime_output_check,
@@ -66,7 +66,7 @@ def _pack_event_word(ev: "Dict[str, Any]") -> str:
 def _load_events(dataset_path: Path = _DATASET_XML) -> "Dict[str, Dict[str, Any]]":
     """Load the real golden dataset, keyed by its real string event id.
 
-    Routed through :class:`~forge.verify.dataset_service.DatasetService`
+    Routed through :class:`~forge.verification.dataset_service.DatasetService`
     — the same layer-A (format
     loading, dispatched by *dataset_path*'s suffix, ``.xml``/``.json``)
     plus layer-B (`passthrough.identity-xml` adapter) path

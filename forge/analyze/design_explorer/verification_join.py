@@ -4,7 +4,7 @@
 prove independent behavioral verification of every instance reachable
 from it. This module joins only that honest, provable fact: `flow X's
 declared entry point is module Y`. It deliberately does not claim
-"module Y was verified" — see ``forge.verify.results.VerificationTarget``
+"module Y was verified" — see ``forge.verification.results.VerificationTarget``
 for the real, typed extension point a future slice can populate once a
 plugin's flow declaration says what it actually covers.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ...ir.model import ResolvedProject
-from ...verify.design_contract import load_verify_design
+from ...verification.design_contract import load_verify_design
 
 
 def _module_group_node_id(module_name: str) -> str:

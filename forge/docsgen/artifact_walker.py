@@ -25,8 +25,8 @@ from typing import Any
 from forge.analyze.design_explorer.graph_model import DesignGraph
 from forge.ir.model import ResolvedProject
 from forge.ir.provenance import ProvenanceManifest
-from forge.verify.dataset_format import SerializedDataset
-from forge.verify.results import FlowResult
+from forge.verification.dataset_format import SerializedDataset
+from forge.verification.results import FlowResult
 
 from ._type_resolution import resolve_dataclass_field_types
 from .type_formatter import format_type

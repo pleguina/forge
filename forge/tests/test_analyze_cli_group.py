@@ -177,7 +177,7 @@ class TestRuntimeLatency:
     def test_reports_observed_latency_from_wide_probe_csv(
         self, capsys: pytest.CaptureFixture[str], tmp_path: Path
     ) -> None:
-        """--probe-format wide is the format forge.verify.gen_sim's real
+        """--probe-format wide is the format forge.verification.gen_sim's real
         Tier-2 probe emission actually produces (previously unusable by
         this CLI command at all — the broken producer/consumer pipe this
         fixes)."""

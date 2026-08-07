@@ -16,13 +16,13 @@ _FLOW_KINDS: "list[str]" = [
 ]
 
 # ── Self-declare with the framework ────────────────────────────────────
-from forge.verify.plugin_registry import declare_plugin_bootstrap as _declare
+from forge.verification.plugin_registry import declare_plugin_bootstrap as _declare
 _declare(PLUGIN_ID, __name__)
 
 
 def bootstrap() -> None:
     """Declare vision_pipeline_demo with the framework. Idempotent."""
-    from forge.verify.plugin_registry import is_plugin_bootstrapped, mark_bootstrapped
+    from forge.verification.plugin_registry import is_plugin_bootstrapped, mark_bootstrapped
 
     import dataset_adapter as _dataset_adapter  # noqa: F401  (self-registers on import)
     import golden_model_provider as _golden_model_provider  # noqa: F401  (self-registers on import)

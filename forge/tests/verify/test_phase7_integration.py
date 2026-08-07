@@ -91,7 +91,7 @@ def _break_golden_json_sibling(consumer_root: Path) -> Path:
     golden value changed, its declared content_hash recomputed to match
     (so this exercises the *DUT-vs-golden mismatch* failure path, not the
     unrelated hash-tamper-detection path already covered elsewhere)."""
-    from forge.verify.dataset_format import compute_events_content_hash
+    from forge.verification.dataset_format import compute_events_content_hash
 
     golden = (
         consumer_root
@@ -123,7 +123,7 @@ def test_full_chain_json_dataset_through_report_on_xsim(
     assert golden_json.exists()
 
     # ── Layer A: format loader, real content-hash verification ─────────
-    from forge.verify.dataset_format import JsonDatasetLoader
+    from forge.verification.dataset_format import JsonDatasetLoader
 
     serialized = JsonDatasetLoader().load(golden_json)  # raises on hash mismatch — doesn't here
     assert serialized.metadata.event_ids == ["0", "1"]
@@ -137,7 +137,7 @@ def test_full_chain_json_dataset_through_report_on_xsim(
         import bootstrap  # noqa: PLC0415
         bootstrap.bootstrap()
 
-        from forge.verify.dataset_adapter import DatasetSource, get_dataset_adapter
+        from forge.verification.dataset_adapter import DatasetSource, get_dataset_adapter
         adapter = get_dataset_adapter("passthrough.identity-xml")
         canonical = adapter.materialize(DatasetSource(serialized=serialized), {})
         assert canonical.events == serialized.events
