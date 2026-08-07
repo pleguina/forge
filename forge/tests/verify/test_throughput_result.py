@@ -1,6 +1,6 @@
 """Tests for forge.verification.throughput_result (construction/serialization
 only; builders are tested separately in
-forge.analyze.throughput_static/throughput_runtime's own test files).
+forge.analysis.throughput_static/throughput_runtime's own test files).
 """
 from __future__ import annotations
 

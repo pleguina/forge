@@ -2,18 +2,17 @@
 
 ## Status
 
-Accepted. `forge/framework/` → `forge/integration/` and
-`forge/verify/` → `forge/verification/` (permanent compatibility shim at
-the old path) have been executed under this decision.
-`forge/analyze` → `forge/analysis` and the `forge/topgen` split are
-**not yet done** — see "Deferred renames" below for why, and what has to
-be true before each one lands. One correction found while executing the
-`verify` rename: `forge.analyze` turns out to have the **same**
-plugin-facing dependency `forge.verify` did — `plugins/vision_pipeline_demo/forge/verify/tools/bootstrap.py`
-itself imports `forge.analyze.dashboards.attachments` directly — so
-`analyze` needs the same permanent-shim treatment as `verify`, not a
-lighter one (an earlier version of this ADR claimed otherwise; that was
-wrong).
+Accepted. `forge/framework/` → `forge/integration/`,
+`forge/verify/` → `forge/verification/`, and `forge/analyze/` →
+`forge/analysis/` (both with a permanent compatibility shim at the old
+path) have been executed under this decision. The `forge/topgen` split
+is **not yet done** — see "Deferred renames" below. One correction found
+while executing the `verify` rename: `forge.analyze` turned out to have
+the **same** plugin-facing dependency `forge.verify` did —
+`plugins/vision_pipeline_demo/forge/verify/tools/bootstrap.py` itself
+imports `forge.analyze.dashboards.attachments` directly — so it got the
+same permanent-shim treatment as `verify`, not a lighter one (an earlier
+version of this ADR claimed otherwise; that was wrong).
 
 ## Context
 
@@ -104,27 +103,35 @@ verified by an identity check (`forge.verify.plugin_registry.declare_plugin_boot
 is forge.verification.plugin_registry.declare_plugin_bootstrap`) and a
 real `python -m forge.verify --help` invocation, both passing.
 
+## `forge/analyze` → `forge/analysis` (done)
+
+Same recipe as `verify`, adapted for a nested-subpackage tree (8
+subpackages — `dashboards`, `hls_reports`, `latency_runtime`,
+`latency_static`, `result_plots`, `design_explorer`, `throughput_static`,
+`throughput_runtime` — plus one top-level module, `latency_model.py`).
+`forge.analyze.design_explorer` is one of the modules already in the
+frozen public API (real `__all__`); the shim's `from
+forge.analysis.design_explorer import *` respects that `__all__`
+directly, verified explicitly (`DesignGraph`/`build_design_graph`
+identity checks). Also verified: the exact import statements real plugin
+tool files use (`forge.analyze.dashboards.attachments.register_report_attachment_provider`,
+`forge.analyze.hls_reports.extractor.collect_reports`,
+`forge.analyze.throughput_static.model.build_static_throughput_analysis`).
+
 ## Deferred renames
 
-`forge/analyze` → `forge/analysis` and the `forge/topgen` split are
-**not yet executed**. Each has a real blast radius (65–92 files touching
-the old dotted path) and real compatibility obligations:
-
-- `forge.analyze` needs the same **permanent** compat-shim treatment as
-  `forge.verify` got (see correction in Status above) — plugin tool files
-  import `forge.analyze.*` submodules directly.
-- `forge.topgen.generators` and `forge.topgen.ip` are both part of the
-  frozen public Python API (`docs/reference/public-python-api.md`) today.
-  Splitting them requires a shim carrying a `DeprecationWarning` for at
-  least one minor release, per this project's own compatibility policy,
-  and the public-API freeze must be regenerated *after* the shim lands,
-  not touched mid-rename.
-
-Each deferred rename should be its own reviewed unit: do the rename, add
-the compat shim, regenerate the public-API freeze, and prove it with the
-full test suite **plus** a clean-venv wheel install **plus** a real
-plugin-facing smoke test before moving to the next one — the same recipe
-`verify` just went through.
+The `forge/topgen` split into `forge/contracts` + `forge/generation` is
+**not yet executed**. `forge.topgen.generators` and `forge.topgen.ip` are
+both part of the frozen public Python API
+(`docs/reference/public-python-api.md`) today. Splitting them requires a
+shim carrying a `DeprecationWarning` for at least one minor release, per
+this project's own compatibility policy, and the public-API freeze must
+be regenerated *after* the shim lands, not touched mid-rename. It should
+be its own reviewed unit: do the rename, add the compat shim, regenerate
+the public-API freeze, and prove it with the full test suite **plus** a
+clean-venv wheel install **plus** a real smoke test (`forge topgen
+gen-top --dry-run`, `forge init`'s full chain) — the same recipe `verify`
+and `analyze` just went through.
 
 ## Consequences
 

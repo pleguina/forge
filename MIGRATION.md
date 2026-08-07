@@ -1,22 +1,24 @@
 # Migration Notes
 
-## `forge.verify` → `forge.verification` package rename
+## `forge.verify`/`forge.analyze` → `forge.verification`/`forge.analysis` package renames
 
 Per `docs/development/adr/0005-package-and-cli-naming.md`,
-`forge/verify/` was renamed to `forge/verification/` (packages are
-nouns; CLI commands are verbs). Unlike the ARC → FORGE rename below,
-**this one ships a permanent compatibility shim** — `forge.verify` keeps
-working indefinitely as a thin alias re-exporting everything from
-`forge.verification`, since existing plugin `bootstrap.py` files import
-`forge.verify.plugin_registry` directly and FORGE doesn't control when
-those get updated. Nothing breaks; new code should just prefer the new
-name.
+`forge/verify/` and `forge/analyze/` were renamed to `forge/verification/`
+and `forge/analysis/` (packages are nouns; CLI commands are verbs).
+Unlike the ARC → FORGE rename below, **both ship a permanent
+compatibility shim** — the old names keep working indefinitely as thin
+aliases re-exporting everything from the new location, since existing
+plugin code (`bootstrap.py`, dashboard/throughput tool scripts) imports
+`forge.verify.plugin_registry`/`forge.analyze.dashboards.attachments`
+directly and FORGE doesn't control when those get updated. Nothing
+breaks; new code should just prefer the new names.
 
 | Old | New |
 |---|---|
 | `forge.verify` (module) | `forge.verification` (module; `forge.verify` still works, permanently) |
+| `forge.analyze` (module) | `forge.analysis` (module; `forge.analyze` still works, permanently) |
 | `python -m forge.verify` | `python -m forge.verification` (old form still works) |
-| `forge verify` (CLI command) | unchanged — CLI names don't change with package renames |
+| `forge verify`/`forge analyze` (CLI commands) | unchanged — CLI names don't change with package renames |
 
 ## ARC → FORGE rename
 

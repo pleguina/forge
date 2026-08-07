@@ -25,7 +25,7 @@ own toggle-in-payload novelty detection, verified exhaustively by
 gen_stimulus_packetizer.py, needs none of this).
 
 A second, related limitation (also found running this exact design):
-``forge.analyze.throughput_runtime.probe.build_runtime_throughput_result``'s
+``forge.analysis.throughput_runtime.probe.build_runtime_throughput_result``'s
 ``accepted_transactions``/``emitted_transactions`` approximate "a
 write/read-domain cycle with full/empty deasserted is a real
 accepted/emitted transaction" -- correct for a FIFO that writes
@@ -53,9 +53,9 @@ import dataclasses
 import json
 from pathlib import Path
 
-from forge.analyze.hls_reports.extractor import collect_reports
-from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
-from forge.analyze.throughput_static.model import build_design_throughput_analysis
+from forge.analysis.hls_reports.extractor import collect_reports
+from forge.analysis.throughput_runtime.probe import build_runtime_throughput_result
+from forge.analysis.throughput_static.model import build_design_throughput_analysis
 from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
 
 # Real, exactly-known record counts from this design's own functional

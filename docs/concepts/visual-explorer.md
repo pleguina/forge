@@ -8,7 +8,7 @@ concept; for the actual CLI command that generates it, see
 
 ## `DesignGraph`: a projection, never a second source of truth
 
-`forge.analyze.design_explorer.graph_model.DesignGraph` is a
+`forge.analysis.design_explorer.graph_model.DesignGraph` is a
 deterministic, read-only **visualization projection** of exactly one
 canonical IR (`forge.ir.model.ResolvedProject`). This is a load-bearing
 invariant of the module, not just a design preference: `DesignGraph` may

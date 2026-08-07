@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.design_explorer.graph_model import (
+from forge.analysis.design_explorer.graph_model import (
     GraphNodeKind,
     MaturityStatus,
     build_design_graph,
     parse_object_reference,
 )
-from forge.analyze.design_explorer.verification_join import join_flow_entry_points
-from forge.analyze.latency_static.graph import build_graph as build_latency_graph
+from forge.analysis.design_explorer.verification_join import join_flow_entry_points
+from forge.analysis.latency_static.graph import build_graph as build_latency_graph
 from forge.ir.build import build_project_ir_with_match_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -24,7 +24,7 @@ not a checklist filled in from memory. Companion to
 | Packaging tests (sdist/wheel build + install) | **PASS** — see "Packaging" below |
 | Docs generation/quality tests (`test_docs_site_*`, `test_docs_staleness`, `test_docsgen_*`) | **PASS**, 12/12 in the docs-specific subset run standalone |
 | Deterministic-output tests (`forge.docsgen --check`, `test_deterministic_output` in each `docsgen` generator's test file) | **PASS** |
-| Security/escaping tests (DOT/HTML/JSON escaping in `forge.analyze.design_explorer`) | Pre-existing, part of the full suite above; not re-audited line-by-line this session (see audit's "not attempted" section) |
+| Security/escaping tests (DOT/HTML/JSON escaping in `forge.analysis.design_explorer`) | Pre-existing, part of the full suite above; not re-audited line-by-line this session (see audit's "not attempted" section) |
 
 ## Reference plugins
 

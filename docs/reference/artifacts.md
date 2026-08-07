@@ -127,7 +127,7 @@ Real dataset metadata: schema version, event ids, provenance, units,
 
 ### `DesignGraph`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]')
 
@@ -243,7 +243,7 @@ The real, structured result of one ``forge test run`` invocation —
 
 ### `GraphEdge`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]', crosses_clock_domain: 'bool', crosses_reset_domain: 'bool', transformations: 'Tuple[Dict[str, Any], ...]', diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '')
 
@@ -261,7 +261,7 @@ GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]
 
 ### `GraphNode`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 GraphNode(id: 'str', kind: 'GraphNodeKind', label: 'str', parent: 'Optional[str]' = None, module: 'Optional[str]' = None, clock_domain: 'Optional[str]' = None, reset_domain: 'Optional[str]' = None, members: 'Tuple[str, ...]' = (), latency: 'Optional[Dict[str, Any]]' = None, maturity: 'Optional[MaturitySummary]' = None, diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), inherited_diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '')
 
@@ -314,7 +314,7 @@ Evidence for one connection: matching keys,
 
 ### `MaturitySummary`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 MaturitySummary(status: 'MaturityStatus', contract_edges: 'int', explicit_edges: 'int', topology_edges: 'int', compatibility_edges: 'int')
 
@@ -328,7 +328,7 @@ MaturitySummary(status: 'MaturityStatus', contract_edges: 'int', explicit_edges:
 
 ### `ObjectRecord`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 One entry in the typed registry backing the selected-object details
     panel — one per real IR object (instance, module definition,
@@ -345,7 +345,7 @@ One entry in the typed registry backing the selected-object details
 
 ### `ObjectReference`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 A reference into one of the real IR object kinds — never
     pre-formatted as ``"module:x"``; ``kind`` and ``id`` are separate so a
@@ -358,7 +358,7 @@ A reference into one of the real IR object kinds — never
 
 ### `ProjectionDiagnostic`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 A projection-layer diagnostic reference — corresponds to
     ``forge.ir.model.DiagnosticReference`` but with its free-text
@@ -585,7 +585,7 @@ A module definition (shared across all its instances).
     populated directly from ``forge.topgen.config.Module.timing`` (no
     re-parsing). This intentionally does
     **not** include the ``hls_report`` latency-source tier
-    (``forge.analyze.latency_static``'s external HLS-synthesis-report
+    (``forge.analysis.latency_static``'s external HLS-synthesis-report
     overlay) — that's runtime data supplied only when analyzing actual
     build artifacts, not a pre-generation design/registry fact.
 
@@ -834,7 +834,7 @@ A source reference, file-level only in this slice (no line/column
 
 A real, provable claim about what one event's simulation actually
     covered, keyed into the same ``ObjectReference`` kind vocabulary the
-    visual design explorer uses (``forge.analyze.design_explorer.graph_model``).
+    visual design explorer uses (``forge.analysis.design_explorer.graph_model``).
 
     Additive and schema-only this phase — no real emission site populates
     it yet. A flow's declared ``top_module`` is a real, provable fact
@@ -869,7 +869,7 @@ A stage in a backend's execution pipeline.
 
 ### `GraphNodeKind`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 An enumeration.
 
@@ -882,7 +882,7 @@ An enumeration.
 
 ### `MaturityStatus`
 
-*Defined in `forge.analyze.design_explorer.graph_model`.*
+*Defined in `forge.analysis.design_explorer.graph_model`.*
 
 An enumeration.
 

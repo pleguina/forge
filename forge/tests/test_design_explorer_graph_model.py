@@ -1,4 +1,4 @@
-"""Tests for forge.analyze.design_explorer.graph_model — the
+"""Tests for forge.analysis.design_explorer.graph_model — the
 DesignGraph projection's shape/provenance/determinism.
 
 Runs against both real reference plugins' real IR (via
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.design_explorer.graph_model import (
+from forge.analysis.design_explorer.graph_model import (
     DESIGN_GRAPH_SCHEMA,
     GraphNodeKind,
     build_design_graph,

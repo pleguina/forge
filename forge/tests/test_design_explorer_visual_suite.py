@@ -24,13 +24,13 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.design_explorer.dot_renderer import render_dot
-from forge.analyze.design_explorer.graph_model import (
+from forge.analysis.design_explorer.dot_renderer import render_dot
+from forge.analysis.design_explorer.graph_model import (
     GraphNodeKind,
     build_design_graph,
     parse_object_reference,
 )
-from forge.analyze.design_explorer.html_renderer import render_explorer_html
+from forge.analysis.design_explorer.html_renderer import render_explorer_html
 from forge.ir.build import build_project_ir_with_match_report
 from forge.ir.model import (
     DiagnosticReference,

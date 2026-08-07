@@ -55,7 +55,7 @@ reader only has to learn it once.
   module's `interface_contract` clock name, and declare its reset
   synchronization explicitly via `reset_domains`, rather than assuming
   FORGE infers domain membership from anywhere else.
-- `forge.analyze.latency_static`'s merge-point checker must treat a CDC
+- `forge.analysis.latency_static`'s merge-point checker must treat a CDC
   edge's latency as genuinely unknown, not zero — an edge whose latency
   is `None` because it crosses domains is not the same as an edge that
   adds zero cycles. Conflating the two silently corrupts alignment math

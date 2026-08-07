@@ -1,4 +1,4 @@
-"""Tests for forge.analyze.design_explorer.dot_renderer — DOT text
+"""Tests for forge.analysis.design_explorer.dot_renderer — DOT text
 generation, real SVG rendering, and the --dot/--svg CLI split's
 honest-failure behavior.
 """
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
-from forge.analyze.design_explorer.graph_model import build_design_graph
+from forge.analysis.design_explorer.dot_renderer import dot_available, render_dot, render_svg
+from forge.analysis.design_explorer.graph_model import build_design_graph
 from forge.core.cli.main import build_parser
 from forge.ir.build import build_project_ir_with_match_report
 from forge.ir.model import (

@@ -28,7 +28,7 @@
 # declared [1,17] window, comfortably covering that bound either way
 # (algo/rtl/tile_boundary_rtl.v).
 # tile_summary_join_rtl matches the two branches by tile_id/frame_id, not
-# cycle position -- forge.analyze.latency_static's check_merge_points
+# cycle position -- forge.analysis.latency_static's check_merge_points
 # classifies this merge point `bounded_skew` (both predecessors declare
 # `kind: bounded`) and verifies the two windows actually overlap at
 # `forge topgen validate` time; `join_mismatch` verifies the same

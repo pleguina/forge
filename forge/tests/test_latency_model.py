@@ -1,5 +1,5 @@
 """
-Tests for forge.analyze.latency_model — the shared, provenance-carrying
+Tests for forge.analysis.latency_model — the shared, provenance-carrying
 latency wrapper.
 """
 
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from forge.analyze.latency_model import (
+from forge.analysis.latency_model import (
     LATENCY_KINDS,
     LATENCY_SOURCES,
     LatencyModelError,

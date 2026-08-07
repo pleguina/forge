@@ -20,7 +20,7 @@
 // see the standalone xsim check this module was built against). This
 // module makes that delay UNIFORM for every pixel, including border
 // ones, so it can be declared as a plain `latency: {kind: fixed, cycles:
-// FRAME_WIDTH+2}` in modules.yml and pass forge.analyze.latency_static's
+// FRAME_WIDTH+2}` in modules.yml and pass forge.analysis.latency_static's
 // real exact_cycle merge check like any other fixed-latency module — no
 // bespoke alignment logic needed downstream in edge_mask_merge_rtl.
 //

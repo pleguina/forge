@@ -149,7 +149,7 @@ modules:
   # module at (algo/tile_stats/tile_stats_hls.cpp's own header has the
   # full derivation). tile_boundary_rtl/tile_summary_join_rtl's own
   # bounded/elastic declarations below are unaffected --
-  # forge.analyze.latency_static's check_merge_points still classifies
+  # forge.analysis.latency_static's check_merge_points still classifies
   # their shared merge point `bounded_skew` (tile_boundary_rtl alone
   # still declares `kind: bounded`) and confirms the real, now much
   # tighter, 1-cycle figure still lands inside tile_boundary_rtl's own

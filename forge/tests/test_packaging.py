@@ -3,7 +3,7 @@ drifting from the real package tree on disk.
 
 This is exactly the class of bug found and fixed in a real release audit:
 `forge.core.cli.groups`, `forge.framework`, `forge.docsgen`,
-`forge.analyze.throughput_static`, and `forge.analyze.throughput_runtime`
+`forge.analysis.throughput_static`, and `forge.analysis.throughput_runtime`
 were all real, imported-elsewhere packages missing from the declared list
 — invisible until a clean-venv wheel install crashed on every `forge`
 invocation. `[tool.setuptools.packages.find]` auto-discovery was tried as

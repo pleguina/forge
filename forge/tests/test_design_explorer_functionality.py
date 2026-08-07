@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.design_explorer.graph_model import GraphNodeKind, build_design_graph
-from forge.analyze.design_explorer.html_renderer import render_explorer_html
-from forge.analyze.latency_static.graph import build_graph as build_latency_graph
+from forge.analysis.design_explorer.graph_model import GraphNodeKind, build_design_graph
+from forge.analysis.design_explorer.html_renderer import render_explorer_html
+from forge.analysis.latency_static.graph import build_graph as build_latency_graph
 from forge.ir.build import build_project_ir_with_match_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

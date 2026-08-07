@@ -22,7 +22,7 @@ import typing
 from enum import Enum
 from typing import Any
 
-from forge.analyze.design_explorer.graph_model import DesignGraph
+from forge.analysis.design_explorer.graph_model import DesignGraph
 from forge.ir.model import ResolvedProject
 from forge.ir.provenance import ProvenanceManifest
 from forge.verification.dataset_format import SerializedDataset

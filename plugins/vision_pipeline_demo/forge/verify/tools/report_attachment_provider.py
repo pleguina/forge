@@ -9,7 +9,7 @@ every report run (the same "release/acceptance execution produces
 canonical artifacts, a report just displays them" model
 tutorial/generate_reference_assets.py itself follows).
 
-Registers via forge.analyze.dashboards.attachments — see
+Registers via forge.analysis.dashboards.attachments — see
 docs/development/adr's golden-model/dataset ADRs for the analogous
 ownership-boundary reasoning applied here to reports instead.
 """
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import List, Sequence
 
-from forge.analyze.dashboards.attachments import ReportAttachment
+from forge.analysis.dashboards.attachments import ReportAttachment
 
 PROVIDER_ID = "vision_pipeline.report_attachments"
 

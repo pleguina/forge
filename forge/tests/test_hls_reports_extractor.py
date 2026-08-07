@@ -1,5 +1,5 @@
 """
-Tests for forge.analyze.hls_reports.extractor/formatter's recovery of
+Tests for forge.analysis.hls_reports.extractor/formatter's recovery of
 csynth.xml's Interval-min/Interval-max — data the extractor's underlying
 HLSMetricsExtractor already parsed, but that was silently dropped before
 reaching HLSModuleReport.
@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analyze.hls_reports.extractor import collect_reports
-from analyze.hls_reports.formatter import to_csv, to_html, to_markdown
+from forge.analysis.hls_reports.extractor import collect_reports
+from forge.analysis.hls_reports.formatter import to_csv, to_html, to_markdown
 
 _CSYNTH_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <profile>

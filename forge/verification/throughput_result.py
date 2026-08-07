@@ -3,20 +3,20 @@
 artifact.
 
 Two distinct result types, kept separate per Decision B rather than
-folded into ``forge.analyze.hls_reports.extractor.HLSModuleReport``: a
+folded into ``forge.analysis.hls_reports.extractor.HLSModuleReport``: a
 synthesis-time (``csynth.xml``) report structurally cannot carry
 simulation-derived occupancy/high-water data, so conflating the two would
 misrepresent a static-analysis artifact as runtime data.
 
 - :class:`StaticThroughputAnalysis` — module II, clock frequency,
   records/cycle, width, nominal capacity; derived from real
-  :class:`~forge.analyze.hls_reports.extractor.HLSModuleReport`\\ s, no
-  simulation needed. Built by :mod:`forge.analyze.throughput_static.model`.
+  :class:`~forge.analysis.hls_reports.extractor.HLSModuleReport`\\ s, no
+  simulation needed. Built by :mod:`forge.analysis.throughput_static.model`.
 - :class:`RuntimeThroughputResult` — accepted/emitted transactions, stall
   cycles, FIFO occupancy/high-water mark, full/empty events, measured
   throughput, dropped/duplicated transactions; derived from a real
   simulation's Tier 2 probe CSV. Built by
-  :mod:`forge.analyze.throughput_runtime.probe`.
+  :mod:`forge.analysis.throughput_runtime.probe`.
 
 :class:`ThroughputResult` is the composite ``forge.throughput_result.v1``
 artifact wrapping both, following the exact frozen-dataclass +

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.analyze.dashboards.aggregator import collect
-from forge.analyze.dashboards.renderer import render_html, render_markdown_summary
+from forge.analysis.dashboards.aggregator import collect
+from forge.analysis.dashboards.renderer import render_html, render_markdown_summary
 
 _SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>'
 

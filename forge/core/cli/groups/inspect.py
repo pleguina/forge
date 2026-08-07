@@ -142,8 +142,8 @@ def cmd_inspect(args):
     # template); `--svg` does, and fails loudly and specifically when it's
     # not on PATH — it never silently no-ops on an explicit user request.
     if getattr(args, "dot", None) or getattr(args, "svg", None) or getattr(args, "explorer", None):
-        from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
-        from forge.analyze.design_explorer.graph_model import build_design_graph
+        from forge.analysis.design_explorer.dot_renderer import dot_available, render_dot, render_svg
+        from forge.analysis.design_explorer.graph_model import build_design_graph
         from forge.core.cli._shared import build_explorer_overlay_data
 
         latency_by_instance, verification_flow_entry_points = build_explorer_overlay_data(
@@ -158,7 +158,7 @@ def cmd_inspect(args):
         dot_text = render_dot(graph)
 
         if getattr(args, "explorer", None):
-            from forge.analyze.design_explorer.html_renderer import render_explorer_html
+            from forge.analysis.design_explorer.html_renderer import render_explorer_html
 
             explorer_path = Path(args.explorer).expanduser().resolve()
             render_explorer_html(graph, explorer_path)

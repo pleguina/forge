@@ -7,7 +7,7 @@ codepaths:
   design.yml file order, sums worst_case_latency — no notion that two
   modules might feed the same consumer in parallel rather than
   sequentially).
-- forge.analyze.latency_static (LatencyGraph/check_merge_points), the
+- forge.analysis.latency_static (LatencyGraph/check_merge_points), the
   DAG-aware alternative.
 
 This does NOT prove the two agree everywhere — they don't, and can't:
@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from analyze.latency_static.graph import build_graph
+from forge.analysis.latency_static.graph import build_graph
 from topgen.config import DesignConfig
 from topgen.generators.design_parameters import extract_design_parameters
 

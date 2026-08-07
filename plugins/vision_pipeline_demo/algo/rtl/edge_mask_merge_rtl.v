@@ -11,7 +11,7 @@
 // alignment between its two upstream branches -- that alignment is a
 // static property
 // the two branches' declared fixed latencies already guarantee (checked
-// by forge.analyze.latency_static's real exact_cycle merge-point
+// by forge.analysis.latency_static's real exact_cycle merge-point
 // classification at `forge topgen validate` time, not by anything in
 // this module). What THIS module does at runtime is verify that
 // guarantee actually held: both branches' x/y/frame_id/tile_id tags are

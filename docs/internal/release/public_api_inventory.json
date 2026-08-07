@@ -101,67 +101,67 @@
     },
     {
       "kind": "value",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "DESIGN_GRAPH_SCHEMA",
       "summary": "A ``{\"name\", \"version\"}`` tag carried by every structured artifact"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "DesignGraph",
       "summary": "DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]')"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "GraphEdge",
       "summary": "GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]', crosses_clock_domain: 'bool', crosses_reset_domain: 'bool', transformations: 'Tuple[Dict[str, Any], ...]', diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '')"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "GraphNode",
       "summary": "GraphNode(id: 'str', kind: 'GraphNodeKind', label: 'str', parent: 'Optional[str]' = None, module: 'Optional[str]' = None, clock_domain: 'Optional[str]' = None, reset_domain: 'Optional[str]' = None, members: 'Tuple[str, ...]' = (), latency: 'Optional[Dict[str, Any]]' = None, maturity: 'Optional[MaturitySummary]' = None, diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), inherited_diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '')"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "GraphNodeKind",
       "summary": "An enumeration."
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "MaturityStatus",
       "summary": "An enumeration."
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "MaturitySummary",
       "summary": "MaturitySummary(status: 'MaturityStatus', contract_edges: 'int', explicit_edges: 'int', topology_edges: 'int', compatibility_edges: 'int')"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "ObjectRecord",
       "summary": "One entry in the typed registry backing the selected-object details"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "ObjectReference",
       "summary": "A reference into one of the real IR object kinds \u2014 never"
     },
     {
       "kind": "class",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "ProjectionDiagnostic",
       "summary": "A projection-layer diagnostic reference \u2014 corresponds to"
     },
     {
       "kind": "function",
-      "module": "forge.analyze.design_explorer",
+      "module": "forge.analysis.design_explorer",
       "name": "build_design_graph",
       "summary": "Build a ``DesignGraph`` projection of *project*."
     },

@@ -288,7 +288,7 @@ def test_inspect_explorer_for_platform_wrapper_design_joins_real_verification_fl
     full_chip_rtl` flow in this plugin
     declares `top_module: algo_top` (the generated wrapper itself, not a
     module ref), which never resolves to a real module — an honest empty
-    join, not a bug (see forge.analyze.design_explorer.verification_join's
+    join, not a bug (see forge.analysis.design_explorer.verification_join's
     own docstring). `pixel_normalizer_csim` (`kind: hls_csim`,
     `top_module: pixel_normalizer`) is this plugin's one flow whose entry
     point genuinely matches a real module's ip_info_key (`norm`'s own

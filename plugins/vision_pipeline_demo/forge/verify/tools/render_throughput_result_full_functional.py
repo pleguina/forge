@@ -29,9 +29,9 @@ import dataclasses
 import json
 from pathlib import Path
 
-from forge.analyze.hls_reports.extractor import collect_reports
-from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
-from forge.analyze.throughput_static.model import build_design_throughput_analysis
+from forge.analysis.hls_reports.extractor import collect_reports
+from forge.analysis.throughput_runtime.probe import build_runtime_throughput_result
+from forge.analysis.throughput_static.model import build_design_throughput_analysis
 from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
 
 # Real, exactly-known record counts from this design's own functional

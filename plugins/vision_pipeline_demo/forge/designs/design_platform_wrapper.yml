@@ -40,7 +40,7 @@
 # built the same way as every other design here, not new machinery.
 #
 # A real, previously-undiscovered framework bug was found and fixed
-# assembling this design: forge.analyze.latency_static.checker's
+# assembling this design: forge.analysis.latency_static.checker's
 # check_merge_points/_upstream_chain_latency treated a
 # mailbox_transfer/async_fifo edge's genuinely-unknown latency as "0
 # extra cycles" rather than propagating "unknown" -- invisible until

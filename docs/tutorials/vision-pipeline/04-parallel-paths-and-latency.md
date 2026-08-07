@@ -104,7 +104,7 @@ capability's real evidence.
 Any design with two parallel paths of different depth needs this same
 alignment proof — chapter 05's bounded/elastic join and chapter 09's
 full-functional assembly both depend on the same
-`forge.analyze.latency_static` machinery this chapter exercises
+`forge.analysis.latency_static` machinery this chapter exercises
 directly.
 
 ## Common failure

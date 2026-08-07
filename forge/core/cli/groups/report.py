@@ -5,23 +5,23 @@ renderer that already exists elsewhere in the codebase —
 
 - maturity/compatibility: `topgen._compute_maturity_summary`/
   `render_maturity_markdown` (shared helper).
-- latency check: `forge.analyze.latency_static` (graph/checker/reporter).
-- HLS summary: `forge.analyze.hls_reports` (extractor/formatter) — only
+- latency check: `forge.analysis.latency_static` (graph/checker/reporter).
+- HLS summary: `forge.analysis.hls_reports` (extractor/formatter) — only
   when `--hls-build-root` is given and has real synthesis data; honest
   absence otherwise (passthrough_demo has no HLS build artifacts, so this
   path is real, not synthetic).
-- runtime latency: `forge.analyze.latency_runtime` — only when
+- runtime latency: `forge.analysis.latency_runtime` — only when
   `--probe-csv` is given.
 - provenance summary: `forge.ir.provenance.render_markdown` — only when
   `--provenance` points at an existing manifest.
 - verification results: `forge.verification.junit_xml.render_markdown` — only
   when `--junit-xml` points at a file a prior `forge test run
   --junit-xml` already wrote (reused, not recomputed).
-- dashboard.html/summary.md: `forge.analyze.dashboards.aggregator.collect`/
+- dashboard.html/summary.md: `forge.analysis.dashboards.aggregator.collect`/
   `renderer.render_html`/`render_markdown_summary`, run over everything
   this command just wrote into the output directory.
 
-- topology: `forge.analyze.design_explorer` — a
+- topology: `forge.analysis.design_explorer` — a
   deterministic Graphviz DOT/SVG rendering of the same canonical IR
   the maturity section above already builds, plus the self-contained
   interactive HTML explorer. Degrades gracefully: the DOT artifact
@@ -90,7 +90,7 @@ def cmd_report(args) -> None:
             "message": f"maturity report failed: {exc}",
         })
 
-    # ── Latency check (reuses forge.analyze.latency_static) ────────────────
+    # ── Latency check (reuses forge.analysis.latency_static) ────────────────
     try:
         mismatch_count = _write_latency_check(design_path, args, output_dir)
         artifacts.append(str(output_dir / "latency_check.md"))
@@ -247,7 +247,7 @@ def cmd_report(args) -> None:
     # ── Project attachments (optional, only with --plugin) ──────────────────
     # A project contributes extra report sections (image panels, ownership
     # annotations, dataset/golden-model identity — anything FORGE core has
-    # no business understanding) via forge.analyze.dashboards.attachments'
+    # no business understanding) via forge.analysis.dashboards.attachments'
     # registry, populated by the plugin's own bootstrap.py. FORGE core only
     # ever sees a title/kind/path — never the domain semantics behind it.
     plugin_id = getattr(args, "plugin", None)
@@ -258,8 +258,8 @@ def cmd_report(args) -> None:
             diagnostics.append({"severity": "warning", "message": f"project attachments failed: {exc}"})
 
     # ── Dashboard (aggregates everything just written) ──────────────────────
-    from forge.analyze.dashboards.aggregator import collect
-    from forge.analyze.dashboards.renderer import render_html, render_markdown_summary
+    from forge.analysis.dashboards.aggregator import collect
+    from forge.analysis.dashboards.renderer import render_html, render_markdown_summary
 
     aggregated = collect(output_dir)
     render_html(aggregated, output_dir / "dashboard.html")
@@ -282,9 +282,9 @@ def cmd_report(args) -> None:
 
 
 def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
-    from forge.analyze.design_explorer.dot_renderer import dot_available, render_dot, render_svg
-    from forge.analyze.design_explorer.graph_model import build_design_graph
-    from forge.analyze.design_explorer.html_renderer import render_explorer_html
+    from forge.analysis.design_explorer.dot_renderer import dot_available, render_dot, render_svg
+    from forge.analysis.design_explorer.graph_model import build_design_graph
+    from forge.analysis.design_explorer.html_renderer import render_explorer_html
     from forge.core.cli._shared import build_explorer_overlay_data
     from forge.ir import build_project_ir_with_match_report
 
@@ -327,9 +327,9 @@ def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[st
 
 
 def _write_latency_check(design_path: Path, args, output_dir: Path) -> int:
-    from forge.analyze.latency_static.checker import check_merge_points
-    from forge.analyze.latency_static.graph import build_graph
-    from forge.analyze.latency_static.reporter import render_markdown
+    from forge.analysis.latency_static.checker import check_merge_points
+    from forge.analysis.latency_static.graph import build_graph
+    from forge.analysis.latency_static.reporter import render_markdown
 
     contracts_from = getattr(args, "contracts_from", None)
     modules_yml = Path(contracts_from) if contracts_from else None
@@ -340,8 +340,8 @@ def _write_latency_check(design_path: Path, args, output_dir: Path) -> int:
 
 
 def _write_hls_report(hls_build_root: Path, args, output_dir: Path) -> int:
-    from forge.analyze.hls_reports.extractor import collect_reports
-    from forge.analyze.hls_reports.formatter import to_csv, to_html, to_markdown
+    from forge.analysis.hls_reports.extractor import collect_reports
+    from forge.analysis.hls_reports.formatter import to_csv, to_html, to_markdown
 
     reports = collect_reports(hls_build_root, solution=getattr(args, "solution", "solution1"))
     if not reports:
@@ -353,11 +353,11 @@ def _write_hls_report(hls_build_root: Path, args, output_dir: Path) -> int:
 
 
 def _write_runtime_latency(probe_csv: Path, args, output_dir: Path) -> int:
-    from forge.analyze.latency_runtime.comparator import compare
-    from forge.analyze.latency_runtime.probe import (
+    from forge.analysis.latency_runtime.comparator import compare
+    from forge.analysis.latency_runtime.probe import (
         load_probe_csv, load_wide_probe_csv, measure_latency,
     )
-    from forge.analyze.latency_runtime.reporter import render_markdown
+    from forge.analysis.latency_runtime.reporter import render_markdown
 
     probe_format = getattr(args, "probe_format", "long")
     loader = load_wide_probe_csv if probe_format == "wide" else load_probe_csv
@@ -366,7 +366,7 @@ def _write_runtime_latency(probe_csv: Path, args, output_dir: Path) -> int:
     hls_map: Dict[str, Any] = {}
     hls_build_root = getattr(args, "hls_build_root", None)
     if hls_build_root and Path(hls_build_root).exists():
-        from forge.analyze.hls_reports.extractor import collect_reports, latency_map_from_reports
+        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
 
         hls_map = latency_map_from_reports(collect_reports(Path(hls_build_root)))
 
@@ -404,8 +404,8 @@ def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
     predicted_rate = None
     hls_build_root = getattr(args, "hls_build_root", None)
     if hls_build_root and Path(hls_build_root).exists():
-        from forge.analyze.hls_reports.extractor import collect_reports
-        from forge.analyze.throughput_static.model import build_design_throughput_analysis
+        from forge.analysis.hls_reports.extractor import collect_reports
+        from forge.analysis.throughput_static.model import build_design_throughput_analysis
 
         widths: Dict[str, int] = {}
         for entry in (getattr(args, "module_width", None) or []):
@@ -419,7 +419,7 @@ def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
     runtime_results = []
     probe_csv = getattr(args, "probe_csv", None)
     if probe_csv and Path(probe_csv).exists():
-        from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
+        from forge.analysis.throughput_runtime.probe import build_runtime_throughput_result
 
         for entry in (getattr(args, "fifo_probe", None) or []):
             parts = entry.split(":")
@@ -469,7 +469,7 @@ def _write_project_attachments(
     import json
     import sys as _sys
 
-    from forge.analyze.dashboards.attachments import get_report_attachment_providers
+    from forge.analysis.dashboards.attachments import get_report_attachment_providers
     from forge.verification.plugin_registry import bootstrap_plugin
 
     tools_dir = design_path.parent.parent / "verify" / "tools"
@@ -567,7 +567,7 @@ def register(sub) -> None:
         "--plugin",
         help="Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and "
              "collect any report attachments it has registered via "
-             "forge.analyze.dashboards.attachments.register_report_attachment_provider "
+             "forge.analysis.dashboards.attachments.register_report_attachment_provider "
              "— e.g. project-owned image panels or ownership annotations",
     )
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")

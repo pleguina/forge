@@ -1,4 +1,4 @@
-"""Tests for forge.analyze.design_explorer.html_renderer — the
+"""Tests for forge.analysis.design_explorer.html_renderer — the
 self-contained, offline, interactive HTML explorer.
 """
 from __future__ import annotations
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.design_explorer.graph_model import build_design_graph
-from forge.analyze.design_explorer.html_renderer import render_explorer_html
+from forge.analysis.design_explorer.graph_model import build_design_graph
+from forge.analysis.design_explorer.html_renderer import render_explorer_html
 from forge.ir.build import build_project_ir_with_match_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

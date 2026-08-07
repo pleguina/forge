@@ -26,7 +26,7 @@
 //
 // Timing: destination-domain latency is fixed at 3 cycles (2 toggle-sync
 // stages + 1 edge-detect stage) — see
-// forge.analyze.latency_static.graph._edge_latency_from_connection.
+// forge.analysis.latency_static.graph._edge_latency_from_connection.
 //==============================================================================
 
 `timescale 1ns / 1ps

@@ -12,7 +12,7 @@ real exact-cycle merge, not just a single pixel in isolation.
 
 Total latency from driving pixel k at norm's input to merge's
 corresponding output is a *constant* 18 cycles for every k (verified
-both by hand and by forge.analyze.latency_static.checker.check_merge_points
+both by hand and by forge.analysis.latency_static.checker.check_merge_points
 against this exact design -- see
 forge/tests/test_latency_checker.py::test_vision_pipeline_demo_pixel_result_design_has_zero_merge_skew):
 

@@ -15,7 +15,7 @@
 # branch's own total latency (window_builder_rtl 10 cycles + sobel_hls 4
 # cycles = 14, vs. threshold_rtl's 2 + 12 = 14), so both branches present
 # the same logical pixel to edge_mask_merge_rtl on the same cycle --
-# forge.analyze.latency_static's real exact_cycle merge-point check
+# forge.analysis.latency_static's real exact_cycle merge-point check
 # verifies this statically at `forge topgen validate` time; the
 # tag_mismatch output on edge_mask_merge_rtl verifies it again at runtime.
 # ═══════════════════════════════════════════════════════════════════════════

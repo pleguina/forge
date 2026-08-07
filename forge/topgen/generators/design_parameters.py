@@ -400,7 +400,7 @@ def extract_design_parameters(
     # (e.g. trigger_demo's dec x4 -> col gather) if ever asked to reason
     # about that region — it just adds each module once, in file order,
     # with no concept of "these 4 modules feed the same consumer in
-    # parallel." forge.analyze.latency_static (LatencyGraph/check_merge_points)
+    # parallel." forge.analysis.latency_static (LatencyGraph/check_merge_points)
     # is the DAG-aware alternative that does model this correctly,
     # including per-instance merge points. This
     # walker's output is deliberately not replaced here (it's a

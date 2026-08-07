@@ -1,11 +1,11 @@
-"""Tests for forge.analyze.throughput_static.model.
+"""Tests for forge.analysis.throughput_static.model.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from forge.analyze.hls_reports.extractor import HLSModuleReport, collect_reports
-from forge.analyze.throughput_static.model import (
+from forge.analysis.hls_reports.extractor import HLSModuleReport, collect_reports
+from forge.analysis.throughput_static.model import (
     build_design_throughput_analysis,
     build_static_throughput_analysis,
 )

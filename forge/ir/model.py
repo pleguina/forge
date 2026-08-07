@@ -116,7 +116,7 @@ class ResolvedModuleDefinition:
     populated directly from ``forge.topgen.config.Module.timing`` (no
     re-parsing). This intentionally does
     **not** include the ``hls_report`` latency-source tier
-    (``forge.analyze.latency_static``'s external HLS-synthesis-report
+    (``forge.analysis.latency_static``'s external HLS-synthesis-report
     overlay) — that's runtime data supplied only when analyzing actual
     build artifacts, not a pre-generation design/registry fact.
 

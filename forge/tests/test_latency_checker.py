@@ -1,5 +1,5 @@
 """
-Tests for forge.analyze.latency_static.checker's edge-latency fold-in.
+Tests for forge.analysis.latency_static.checker's edge-latency fold-in.
 
 Before this fix, LatencyEdge carried no latency at all, so
 check_merge_points summed only each predecessor node's own latency — any
@@ -13,9 +13,9 @@ cycles the other doesn't.
 
 from __future__ import annotations
 
-from analyze.latency_static.checker import check_merge_points
-from analyze.latency_static.graph import LatencyEdge, LatencyGraph, LatencyNode
-from analyze.latency_model import LatencyProvenance, LatencyValue
+from forge.analysis.latency_static.checker import check_merge_points
+from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph, LatencyNode
+from forge.analysis.latency_model import LatencyProvenance, LatencyValue
 
 
 def _node(name, cycles, *, is_variable=False):

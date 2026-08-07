@@ -1,4 +1,4 @@
-"""Tests for forge.analyze.throughput_runtime.probe.
+"""Tests for forge.analysis.throughput_runtime.probe.
 """
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.throughput_runtime.probe import build_runtime_throughput_result
+from forge.analysis.throughput_runtime.probe import build_runtime_throughput_result
 
 _CSV_HEADER = "cycle,fifo_full,fifo_empty,fifo_occupancy,fifo_overflow\n"
 

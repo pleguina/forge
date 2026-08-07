@@ -27,8 +27,8 @@ def _emit_analyze_envelope(*, status: str, json_mode: bool, **kwargs) -> None:
 
 def cmd_hls_report(args) -> None:
     """Generate HLS synthesis summary from a build_hls tree."""
-    from forge.analyze.hls_reports.extractor import collect_reports
-    from forge.analyze.hls_reports.formatter import to_csv, to_markdown, to_html
+    from forge.analysis.hls_reports.extractor import collect_reports
+    from forge.analysis.hls_reports.formatter import to_csv, to_markdown, to_html
 
     json_mode = getattr(args, "json", False)
     build_root = Path(args.hls_build_root)
@@ -89,9 +89,9 @@ def cmd_hls_report(args) -> None:
 
 def cmd_latency_check(args) -> None:
     """Static latency mismatch checker from design.yml topology."""
-    from forge.analyze.latency_static.graph import build_graph
-    from forge.analyze.latency_static.checker import check_merge_points
-    from forge.analyze.latency_static.reporter import render_markdown
+    from forge.analysis.latency_static.graph import build_graph
+    from forge.analysis.latency_static.checker import check_merge_points
+    from forge.analysis.latency_static.reporter import render_markdown
 
     json_mode = getattr(args, "json", False)
     design_path = Path(args.design)
@@ -104,7 +104,7 @@ def cmd_latency_check(args) -> None:
     if hls_root:
         hls_root_path = Path(hls_root)
         if hls_root_path.exists():
-            from forge.analyze.hls_reports.extractor import collect_reports, latency_map_from_reports
+            from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
             try:
                 raw_reports = collect_reports(hls_root_path)
                 hls_reports = latency_map_from_reports(raw_reports)
@@ -172,9 +172,9 @@ def cmd_latency_check(args) -> None:
 
 def cmd_runtime_latency(args) -> None:
     """Compare HLS-predicted vs simulation-observed latency from probe CSV files."""
-    from forge.analyze.latency_runtime.probe import load_probe_csv, load_wide_probe_csv, measure_latency
-    from forge.analyze.latency_runtime.comparator import compare
-    from forge.analyze.latency_runtime.reporter import render_markdown
+    from forge.analysis.latency_runtime.probe import load_probe_csv, load_wide_probe_csv, measure_latency
+    from forge.analysis.latency_runtime.comparator import compare
+    from forge.analysis.latency_runtime.reporter import render_markdown
 
     json_mode = getattr(args, "json", False)
     probe_csv  = Path(args.probe_csv)
@@ -196,7 +196,7 @@ def cmd_runtime_latency(args) -> None:
     hls_map: "dict" = {}
     hls_root = getattr(args, "hls_build_root", None)
     if hls_root and Path(hls_root).exists():
-        from forge.analyze.hls_reports.extractor import collect_reports, latency_map_from_reports
+        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
         try:
             hls_map = latency_map_from_reports(collect_reports(Path(hls_root)))
         except Exception as exc:
@@ -255,8 +255,8 @@ def cmd_runtime_latency(args) -> None:
 
 def cmd_plot_results(args) -> None:
     """Render result comparison plots from a plugin-defined config file."""
-    from forge.analyze.result_plots.config import load_plot_config
-    from forge.analyze.result_plots.engine import generate_plots
+    from forge.analysis.result_plots.config import load_plot_config
+    from forge.analysis.result_plots.engine import generate_plots
 
     json_mode = getattr(args, "json", False)
     config_path   = Path(args.config)
@@ -311,8 +311,8 @@ def cmd_plot_results(args) -> None:
 
 def cmd_dashboard(args) -> None:
     """Aggregate analysis artifacts into an HTML dashboard."""
-    from forge.analyze.dashboards.aggregator import collect
-    from forge.analyze.dashboards.renderer import render_html, render_markdown_summary
+    from forge.analysis.dashboards.aggregator import collect
+    from forge.analysis.dashboards.renderer import render_html, render_markdown_summary
 
     json_mode = getattr(args, "json", False)
     reports_dir = Path(args.input)

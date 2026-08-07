@@ -66,7 +66,7 @@
 //
 // Timing: fill/drain latency is data-dependent (depends on relative
 // write/read rates and clock phase) and is not statically bounded —
-// forge.analyze.latency_static.graph treats async_fifo edges as unknown
+// forge.analysis.latency_static.graph treats async_fifo edges as unknown
 // (None).
 //==============================================================================
 

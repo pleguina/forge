@@ -29,7 +29,7 @@
 //
 // Timing: round-trip (request -> acknowledge) latency depends on the
 // relative phase of src_clk/dst_clk and is not statically bounded across
-// arbitrary clock ratios — forge.analyze.latency_static.graph treats
+// arbitrary clock ratios — forge.analysis.latency_static.graph treats
 // mailbox_transfer edges the same honest way it already treats
 // async_fifo: latency stays unknown (None), not silently mis-declared as
 // fixed.

@@ -60,7 +60,7 @@ def test_vendored_cytoscape_js_survives_a_real_pip_install(tmp_path: Path) -> No
     probe = subprocess.run(
         [str(venv_python), "-c", (
             "import importlib.resources, hashlib\n"
-            "data = importlib.resources.files('forge.analyze.design_explorer')"
+            "data = importlib.resources.files('forge.analysis.design_explorer')"
             ".joinpath('vendor', 'cytoscape.min.js').read_bytes()\n"
             "print(len(data))\n"
             "print(hashlib.sha256(data).hexdigest())\n"
@@ -70,7 +70,7 @@ def test_vendored_cytoscape_js_survives_a_real_pip_install(tmp_path: Path) -> No
     assert probe.returncode == 0, probe.stdout + probe.stderr
     lines = probe.stdout.strip().splitlines()
     assert int(lines[0]) > 100_000, "installed vendored cytoscape.min.js looks truncated"
-    real_sha256 = (FORGE_DIR / "analyze/design_explorer/vendor/cytoscape.min.js").read_bytes()
+    real_sha256 = (FORGE_DIR / "analysis/design_explorer/vendor/cytoscape.min.js").read_bytes()
     import hashlib
     assert lines[1] == hashlib.sha256(real_sha256).hexdigest()
 
@@ -78,8 +78,8 @@ def test_vendored_cytoscape_js_survives_a_real_pip_install(tmp_path: Path) -> No
     # artifact, not just a raw resource read.
     render_probe = subprocess.run(
         [str(venv_python), "-c", (
-            "from forge.analyze.design_explorer.html_renderer import render_explorer_html\n"
-            "from forge.analyze.design_explorer.graph_model import DesignGraph\n"
+            "from forge.analysis.design_explorer.html_renderer import render_explorer_html\n"
+            "from forge.analysis.design_explorer.graph_model import DesignGraph\n"
             "from forge.core.artifact_schema import ArtifactSchema\n"
             "import tempfile, pathlib\n"
             "graph = DesignGraph(schema=ArtifactSchema('forge.design_graph', '1.0'), "

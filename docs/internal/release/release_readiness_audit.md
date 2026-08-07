@@ -42,7 +42,7 @@ exact diff if this file is read before those changes are committed.
 
 `forge/pyproject.toml`'s `[tool.setuptools] packages` list was hand-
 maintained and had drifted: `forge.core.cli.groups`, `forge.framework`,
-`forge.analyze.throughput_static`, `forge.analyze.throughput_runtime`, and
+`forge.analysis.throughput_static`, `forge.analysis.throughput_runtime`, and
 `forge.docsgen` all exist as real packages on disk with real, imported-
 elsewhere code, but were **not** in the list. A real `python -m build` +
 clean-venv `pip install` of the resulting wheel reproduced the exact P0

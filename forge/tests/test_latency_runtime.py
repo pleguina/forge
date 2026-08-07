@@ -1,5 +1,5 @@
 """
-Tests for forge.analyze.latency_runtime's additions:
+Tests for forge.analysis.latency_runtime's additions:
   - probe.load_wide_probe_csv, the fix for the previously-broken pipe
     between forge.verification.gen_sim's real Tier-2 probe emission (wide CSV)
     and this package's consumer (which only accepted long-format CSV).
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analyze.latency_runtime.comparator import compare
-from analyze.latency_runtime.probe import (
+from forge.analysis.latency_runtime.comparator import compare
+from forge.analysis.latency_runtime.probe import (
     ProbeEvent,
     load_probe_csv,
     load_wide_probe_csv,

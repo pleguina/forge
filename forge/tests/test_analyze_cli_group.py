@@ -1,6 +1,6 @@
 """End-to-end coverage for `forge analyze` (core/cli/groups/analyze.py, ~22%).
 
-`plot-results` is skipped: it imports forge.analyze.result_plots.engine
+`plot-results` is skipped: it imports forge.analysis.result_plots.engine
 at call time, which requires matplotlib — an optional dependency not
 installed in this environment. Everything else here has no such
 dependency and is driven for real.
@@ -21,7 +21,7 @@ PASSTHROUGH_DESIGN_YML = REPO_ROOT / "plugins/passthrough_demo/forge/designs/des
 
 skip_without_matplotlib = pytest.mark.skipif(
     importlib.util.find_spec("matplotlib") is None,
-    reason="matplotlib not installed (optional dependency for forge.analyze.result_plots)",
+    reason="matplotlib not installed (optional dependency for forge.analysis.result_plots)",
 )
 
 

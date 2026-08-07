@@ -46,7 +46,7 @@ the project is CERN-only.
 
 ```bash
 # Lint
-flake8 forge/core forge/topgen forge/hls forge/verify forge/integration forge/analyze
+flake8 forge/core forge/topgen forge/hls forge/verify forge/integration forge/analysis
 yamllint -d relaxed plugins/trigger_demo/forge/designs/design.yml plugins/trigger_demo/forge/modules.yml
 
 # Agnosticism guard — forge/ core must not hardcode detector/algorithm assumptions

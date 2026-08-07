@@ -107,7 +107,7 @@ class TestBenchConfig:
     generate: bool = True  # Whether to generate testbench by default
 
 # The three timing kinds this module requires. Duplicated (not
-# imported) from forge.analyze.latency_model.LATENCY_KINDS deliberately —
+# imported) from forge.analysis.latency_model.LATENCY_KINDS deliberately —
 # forge/topgen is the schema/config layer and forge/analyze is a
 # downstream consumer of it; importing analyze from here would be a
 # wrong-direction dependency. Three fixed, closed values, unlikely to
@@ -172,7 +172,7 @@ class ModuleTiming:
     Absent (``Module.timing is None``) is the default and behaves
     identically to every existing consumer that predates this field.
 
-    Resolution order used by consumers (forge.analyze.latency_static,
+    Resolution order used by consumers (forge.analysis.latency_static,
     the canonical IR): a structured ``latency:`` declaration (explicit,
     authoritative) > ``latency_cycles`` (explicit,
     authoritative, the older flat spelling) > an externally-supplied HLS

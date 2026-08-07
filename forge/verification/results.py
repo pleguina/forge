@@ -138,7 +138,7 @@ def parse_forge_check_lines(text: str) -> "list[CheckResult]":
 class VerificationTarget:
     """A real, provable claim about what one event's simulation actually
     covered, keyed into the same ``ObjectReference`` kind vocabulary the
-    visual design explorer uses (``forge.analyze.design_explorer.graph_model``).
+    visual design explorer uses (``forge.analysis.design_explorer.graph_model``).
 
     Additive and schema-only this phase — no real emission site populates
     it yet. A flow's declared ``top_module`` is a real, provable fact

@@ -1,5 +1,5 @@
 """
-Proofs that forge.analyze.latency_static.graph.build_graph's
+Proofs that forge.analysis.latency_static.graph.build_graph's
 DesignConfig-driven implementation produces results identical to an
 independent raw-YAML re-parse, on real designs.
 """
@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analyze.latency_static.graph import (
+from forge.analysis.latency_static.graph import (
     build_graph, _build_graph_legacy, _build_graph_from_ir, _edge_latency_from_connection,
 )
-from analyze.latency_static.checker import check_merge_points
-from analyze.latency_static.reporter import render_markdown
+from forge.analysis.latency_static.checker import check_merge_points
+from forge.analysis.latency_static.reporter import render_markdown
 from forge.topgen.config import Connection
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

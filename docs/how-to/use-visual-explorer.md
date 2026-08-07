@@ -54,8 +54,8 @@ to post-process the graph or embed it in another tool — the same
 functions the CLI calls are public:
 
 ```python
-from forge.analyze.design_explorer.graph_model import build_design_graph
-from forge.analyze.design_explorer.html_renderer import render_explorer_html
+from forge.analysis.design_explorer.graph_model import build_design_graph
+from forge.analysis.design_explorer.html_renderer import render_explorer_html
 from forge.ir import build_project_ir_with_match_report
 
 project, _cfg, _match_report = build_project_ir_with_match_report(

@@ -97,12 +97,21 @@ packages = [
     "forge.analyze.result_plots",
     "forge.analyze.dashboards",
     "forge.analyze.design_explorer",
+    "forge.analysis",
+    "forge.analysis.hls_reports",
+    "forge.analysis.latency_static",
+    "forge.analysis.latency_runtime",
+    "forge.analysis.throughput_static",
+    "forge.analysis.throughput_runtime",
+    "forge.analysis.result_plots",
+    "forge.analysis.dashboards",
+    "forge.analysis.design_explorer",
 ]
 
 [tool.setuptools.package-data]
 forge = [
     "py.typed", "topgen/ip/*.yaml", "hls/templates/*.tcl.j2",
-    "analyze/design_explorer/vendor/*",
+    "analysis/design_explorer/vendor/*",
 ]
 
 [tool.black]

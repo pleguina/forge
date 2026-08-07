@@ -574,8 +574,8 @@ optional arguments:
                         run --golden-comparison-json)
   --plugin PLUGIN       Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and
                         collect any report attachments it has registered via
-                        forge.analyze.dashboards.attachments.register_report_attachment_provider —
-                        e.g. project-owned image panels or ownership annotations
+                        forge.analysis.dashboards.attachments.register_report_attachment_provider
+                        — e.g. project-owned image panels or ownership annotations
   --json                Machine-readable JSON output
 ```
 

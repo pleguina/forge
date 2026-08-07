@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forge.analyze.dashboards.attachments import ReportAttachment
+from forge.analysis.dashboards.attachments import ReportAttachment
 
 _PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 _DESIGNS_DIR = _PLUGIN_ROOT / "forge" / "designs"

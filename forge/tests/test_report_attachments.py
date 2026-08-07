@@ -1,5 +1,5 @@
 """Tests for the project-attachment extension point `forge report` uses
-to let a plugin contribute extra sections (forge.analyze.dashboards.
+to let a plugin contribute extra sections (forge.analysis.dashboards.
 attachments/aggregator/renderer) without FORGE core understanding the
 domain semantics behind them.
 
@@ -16,14 +16,14 @@ from pathlib import Path
 
 import pytest
 
-from forge.analyze.dashboards.aggregator import collect
-from forge.analyze.dashboards.attachments import (
+from forge.analysis.dashboards.aggregator import collect
+from forge.analysis.dashboards.attachments import (
     ReportAttachment,
     _reset_for_testing,
     get_report_attachment_providers,
     register_report_attachment_provider,
 )
-from forge.analyze.dashboards.renderer import render_html, render_markdown_summary
+from forge.analysis.dashboards.renderer import render_html, render_markdown_summary
 
 
 @pytest.fixture(autouse=True)

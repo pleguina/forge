@@ -1,31 +1,12 @@
-"""forge.analyze — performance analysis, latency checking, reporting, and plotting.
+"""forge.analyze — permanent compatibility alias for :mod:`forge.analysis`.
 
-Subsystem responsibilities
---------------------------
-hls_reports/
-    Parse Vitis HLS csynth.xml synthesis reports and emit CSV / Markdown / HTML
-    summaries. Wraps forge.hls.extract_hls_metrics so the XML parsing logic lives
-    in exactly one place.
-
-latency_static/
-    Topology-based latency checker. Reads design.yml + modules.yml + optional HLS
-    reports and detects latency mismatches at every merge point in the pipeline
-    DAG. Suggests signal_delay depths where needed.
-
-latency_runtime/
-    Compare HLS-predicted latency against simulation-observed latency. Reads
-    probe CSV files written during forge verify runs and produces a side-by-side
-    comparison table.
-
-result_plots/
-    Generic plotting engine. The plugin supplies a plot_config.yml that names
-    columns and plot kinds; the framework produces the figures. No OMTF-specific
-    semantics here.
-
-dashboards/
-    Aggregates the outputs of the other four modules and renders a self-contained
-    HTML dashboard plus a Markdown summary.
-
-All five modules are plugin-agnostic — no OMTF or detector-specific assumptions
-belong here. Plugin-specific semantics live under plugins/<plugin>/.
+.. deprecated::
+    Import from :mod:`forge.analysis` instead. This package is kept
+    working indefinitely, not on a deprecation timer: existing plugin
+    tool code (e.g. ``forge.analyze.dashboards.attachments``,
+    ``forge.analyze.throughput_static.model``) imports ``forge.analyze.*``
+    submodules directly, and FORGE doesn't control when those get
+    updated to the new name. See
+    docs/development/adr/0005-package-and-cli-naming.md.
 """
+import forge.analysis as _analysis  # noqa: F401

@@ -4,7 +4,7 @@
 # A physical package split (forge-model/sdk/backends/analysis/cli) was
 # considered and rejected: the dependency direction it would enforce is
 # *already* clean in the current
-# forge/{core,topgen,hls,verification,analyze,integration,ir} layout — a
+# forge/{core,topgen,hls,verification,analysis,integration,ir} layout — a
 # cheap CI grep achieves the same goal at a fraction of the cost of a
 # physical package split, which stays deferred unless repo/team growth
 # later justifies it.
@@ -23,16 +23,17 @@
 #   2. forge/topgen/ and forge/verification/ must not cross-import each
 #      other (they're independent subsystems composed by the CLI layer,
 #      not by each other).
-#   3. forge/analyze/ must not import forge.core.cli.
+#   3. forge/analysis/ must not import forge.core.cli.
 #   4. forge/ir/ (the canonical IR — see forge/ir/model.py) must not import
 #      forge.core.cli, forge.topgen.generators, or forge.verification —
 #      the IR is a read-only consumer of topology/contract/IP-metadata
 #      loaders only (see forge/ir/build.py's own module docstring), never
 #      of CLI rendering or generator/verification logic.
 #
-# Note: forge/verify/ still exists as a thin, permanent compatibility
-# shim (re-exports from forge/verification/, see forge/verify/__init__.py)
-# — it has no real logic and is not scanned separately here.
+# Note: forge/verify/ and forge/analyze/ still exist as thin, permanent
+# compatibility shims (re-exports from forge/verification/ and
+# forge/analysis/ respectively) — neither has real logic and neither is
+# scanned separately here.
 # forge/tests/ is excluded from all rules — test modules legitimately
 # drive the real CLI entry point and cross-subsystem behavior end to end.
 #
@@ -78,7 +79,7 @@ _check() {
 echo "--- Rule 1: nothing outside forge/core/cli/ imports forge.core.cli ---"
 _check "no cross-import of forge.core.cli outside forge/core/cli/" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
-    forge/topgen forge/hls forge/analyze forge/integration forge/ir
+    forge/topgen forge/hls forge/analysis forge/integration forge/ir
 
 # forge/verification is checked separately: forge.core.cli.envelope is a
 # deliberate, documented exception (see comment above) — every other
@@ -102,10 +103,10 @@ _check "forge/verification must not import forge.topgen" \
     '(from|import)[[:space:]]+[.[:alnum:]]*topgen\b' \
     forge/verification
 
-echo "--- Rule 3: forge/analyze does not import forge.core.cli ---"
-_check "forge/analyze must not import forge.core.cli" \
+echo "--- Rule 3: forge/analysis does not import forge.core.cli ---"
+_check "forge/analysis must not import forge.core.cli" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
-    forge/analyze
+    forge/analysis
 
 echo "--- Rule 4: forge/ir stays read-only (no CLI/generator/verification deps) ---"
 _check "forge/ir must not import forge.core.cli" \

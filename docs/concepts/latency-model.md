@@ -44,7 +44,7 @@ canonical IR's `ResolvedModuleDefinition.latency_cycles`/`.latency_hint`/
 `.is_variable_latency`): `latency_cycles` (explicit) > an externally
 supplied HLS synthesis report (a runtime overlay from actual build
 artifacts, not registry/design data — see
-`forge.analyze.hls_reports.extractor`) > `latency_hint` (rough estimate) >
+`forge.analysis.hls_reports.extractor`) > `latency_hint` (rough estimate) >
 unknown.
 
 **Conflict rule**: `latency_cycles` and `variable_latency: true` are
@@ -58,7 +58,7 @@ before this field existed.
 
 ## How it flows into `LatencyGraph`
 
-`Module.timing` metadata is read by `forge.analyze.latency_static.graph`,
+`Module.timing` metadata is read by `forge.analysis.latency_static.graph`,
 which builds a directed `LatencyGraph` from `design.yml` + `modules.yml`
 (the same shared config loader the canonical IR itself uses, deliberately
 stopping short of the full matched IR so latency analysis keeps working

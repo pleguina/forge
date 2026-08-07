@@ -40,8 +40,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from forge.analyze.hls_reports.extractor import collect_reports
-from forge.analyze.throughput_static.model import build_static_throughput_analysis
+from forge.analysis.hls_reports.extractor import collect_reports
+from forge.analysis.throughput_static.model import build_static_throughput_analysis
 from forge.verification.throughput_result import StaticThroughputAnalysis
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]

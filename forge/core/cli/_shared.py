@@ -134,7 +134,7 @@ def load_verify_flow_entries(verify_design_path: Path) -> list[tuple[str, str | 
 
 def build_explorer_overlay_data(design_path: Path, project, args):
     """Compute the two overlays ``build_design_graph``
-    (``forge.analyze.design_explorer.graph_model``) has always accepted
+    (``forge.analysis.design_explorer.graph_model``) has always accepted
     but that neither ``forge report`` nor ``forge inspect`` ever
     populated with real data before now:
     ``latency_by_instance`` and ``verification_flow_entry_points``.
@@ -149,7 +149,7 @@ def build_explorer_overlay_data(design_path: Path, project, args):
 
     Args:
         design_path: the design.yml path (for the latency-graph rebuild
-            — ``forge.analyze.latency_static.graph.build_graph`` takes a
+            — ``forge.analysis.latency_static.graph.build_graph`` takes a
             path, not an already-resolved ``ResolvedProject``).
         project: the already-built ``ResolvedProject`` the caller's own
             ``build_design_graph`` call will use — reused here for the
@@ -162,7 +162,7 @@ def build_explorer_overlay_data(design_path: Path, project, args):
     """
     latency_by_instance: dict = {}
     try:
-        from forge.analyze.latency_static.graph import build_graph as build_latency_graph
+        from forge.analysis.latency_static.graph import build_graph as build_latency_graph
 
         contracts_from = getattr(args, "contracts_from", None)
         modules_yml = Path(contracts_from) if contracts_from else None
@@ -180,7 +180,7 @@ def build_explorer_overlay_data(design_path: Path, project, args):
         try:
             import json
 
-            from forge.analyze.design_explorer.verification_join import join_flow_entry_points
+            from forge.analysis.design_explorer.verification_join import join_flow_entry_points
 
             results_payload = json.loads(Path(results_json_path).read_text())
             verification_flow_entry_points = join_flow_entry_points(
