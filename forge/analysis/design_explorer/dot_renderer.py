@@ -17,7 +17,7 @@ from .escaping import dot_html_label_text, dot_id, dot_label
 from .graph_model import DesignGraph, GraphEdge, GraphNode, GraphNodeKind
 
 # Visual style per real `wiring_method` value — every real value the
-# matcher produces (`forge.topgen.ip.matcher.MatchReport.wiring_method_counts`'s
+# matcher produces (`forge.contracts.matcher.MatchReport.wiring_method_counts`'s
 # keys), plus the honest "unknown" fallback for an unclassified/global-net
 # edge (wiring_method=None).
 _WIRING_METHOD_COLOR: Dict[str, str] = {

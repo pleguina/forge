@@ -10,7 +10,7 @@
 // of a destination reset *domain*, not a `connections:`-level data
 // crossing, so this primitive is emitted once per synchronized reset
 // domain rather than once per connection (see
-// forge.topgen.ip.cdc's module docstring for why).
+// forge.contracts.cdc's module docstring for why).
 //
 // Parameters: none (reset is always a single bit).
 //

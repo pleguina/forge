@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Set
 
 import yaml
-from ..config import DesignConfig, Module
+from .config import DesignConfig, Module
 from .topology_deriver import derive_topology_group
 
 
@@ -69,7 +69,7 @@ class MatchReport:
         first-match-wins guard (i.e. every candidate *after* the one that
         was actually wired). Populated by the same first-driver-wins guard
         that has always silently dropped these —
-        ``forge.topgen.ip.contract_verifier.verify_cardinality`` is the
+        ``forge.contracts.contract_verifier.verify_cardinality`` is the
         first consumer.
     ``rejected_matches``: semantic candidate rejections that never produced
         any wire at all (so there's no sink pin / ``ResolvedConnection`` to

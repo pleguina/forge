@@ -2,7 +2,7 @@
 Real-design agreement test between the two independent latency-summing
 codepaths:
 
-- forge.topgen.generators.design_parameters.extract_design_parameters's
+- forge.generation.generators.design_parameters.extract_design_parameters's
   naive, DAG-blind cumulative-latency walker (walks cfg.modules in
   design.yml file order, sums worst_case_latency — no notion that two
   modules might feed the same consumer in parallel rather than
@@ -26,8 +26,8 @@ import json
 from pathlib import Path
 
 from forge.analysis.latency_static.graph import build_graph
-from topgen.config import DesignConfig
-from topgen.generators.design_parameters import extract_design_parameters
+from forge.contracts.config import DesignConfig
+from forge.generation.generators.design_parameters import extract_design_parameters
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRIGGER_DESIGN = REPO_ROOT / "plugins/trigger_demo/forge/designs/design.yml"

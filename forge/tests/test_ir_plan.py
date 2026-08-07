@@ -17,7 +17,7 @@ from forge.ir.model import (
     ResolvedTransformation,
 )
 from forge.ir.plan import build_generation_plan, plan_hash
-from forge.topgen.ip.matcher import MatchReport, RejectedMatch
+from forge.contracts.matcher import MatchReport, RejectedMatch
 
 
 def _connection(id_, src_inst, src_port, dst_inst, dst_port, *, wiring_method,

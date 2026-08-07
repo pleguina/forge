@@ -14,7 +14,7 @@ re-matching). A module is correctly excluded (``None``) when its contract
 declares ``clock_free``/``reset_free`` — it was never wired to any net and
 must not appear to belong to one. Modules with no contract at all fall
 back to the same conservative name heuristics
-``forge.topgen.ip.matcher.auto_match_ports`` itself uses for compat-mode
+``forge.contracts.matcher.auto_match_ports`` itself uses for compat-mode
 wiring. A module that needs a clock/reset (no contract,
 ``connect_clock``/``connect_reset`` is on) but resolves to nothing is
 reported in ``unresolved`` — the "unknown domain" case this module
@@ -27,10 +27,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from ..config import DesignConfig
+from .config import DesignConfig
 from .contract_loader import LoadedContract
 
-# Same conservative name lists forge.topgen.ip.matcher.auto_match_ports
+# Same conservative name lists forge.contracts.matcher.auto_match_ports
 # uses for compat-mode clock/reset heuristics (function-local there, not a
 # public constant — duplicated here rather than imported, same choice
 # already made in forge/topgen/migrate.py's infer_contract_skeleton).

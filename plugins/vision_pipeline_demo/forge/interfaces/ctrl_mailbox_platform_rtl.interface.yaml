@@ -15,7 +15,7 @@ ip_interface:
     clk_control/rst_control (non-standard names, same "own real
     top-level net" mechanism pixel_sink_rtl.interface.yaml's own
     clk_pixel/rst_pixel already established -- see
-    forge.topgen.ip.domains.resolve_domain_nets) rather than the literal
+    forge.contracts.domains.resolve_domain_nets) rather than the literal
     ap_clk/ap_rst this design's real 9-module pixel pipeline reuses
     unmodified.
 

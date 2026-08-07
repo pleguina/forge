@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.topgen.config import DesignConfig
-from forge.topgen.validation import validate_design, validate_registry
+from forge.contracts.config import DesignConfig
+from forge.generation.validation import validate_design, validate_registry
 
 _MINIMAL_DESIGN_BODY = """\
 part: xcvu13p

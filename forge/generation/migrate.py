@@ -28,10 +28,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from .config import DESIGN_SCHEMA_VERSION, MODULE_REGISTRY_SCHEMA_VERSION
-from .ip.contract_loader import INTERFACE_CONTRACT_SCHEMA_VERSION
+from ..contracts.config import DESIGN_SCHEMA_VERSION, MODULE_REGISTRY_SCHEMA_VERSION
+from ..contracts.contract_loader import INTERFACE_CONTRACT_SCHEMA_VERSION
 
-# forge.topgen must not depend on forge.verification (no such import exists
+# forge.generation must not depend on forge.verification (no such import exists
 # anywhere else in the codebase — the two subsystems are kept
 # independent). This value is kept manually
 # in sync with forge.verification.design_contract.VERIFY_CONTRACT_SCHEMA_VERSION
@@ -340,7 +340,7 @@ def apply_rename_verify_contract(legacy_path: Path) -> Path:
 # 5. Compatibility-mode contract inference
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Same conservative name lists forge.topgen.ip.matcher.auto_match_ports uses
+# Same conservative name lists forge.contracts.matcher.auto_match_ports uses
 # for compat-mode clock/reset heuristics (matcher.py, local to that
 # function) — duplicated rather than imported since they're function-local
 # there, not a public module constant.

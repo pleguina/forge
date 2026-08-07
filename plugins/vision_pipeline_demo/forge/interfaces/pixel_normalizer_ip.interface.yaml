@@ -6,7 +6,7 @@
 #
 # Field set mirrors the logical forge.pixel_stream.v1 bus -- no
 # bus-grouping mechanism exists in the framework today (confirmed:
-# forge.topgen.ip.contract_verifier.KNOWN_PROTOCOLS has no such concept),
+# forge.contracts.contract_verifier.KNOWN_PROTOCOLS has no such concept),
 # so this is expressed as individual roles, exactly like every other
 # reference plugin's interface contract.
 

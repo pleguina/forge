@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from ..config import DesignConfig
+from ...contracts.config import DesignConfig
 
 
 _DEFAULT_SYSTEM_SIGNAL_NAMES = frozenset({

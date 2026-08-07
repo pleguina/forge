@@ -33,9 +33,9 @@ _TOPGEN_ROOT = Path(__file__).resolve().parents[1]
 if str(_TOPGEN_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOPGEN_ROOT))
 
-from topgen.config import InstanceAssign, TopologyGroup
-from topgen.ip.contract_loader import LoadedContract
-from topgen.ip.topology_deriver import derive_topology_group
+from forge.contracts.config import InstanceAssign, TopologyGroup
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.topology_deriver import derive_topology_group
 
 
 # ─────────────────────────────────────────────────────────────────────────────

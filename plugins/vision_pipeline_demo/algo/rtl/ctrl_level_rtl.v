@@ -8,9 +8,9 @@
 //
 // A dedicated module for this one crossing kind (not folded into a
 // single "control_src_rtl" register bank) because
-// forge.topgen.generators.structural_verilog's cdc_map is keyed by
+// forge.generation.generators.structural_verilog's cdc_map is keyed by
 // (src_module, dst_module) alone, not per-pin (a real constraint found
-// while wiring this design; forge.topgen.config's ATG027 check exists
+// while wiring this design; forge.contracts.config's ATG027 check exists
 // because of it) -- three
 // different cdc kinds sourced from the same control-domain instance to
 // the same pixel-domain instance would silently collapse into one.

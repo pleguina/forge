@@ -33,7 +33,7 @@ around.
 
 ## `reference_period_ns`: overriding an implicit timing default
 
-`forge.topgen.config.DesignConfig.reference_period_ns` is the external
+`forge.contracts.config.DesignConfig.reference_period_ns` is the external
 synchronous reference period (in nanoseconds) that generated testbench
 timing parameters — batches-per-event, counter modulo, and similar — are
 derived against. When a `design.yml` doesn't declare one, FORGE defaults

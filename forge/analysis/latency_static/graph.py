@@ -352,7 +352,7 @@ def _build_graph_from_ir(
 ) -> LatencyGraph:
     """Migration step 7: build the LatencyGraph from ``DesignConfig`` — the
     same shared loader the canonical IR itself is built from
-    (``forge.topgen.config``) — instead of independently re-parsing
+    (``forge.contracts.config``) — instead of independently re-parsing
     design.yml/modules.yml as raw YAML.
 
     Deliberately stops at ``DesignConfig``/``Module`` rather than going
@@ -367,7 +367,7 @@ def _build_graph_from_ir(
     expanded ``from_``/``to`` module names, so no port matching is needed
     to build module-to-module edges either.
     """
-    from forge.topgen.config import DesignConfig
+    from forge.contracts.config import DesignConfig
 
     cfg = DesignConfig.load_relaxed(design_path)
 

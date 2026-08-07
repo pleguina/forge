@@ -64,7 +64,7 @@ A ``{"name", "version"}`` tag carried by every structured artifact
 
 The resolved cardinality bound an endpoint's interface declared,
     checked against how many connections actually exist. Descriptive only
-    — ``forge.topgen.ip.cardinality.verify_cardinality`` is what actually
+    — ``forge.contracts.cardinality.verify_cardinality`` is what actually
     enforces this design-wide under ``--strict``.
 
 | Field | Type | Required | Default |
@@ -401,7 +401,7 @@ ProvenanceManifest(schema_version: 'str' = '0.2.0', forge_version: 'str' = '', p
 *Defined in `forge.ir.model`.*
 
 A losing producer for a connection's consumer pin, sourced read-only
-    from ``forge.topgen.ip.matcher.MatchReport.rejected_fanin`` (never a
+    from ``forge.contracts.matcher.MatchReport.rejected_fanin`` (never a
     second source of truth for it).
 
 | Field | Type | Required | Default |
@@ -424,11 +424,11 @@ A named clock domain — one per distinct resolved clock net.
 
     ``derived_from``/``ratio`` are purely descriptive,
     populated from ``design.yml``'s optional ``clock_domains:`` block
-    (``forge.topgen.config.DesignConfig.clock_domains``) when the design
+    (``forge.contracts.config.DesignConfig.clock_domains``) when the design
     documents a relationship to another domain. They do **not** auto-
     approve a crossing between related domains — every crossing still
     needs an explicit per-connection ``cdc:`` declaration, checked by
-    ``forge.topgen.ip.cdc.verify_cdc``.
+    ``forge.contracts.cdc.verify_cdc``.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -445,7 +445,7 @@ A resolved wire between two endpoints.
 
     ``wiring_method`` (one of ``contract_wiring``/``port_map_ranges``/
     ``port_map``/``auto_match``/``topology_group``/``heuristic``) is
-    populated from ``forge.topgen.ip.matcher.MatchReport.connection_evidence``.
+    populated from ``forge.contracts.matcher.MatchReport.connection_evidence``.
 
     ``matching_evidence`` (``MatchingEvidence``) is
     populated in ``forge/ir/build.py`` and carries coordinates/protocol/
@@ -465,7 +465,7 @@ A resolved wire between two endpoints.
     descriptive only — computed from the two endpoints' resolved domains
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
-    ``forge.topgen.ip.cdc.verify_cdc`` is what actually rejects an
+    ``forge.contracts.cdc.verify_cdc`` is what actually rejects an
     undeclared crossing under ``--strict``.
 
 | Field | Type | Required | Default |
@@ -582,7 +582,7 @@ A named role on a module (e.g. ``clock_primary``, ``trigger_data``).
 A module definition (shared across all its instances).
 
     ``latency_cycles``/``latency_hint``/``is_variable_latency`` are
-    populated directly from ``forge.topgen.config.Module.timing`` (no
+    populated directly from ``forge.contracts.config.Module.timing`` (no
     re-parsing). This intentionally does
     **not** include the ``hls_report`` latency-source tier
     (``forge.analysis.latency_static``'s external HLS-synthesis-report
@@ -592,10 +592,10 @@ A module definition (shared across all its instances).
     ``latency`` is the structured
     ``kind: fixed|bounded|elastic`` declaration, when the module used the
     new ``latency:`` YAML syntax — a
-    ``forge.topgen.config.LatencyDeclaration``, additive alongside the
+    ``forge.contracts.config.LatencyDeclaration``, additive alongside the
     flat fields above (which stay populated exactly as before; the two
     syntaxes are mutually exclusive per module, enforced at load time in
-    ``topgen.config._pop_timing``, not here).
+    ``contracts.config._pop_timing``, not here).
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -652,7 +652,7 @@ A named reset domain — see ``ResolvedClockDomain``.
     (currently only ``"reset_sync"`` is supported) — unlike
     ``derived_from``/``ratio``, this field DOES trigger real RTL
     generation: a ``cdc_reset_sync`` instance is emitted for this domain
-    by the structural generator. See ``forge.topgen.ip.cdc``'s module
+    by the structural generator. See ``forge.contracts.cdc``'s module
     docstring for why reset synchronization is a domain property, not a
     ``Connection.cdc`` declaration.
 
@@ -740,7 +740,7 @@ A generated (or declared-and-approved) element sitting on a
       generation runs), present only in ``gen-top``'s emitted
       ``design.ir.json`` — same asymmetry as ``ResolvedTopLevelPort``.
     - ``gather_scatter`` — matching-evidence expansion:
-      ``forge.topgen.ip.topology_deriver``'s scatter/gather classification
+      ``forge.contracts.topology_deriver``'s scatter/gather classification
       (previously discarded before reaching ``MatchReport``) is now
       surfaced via ``MatchReport.gather_scatter_evidence`` and synthesized
       here as a real transformation, ``tag`` carrying ``"scatter"`` or

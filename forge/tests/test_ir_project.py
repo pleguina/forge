@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from topgen.config import DesignConfig
-from topgen.ip.contract_loader import load_contracts_for_design, synthesize_ip_info
-from topgen.ip.matcher import auto_match_ports
+from forge.contracts.config import DesignConfig
+from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
+from forge.contracts.matcher import auto_match_ports
 
 from forge.ir.build import assemble_project_ir
 from forge.ir.project import project_to_conn_map

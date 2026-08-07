@@ -4,10 +4,10 @@
 # A physical package split (forge-model/sdk/backends/analysis/cli) was
 # considered and rejected: the dependency direction it would enforce is
 # *already* clean in the current
-# forge/{core,topgen,hls,verification,analysis,integration,ir} layout — a
-# cheap CI grep achieves the same goal at a fraction of the cost of a
-# physical package split, which stays deferred unless repo/team growth
-# later justifies it.
+# forge/{core,contracts,generation,hls,verification,analysis,integration,ir}
+# layout — a cheap CI grep achieves the same goal at a fraction of the
+# cost of a physical package split, which stays deferred unless
+# repo/team growth later justifies it.
 #
 # Rules enforced (all read-only greps, no AST — same tradeoff as
 # ci/agnosticism_check.sh: a real, if necessarily imprecise, regression
@@ -20,20 +20,27 @@
 #      CLI-layer shared code, importable from forge/verification/__main__.py — a
 #      separate CLI entry point that predates and does not import
 #      forge/core/cli/_shared.py — without that being a layering violation.
-#   2. forge/topgen/ and forge/verification/ must not cross-import each
-#      other (they're independent subsystems composed by the CLI layer,
-#      not by each other).
+#   2. forge/contracts/ and forge/generation/ (structural generation) must
+#      not import forge/verification/, and vice versa — independent
+#      subsystems composed by the CLI layer, not by each other.
+#      forge/generation/ *is* allowed to depend on forge/contracts/ (a
+#      real, one-directional dependency: generation consumes the
+#      contract/matching/CDC semantics contracts/ resolves) — only the
+#      verification cross-import is forbidden.
 #   3. forge/analysis/ must not import forge.core.cli.
 #   4. forge/ir/ (the canonical IR — see forge/ir/model.py) must not import
-#      forge.core.cli, forge.topgen.generators, or forge.verification —
+#      forge.core.cli, forge.generation.generators, or forge.verification —
 #      the IR is a read-only consumer of topology/contract/IP-metadata
 #      loaders only (see forge/ir/build.py's own module docstring), never
-#      of CLI rendering or generator/verification logic.
+#      of CLI rendering or generator/verification logic. It *is* allowed
+#      to depend on forge.contracts (the schema/matching/CDC layer it
+#      resolves against).
 #
-# Note: forge/verify/ and forge/analyze/ still exist as thin, permanent
-# compatibility shims (re-exports from forge/verification/ and
-# forge/analysis/ respectively) — neither has real logic and neither is
-# scanned separately here.
+# Note: forge/verify/, forge/analyze/, and forge/topgen/{generators,ip}/
+# still exist as thin compatibility shims (forge/verify and forge/analyze
+# permanently; forge/topgen/generators and forge/topgen/ip on a
+# deprecation timer — both are part of the frozen public API). None has
+# real logic and none is scanned separately here.
 # forge/tests/ is excluded from all rules — test modules legitimately
 # drive the real CLI entry point and cross-subsystem behavior end to end.
 #
@@ -79,7 +86,7 @@ _check() {
 echo "--- Rule 1: nothing outside forge/core/cli/ imports forge.core.cli ---"
 _check "no cross-import of forge.core.cli outside forge/core/cli/" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
-    forge/topgen forge/hls forge/analysis forge/integration forge/ir
+    forge/contracts forge/generation forge/hls forge/analysis forge/integration forge/ir
 
 # forge/verification is checked separately: forge.core.cli.envelope is a
 # deliberate, documented exception (see comment above) — every other
@@ -95,12 +102,15 @@ else
     echo "✅ no cross-import of forge.core.cli outside forge/core/cli/ (forge/verification, envelope exempted)"
 fi
 
-echo "--- Rule 2: forge/topgen and forge/verification do not cross-import ---"
-_check "forge/topgen must not import forge.verification" \
+echo "--- Rule 2: forge/contracts, forge/generation, and forge/verification do not cross-import ---"
+_check "forge/contracts must not import forge.verification" \
     '(from|import)[[:space:]]+[.[:alnum:]]*verif(y|ication)\b' \
-    forge/topgen
-_check "forge/verification must not import forge.topgen" \
-    '(from|import)[[:space:]]+[.[:alnum:]]*topgen\b' \
+    forge/contracts
+_check "forge/generation must not import forge.verification" \
+    '(from|import)[[:space:]]+[.[:alnum:]]*verif(y|ication)\b' \
+    forge/generation
+_check "forge/verification must not import forge.contracts or forge.generation" \
+    '(from|import)[[:space:]]+[.[:alnum:]]*(contracts|generation)\b' \
     forge/verification
 
 echo "--- Rule 3: forge/analysis does not import forge.core.cli ---"
@@ -112,8 +122,8 @@ echo "--- Rule 4: forge/ir stays read-only (no CLI/generator/verification deps) 
 _check "forge/ir must not import forge.core.cli" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
     forge/ir
-_check "forge/ir must not import forge.topgen.generators (no generator mutation)" \
-    '(from|import)[[:space:]]+[.[:alnum:]]*topgen\.generators\b' \
+_check "forge/ir must not import forge.generation.generators (no generator mutation)" \
+    '(from|import)[[:space:]]+[.[:alnum:]]*generation\.generators\b' \
     forge/ir
 _check "forge/ir must not import forge.verification" \
     '(from|import)[[:space:]]+[.[:alnum:]]*verif(y|ication)\b' \

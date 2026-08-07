@@ -20,23 +20,23 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from forge import __version__ as _forge_version
-from ..topgen.config import DesignConfig, Module
-from ..topgen.validation import validate_design
-from ..topgen.ip.contract_loader import (
+from ..contracts.config import DesignConfig, Module
+from ..generation.validation import validate_design
+from ..contracts.contract_loader import (
     LoadedContract,
     load_contracts_for_design,
     synthesize_ip_info,
 )
-from ..topgen.ip.contract_verifier import load_canonical_role_vocab
-from ..topgen.ip.cardinality import Bound, CardinalityError, parse_cardinality
-from ..topgen.ip.coordinates import coordinate_key
-from ..topgen.ip.domains import (
+from ..contracts.contract_verifier import load_canonical_role_vocab
+from ..contracts.cardinality import Bound, CardinalityError, parse_cardinality
+from ..contracts.coordinates import coordinate_key
+from ..contracts.domains import (
     CLOCK_HEURISTIC_NAMES,
     RESET_HEURISTIC_NAMES,
     resolve_domain_nets,
 )
-from ..topgen.ip.matcher import _expand_nd, auto_match_ports, load_ip_info
-from ..topgen.ip.parser import collect_all
+from ..contracts.matcher import _expand_nd, auto_match_ports, load_ip_info
+from ..contracts.parser import collect_all
 
 from .identifiers import resolved_instance_id
 from .model import (
@@ -64,7 +64,7 @@ _TIE_OFF = "$tie_off"
 
 
 def _instance_id(mod: Module, idx: int) -> str:
-    """Same convention as ``forge.topgen.ip.matcher._inst`` — instance IDs
+    """Same convention as ``forge.contracts.matcher._inst`` — instance IDs
     here must match ``conn_map`` keys for connections to resolve correctly.
     Delegates to the one shared implementation (``forge.ir.identifiers``)
     also used by ``forge.analysis.latency_static.graph`` — see that
@@ -585,7 +585,7 @@ def assemble_project_ir(
 
     # Resolve each instance's clock/reset domain from the net
     # actually wired to it (or None for clock-free/reset-free modules) —
-    # see forge.topgen.ip.domains.resolve_domain_nets's docstring. This
+    # see forge.contracts.domains.resolve_domain_nets's docstring. This
     # must run before clock_domains/reset_domains below, which are
     # *derived* from these per-instance values, not populated
     # independently.
@@ -601,7 +601,7 @@ def assemble_project_ir(
     # connections. Coarse: applied to every expanded
     # instance pair between those two modules — matches the generator's
     # own module-pair-level register_stages/delay_cycles/boundary/cdc maps
-    # (forge/topgen/generators/structural_verilog.py).
+    # (forge/generation/generators/structural_verilog.py).
     module_transforms: Dict[tuple, List[ResolvedTransformation]] = {}
     # The connection's *declared* CDC kind (if any),
     # keyed the same way as module_transforms — separate from
@@ -667,7 +667,7 @@ def assemble_project_ir(
     _emission_counter = 0
 
     # Precomputed once (not per-connection) using the
-    # exact same counting rule forge.topgen.ip.cardinality.verify_cardinality
+    # exact same counting rule forge.contracts.cardinality.verify_cardinality
     # already applies — a sink's producer count includes both the one
     # candidate that won (connection_evidence) and every one that lost the
     # first-driver-wins guard (rejected_fanin); a source's consumer count
@@ -689,7 +689,7 @@ def assemble_project_ir(
         # Descriptive only — does the connection's two module
         # instances resolve to different, both-known domains? Enforcement
         # (rejecting an undeclared crossing under --strict) is
-        # forge.topgen.ip.cdc.verify_cdc's job, not this builder's.
+        # forge.contracts.cdc.verify_cdc's job, not this builder's.
         src_clock, dst_clock = clock_of_module.get(src_mod), clock_of_module.get(dst_mod)
         crosses_clock = src_clock is not None and dst_clock is not None and src_clock != dst_clock
         src_reset, dst_reset = reset_of_module.get(src_mod), reset_of_module.get(dst_mod)

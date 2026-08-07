@@ -93,7 +93,7 @@ def test_unresolvable_module_gets_diagnostic_not_a_crash(tmp_path):
         "orphan" in diag.message and "no resolvable IP/RTL port metadata" in diag.message
         for diag in d.diagnostics
     )
-    # forge.topgen.ip.matcher.auto_match_ports (fixed this session — see
+    # forge.contracts.matcher.auto_match_ports (fixed this session — see
     # test_matcher_handles_unresolved_module_without_crashing in
     # test_matcher_unresolved_ip_info.py) itself degrades gracefully for
     # global-net wiring and surfaces its own warning, forwarded here.
@@ -270,7 +270,7 @@ def test_interfaces_carry_protocol_from_the_contract():
 # ─────────────────────────────────────────────────────────────────────────────
 
 from forge.ir.build import _build_interfaces
-from forge.topgen.ip.contract_loader import LoadedContract
+from forge.contracts.contract_loader import LoadedContract
 
 
 def _synthetic_contract(roles: dict) -> LoadedContract:
@@ -385,8 +385,8 @@ def test_no_cardinality_declared_stays_none():
 # ─────────────────────────────────────────────────────────────────────────────
 
 from forge.ir.build import assemble_project_ir
-from forge.topgen.config import Connection, DesignConfig, Module
-from forge.topgen.ip.matcher import auto_match_ports
+from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.matcher import auto_match_ports
 
 
 def _ip_info_entry(ports):
@@ -781,7 +781,7 @@ def test_matching_evidence_surfaces_width_mismatch():
 
 def test_matching_evidence_cardinality_result_reflects_unsatisfied_bound():
     """Release-plan §3.5's 'cardinality result' — the same bound
-    forge.topgen.ip.cardinality.verify_cardinality enforces design-wide,
+    forge.contracts.cardinality.verify_cardinality enforces design-wide,
     reflected per-connection as a descriptive fact. Two producers wire to
     a max=1 sink; the first-driver-wins guard keeps only one, but the
     cardinality result must still count both (same rule verify_cardinality
@@ -827,7 +827,7 @@ def test_matching_evidence_synthetic_scatter():
     """Scatter (prefix_array producer -> scalar consumer instances) has no
     real occurrence in either reference design — proven synthetically
     here, unlike gather above."""
-    from forge.topgen.config import TopologyGroup
+    from forge.contracts.config import TopologyGroup
 
     src = Module(name="src", top="src_top", src=["x.v"])
     dst = Module(name="dst", top="dst_top", src=["x.v"], instances=3)

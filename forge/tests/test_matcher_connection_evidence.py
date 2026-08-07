@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from topgen.config import Connection, DesignConfig, Module
-from topgen.ip.contract_loader import LoadedContract
-from topgen.ip.matcher import RejectedMatch, _derive_from_contracts, auto_match_ports
+from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.matcher import RejectedMatch, _derive_from_contracts, auto_match_ports
 
 
 def _make_contract(roles, module_name="test"):

@@ -453,7 +453,7 @@ def test_gen_top_writes_provenance_manifest_alongside_design_ir(
     from forge.core.cli.groups.build import _planned_output_artifacts
     import argparse
 
-    from forge.topgen.config import DesignConfig
+    from forge.contracts.config import DesignConfig
     cfg = DesignConfig.load_relaxed(DESIGN_YML)
     build_args = argparse.Namespace(
         design=str(DESIGN_YML), mode="verilog", output=str(output),

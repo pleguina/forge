@@ -204,7 +204,7 @@ modules:
   top: ctrl_level_rtl
   # Fixed 1-cycle latency (see algo/rtl/ctrl_level_rtl.v). A dedicated
   # module per crossing kind, not one bigger control-domain register
-  # bank -- see that file's header for why (ATG027, forge.topgen.config).
+  # bank -- see that file's header for why (ATG027, forge.contracts.config).
   latency:
     kind: fixed
     cycles: 1

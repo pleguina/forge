@@ -32,7 +32,7 @@ cd "$REPO_ROOT"
 # forge/tests/ is excluded because its fixtures intentionally use realistic
 # example data (DT/CSC/blobfish) to prove the *generic* mechanism handles
 # one concrete example correctly, not because the mechanism is hardcoded.
-SCAN_DIRS=(forge/core forge/topgen forge/hls forge/verify forge/analysis forge/integration)
+SCAN_DIRS=(forge/core forge/contracts forge/generation forge/hls forge/verify forge/analysis forge/integration)
 
 # Whole-word, case-sensitive: catches literal detector/role enum values
 # like "DT": ... or name_lower in ['dt', 'csc'], without flagging unrelated

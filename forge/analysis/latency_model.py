@@ -21,7 +21,7 @@ from typing import Optional
 # The six latency-value sources this module keeps distinguishable.
 # Kept as a frozenset (not an Enum) to match this
 # codebase's existing convention for small closed vocabularies validated
-# at construction time (e.g. forge.topgen.ip.cardinality's KNOWN_* sets).
+# at construction time (e.g. forge.contracts.cardinality's KNOWN_* sets).
 LATENCY_SOURCES = frozenset({
     "explicit_contract",        # a user-declared latency_cycles / latency: {...} block
     "hls_report",                # parsed HLS synthesis report (csynth.xml)
@@ -32,7 +32,7 @@ LATENCY_SOURCES = frozenset({
 })
 
 # The three timing kinds this module defines. Defined here (not in
-# forge.topgen.config) because both the schema-input side and the
+# forge.contracts.config) because both the schema-input side and the
 # analysis-output side (this module) need the same
 # vocabulary, and this module is the one with no upstream dependencies.
 LATENCY_KINDS = frozenset({"fixed", "bounded", "elastic"})
@@ -42,7 +42,7 @@ class LatencyModelError(ValueError):
     """Raised when a LatencyProvenance/LatencyValue is constructed with
     data outside this module's declared vocabulary — a programming error
     in a caller, not a user-input validation failure (user-facing YAML
-    validation happens in forge.topgen.validation, which raises/reports
+    validation happens in forge.generation.validation, which raises/reports
     its own structured errors well before reaching this module)."""
 
 

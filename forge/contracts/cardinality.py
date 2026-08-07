@@ -29,11 +29,11 @@ This module has two halves:
 
 * :func:`parse_cardinality` — parses and validates one role's
   ``cardinality:`` block in isolation (used by
-  ``forge.topgen.ip.contract_verifier.ContractVerifier`` for structural
+  ``forge.contracts.contract_verifier.ContractVerifier`` for structural
   validation, and by :func:`verify_cardinality` below to know what to
   check).
 * :func:`verify_cardinality` — checks resolved cardinality against the
-  connections ``forge.topgen.ip.matcher.auto_match_ports`` actually wired
+  connections ``forge.contracts.matcher.auto_match_ports`` actually wired
   (plus candidates its first-driver-wins guard rejected — see
   ``MatchReport.rejected_fanin``). This is a design-level check: it needs
   the wired design, not just one contract in isolation.

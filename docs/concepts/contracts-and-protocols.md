@@ -240,7 +240,7 @@ signal?).
 
 **Not required**: `interface`/`member` are entirely optional. A role that
 omits them keeps today's 1:1 behavior unchanged — this is additive, not a
-migration. Topology matching (`forge.topgen.ip.matcher`) still operates
+migration. Topology matching (`forge.contracts.matcher`) still operates
 per role/`wiring_kind`, independent of grouping; grouping is currently an
 IR/inspection-level representation, not a matching-time construct.
 
@@ -290,9 +290,9 @@ signals the role's `direction:` or the intended constraint is wrong.
 role's block *in isolation* (used by `ContractVerifier` for structural
 checks — bad bounds, wrong key for the role's direction). Checking whether
 the *actual wired design* satisfies a bound is a separate, design-wide
-check: `forge.topgen.ip.cardinality.verify_cardinality(design_cfg,
+check: `forge.contracts.cardinality.verify_cardinality(design_cfg,
 contracts, match_report)`, run against
-`forge.topgen.ip.matcher.MatchReport` — the same object
+`forge.contracts.matcher.MatchReport` — the same object
 `auto_match_ports` already returns. It reports:
 
 - **producers below `min`** (a required input never got connected —
@@ -334,7 +334,7 @@ ip_interface:
 
 Absence is valid and silent — no existing contract needs to declare it to
 keep working. A declared value is checked against
-`forge.topgen.ip.contract_loader.INTERFACE_CONTRACT_SCHEMA_VERSION`: same
+`forge.contracts.contract_loader.INTERFACE_CONTRACT_SCHEMA_VERSION`: same
 major with a declared minor the current FORGE build doesn't recognize is a
 warning (fields beyond that minor may be ignored); a different major is a
 contract-verification error. See

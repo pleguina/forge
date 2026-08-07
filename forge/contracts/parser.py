@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..config import Module
+    from .config import Module
 
-from ..config import resolve_declared_path
+from .config import resolve_declared_path
 
 # Import minimal HDL parsing utilities
 from forge.core.utils.hdl_parser import (
@@ -356,7 +356,7 @@ def write_summary(
 
 if __name__ == "__main__":
     import argparse
-    from ..config import DesignConfig
+    from .config import DesignConfig
 
     parser = argparse.ArgumentParser(description="Collect HLS IP component.xml info")
     parser.add_argument("config", type=Path,

@@ -14,7 +14,7 @@ design.yml connections (``from:`` / ``to:``).
 
 Usage::
 
-    from forge.topgen.ip.contract_loader import load_contracts_for_design
+    from forge.contracts.contract_loader import load_contracts_for_design
 
     # Load all contracts referenced by modules referenced in design.yml:
     contracts = load_contracts_for_design(modules_yml_path, repo_root)
@@ -173,7 +173,7 @@ class LoadedContract:
           - ``partition``      : str or None (legacy scalar coordinate label)
           - ``coordinates``    : dict or None (structured coordinates)
           - ``protocol``       : str or None (one of
-            ``forge.topgen.ip.contract_verifier.KNOWN_PROTOCOLS``; see
+            ``forge.contracts.contract_verifier.KNOWN_PROTOCOLS``; see
             docs/IP_INTERFACE_POLICY.md "Protocol semantics")
           - ``direction``      : str (``'input'`` or ``'output'`` — the
             *direction* argument this role was matched under)
@@ -188,7 +188,7 @@ class LoadedContract:
             "Interface members")
           - ``cardinality``    : dict or None (the role's raw
             ``cardinality:`` block, if declared; parse with
-            ``forge.topgen.ip.cardinality.parse_cardinality``. See
+            ``forge.contracts.cardinality.parse_cardinality``. See
             docs/IP_INTERFACE_POLICY.md "Declarative cardinality")
         """
         result = []

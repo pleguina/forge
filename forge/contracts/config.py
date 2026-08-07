@@ -336,7 +336,7 @@ class Connection:
     # Declares an approved clock/reset-domain-crossing adapter for this
     # connection: {"kind": "2ff_sync"|"async_fifo",
     # "depth": int|None}. Covers both clock- and reset-crossing approval
-    # for the connection — see forge.topgen.ip.cdc.verify_cdc, which is
+    # for the connection — see forge.contracts.cdc.verify_cdc, which is
     # what actually checks a connection against this declaration.
     cdc: Optional[Dict[str, Any]] = None
 
@@ -346,14 +346,14 @@ class InstanceAssign:
 
     Either the legacy scalar ``partition`` label or the structured
     ``coordinates`` mapping (or both, if consistent) must be set — see
-    ``forge.topgen.ip.coordinates``.
+    ``forge.contracts.coordinates``.
     """
     instances: Tuple[int, int]  # [start, end) half-open range
     partition: Optional[str] = None
     coordinates: Optional[Dict[str, Any]] = None
 
     def coordinate_key(self):
-        from .ip.coordinates import coordinate_key
+        from .coordinates import coordinate_key
         return coordinate_key({"partition": self.partition, "coordinates": self.coordinates})
 
 @dataclass
@@ -448,7 +448,7 @@ class DesignConfig:
 
     # Optional, purely descriptive domain-relationship declarations,
     # keyed by the already-resolved net name (e.g.
-    # "ap_clk" — see forge.topgen.ip.domains.resolve_domain_nets). Each
+    # "ap_clk" — see forge.contracts.domains.resolve_domain_nets). Each
     # entry: {"derived_from": str|None, "ratio": int|None, "sync": str|None}.
     # `derived_from`/`ratio` do NOT auto-approve crossings between related
     # domains — every data crossing still needs an explicit
@@ -458,7 +458,7 @@ class DesignConfig:
     # actually triggers generation of a real reset synchronizer for that
     # destination reset domain — a reset crossing is a domain property,
     # not a `connections:`-level data crossing, so it doesn't go through
-    # `cdc:` at all. See forge.topgen.ip.cdc's module docstring.
+    # `cdc:` at all. See forge.contracts.cdc's module docstring.
     clock_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     reset_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -605,7 +605,7 @@ class DesignConfig:
 
             # Validation: cdc: declares an approved clock/reset-domain-
             # crossing adapter — see
-            # forge.topgen.ip.cdc.KNOWN_CDC_KINDS (kept in sync with the
+            # forge.contracts.cdc.KNOWN_CDC_KINDS (kept in sync with the
             # literal tuple below by hand; cdc.py cannot be imported here,
             # it already imports DesignConfig from this module).
             # 'reset_sync' is deliberately NOT accepted here — a reset
@@ -687,7 +687,7 @@ class DesignConfig:
                     )
                 )
 
-        # forge.topgen.generators.
+        # forge.generation.generators.
         # structural_verilog's cdc_map (and conn_map's own per-instance-pair
         # grouping) is keyed by (src_module, dst_module) alone, not per-pin —
         # a real limitation discovered wiring a genuine multi-crossing design
@@ -713,7 +713,7 @@ class DesignConfig:
                 raise ValueError(
                     f"[ATG027] Multiple connections from {conn.from_!r} to {conn.to!r} "
                     f"declare different cdc kinds ({prior_kind!r} and {kind!r}) — "
-                    "forge.topgen.generators.structural_verilog's cdc_map is keyed by "
+                    "forge.generation.generators.structural_verilog's cdc_map is keyed by "
                     "(src_module, dst_module) only, not per-pin, so the second "
                     "declaration would silently overwrite the first for every pin "
                     "between this module pair. Route each distinct cdc kind between "
@@ -815,7 +815,7 @@ class DesignConfig:
                 # real reset synchronizer for this destination reset
                 # domain — only meaningful on reset_domains (a reset
                 # crossing is a domain property, not a data connection;
-                # see forge.topgen.ip.cdc's module docstring for why this
+                # see forge.contracts.cdc's module docstring for why this
                 # is NOT a Connection.cdc field). Requires derived_from,
                 # since you can't synchronize a reset with no declared
                 # source domain to synchronize it from.

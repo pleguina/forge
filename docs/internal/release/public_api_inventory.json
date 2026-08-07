@@ -166,10 +166,64 @@
       "summary": "Build a ``DesignGraph`` projection of *project*."
     },
     {
+      "kind": "function",
+      "module": "forge.contracts",
+      "name": "auto_match_ports",
+      "summary": "Build:"
+    },
+    {
+      "kind": "function",
+      "module": "forge.contracts",
+      "name": "collect_all",
+      "summary": "Return {module.name: component-dict | None}, prioritising component.xml;"
+    },
+    {
+      "kind": "function",
+      "module": "forge.contracts",
+      "name": "load_ip_info",
+      "summary": "Thin YAML wrapper used by several sub-packages."
+    },
+    {
+      "kind": "function",
+      "module": "forge.contracts",
+      "name": "parse_component",
+      "summary": "Parse a single HLS-exported component.xml into a dict:"
+    },
+    {
+      "kind": "function",
+      "module": "forge.contracts",
+      "name": "unpack_ip_archives",
+      "summary": "Extract IP archives from source directory into IP root."
+    },
+    {
+      "kind": "function",
+      "module": "forge.contracts",
+      "name": "write_summary",
+      "summary": "Write the summary dict out in either JSON or YAML form."
+    },
+    {
       "kind": "value",
       "module": "forge.core.cli",
       "name": "main",
       "summary": "forge CLI entry point."
+    },
+    {
+      "kind": "function",
+      "module": "forge.generation.generators",
+      "name": "write_bd_tcl",
+      "summary": ""
+    },
+    {
+      "kind": "function",
+      "module": "forge.generation.generators",
+      "name": "write_structural_verilog",
+      "summary": "Generate a structural Verilog top that wires algorithm modules together."
+    },
+    {
+      "kind": "function",
+      "module": "forge.generation.generators",
+      "name": "write_structural_vhdl",
+      "summary": "Generate a structural RTL top that wires algorithm modules together."
     },
     {
       "kind": "class",

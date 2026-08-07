@@ -1,5 +1,5 @@
 """
-Tests for forge.topgen.config.ModuleTiming — optional per-module latency
+Tests for forge.contracts.config.ModuleTiming — optional per-module latency
 metadata.
 """
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from topgen.config import DesignConfig, LatencyDeclaration, ModuleTiming, _pop_timing
-from topgen.validation import validate_registry
+from forge.contracts.config import DesignConfig, LatencyDeclaration, ModuleTiming, _pop_timing
+from forge.generation.validation import validate_registry
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -371,7 +371,7 @@ def test_resolved_module_definition_carries_latency_declaration(tmp_path):
     project = build_project_ir(design)
     mod = project.design.modules[0]
     # Field-by-field, not a full dataclass == : forge.ir.build imports
-    # LatencyDeclaration via the "forge.topgen.config" module path while
+    # LatencyDeclaration via the "forge.contracts.config" module path while
     # this test file uses the short "topgen.config" path — same source
     # file, but two distinct sys.modules entries/classes, so a direct
     # dataclass equality would spuriously fail despite identical data.

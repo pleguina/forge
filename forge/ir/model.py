@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional
 # DesignConfig/Module — reused directly here rather
 # than mirrored, matching how ResolvedModuleDefinition already reuses
 # Module.timing's flat fields verbatim.
-from ..topgen.config import LatencyDeclaration
+from ..contracts.config import LatencyDeclaration
 
 IR_SCHEMA_VERSION = "0.2.0"
 
@@ -103,7 +103,7 @@ class ResolvedLogicalInterface:
     # string "many"), taken from the group's `member: data` role — or
     # None when no `cardinality:` block is declared. Descriptive only;
     # enforcement happens design-wide in
-    # ``forge.topgen.ip.cardinality.verify_cardinality``, not here.
+    # ``forge.contracts.cardinality.verify_cardinality``, not here.
     cardinality: Optional[Dict[str, Any]] = None
     members: List[ResolvedInterfaceMember] = field(default_factory=list)
 
@@ -113,7 +113,7 @@ class ResolvedModuleDefinition:
     """A module definition (shared across all its instances).
 
     ``latency_cycles``/``latency_hint``/``is_variable_latency`` are
-    populated directly from ``forge.topgen.config.Module.timing`` (no
+    populated directly from ``forge.contracts.config.Module.timing`` (no
     re-parsing). This intentionally does
     **not** include the ``hls_report`` latency-source tier
     (``forge.analysis.latency_static``'s external HLS-synthesis-report
@@ -123,10 +123,10 @@ class ResolvedModuleDefinition:
     ``latency`` is the structured
     ``kind: fixed|bounded|elastic`` declaration, when the module used the
     new ``latency:`` YAML syntax — a
-    ``forge.topgen.config.LatencyDeclaration``, additive alongside the
+    ``forge.contracts.config.LatencyDeclaration``, additive alongside the
     flat fields above (which stay populated exactly as before; the two
     syntaxes are mutually exclusive per module, enforced at load time in
-    ``topgen.config._pop_timing``, not here).
+    ``contracts.config._pop_timing``, not here).
     """
     name: str
     kind: str  # 'hls' | 'rtl'
@@ -142,7 +142,7 @@ class ResolvedModuleDefinition:
     latency: Optional["LatencyDeclaration"] = None
     # The canonical registry name this module resolves to (set when a
     # design.yml entry uses `ref: <canonical>`; None for inline modules
-    # that never declared one) — mirrors forge.topgen.config.Module.ip_info_key.
+    # that never declared one) — mirrors forge.contracts.config.Module.ip_info_key.
     ip_info_key: Optional[str] = None
 
 
@@ -220,7 +220,7 @@ class ResolvedTransformation:
       generation runs), present only in ``gen-top``'s emitted
       ``design.ir.json`` — same asymmetry as ``ResolvedTopLevelPort``.
     - ``gather_scatter`` — matching-evidence expansion:
-      ``forge.topgen.ip.topology_deriver``'s scatter/gather classification
+      ``forge.contracts.topology_deriver``'s scatter/gather classification
       (previously discarded before reaching ``MatchReport``) is now
       surfaced via ``MatchReport.gather_scatter_evidence`` and synthesized
       here as a real transformation, ``tag`` carrying ``"scatter"`` or
@@ -247,7 +247,7 @@ class ResolvedTransformation:
 @dataclass
 class RejectedCandidate:
     """A losing producer for a connection's consumer pin, sourced read-only
-    from ``forge.topgen.ip.matcher.MatchReport.rejected_fanin`` (never a
+    from ``forge.contracts.matcher.MatchReport.rejected_fanin`` (never a
     second source of truth for it)."""
     producer: ResolvedEndpoint
     reason: str = "first-driver-wins: another producer connected first"
@@ -257,7 +257,7 @@ class RejectedCandidate:
 class CardinalityCheckResult:
     """The resolved cardinality bound an endpoint's interface declared,
     checked against how many connections actually exist. Descriptive only
-    — ``forge.topgen.ip.cardinality.verify_cardinality`` is what actually
+    — ``forge.contracts.cardinality.verify_cardinality`` is what actually
     enforces this design-wide under ``--strict``."""
     bound: Dict[str, Any]  # {"min": ..., "max": ...}, same shape as ResolvedLogicalInterface.cardinality
     actual_count: int
@@ -305,7 +305,7 @@ class ResolvedConnection:
 
     ``wiring_method`` (one of ``contract_wiring``/``port_map_ranges``/
     ``port_map``/``auto_match``/``topology_group``/``heuristic``) is
-    populated from ``forge.topgen.ip.matcher.MatchReport.connection_evidence``.
+    populated from ``forge.contracts.matcher.MatchReport.connection_evidence``.
 
     ``matching_evidence`` (``MatchingEvidence``) is
     populated in ``forge/ir/build.py`` and carries coordinates/protocol/
@@ -325,7 +325,7 @@ class ResolvedConnection:
     descriptive only — computed from the two endpoints' resolved domains
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
-    ``forge.topgen.ip.cdc.verify_cdc`` is what actually rejects an
+    ``forge.contracts.cdc.verify_cdc`` is what actually rejects an
     undeclared crossing under ``--strict``.
     """
     id: str
@@ -352,11 +352,11 @@ class ResolvedClockDomain:
 
     ``derived_from``/``ratio`` are purely descriptive,
     populated from ``design.yml``'s optional ``clock_domains:`` block
-    (``forge.topgen.config.DesignConfig.clock_domains``) when the design
+    (``forge.contracts.config.DesignConfig.clock_domains``) when the design
     documents a relationship to another domain. They do **not** auto-
     approve a crossing between related domains — every crossing still
     needs an explicit per-connection ``cdc:`` declaration, checked by
-    ``forge.topgen.ip.cdc.verify_cdc``.
+    ``forge.contracts.cdc.verify_cdc``.
     """
     name: str = "default"
     instances: List[str] = field(default_factory=list)
@@ -372,7 +372,7 @@ class ResolvedResetDomain:
     (currently only ``"reset_sync"`` is supported) — unlike
     ``derived_from``/``ratio``, this field DOES trigger real RTL
     generation: a ``cdc_reset_sync`` instance is emitted for this domain
-    by the structural generator. See ``forge.topgen.ip.cdc``'s module
+    by the structural generator. See ``forge.contracts.cdc``'s module
     docstring for why reset synchronization is a domain property, not a
     ``Connection.cdc`` declaration.
     """

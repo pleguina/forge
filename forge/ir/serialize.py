@@ -79,9 +79,9 @@ def _canonical_design_json(project: ResolvedProject) -> str:
       entirely rather than rewritten, since the design's own file identity
       isn't itself part of "what the design says".
     - Each module's ``contract_path`` — the resolved absolute path to its
-      interface-contract YAML (``forge/topgen/ip/contract_loader.py``).
+      interface-contract YAML (``forge/contracts/contract_loader.py``).
     - Each module's ``source_files`` — resolved to absolute paths by
-      ``forge/topgen/config.py``'s registry loader (``_load_registry``)
+      ``forge/contracts/config.py``'s registry loader (``_load_registry``)
       for any module that inherits identity fields from a ``modules.yml``
       registry via ``ref:``, which is the common case for both reference
       plugins.

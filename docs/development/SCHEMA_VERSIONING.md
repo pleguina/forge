@@ -9,9 +9,9 @@ policy for FORGE's schemas.
 
 | Schema | File(s) | Version field | Current version | Supported-version constant |
 |---|---|---|---|---|
-| Design topology | `design.yml` | `schema_version` (top level, optional) | `1.0` | `forge.topgen.config.DESIGN_SCHEMA_VERSION` |
-| Module registry | `modules.yml` | `registry_version` (top level, optional — pre-existing field name, kept as-is) | `1.0`-equivalent (`'1'` accepted as legacy shorthand) | `forge.topgen.config.MODULE_REGISTRY_SCHEMA_VERSION` |
-| Interface contract | `*.interface.yaml` | `schema_version` (under `ip_interface:`, optional) | `1.0` | `forge.topgen.ip.contract_loader.INTERFACE_CONTRACT_SCHEMA_VERSION` |
+| Design topology | `design.yml` | `schema_version` (top level, optional) | `1.0` | `forge.contracts.config.DESIGN_SCHEMA_VERSION` |
+| Module registry | `modules.yml` | `registry_version` (top level, optional — pre-existing field name, kept as-is) | `1.0`-equivalent (`'1'` accepted as legacy shorthand) | `forge.contracts.config.MODULE_REGISTRY_SCHEMA_VERSION` |
+| Interface contract | `*.interface.yaml` | `schema_version` (under `ip_interface:`, optional) | `1.0` | `forge.contracts.contract_loader.INTERFACE_CONTRACT_SCHEMA_VERSION` |
 | Verification contract | `design.verification.yml` | `schema_version` (top level, optional) | `1.0` | `forge.verification.design_contract.VERIFY_CONTRACT_SCHEMA_VERSION` |
 | Canonical IR | generated `design.ir.json` | `schema_version` (always present — system-generated) | `0.1.0` | `forge.ir.model.IR_SCHEMA_VERSION` |
 | Provenance manifest | generated provenance JSON | `schema_version` (always present — system-generated) | `0.1.0` | `forge.ir.provenance.PROVENANCE_SCHEMA_VERSION` |

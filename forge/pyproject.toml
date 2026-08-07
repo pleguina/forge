@@ -85,6 +85,8 @@ packages = [
     "forge.integration",
     "forge.ir",
     "forge.topgen", "forge.topgen.generators", "forge.topgen.ip",
+    "forge.contracts",
+    "forge.generation", "forge.generation.generators",
     "forge.hls",
     "forge.verify",
     "forge.verification",
@@ -110,7 +112,7 @@ packages = [
 
 [tool.setuptools.package-data]
 forge = [
-    "py.typed", "topgen/ip/*.yaml", "hls/templates/*.tcl.j2",
+    "py.typed", "contracts/*.yaml", "hls/templates/*.tcl.j2",
     "analysis/design_explorer/vendor/*",
 ]
 

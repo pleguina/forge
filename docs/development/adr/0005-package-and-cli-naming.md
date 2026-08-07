@@ -2,17 +2,24 @@
 
 ## Status
 
-Accepted. `forge/framework/` → `forge/integration/`,
-`forge/verify/` → `forge/verification/`, and `forge/analyze/` →
+Accepted and **fully executed**: `forge/framework/` → `forge/integration/`,
+`forge/verify/` → `forge/verification/`, `forge/analyze/` →
 `forge/analysis/` (both with a permanent compatibility shim at the old
-path) have been executed under this decision. The `forge/topgen` split
-is **not yet done** — see "Deferred renames" below. One correction found
-while executing the `verify` rename: `forge.analyze` turned out to have
-the **same** plugin-facing dependency `forge.verify` did —
+path), and `forge/topgen/` split into `forge/contracts/` +
+`forge/generation/` (deprecation-window shim). One correction found while
+executing the `verify` rename: `forge.analyze` turned out to have the
+**same** plugin-facing dependency `forge.verify` did —
 `plugins/vision_pipeline_demo/forge/verify/tools/bootstrap.py` itself
 imports `forge.analyze.dashboards.attachments` directly — so it got the
 same permanent-shim treatment as `verify`, not a lighter one (an earlier
-version of this ADR claimed otherwise; that was wrong).
+version of this ADR claimed otherwise; that was wrong). A second
+correction found while executing the `topgen` split: `config.py`
+(`DesignConfig`/`Module`/`Connection`) turned out to be depended on by
+`forge/contracts/` itself (6 of its files need `DesignConfig`), not just
+by the generators — it joined `forge/contracts/` rather than
+`forge/generation/` as originally sketched below, keeping the
+dependency direction strictly one-way (`generation` → `contracts`,
+never the reverse).
 
 ## Context
 
@@ -65,27 +72,33 @@ subsystem-specific code is allowed under `core/` because command routing
 *is* the cross-cutting concern, and every subsystem needs exactly one
 place to register a command group. Nothing else gets this exception.
 
-## Target package tree
+## Package tree (as executed)
 
 ```
 forge/
-  core/            shared mechanisms only (see boundary rule above)
-  ir/               canonical resolved-design IR — keep, already clean
-  contracts/        cardinality, CDC, contract loading/verification,
-                    coordinates, domains, matching, topology derivation
-                    (currently forge/topgen/ip/*)
-  generation/        config, validation, migration helpers, and the
-                    structural Verilog/VHDL/Block-Design generators
-                    (currently forge/topgen/{config,validation,migrate}.py
-                    + forge/topgen/generators/*)
-  integration/       external framework/ABI import, detector I/O
-                    resolution, payload generation (was forge/framework/)
-  verification/      backends, datasets, golden-model runner, flows,
-                    results, stimulus (currently forge/verify/)
-  analysis/          latency, throughput, HLS reports, design explorer,
-                    dashboards, plots (currently forge/analyze/)
-  hls/              keep
-  docsgen/          keep
+  core/          shared mechanisms only (see boundary rule above)
+  ir/            canonical resolved-design IR
+  contracts/     config (DesignConfig/Module/Connection schema),
+                 cardinality, CDC, contract loading/verification,
+                 coordinates, domains, matching, topology derivation
+  generation/    validation, migration helpers, and the structural
+                 Verilog/VHDL/Block-Design generators — depends on
+                 contracts/, never the reverse
+  integration/   external framework/ABI import, detector I/O
+                 resolution, payload generation
+  verification/  backends, datasets, golden-model runner, flows,
+                 results, stimulus
+  analysis/      latency, throughput, HLS reports, design explorer,
+                 dashboards, plots
+  hls/           unchanged
+  docsgen/       unchanged
+
+  # deprecation-window compat shim only, no real logic:
+  topgen/{generators,ip}/   DeprecationWarning, removable after one
+                            minor release once the public-API freeze
+                            no longer needs them
+  # permanent compat shims, no real logic, never removed:
+  verify/, analyze/, framework/ (-> integration/ handled separately)
 ```
 
 ## `forge/verify` → `forge/verification` (done)
@@ -118,20 +131,30 @@ tool files use (`forge.analyze.dashboards.attachments.register_report_attachment
 `forge.analyze.hls_reports.extractor.collect_reports`,
 `forge.analyze.throughput_static.model.build_static_throughput_analysis`).
 
-## Deferred renames
+## `forge/topgen` → `forge/contracts` + `forge/generation` (done)
 
-The `forge/topgen` split into `forge/contracts` + `forge/generation` is
-**not yet executed**. `forge.topgen.generators` and `forge.topgen.ip` are
-both part of the frozen public Python API
-(`docs/reference/public-python-api.md`) today. Splitting them requires a
-shim carrying a `DeprecationWarning` for at least one minor release, per
-this project's own compatibility policy, and the public-API freeze must
-be regenerated *after* the shim lands, not touched mid-rename. It should
-be its own reviewed unit: do the rename, add the compat shim, regenerate
-the public-API freeze, and prove it with the full test suite **plus** a
-clean-venv wheel install **plus** a real smoke test (`forge topgen
-gen-top --dry-run`, `forge init`'s full chain) — the same recipe `verify`
-and `analyze` just went through.
+A split, not a 1:1 rename. `forge.topgen.generators` and `forge.topgen.ip`
+were both part of the frozen public Python API
+(`docs/reference/public-python-api.md`); their shims carry a real
+`DeprecationWarning` (via `from warnings import warn as _warn; _warn(...)`
+— a bare-name import, not `warnings.warn(...)`, to avoid colliding with
+`forge.docsgen.diagnostics_registry`'s AST scanner, which treats *any*
+`.warn(...)` attribute call as a diagnostic-code emission site) for at
+least one minor release, per this project's compatibility policy, unlike
+`verify`/`analyze`'s permanent, silent shims. No plugin imported
+`forge.topgen.*` submodules directly (confirmed by grep), so only
+`forge/__init__.py`'s 5 top-level re-exports and internal callers needed
+fixing — no plugin-facing smoke test was required here, unlike
+`verify`/`analyze`. `forge/ir/build.py` and `forge/ir/model.py` (not
+moving) had relative imports reaching into the old `topgen/`, corrected
+to `forge/contracts`/`forge/generation` — the highest-value correctness
+check, since `forge/ir/` is this repo's most heavily-tested subsystem.
+Also found and fixed one lazy, function-body-level relative import
+(`forge/contracts/config.py`'s `coordinate_key()` did `from .ip.coordinates
+import ...`, missed by the initial line-anchored sweep since it wasn't at
+module level) and 11 pre-existing bare `from topgen.X import Y` test
+imports (same sys.path-quirk bug class found and fixed during the
+`analyze` rename).
 
 ## Consequences
 
@@ -140,7 +163,7 @@ and `analyze` just went through.
 - CLI command names (`forge verify`, `forge analyze`, `forge framework`)
   are stable independent of the packages backing them; a future package
   rename is not, by itself, a CLI-breaking change.
-- `forge/topgen/ip/` should not accumulate more foundational
-  contract/CDC/matching semantics while it's still named after top
-  generation — new work in that area is a signal the split in this ADR
-  is overdue, not a reason to keep deferring it.
+- `forge/topgen/generators` and `forge/topgen/ip` should be removed
+  (not just deprecated) once the next minor version ships, per the
+  compatibility policy — track this as a real follow-up, not left to
+  linger indefinitely the way a "permanent" shim would.

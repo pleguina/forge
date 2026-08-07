@@ -1,6 +1,6 @@
 """
 Project the canonical IR back into the legacy ``conn_map``/``global_nets``
-shapes generators consume (``forge.topgen.ip.matcher.auto_match_ports``'s
+shapes generators consume (``forge.contracts.matcher.auto_match_ports``'s
 return shape) — the inverse of what ``forge.ir.build.assemble_project_ir``
 builds them into.
 
@@ -30,7 +30,7 @@ GlobalNets = Dict[str, List[Tuple[str, str]]]
 def project_to_conn_map(project: ResolvedProject) -> Tuple[ConnMap, GlobalNets]:
     """Reconstruct ``(conn_map, global_nets)`` from *project*'s connections,
     in their original construction order (``emission_order``), exactly as
-    ``forge.topgen.ip.matcher.auto_match_ports`` would have returned them.
+    ``forge.contracts.matcher.auto_match_ports`` would have returned them.
     """
     conn_map: ConnMap = {}
     global_nets: GlobalNets = {}

@@ -12,7 +12,7 @@ This module ensures design.yml is correct before generation:
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Tuple
 from dataclasses import dataclass
-from .config import DESIGN_SCHEMA_VERSION, MODULE_REGISTRY_SCHEMA_VERSION, DesignConfig, Module
+from ..contracts.config import DESIGN_SCHEMA_VERSION, MODULE_REGISTRY_SCHEMA_VERSION, DesignConfig, Module
 from forge.core.schema_version import check_schema_version
 
 

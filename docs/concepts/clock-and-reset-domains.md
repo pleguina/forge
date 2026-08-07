@@ -25,7 +25,7 @@ authoritative wording this page mirrors.
 
 Also unchanged this release: every generated `algo_top` still exposes
 exactly one physical top-level `ap_clk`/`ap_rst` pair
-(`forge.topgen.generators.structural_verilog`/`structural_vhdl`). A
+(`forge.generation.generators.structural_verilog`/`structural_vhdl`). A
 module's own resolved clock/reset net (see Layer 2) may have a different
 *name*, but it is always aliased back onto that single literal top-level
 port — no design in this repo has ever declared a real second physical
@@ -36,8 +36,8 @@ deferred" below.
 
 Separately from the per-module role model above, FORGE has a real,
 working clock-domain-crossing **checker** for connections *between*
-modules: `forge.topgen.ip.cdc.verify_cdc`. It resolves which raw net
-drives each module's clock and reset (`forge.topgen.ip.domains.resolve_domain_nets`,
+modules: `forge.contracts.cdc.verify_cdc`. It resolves which raw net
+drives each module's clock and reset (`forge.contracts.domains.resolve_domain_nets`,
 shared with the canonical IR so the two never disagree), and flags any
 wired connection between two modules whose resolved clock (or reset) nets
 differ and which has no matching `cdc:` declaration on its `design.yml`
@@ -80,7 +80,7 @@ reset-crossing for its connection.
 Every kind is a data crossing declared on a `connections:` entry, wired
 into `write_structural_verilog`'s generation exactly like
 `register_stages`/`delay_cycles`/`boundary` already are (see
-`forge.topgen.ip.cdc`'s own module docstring). Both the source and
+`forge.contracts.cdc`'s own module docstring). Both the source and
 destination side are wired continuously — FORGE's structural `port_map`
 wiring has no generic valid/ready concept — so `mailbox_transfer` and
 `async_fifo` provide real buffering/synchronization but not true
@@ -124,7 +124,7 @@ exactly what they always were: purely descriptive (`derived_from`/
   but no plugin in this repo has yet declared a genuinely second clock
   domain end to end, through real HLS synthesis and `xsim`. That's
   release-plan slice 10.4's job, not this one.
-- **VHDL generation.** `forge.topgen.generators.structural_vhdl` has no
+- **VHDL generation.** `forge.generation.generators.structural_vhdl` has no
   CDC support at all (not even for `level_sync`) — no real plugin
   exercises VHDL mode today, and adding it is a separate, unscoped
   project, not bundled into this CDC work.

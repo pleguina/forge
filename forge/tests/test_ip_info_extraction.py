@@ -22,7 +22,7 @@ _TOPGEN_ROOT = Path(__file__).resolve().parents[1]
 if str(_TOPGEN_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOPGEN_ROOT))
 
-from topgen.ip.parser import (
+from forge.contracts.parser import (
     _parse_vhdl_entity,
     _normalize_ports_from_map,
     parse_component,

@@ -23,7 +23,7 @@
 // record was dequeued, and holds steady (repeating the last real value,
 // toggle included) on every cycle the FIFO has nothing new. This needed
 // no core-framework change (no new port-wiring convention in
-// forge.topgen.generators.structural_verilog) -- the same "continuously
+// forge.generation.generators.structural_verilog) -- the same "continuously
 // driven, self-describing payload" model every other CDC kind in this
 // repo already uses, just carrying one extra bit (this toggle-in-payload
 // convention is documented project-wide in

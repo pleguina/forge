@@ -22,7 +22,7 @@ from ..core.utils.content_hash import hash_bytes
 
 PLAN_SCHEMA_VERSION = "0.1.0"
 
-# ResolvedConnection.wiring_method vocabulary (forge/topgen/ip/matcher.py's
+# ResolvedConnection.wiring_method vocabulary (forge/contracts/matcher.py's
 # MatchReport.wiring_method_counts keys) split into "inferred" (the matcher
 # guessed) vs "explicit" (the design.yml/contract said so outright).
 _INFERRED_WIRING_METHODS = frozenset({"auto_match", "topology_group"})

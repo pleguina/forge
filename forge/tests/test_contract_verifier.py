@@ -20,7 +20,7 @@ _TOPGEN_ROOT = Path(__file__).resolve().parents[1]
 if str(_TOPGEN_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOPGEN_ROOT))
 
-from topgen.ip.contract_verifier import ContractVerifier, VerifyResult
+from forge.contracts.contract_verifier import ContractVerifier, VerifyResult
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -683,9 +683,9 @@ class TestDeclarativeCardinality:
 # ─────────────────────────────────────────────────────────────────────────────
 
 from unittest.mock import MagicMock
-from topgen.config import TopologyGroup, InstanceAssign, Module
-from topgen.ip.contract_loader import LoadedContract
-from topgen.ip.contract_verifier import verify_topology_groups
+from forge.contracts.config import TopologyGroup, InstanceAssign, Module
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.contract_verifier import verify_topology_groups
 
 
 def _mock_design(modules, topology_groups):

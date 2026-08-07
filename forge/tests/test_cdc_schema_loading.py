@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.topgen.config import DesignConfig
+from forge.contracts.config import DesignConfig
 
 _BASE = """\
 part: xcvu13p
@@ -130,7 +130,7 @@ class TestCdcConnectionField:
 
     def test_reset_sync_is_not_a_connection_kind(self, tmp_path):
         # reset_sync is a reset-domain property (reset_domains.*.sync),
-        # not a Connection.cdc kind — see forge.topgen.ip.cdc's module
+        # not a Connection.cdc kind — see forge.contracts.cdc's module
         # docstring for why.
         design = _write(tmp_path, (
             "connections:\n"

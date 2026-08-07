@@ -7,9 +7,9 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 
 import yaml  # To read system.yml
 
-from ..config import DesignConfig, Module, resolve_declared_path
-from ..ip.domains import resolve_domain_nets
-from ..ip.matcher import load_ip_info, auto_match_ports
+from ...contracts.config import DesignConfig, Module, resolve_declared_path
+from ...contracts.domains import resolve_domain_nets
+from ...contracts.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
 from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
 from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
@@ -68,7 +68,7 @@ def _inst(mod: Module, idx: int) -> str:
 
 def _domain_to_top_level_net(domain_name: str, *, is_clock: bool) -> str:
     """Translate a resolved clock/reset domain identity (the raw port name
-    — see forge.topgen.ip.domains.resolve_domain_nets) into the actual
+    — see forge.contracts.domains.resolve_domain_nets) into the actual
     top-level net name this generator wires it to.
 
     This generator's own clock/reset auto-map (the per-instance port-
@@ -487,8 +487,8 @@ def write_structural_verilog(
     when a connection declares ``cdc: {kind: 2ff_sync}`` — it's what lets
     this function resolve the *destination* instance's own clock/reset net
     (which may differ from the design's default ``ap_clk``/``ap_rst`` in a
-    multi-domain design) via ``forge.topgen.ip.domains.resolve_domain_nets``,
-    the same resolver the IR and ``forge.topgen.ip.cdc.verify_cdc`` use.
+    multi-domain design) via ``forge.contracts.domains.resolve_domain_nets``,
+    the same resolver the IR and ``forge.contracts.cdc.verify_cdc`` use.
     ``cdc: {kind: async_fifo}`` emits a real ``cdc_async_fifo`` instance
     (depth, occupancy, and write-enable-gating handled below), not a
     direct wire-through.
@@ -540,7 +540,7 @@ def write_structural_verilog(
             "reset_sync entry is present) but write_structural_verilog was not "
             "given a match_report — pass the MatchReport auto_match_ports "
             "returned so the destination instance's real clock/reset net can be "
-            "resolved (forge.topgen.ip.domains.resolve_domain_nets)."
+            "resolved (forge.contracts.domains.resolve_domain_nets)."
         )
 
     # ---------- helpers (local to this function) --------------------------
@@ -1233,7 +1233,7 @@ def write_structural_verilog(
     # connection, clocked/reset by each side's own resolved clock/reset net
     # (which may differ from ap_clk/ap_rst in a multi-domain design —
     # though no plugin in this repo declares a real second domain yet, see
-    # forge.topgen.ip.domains; the physical top-level port is still always
+    # forge.contracts.domains; the physical top-level port is still always
     # a single ap_clk/ap_rst pair this release).
     if cdc_map:
         emit("  // CDC synchronizers for declared clock-domain-crossing connections")
@@ -1313,7 +1313,7 @@ def write_structural_verilog(
                 elif kind == "async_fifo":
                     depth = cdc.get("depth")
                     # $clog2(depth) — depth is validated as a positive power of
-                    # two at design.yml load time (forge.topgen.config).
+                    # two at design.yml load time (forge.contracts.config).
                     addr_width = (depth - 1).bit_length() if depth else 0
                     full_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_full")
                     empty_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}_empty")
@@ -1366,7 +1366,7 @@ def write_structural_verilog(
     # ====== Reset Synchronizer Instances ====================================
     # ====== reset_domains.<name>.sync: reset_sync ===========================
     # A reset crossing is a property of a destination reset *domain*, not
-    # a connections:-level data crossing (see forge.topgen.ip.cdc's module
+    # a connections:-level data crossing (see forge.contracts.cdc's module
     # docstring), so this is driven directly off cfg.reset_domains rather
     # than cdc_map. NOTE: the synchronized reset net produced here is not
     # yet threaded into any instance's actual reset pin binding — every

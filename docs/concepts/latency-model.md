@@ -15,7 +15,7 @@ how it's resolved and consumed.
 
 A `modules.yml` registry entry (or a design-level module entry, which
 overrides the registry's value) may declare optional timing metadata,
-modeled as `forge.topgen.config.ModuleTiming` and carried on
+modeled as `forge.contracts.config.ModuleTiming` and carried on
 `Module.timing`:
 
 ```yaml

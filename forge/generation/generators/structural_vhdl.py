@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 
 import yaml  # NEW: to read system.yml
 
-from ..config import DesignConfig, Module, resolve_declared_path
-from ..ip.matcher import load_ip_info, auto_match_ports
+from ...contracts.config import DesignConfig, Module, resolve_declared_path
+from ...contracts.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
 from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
 from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name

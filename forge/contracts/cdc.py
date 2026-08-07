@@ -26,19 +26,19 @@ see the top-level ``reset_domains:`` block instead:
 
 ``verify_cdc`` checks every wired connection between two modules resolved
 to *different*, both-known clock (or reset) domains
-(``forge.topgen.ip.domains.resolve_domain_nets``) and flags any that has
+(``forge.contracts.domains.resolve_domain_nets``) and flags any that has
 no matching ``cdc:`` declaration on its originating ``Connection`` — an
 undeclared cross-domain wire. Only ``connections:`` entries are checked
 (not ``topology_groups:``), consistent with ``register_stages``/
 ``delay_cycles``/``boundary`` already being ``Connection``-only fields,
 not a new asymmetry. It does not itself validate ``reset_domains.*.sync``
 (that's schema-level work done at ``DesignConfig.load`` time in
-``forge.topgen.config``) — reset *synchronization* is a docs/generation
+``forge.contracts.config``) — reset *synchronization* is a docs/generation
 concern, not a structural crossing to flag as undeclared.
 
 Following the exact existing convention of
-``forge.topgen.ip.cardinality.verify_cardinality``/
-``forge.topgen.ip.contract_verifier.verify_topology_groups``: this
+``forge.contracts.cardinality.verify_cardinality``/
+``forge.contracts.contract_verifier.verify_topology_groups``: this
 function only ever produces ``"error"``-severity issues (no warning
 tier). It is called both from ``gen-top --strict`` (as an error) and
 from ``forge topgen validate`` (surfaced as
@@ -55,7 +55,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
-from ..config import DesignConfig
+from .config import DesignConfig
 from .contract_loader import LoadedContract
 from .domains import resolve_domain_nets
 
@@ -193,7 +193,7 @@ def report_all_crossings(
     A same-domain pair with no ``cdc:`` declared is not a crossing at
     all and is skipped entirely — there is nothing to verify.
 
-    Returns plain dicts, not a ``forge.verification`` dataclass — ``forge.topgen``
+    Returns plain dicts, not a ``forge.verification`` dataclass — ``forge.contracts``
     and ``forge.verification`` must never cross-import each other
     (``ci/import_direction_check.sh`` enforces this; they're independent
     subsystems composed by the CLI layer, not by each other). A caller in

@@ -1,6 +1,6 @@
 """
 Regression test for a crash found while building the canonical IR
-(forge/ir/build.py): forge.topgen.ip.matcher.auto_match_ports's
+(forge/ir/build.py): forge.contracts.matcher.auto_match_ports's
 heuristic global-net (clock/reset/control-signal) scanner assumed every
 module resolved to a non-None ip_info entry and crashed with a bare
 ``TypeError: 'NoneType' object is not subscriptable`` whenever a module had
@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from topgen.config import DesignConfig
-from topgen.ip.matcher import auto_match_ports
+from forge.contracts.config import DesignConfig
+from forge.contracts.matcher import auto_match_ports
 
 
 def _write_single_module_design(tmp_path: Path, *, name: str = "orphan") -> Path:
@@ -40,7 +40,7 @@ def _write_single_module_design(tmp_path: Path, *, name: str = "orphan") -> Path
 def test_matcher_handles_unresolved_module_without_crashing(tmp_path):
     cfg = DesignConfig.load_relaxed(_write_single_module_design(tmp_path))
 
-    # ip_info entry is None — the same shape forge.topgen.ip.parser.collect_all
+    # ip_info entry is None — the same shape forge.contracts.parser.collect_all
     # produces for a module it couldn't find a component.xml or HDL source for.
     conn_map, global_nets, report = auto_match_ports(cfg, {"orphan": None})
 

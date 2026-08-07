@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """``forge.cdc_verification_result.v1`` — a structured, versioned wrapper
-around :func:`forge.topgen.ip.cdc.report_all_crossings`'s structural
+around :func:`forge.contracts.cdc.report_all_crossings`'s structural
 clock/reset-domain-crossing check.
 
 Scope, resolved explicitly (the preflight text alone under-specifies
@@ -84,7 +84,7 @@ def build_cdc_verification_result(
 ) -> CdcVerificationResult:
     """Build the ``forge.cdc_verification_result.v1`` artifact from
     *crossings* — the plain-dict list
-    :func:`forge.topgen.ip.cdc.report_all_crossings` returns.
+    :func:`forge.contracts.cdc.report_all_crossings` returns.
 
     Takes already-computed plain dicts, not a live ``design_cfg``/
     ``match_report``/etc., and does not import ``forge.topgen`` itself —

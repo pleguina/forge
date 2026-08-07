@@ -1,5 +1,5 @@
 """Tests for DesignConfig.load's ATG027 check:
-forge.topgen.generators.structural_verilog's cdc_map is
+forge.generation.generators.structural_verilog's cdc_map is
 keyed by (src_module, dst_module) alone, not per-pin — declaring two
 `cdc:` connections between the same module pair with *different* kinds
 used to merge silently (the second declaration's kind was applied to
@@ -16,7 +16,7 @@ import textwrap
 
 import pytest
 
-from forge.topgen.config import DesignConfig
+from forge.contracts.config import DesignConfig
 
 
 _YAML_HEADER = """\

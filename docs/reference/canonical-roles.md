@@ -4,7 +4,7 @@
 
 Generated directly from `forge/topgen/ip/canonical_roles.yaml`
 (loaded via
-`forge.topgen.ip.contract_verifier.load_canonical_role_vocab()`) —
+`forge.contracts.contract_verifier.load_canonical_role_vocab()`) —
 the canonical *role* vocabulary specifically, distinct from the
 [Protocols](protocols.md) and [Interface Members](interface-members.md)
 vocabularies, which are separate, independently-validated sources.

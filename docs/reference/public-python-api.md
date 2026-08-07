@@ -35,7 +35,16 @@ path.
 | `forge.analysis.design_explorer` | `ObjectReference` | class | A reference into one of the real IR object kinds — never |
 | `forge.analysis.design_explorer` | `ProjectionDiagnostic` | class | A projection-layer diagnostic reference — corresponds to |
 | `forge.analysis.design_explorer` | `build_design_graph` | function | Build a ``DesignGraph`` projection of *project*. |
+| `forge.contracts` | `auto_match_ports` | function | Build: |
+| `forge.contracts` | `collect_all` | function | Return {module.name: component-dict \| None}, prioritising component.xml; |
+| `forge.contracts` | `load_ip_info` | function | Thin YAML wrapper used by several sub-packages. |
+| `forge.contracts` | `parse_component` | function | Parse a single HLS-exported component.xml into a dict: |
+| `forge.contracts` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
+| `forge.contracts` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
 | `forge.core.cli` | `main` | value | forge CLI entry point. |
+| `forge.generation.generators` | `write_bd_tcl` | function |  |
+| `forge.generation.generators` | `write_structural_verilog` | function | Generate a structural Verilog top that wires algorithm modules together. |
+| `forge.generation.generators` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
 | `forge.ir` | `DiagnosticReference` | class | A diagnostic attached to a specific IR object, so tooling (CLI, |
 | `forge.ir` | `IR_SCHEMA_VERSION` | value | str(object='') -> str |
 | `forge.ir` | `PROVENANCE_SCHEMA_VERSION` | value | str(object='') -> str |

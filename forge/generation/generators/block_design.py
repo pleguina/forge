@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
-from ..config import DesignConfig, Module, resolve_declared_path
+from ...contracts.config import DesignConfig, Module, resolve_declared_path
 
 NL = "\n"
 
@@ -370,7 +370,7 @@ def write_bd_tcl(
 # ── ad-hoc CLI for debugging --------------------------------
 if __name__ == "__main__":
     import argparse, sys
-    from ..ip.matcher import auto_match_ports, load_ip_info
+    from ...contracts.matcher import auto_match_ports, load_ip_info
 
     ap = argparse.ArgumentParser()
     ap.add_argument("design", type=Path)

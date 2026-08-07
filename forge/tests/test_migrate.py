@@ -1,5 +1,5 @@
 """
-Tests for forge.topgen.migrate — the pure migration functions behind
+Tests for forge.generation.migrate — the pure migration functions behind
 `forge topgen migrate`. CLI-level tests live in
 test_topgen_migrate_cli.py.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.topgen.migrate import (
+from forge.generation.migrate import (
     apply_legacy_plugin_layout,
     apply_rename_verify_contract,
     detect_schema_kind,

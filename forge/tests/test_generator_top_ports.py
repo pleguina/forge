@@ -11,10 +11,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Tuple
 
-from topgen.config import DesignConfig
-from topgen.ip.contract_loader import load_contracts_for_design, synthesize_ip_info
-from topgen.ip.matcher import auto_match_ports
-from topgen.generators.structural_verilog import write_structural_verilog
+from forge.contracts.config import DesignConfig
+from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
+from forge.contracts.matcher import auto_match_ports
+from forge.generation.generators.structural_verilog import write_structural_verilog
 from core.utils.hdl_parser import _scan_verilog_ports
 from core.cli.groups.topgen import generate_port_map
 

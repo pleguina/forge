@@ -1,8 +1,8 @@
 """
 Tests for CDC synchronizer RTL emission in
-forge.topgen.generators.structural_verilog.write_structural_verilog.
+forge.generation.generators.structural_verilog.write_structural_verilog.
 
-Structural crossing *detection* (forge.topgen.ip.cdc.verify_cdc) is tested
+Structural crossing *detection* (forge.contracts.cdc.verify_cdc) is tested
 in test_cdc.py; these tests cover the actual generated Verilog text for a
 declared `cdc:` adapter.
 """
@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from forge.topgen.config import Connection, DesignConfig, Module
-from forge.topgen.ip.contract_loader import LoadedContract
-from forge.topgen.ip.matcher import auto_match_ports
-from forge.topgen.generators.structural_verilog import write_structural_verilog
+from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.matcher import auto_match_ports
+from forge.generation.generators.structural_verilog import write_structural_verilog
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRIGGER_DESIGN = REPO_ROOT / "plugins/trigger_demo/forge/designs/design.yml"
@@ -528,8 +528,8 @@ def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
 def test_trigger_demo_generation_is_unaffected_by_cdc_support(tmp_path):
     """trigger_demo declares no `cdc:` connections — real-design regression
     guard: adding CDC support must not change its generated output."""
-    from forge.topgen.config import DesignConfig as _DC
-    from forge.topgen.ip.contract_loader import load_contracts_for_design, synthesize_ip_info
+    from forge.contracts.config import DesignConfig as _DC
+    from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
 
     cfg = _DC.load_relaxed(TRIGGER_DESIGN)
     contracts = load_contracts_for_design(TRIGGER_MODULES, TRIGGER_DESIGN.parent)

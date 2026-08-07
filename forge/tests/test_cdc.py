@@ -1,5 +1,5 @@
 """
-Tests for forge.topgen.ip.cdc.verify_cdc — structural
+Tests for forge.contracts.cdc.verify_cdc — structural
 clock/reset-domain-crossing detection against what auto_match_ports
 actually wired.
 """
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.topgen.config import Connection, DesignConfig, Module
-from forge.topgen.ip.cdc import report_all_crossings, verify_cdc
-from forge.topgen.ip.contract_loader import LoadedContract
-from forge.topgen.ip.matcher import auto_match_ports
+from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.cdc import report_all_crossings, verify_cdc
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.matcher import auto_match_ports
 
 
 def _contract(module_name, ip_info_key, clock_port, reset_port="rst"):

@@ -13,7 +13,7 @@ from forge.analysis.latency_static.graph import (
 )
 from forge.analysis.latency_static.checker import check_merge_points
 from forge.analysis.latency_static.reporter import render_markdown
-from forge.topgen.config import Connection
+from forge.contracts.config import Connection
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRIGGER_DESIGN = REPO_ROOT / "plugins/trigger_demo/forge/designs/design.yml"

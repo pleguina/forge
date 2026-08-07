@@ -57,7 +57,7 @@ forge:lint:
     - mkdir -p ci-logs
     - |
       echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
-      flake8 forge/core forge/topgen forge/hls forge/verify forge/integration forge/analysis forge/docsgen \
+      flake8 forge/core forge/contracts forge/generation forge/topgen forge/hls forge/verify forge/integration forge/analysis forge/docsgen \
         2>&1 | tee -a ci-logs/lint.log
     - |
       echo "--- YAML lint ---" | tee -a ci-logs/lint.log
@@ -92,7 +92,7 @@ forge:type-check:
   script:
     - mkdir -p ci-logs
     - |
-      mypy forge/core forge/topgen forge/hls forge/verify forge/integration forge/analysis forge/docsgen \
+      mypy forge/core forge/contracts forge/generation forge/topgen forge/hls forge/verify forge/integration forge/analysis forge/docsgen \
         2>&1 | tee ci-logs/type-check.log
   artifacts:
     name: "forge-type-check-${CI_COMMIT_SHORT_SHA}"

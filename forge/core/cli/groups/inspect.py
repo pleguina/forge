@@ -313,7 +313,7 @@ def _project_from_json(payload: dict):
         ResolvedResetDomain, ResolvedTopLevelPort, ResolvedTransformation,
         ResolvedVerificationPlan, SourceLocation, DiagnosticReference,
     )
-    from forge.topgen.config import LatencyDeclaration
+    from forge.contracts.config import LatencyDeclaration
 
     def _matching_evidence(me: Optional[dict]):
         if not me:

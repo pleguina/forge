@@ -1,5 +1,5 @@
 """
-Tests for forge.topgen.ip.coordinates — the structured-coordinates /
+Tests for forge.contracts.coordinates — the structured-coordinates /
 legacy-partition compatibility layer (audit gap #2: "No structured
 coordinates / no cardinality schema").
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from forge.topgen.ip.coordinates import coordinate_key, coordinate_label
+from forge.contracts.coordinates import coordinate_key, coordinate_label
 
 
 def test_legacy_partition_string_normalizes():

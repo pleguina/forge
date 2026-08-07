@@ -36,10 +36,10 @@ def resolve_framework_resources() -> "dict[str, dict[str, object]]":
     Shared by ``forge core resources`` and ``forge doctor``.
     """
     import forge.hls as _hls
-    import forge.topgen.ip as _topgen_ip
+    import forge.contracts as _contracts
 
     hls_templates = Path(_hls.__file__).parent / "templates"
-    canonical_roles = Path(_topgen_ip.__file__).parent / "canonical_roles.yaml"
+    canonical_roles = Path(_contracts.__file__).parent / "canonical_roles.yaml"
     # These two are framework-repo-root artifacts, not installed package
     # resources — only resolvable in a source checkout of the framework
     # repo (sibling to forge/), not in a plain `pip install forge`.
@@ -132,7 +132,7 @@ def cmd_verify_contract(args):
         sys.exit(envelope.exit_code())
 
     try:
-        from forge.topgen.ip.contract_verifier import ContractVerifier, verify_all
+        from forge.contracts.contract_verifier import ContractVerifier, verify_all
     except ImportError as exc:
         _usage_error(f"Cannot import contract verifier: {exc}")
         return

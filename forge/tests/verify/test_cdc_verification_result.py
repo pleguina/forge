@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.topgen.config import Connection, DesignConfig, Module
-from forge.topgen.ip.contract_loader import LoadedContract
-from forge.topgen.ip.matcher import auto_match_ports
+from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.matcher import auto_match_ports
 from forge.verification.cdc_verification_result import (
     CDC_VERIFICATION_RESULT_SCHEMA,
     CdcCrossingResult,
@@ -105,7 +105,7 @@ def test_build_cdc_verification_result_wraps_report_all_crossings():
     # cross-import rule (ci/import_direction_check.sh) — real production
     # code never imports both directly; the CLI layer composes them (see
     # forge/core/cli/groups/topgen.py's cmd_validate).
-    from forge.topgen.ip.cdc import report_all_crossings
+    from forge.contracts.cdc import report_all_crossings
 
     src = Module(name="src", top="src_top", src=["x.v"])
     dst = Module(name="dst", top="dst_top", src=["x.v"])

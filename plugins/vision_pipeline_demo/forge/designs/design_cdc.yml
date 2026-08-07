@@ -26,11 +26,11 @@
 #
 # One module per crossing kind on the *source* side (ctrl_level_rtl/
 # ctrl_pulse_rtl/ctrl_mailbox_rtl; outsink_level_rtl/outsink_pulse_rtl),
-# not one bigger register bank per domain: forge.topgen.generators.
+# not one bigger register bank per domain: forge.generation.generators.
 # structural_verilog's cdc_map is keyed by (src_module, dst_module)
 # alone, not per-pin, so sourcing three different cdc kinds from one
 # instance to the same destination instance would silently collapse into
-# one (now a real forge.topgen.config ATG027 load-time error instead of
+# one (now a real forge.contracts.config ATG027 load-time error instead of
 # silently wrong hardware). pixel_sink_rtl stays a single module on the
 # *destination* side — receiving from three distinct source instances has
 # no collision risk (see ctrl_level_rtl.v's header for the full

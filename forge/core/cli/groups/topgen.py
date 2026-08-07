@@ -11,17 +11,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from forge.topgen.config import DesignConfig
-from forge.topgen.ip.unpacker import unpack_ip_archives
-from forge.topgen.ip.parser import collect_all, write_summary
-from forge.topgen.ip.matcher import load_ip_info, auto_match_ports
-from forge.topgen.ip.contract_loader import load_contracts_for_design, synthesize_ip_info
-from forge.topgen.generators.structural_vhdl import write_structural_vhdl
-from forge.topgen.generators.structural_verilog import write_structural_verilog
-from forge.topgen.generators.block_design import write_bd_tcl
-from forge.topgen.generators.sv_testbench_generator import generate_sv_testbench
-from forge.topgen.generators.design_parameters import write_design_parameters
-from forge.topgen.validation import validate_design, validate_registry
+from forge.contracts.config import DesignConfig
+from forge.contracts.unpacker import unpack_ip_archives
+from forge.contracts.parser import collect_all, write_summary
+from forge.contracts.matcher import load_ip_info, auto_match_ports
+from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
+from forge.generation.generators.structural_vhdl import write_structural_vhdl
+from forge.generation.generators.structural_verilog import write_structural_verilog
+from forge.generation.generators.block_design import write_bd_tcl
+from forge.generation.generators.sv_testbench_generator import generate_sv_testbench
+from forge.generation.generators.design_parameters import write_design_parameters
+from forge.generation.validation import validate_design, validate_registry
 from forge.ir.build import assemble_project_ir, build_tie_off_connections
 from forge.ir.model import ResolvedTopLevelPort
 from forge.ir.project import project_to_conn_map
@@ -1235,7 +1235,7 @@ def cmd_validate(args):
                     _conn_map, _global_nets, _match_report = auto_match_ports(
                         cfg, _cdc_ip_info, contracts=_cdc_contracts,
                     )
-                    from forge.topgen.ip.cdc import verify_cdc
+                    from forge.contracts.cdc import verify_cdc
                     _cdc_issues = verify_cdc(cfg, _cdc_contracts, _match_report, _conn_map, _global_nets)
                     cdc_diagnostics = [
                         {
@@ -1254,7 +1254,7 @@ def cmd_validate(args):
                         import json as _json
 
                         from forge.core.utils.content_hash import hash_file
-                        from forge.topgen.ip.cdc import report_all_crossings
+                        from forge.contracts.cdc import report_all_crossings
                         from forge.verification.cdc_verification_result import build_cdc_verification_result
 
                         _crossings = report_all_crossings(
@@ -1585,15 +1585,15 @@ def compute_gen_top_plan(
 
     topology_group_issues: List[Any] = []
     if contracts and cfg.topology_groups:
-        from forge.topgen.ip.contract_verifier import verify_topology_groups
+        from forge.contracts.contract_verifier import verify_topology_groups
         topology_group_issues = verify_topology_groups(cfg, contracts)
 
     cardinality_issues: List[Any] = []
     if contracts:
-        from forge.topgen.ip.cardinality import verify_cardinality
+        from forge.contracts.cardinality import verify_cardinality
         cardinality_issues = verify_cardinality(cfg, contracts, match_report)
 
-    from forge.topgen.ip.cdc import verify_cdc
+    from forge.contracts.cdc import verify_cdc
     cdc_issues = verify_cdc(cfg, contracts or {}, match_report, conn_map, global_nets)
 
     project = assemble_project_ir(
@@ -2425,7 +2425,7 @@ def cmd_migrate(args):
     passed — the same compute-then-write-gated-by-dry-run pattern used by
     ``cmd_gen_top``/``cmd_clean``/``cmd_init_plugin``.
     """
-    from forge.topgen.migrate import (
+    from forge.generation.migrate import (
         apply_legacy_plugin_layout,
         apply_rename_verify_contract,
         find_legacy_plugin_layout,

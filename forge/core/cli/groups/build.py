@@ -118,8 +118,8 @@ def _build_command_options(args) -> Dict[str, Any]:
 def cmd_build(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
     from forge.core.cli.groups import topgen
-    from forge.topgen.config import DesignConfig
-    from forge.topgen.validation import validate_design
+    from forge.contracts.config import DesignConfig
+    from forge.generation.validation import validate_design
     from forge.ir.plan import build_generation_plan, plan_hash
 
     json_mode = getattr(args, "json", False)

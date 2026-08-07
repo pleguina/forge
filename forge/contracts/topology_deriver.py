@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from .coordinates import CoordinateKey, coordinate_key, coordinate_label
 
 if TYPE_CHECKING:
-    from ..config import TopologyGroup, InstanceAssign
+    from .config import TopologyGroup, InstanceAssign
     from .contract_loader import LoadedContract
 
 
@@ -128,7 +128,7 @@ def _resolve_instance_partition(
     role for the matching wiring_kind (since each instance produces one
     output).  The consumer contract has multiple roles with different
     coordinates, declared as either a legacy ``partition:`` string or a
-    structured ``coordinates:`` mapping (see ``forge.topgen.ip.coordinates``).
+    structured ``coordinates:`` mapping (see ``forge.contracts.coordinates``).
     """
     # Producer: expect exactly one output role per wiring_kind
     # (each instance of the producer has this single output)

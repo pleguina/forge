@@ -1,5 +1,5 @@
 """
-Tests for forge.topgen.ip.domains.resolve_domain_nets — the shared
+Tests for forge.contracts.domains.resolve_domain_nets — the shared
 clock/reset domain resolution algorithm used by both the canonical IR
 (forge/ir/build.py) and the CDC checker (forge/topgen/ip/cdc.py).
 """
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.topgen.config import DesignConfig, Module
-from forge.topgen.ip.contract_loader import LoadedContract
-from forge.topgen.ip.domains import resolve_domain_nets
-from forge.topgen.ip.matcher import auto_match_ports
+from forge.contracts.config import DesignConfig, Module
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.domains import resolve_domain_nets
+from forge.contracts.matcher import auto_match_ports
 
 
 def _contract(module_name, ip_info_key, *, clock_free=False, reset_free=False, clock_port=None, reset_port=None):

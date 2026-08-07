@@ -1,6 +1,6 @@
 """
 Tests for declarative cardinality:
-``forge.topgen.ip.cardinality.parse_cardinality`` (per-role structural
+``forge.contracts.cardinality.parse_cardinality`` (per-role structural
 parsing/sugar resolution) and ``verify_cardinality`` (design-level
 enforcement against what ``auto_match_ports`` actually wired).
 """
@@ -11,15 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from forge.topgen.config import Connection, DesignConfig, Module
-from forge.topgen.ip.cardinality import (
+from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.cardinality import (
     Bound,
     CardinalityError,
     parse_cardinality,
     verify_cardinality,
 )
-from forge.topgen.ip.contract_loader import LoadedContract
-from forge.topgen.ip.matcher import auto_match_ports
+from forge.contracts.contract_loader import LoadedContract
+from forge.contracts.matcher import auto_match_ports
 
 
 def _synthetic_contract(module_name: str, ip_info_key: str, roles: dict) -> LoadedContract:

@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from topgen.config import DesignConfig
-from topgen.ip.contract_loader import load_contracts_for_design, synthesize_ip_info
-from topgen.ip.matcher import auto_match_ports
-from topgen.generators.structural_verilog import write_structural_verilog
-from topgen.generators.structural_vhdl import write_structural_vhdl
-from topgen.generators.block_design import write_bd_tcl
+from forge.contracts.config import DesignConfig
+from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
+from forge.contracts.matcher import auto_match_ports
+from forge.generation.generators.structural_verilog import write_structural_verilog
+from forge.generation.generators.structural_vhdl import write_structural_vhdl
+from forge.generation.generators.block_design import write_bd_tcl
 
 from forge.ir.build import assemble_project_ir
 from forge.ir.project import project_to_conn_map

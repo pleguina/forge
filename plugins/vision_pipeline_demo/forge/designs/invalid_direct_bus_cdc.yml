@@ -6,7 +6,7 @@
 # domains: ctrl_mailbox_rtl (control, ap_clk) -> pixel_sink_rtl (pixel,
 # clk_pixel), with NO `cdc:` block on the connection. Must fail
 # `forge topgen validate`/`gen-top --strict` with a real ATG023
-# diagnostic (forge.topgen.ip.cdc.verify_cdc) before any RTL is
+# diagnostic (forge.contracts.cdc.verify_cdc) before any RTL is
 # generated — the same real, code-verified check design_cdc.yml's own
 # six real crossings are approved against, not a hypothetical.
 #

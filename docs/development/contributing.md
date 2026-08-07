@@ -48,7 +48,7 @@ the project is CERN-only.
 
 ```bash
 # Lint
-flake8 forge/core forge/topgen forge/hls forge/verify forge/integration forge/analysis
+flake8 forge/core forge/contracts forge/generation forge/topgen forge/hls forge/verify forge/integration forge/analysis
 yamllint -d relaxed plugins/trigger_demo/forge/designs/design.yml plugins/trigger_demo/forge/modules.yml
 
 # Agnosticism guard — forge/ core must not hardcode detector/algorithm assumptions
@@ -84,7 +84,7 @@ topology pattern with a pointer to the exact files that implement it.
 detector-type names, trigger-role names, or accelerator timing constants —
 those belong in a plugin's own config, or as an explicit, overridable
 default (see `forge/integration/io_resolver.py`'s `detector_input_roles`
-parameter or `forge/topgen/config.py`'s `reference_period_ns` field for the
+parameter or `forge/contracts/config.py`'s `reference_period_ns` field for the
 pattern). `ci/agnosticism_check.sh` enforces a best-effort version of this
 in CI; read its header comment before adding an allowlist entry to it.
 

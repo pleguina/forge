@@ -16,7 +16,7 @@ ip_interface:
     names (clk_pixel/rst_pixel) so this design's clock/reset auto-map
     resolves them to their own real top-level nets, not the literal
     ap_clk/ap_rst every single-domain design in this repo reuses -- see
-    forge.topgen.ip.domains.resolve_domain_nets. rst_pixel is a real
+    forge.contracts.domains.resolve_domain_nets. rst_pixel is a real
     reset_domains.rst_pixel.sync: reset_sync destination (design_cdc.yml),
     not a raw external reset.
 
