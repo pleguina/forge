@@ -1,0 +1,120 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Design Topology (tile-statistics path)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Pipeline:
+#
+#   external pixel stream -> pixel_normalizer (HLS)
+#     -> tile_stats_hls (HLS, fixed 1-cycle latency, real II=1)  ─┐
+#     -> tile_boundary_rtl (RTL, bounded hold)                    ┴-> tile_summary_join_rtl (RTL)
+#     -> external forge.tile_statistics.v1 record
+#
+# One clock domain (no CDC -- see design_cdc.yml for that). This is the
+# per-tile path only, standalone from design_pixel_result.yml's
+# pixel-result path: two independent output paths, multiplexed at the
+# packetizer, not merged before it. Both paths share the same
+# pixel_normalizer *algorithm*, but each design in this repo instantiates
+# its own `norm` (mirroring design_pixel_result.yml's own precedent of a
+# standalone `norm` instance) so each design demonstrates its own
+# capability set in isolation; the full combined design (all branches,
+# CDC, packetizer) is design_full_functional.yml.
+#
+# tile_stats_hls and tile_boundary_rtl are both direct fan-out siblings
+# of pixel_normalizer -- not chained after each other -- so they see the
+# tile-last sample on the exact same input cycle. tile_stats_hls's
+# declared latency is a real, csynth-confirmed fixed 1 cycle at real
+# II=1 (see modules.yml's tile_stats_hls entry for the full derivation);
+# tile_boundary_rtl holds its independently-derived tag valid for a
+# declared [1,17] window, comfortably covering that bound either way
+# (algo/rtl/tile_boundary_rtl.v).
+# tile_summary_join_rtl matches the two branches by tile_id/frame_id, not
+# cycle position -- forge.analysis.latency_static's check_merge_points
+# classifies this merge point `bounded_skew` (both predecessors declare
+# `kind: bounded`) and verifies the two windows actually overlap at
+# `forge topgen validate` time; `join_mismatch` verifies the same
+# tile_id/frame_id agreement again at runtime, mirroring
+# edge_mask_merge_rtl's own tag_mismatch check in design_pixel_result.yml.
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 4.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+modules:
+
+- name: norm
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+- name: tstats
+  ref: tile_stats_hls
+  instances: 1
+
+- name: tbnd
+  ref: tile_boundary_rtl
+  instances: 1
+
+- name: tjoin
+  ref: tile_summary_join_rtl
+  instances: 1
+  external_out_ports:
+    - out_tile_id
+    - out_frame_id
+    - out_minimum
+    - out_maximum
+    - out_mean
+    - out_variance
+    - out_end_of_frame
+    - out_valid
+    - join_mismatch
+
+connections:
+
+- from: norm
+  to: tstats
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: tbnd
+  port_map:
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: tstats
+  to: tjoin
+  port_map:
+    - [minimum, stats_minimum]
+    - [maximum, stats_maximum]
+    - [mean, stats_mean]
+    - [variance, stats_variance]
+    - [tile_id_out, stats_tile_id]
+    - [frame_id_out, stats_frame_id]
+    - [out_valid, stats_valid]
+
+- from: tbnd
+  to: tjoin
+  port_map:
+    - [tag_valid, tag_valid]
+    - [tag_tile_id, tag_tile_id]
+    - [tag_frame_id, tag_frame_id]
+    - [tag_end_of_frame, tag_end_of_frame]

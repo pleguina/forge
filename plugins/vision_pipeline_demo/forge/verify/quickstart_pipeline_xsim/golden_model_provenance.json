@@ -1,0 +1,6 @@
+{
+  "provider_id": "vision_pipeline.quickstart_normalizer_threshold",
+  "provider_version": "1.0",
+  "input_dataset_hash": "aff2655e64f4e948522d9cababed91356d7a8f530a92a2c0f961498a3c4de550",
+  "output_hash": "094158bff43fb96ab3987e6b86591fc2cbcfe6f549a6f4c1d33e2ed3ace80188"
+}

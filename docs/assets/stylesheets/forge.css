@@ -1,0 +1,147 @@
+/* FORGE documentation site — local visual language.
+ * Restrained additions on top of Material for MkDocs: ownership badges,
+ * capability/step cards, and a few layout helpers used by the tutorial.
+ * No animation, no external fonts/assets — see docs/tutorials/vision-pipeline
+ * and forge/tests/test_docs_site_offline.py for the offline constraint this
+ * file must respect.
+ */
+
+:root {
+  --forge-badge-source-bg:       #dbe9ff;
+  --forge-badge-source-fg:       #0b3d91;
+  --forge-badge-generated-bg:    #d9f2e3;
+  --forge-badge-generated-fg:    #0f5c33;
+  --forge-badge-toolchain-bg:    #fde7c8;
+  --forge-badge-toolchain-fg:    #7a4a00;
+  --forge-badge-verification-bg: #ead6fb;
+  --forge-badge-verification-fg: #5a1f96;
+  --forge-badge-tutorial-bg:     #e6e6e6;
+  --forge-badge-tutorial-fg:     #3a3a3a;
+  --forge-card-border: rgba(0, 0, 0, .12);
+  --forge-card-bg: rgba(0, 0, 0, .02);
+}
+
+[data-md-color-scheme="slate"] {
+  --forge-badge-source-bg:       #163a6e;
+  --forge-badge-source-fg:       #cfe1ff;
+  --forge-badge-generated-bg:    #164a2c;
+  --forge-badge-generated-fg:    #c8f2d8;
+  --forge-badge-toolchain-bg:    #5c3d0a;
+  --forge-badge-toolchain-fg:    #ffdfa3;
+  --forge-badge-verification-bg: #3d235c;
+  --forge-badge-verification-fg: #ead6fb;
+  --forge-badge-tutorial-bg:     #3a3a3a;
+  --forge-badge-tutorial-fg:     #e6e6e6;
+  --forge-card-border: rgba(255, 255, 255, .14);
+  --forge-card-bg: rgba(255, 255, 255, .03);
+}
+
+/* ── Ownership badges ────────────────────────────────────────────────── */
+/* Every badge carries its full text label — color is a secondary cue,
+ * never the only one (plan requirement: ownership must not be color-only). */
+
+.badge {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  padding: .15em .55em;
+  border-radius: .35em;
+  white-space: nowrap;
+}
+
+.badge-source       { background: var(--forge-badge-source-bg);       color: var(--forge-badge-source-fg); }
+.badge-generated    { background: var(--forge-badge-generated-bg);    color: var(--forge-badge-generated-fg); }
+.badge-toolchain    { background: var(--forge-badge-toolchain-bg);    color: var(--forge-badge-toolchain-fg); }
+.badge-verification { background: var(--forge-badge-verification-bg); color: var(--forge-badge-verification-fg); }
+.badge-tutorial     { background: var(--forge-badge-tutorial-bg);     color: var(--forge-badge-tutorial-fg); }
+
+/* ── Step-progress strip (tutorial chapters) ────────────────────────── */
+
+.forge-step-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35em;
+  margin: 0 0 1.2em;
+  font-size: .78rem;
+}
+
+.forge-step-strip a,
+.forge-step-strip strong {
+  padding: .25em .6em;
+  border-radius: .35em;
+  border: 1px solid var(--forge-card-border);
+  background: var(--forge-card-bg);
+  color: var(--md-default-fg-color--light);
+  text-decoration: none;
+}
+
+.forge-step-strip strong {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-default-fg-color);
+}
+
+/* ── Capability / artifact cards ─────────────────────────────────────── */
+
+.forge-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1em;
+  margin: 1.2em 0;
+}
+
+.forge-card {
+  border: 1px solid var(--forge-card-border);
+  background: var(--forge-card-bg);
+  border-radius: .5em;
+  padding: .9em 1em;
+}
+
+.forge-card h3, .forge-card strong.forge-card-title {
+  display: block;
+  margin: 0 0 .35em;
+  font-size: .95rem;
+}
+
+/* ── Responsive figure grids ─────────────────────────────────────────── */
+
+.forge-figure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1em;
+  margin: 1.2em 0;
+}
+
+.forge-figure-grid figure {
+  margin: 0;
+}
+
+.forge-figure-grid img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--forge-card-border);
+  border-radius: .35em;
+}
+
+/* ── Hero (tutorial landing page) ────────────────────────────────────── */
+
+.forge-hero {
+  border: 1px solid var(--forge-card-border);
+  background: var(--forge-card-bg);
+  border-radius: .6em;
+  padding: 1.4em 1.6em;
+  margin: 1em 0 1.6em;
+}
+
+.forge-hero p.forge-hero-tagline {
+  font-size: 1.05rem;
+  margin: .2em 0 0;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .forge-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6em;
+  margin-top: 1em;
+}

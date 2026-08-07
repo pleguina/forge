@@ -1,0 +1,31 @@
+format_version: '1'
+generated_by: forge gen-top --mode verilog
+source_file: /data3/home/pleguina/work/omtf-integration-test/workspace/arc-framework/gen-top/design_passthrough_demo/algo_top.v
+top_module: algo_top
+port_signature_hash: 841d6de6776605b9
+port_groups:
+  clock_reset: []
+  bx0: []
+  outputs:
+  - name: pt_data_out
+    direction: output
+    width: 8
+    group: other
+  - name: pt_data_out_valid
+    direction: output
+    width: 1
+    group: other
+  unclassified:
+  - name: ap_clk
+    direction: input
+    width: 1
+  - name: ap_rst
+    direction: input
+    width: 1
+  - name: pt_data_in
+    direction: input
+    width: 8
+  - name: pt_data_in_valid
+    direction: input
+    width: 1
+tier2_probes: []

@@ -1,0 +1,65 @@
+# Integration contract for the trigger_logic HLS module
+#
+# IP: trigger_logic
+# ip_info_key: trig
+# Policy: framework/IP_INTERFACE_POLICY.md
+
+ip_interface:
+  module_name: trigger_logic
+  ip_info_key: trig
+  source_type: hls
+  normalization_status: ready
+  # clock_free removed: trigger_logic uses HLS LATENCY min=3 max=3, so ap_clk IS present in RTL
+  notes: >
+    Simple majority trigger. Fires when the number of valid hits
+    meets or exceeds a threshold (currently 2). Quality output
+    equals the raw hit count. Pipelined at II=1.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    n_hits:
+      raw_port: n_hits
+      direction: input
+      width: 3
+      notes: "Hit multiplicity from collector"
+
+    phi_sum:
+      raw_port: phi_sum
+      direction: input
+      width: 16
+      notes: "Phi sum from collector (reserved for future use)"
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+      notes: "Data valid from collector"
+
+    trigger_accept:
+      raw_port: trigger_accept
+      direction: output
+      width: 1
+      notes: "Trigger decision: 1=accept, 0=reject"
+
+    trigger_quality:
+      raw_port: trigger_quality
+      direction: output
+      width: 8
+      notes: "Trigger quality metric (= hit count)"
+
+    trigger_valid:
+      raw_port: trigger_valid
+      direction: output
+      width: 1
+      notes: "Output valid strobe"

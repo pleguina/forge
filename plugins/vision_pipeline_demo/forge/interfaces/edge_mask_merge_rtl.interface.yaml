@@ -1,0 +1,174 @@
+# Integration contract for the edge_mask_merge_rtl module
+#
+# IP: edge_mask_merge_rtl
+# ip_info_key: merge
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: edge_mask_merge_rtl
+  ip_info_key: merge
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Merges the Sobel branch (window_builder_rtl -> sobel_hls) and the
+    delayed threshold branch into one forge.edge_mask_stream.v1 record.
+    Real runtime tag_mismatch diagnostic, not decoration -- see
+    algo/rtl/edge_mask_merge_rtl.v. Fixed latency 1 cycle, II=1.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    thresh_pixel:
+      raw_port: thresh_pixel
+      direction: input
+      width: 8
+
+    thresh_mask:
+      raw_port: thresh_mask
+      direction: input
+      width: 1
+
+    thresh_x:
+      raw_port: thresh_x
+      direction: input
+      width: 12
+
+    thresh_y:
+      raw_port: thresh_y
+      direction: input
+      width: 12
+
+    thresh_frame_id:
+      raw_port: thresh_frame_id
+      direction: input
+      width: 16
+
+    thresh_tile_id:
+      raw_port: thresh_tile_id
+      direction: input
+      width: 16
+
+    thresh_end_of_line:
+      raw_port: thresh_end_of_line
+      direction: input
+      width: 1
+
+    thresh_end_of_frame:
+      raw_port: thresh_end_of_frame
+      direction: input
+      width: 1
+
+    thresh_valid:
+      raw_port: thresh_valid
+      direction: input
+      width: 1
+
+    sobel_magnitude:
+      raw_port: sobel_magnitude
+      direction: input
+      width: 12
+
+    sobel_x:
+      raw_port: sobel_x
+      direction: input
+      width: 12
+
+    sobel_y:
+      raw_port: sobel_y
+      direction: input
+      width: 12
+
+    sobel_frame_id:
+      raw_port: sobel_frame_id
+      direction: input
+      width: 16
+
+    sobel_tile_id:
+      raw_port: sobel_tile_id
+      direction: input
+      width: 16
+
+    sobel_end_of_line:
+      raw_port: sobel_end_of_line
+      direction: input
+      width: 1
+
+    sobel_end_of_frame:
+      raw_port: sobel_end_of_frame
+      direction: input
+      width: 1
+
+    sobel_valid:
+      raw_port: sobel_valid
+      direction: input
+      width: 1
+
+    normalized_pixel:
+      raw_port: normalized_pixel
+      direction: output
+      width: 8
+      notes: "thresh_pixel, passed through"
+
+    gradient_magnitude:
+      raw_port: gradient_magnitude
+      direction: output
+      width: 12
+      notes: "sobel_magnitude, passed through"
+
+    threshold_mask:
+      raw_port: threshold_mask
+      direction: output
+      width: 1
+      notes: "thresh_mask, passed through"
+
+    out_x:
+      raw_port: out_x
+      direction: output
+      width: 12
+
+    out_y:
+      raw_port: out_y
+      direction: output
+      width: 12
+
+    out_frame_id:
+      raw_port: out_frame_id
+      direction: output
+      width: 16
+
+    out_tile_id:
+      raw_port: out_tile_id
+      direction: output
+      width: 16
+
+    out_end_of_line:
+      raw_port: out_end_of_line
+      direction: output
+      width: 1
+
+    out_end_of_frame:
+      raw_port: out_end_of_frame
+      direction: output
+      width: 1
+
+    out_valid:
+      raw_port: out_valid
+      direction: output
+      width: 1
+      notes: "Asserted only when both branches are valid AND their tags match"
+
+    tag_mismatch:
+      raw_port: tag_mismatch
+      direction: output
+      width: 1
+      notes: "Asserted when both branches are valid but their x/y/frame_id/tile_id/end_of_line/end_of_frame tags disagree -- a real alignment-bug diagnostic, not decoration"

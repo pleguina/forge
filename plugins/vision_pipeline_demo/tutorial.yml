@@ -1,0 +1,239 @@
+# vision_pipeline_demo — Tutorial manifest.
+#
+# Single source of truth for the progressive tutorial steps
+# `run_vision_pipeline_demo.sh --list` / `--step <id>` / `--all` drive
+# (plugins/vision_pipeline_demo/tutorial/runner.py), what each step
+# actually builds/runs, and the capability-to-chapter mapping used by
+# docs/tutorials/vision-pipeline/**.
+#
+# This does not duplicate forge/verify/design.verification.yml (the real
+# flow contract) or forge/modules.yml (the real module registry) — it
+# only adds the tutorial-specific metadata neither of those files has:
+# which chapter a design belongs to, what capability it teaches, which
+# tools it needs, and what a reader should expect to see.
+#
+# Capability ids are drawn from the fixed `capability_vocabulary` list
+# below; plugins/vision_pipeline_demo/forge/verify/tools/tests/test_tutorial_manifest.py
+# enforces every id used below is a real, known one.
+schema_version: 1
+
+capability_vocabulary:
+  - module_registry
+  - contracts_and_protocols
+  - validation_diagnostics
+  - rtl_generation
+  - hls_execution
+  - mixed_rtl_hls
+  - fixed_latency
+  - alignment_delay
+  - bounded_latency
+  - elastic_join
+  - clock_reset_domains
+  - level_sync
+  - pulse_sync
+  - mailbox_transfer
+  - async_fifo
+  - reset_sync
+  - static_throughput
+  - runtime_throughput
+  - fifo_occupancy
+  - backpressure
+  - dataset_loading
+  - golden_model_execution
+  - structured_verification_results
+  - dot_svg_explorer
+  - plan_hash
+  - provenance_staleness
+  - negative_fixtures
+
+steps:
+  - id: quickstart
+    chapter: "01"
+    title: Run the smallest mixed RTL/HLS pipeline
+    kind: design
+    design: design.yml
+    gen_top_outdir: design_vision_pipeline_quickstart
+    hls_modules: [pixel_normalizer]
+    flows:
+      - name: pixel_normalizer_csim
+        gen_stimulus: null
+      - name: quickstart_pipeline_xsim
+        gen_stimulus: "gen_stimulus.py --flow quickstart_pipeline_xsim --event-id 0"
+    capabilities:
+      - module_registry
+      - contracts_and_protocols
+      - validation_diagnostics
+      - rtl_generation
+      - hls_execution
+      - mixed_rtl_hls
+      - fixed_latency
+      - dataset_loading
+      - golden_model_execution
+      - structured_verification_results
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result, golden_comparison]
+
+  - id: pixel_result
+    chapter: "03-04"
+    title: Add a parallel HLS filter with an aligned merge
+    kind: design
+    design: design_pixel_result.yml
+    gen_top_outdir: design_vision_pipeline_pixel_result
+    hls_modules: [pixel_normalizer, sobel_hls]
+    flows:
+      - name: pixel_result_xsim
+        gen_stimulus: "gen_stimulus_pixel_result.py --flow pixel_result_xsim"
+    capabilities:
+      - mixed_rtl_hls
+      - hls_execution
+      - fixed_latency
+      - alignment_delay
+      - dataset_loading
+      - golden_model_execution
+      - structured_verification_results
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result, golden_comparison]
+
+  - id: tile_stats
+    chapter: "05"
+    title: Add a bounded-to-elastic metadata join
+    kind: design
+    design: design_tile_stats.yml
+    gen_top_outdir: design_vision_pipeline_tile_stats
+    hls_modules: [pixel_normalizer, tile_stats_hls]
+    flows:
+      - name: tile_stats_xsim
+        gen_stimulus: "gen_stimulus_tile_stats.py --flow tile_stats_xsim"
+    capabilities:
+      - bounded_latency
+      - elastic_join
+      - hls_execution
+      - dataset_loading
+      - golden_model_execution
+      - structured_verification_results
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result, golden_comparison]
+
+  - id: packetizer
+    chapter: "07"
+    title: Multiplex two paths through async FIFOs with real backpressure
+    kind: design
+    design: design_packetizer.yml
+    gen_top_outdir: design_vision_pipeline_packetizer
+    hls_modules: [pixel_normalizer, sobel_hls, tile_stats_hls]
+    flows:
+      - name: packetizer_xsim
+        gen_stimulus: "gen_stimulus_packetizer.py --flow packetizer_xsim"
+    capabilities:
+      - async_fifo
+      - static_throughput
+      - runtime_throughput
+      - fifo_occupancy
+      - backpressure
+      - golden_model_execution
+      - structured_verification_results
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result, golden_comparison, runtime_throughput_result]
+
+  - id: invalid_fifo_depth
+    chapter: "12"
+    title: "Negative fixture: FIFO depth too shallow for the real burst"
+    kind: design
+    design: invalid_fifo_depth_packetizer.yml
+    gen_top_outdir: design_vision_pipeline_invalid_fifo_depth
+    hls_modules: [pixel_normalizer, sobel_hls, tile_stats_hls]
+    flows:
+      - name: invalid_fifo_depth_xsim
+        gen_stimulus: "gen_stimulus_packetizer.py --flow invalid_fifo_depth_xsim"
+        expect_fail: true
+    negative_fixture: true
+    capabilities:
+      - fifo_occupancy
+      - backpressure
+      - negative_fixtures
+      - structured_verification_results
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result]
+
+  - id: full_functional
+    chapter: "09"
+    title: Assemble every path behind one shared normalizer
+    kind: design
+    design: design_full_functional.yml
+    gen_top_outdir: design_vision_pipeline_full_functional
+    hls_modules: [pixel_normalizer, sobel_hls, tile_stats_hls]
+    flows:
+      - name: full_functional_xsim
+        gen_stimulus: "gen_stimulus_full_functional.py --flow full_functional_xsim"
+    capabilities:
+      - mixed_rtl_hls
+      - clock_reset_domains
+      - async_fifo
+      - dataset_loading
+      - golden_model_execution
+      - structured_verification_results
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result, golden_comparison, runtime_throughput_result]
+
+  - id: platform_wrapper
+    chapter: "10"
+    title: A real three-domain platform with a runtime-configurable threshold
+    kind: design
+    design: design_platform_wrapper.yml
+    gen_top_outdir: design_vision_pipeline_platform_wrapper
+    hls_modules: [pixel_normalizer, sobel_hls, tile_stats_hls]
+    flows:
+      - name: platform_wrapper_xsim
+        gen_stimulus: "gen_stimulus_platform_wrapper.py --flow platform_wrapper_xsim"
+    capabilities:
+      - clock_reset_domains
+      - mailbox_transfer
+      - golden_model_execution
+      - structured_verification_results
+      - dot_svg_explorer
+      - plan_hash
+      - provenance_staleness
+    requirements: [python, vitis_hls, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result, golden_comparison]
+
+  - id: cdc
+    chapter: "06"
+    title: Cross three independent clock domains
+    kind: design
+    design: design_cdc.yml
+    gen_top_outdir: design_vision_pipeline_cdc
+    hls_modules: []
+    flows:
+      - name: cdc_xsim
+        gen_stimulus: "gen_stimulus_cdc.py --flow cdc_xsim"
+    capabilities:
+      - clock_reset_domains
+      - level_sync
+      - pulse_sync
+      - mailbox_transfer
+      - async_fifo
+      - reset_sync
+      - structured_verification_results
+    # No HLS module appears anywhere in design_cdc.yml (every instance is
+    # RTL) -- confirmed by reading every `ref:` in the design file, not
+    # assumed from the topology diagram alone. This is the one step in
+    # the whole tutorial runnable without Vitis HLS on PATH at all.
+    requirements: [python, vivado_xsim]
+    expected_artifacts: [generated_top, flow_result]
+
+  - id: invalid_direct_bus_cdc
+    chapter: "12"
+    title: "Negative fixture: an undeclared clock-domain crossing"
+    kind: topgen_reject
+    design: invalid_direct_bus_cdc.yml
+    hls_modules: []
+    flows: []
+    negative_fixture: true
+    capabilities:
+      - validation_diagnostics
+      - negative_fixtures
+      - clock_reset_domains
+    # No HLS modules appear in this design either (RTL-only), so the
+    # `gen-top --strict` rejection check itself needs no HLS build.
+    requirements: [python]
+    expected_artifacts: []

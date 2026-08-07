@@ -1,0 +1,93 @@
+# Integration contract for the pixel_result_packer_rtl module
+#
+# IP: pixel_result_packer_rtl
+# ip_info_key: prpack
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: pixel_result_packer_rtl
+  ip_info_key: prpack
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Packs edge_mask_merge_rtl's pixel-result fields into the
+    128-bit pixel-result packet record plus a 1-bit CDC-novelty toggle
+    (129 bits total) -- source of the pixel -> output
+    cdc: {kind: async_fifo} connection to packetizer_rtl. Literal
+    ap_clk/ap_rst -- pixel is this design's primary domain (see
+    design_packetizer.yml). Fixed latency 1 cycle, II=1.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    in_normalized_pixel:
+      raw_port: in_normalized_pixel
+      direction: input
+      width: 8
+
+    in_gradient_magnitude:
+      raw_port: in_gradient_magnitude
+      direction: input
+      width: 12
+
+    in_threshold_mask:
+      raw_port: in_threshold_mask
+      direction: input
+      width: 1
+
+    in_x:
+      raw_port: in_x
+      direction: input
+      width: 12
+
+    in_y:
+      raw_port: in_y
+      direction: input
+      width: 12
+
+    in_frame_id:
+      raw_port: in_frame_id
+      direction: input
+      width: 16
+
+    in_tile_id:
+      raw_port: in_tile_id
+      direction: input
+      width: 16
+
+    in_end_of_line:
+      raw_port: in_end_of_line
+      direction: input
+      width: 1
+
+    in_end_of_frame:
+      raw_port: in_end_of_frame
+      direction: input
+      width: 1
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+
+    out_record:
+      raw_port: out_record
+      direction: output
+      width: 129
+      notes: "{toggle, record[127:0]} -- cdc: {kind: async_fifo} source -> output"
+
+    out_record_valid:
+      raw_port: out_record_valid
+      direction: output
+      width: 1
+      notes: "Real per-record write-enable -- cdc.write_enable_pin for the async_fifo crossing above"

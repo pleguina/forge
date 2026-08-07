@@ -1,0 +1,132 @@
+# ============================================================================
+# ci/plugin-consumer.yml
+#
+# Reusable CI fragments for downstream plugin repositories.
+#
+# DESIGN RULE (enforced):
+#   This file provides ONLY:
+#     - shared stage declarations that a plugin can extend
+#     - a hidden Python setup template (.forge_plugin_setup)
+#     - hidden contract-validate / verify-doctor smoke templates
+#   It must NOT:
+#     - define mandatory concrete jobs
+#     - reference plugins/trigger_demo/ or any arc-framework-internal path
+#     - assume any framework directory layout beyond the installed CLI surface
+#     - contain OMTF-specific logic or variables
+#
+# A plugin consumes this file via:
+#   include:
+#     - project: pleguina/arc-framework
+#       ref: main          # pin to a version tag after stabilisation
+#       file: ci/plugin-consumer.yml
+#
+# The plugin then extends the hidden templates:
+#   my-job:
+#     extends: .forge_plugin_setup
+#     stage: validate
+#     script:
+#       - forge topgen validate-registry modules.yml --strict
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Stages — plugins that do not define their own stages list will inherit
+# this order. Plugins that define stages: must include these names.
+# ---------------------------------------------------------------------------
+stages:
+  - lint
+  - validate
+  - test
+  - smoke
+  - build
+  - release
+
+# ---------------------------------------------------------------------------
+# Default image and tag for Docker-based correctness jobs.
+# Override in the consuming .gitlab-ci.yml if a different image is needed.
+# ---------------------------------------------------------------------------
+default:
+  image: python:3.11-slim
+  tags:
+    - default-x86_64
+  interruptible: true
+
+# ---------------------------------------------------------------------------
+# .forge_plugin_cache
+#
+# Pip cache key for a plugin that installs the forge package.
+# Override FORGE_FRAMEWORK_REF to match the pinned include ref.
+# ---------------------------------------------------------------------------
+.forge_plugin_cache:
+  cache:
+    key: "forge-plugin-py311-${FORGE_FRAMEWORK_REF:-main}"
+    paths:
+      - .pip-cache/
+    policy: pull-push
+
+# ---------------------------------------------------------------------------
+# .forge_plugin_setup
+#
+# Installs the forge package (unified topgen + hls + verify + analyze CLI).
+#
+# DECIDED: git install, not public PyPI. "forge" is already taken on
+# public PyPI by an unrelated, actively-maintained package (0.22.0 as of
+# this writing) — publishing under this name isn't available. This is the
+# permanent installation story, not a placeholder; it is unrelated to
+# whether the source itself is public — FORGE is a public, MIT-licensed
+# project at github.com/pleguina/forge, just not published to PyPI under
+# this name.
+#
+# Default: install directly from the forge git repo at FORGE_FRAMEWORK_REF
+# (default "main"). Override FORGE_FORGE_PIP_REF only if your org later
+# stands up its own internal package index and wants to mirror releases
+# there, e.g.:
+#   FORGE_FORGE_PIP_REF: "--index-url https://pypi.mycompany.internal/simple/ forge"
+# ---------------------------------------------------------------------------
+.forge_plugin_setup:
+  image: python:3.11-slim
+  tags:
+    - default-x86_64
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache
+        ${FORGE_FORGE_PIP_REF:-"git+https://github.com/pleguina/forge.git@${FORGE_FRAMEWORK_REF:-main}#subdirectory=forge"}
+        pytest pyyaml yamllint
+
+# ---------------------------------------------------------------------------
+# .forge_contract_validate
+#
+# Hidden template: validate the plugin module registry and all interface
+# contracts. Extend this in a concrete job; set PLUGIN_MODULES_YML and
+# PLUGIN_INTERFACES_DIR in the plugin's variables block.
+# ---------------------------------------------------------------------------
+.forge_contract_validate:
+  extends: .forge_plugin_setup
+  stage: validate
+  script:
+    - forge topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
+    - forge core verify-contract
+        --ip-info "${PLUGIN_IP_INFO_YML:-ip_info.yaml}"
+        --all-contracts "${PLUGIN_INTERFACES_DIR}"
+  artifacts:
+    name: "forge-contract-validate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 14 days
+    paths:
+      - ci-logs/contract-validate.log
+
+# ---------------------------------------------------------------------------
+# .forge_verify_doctor
+#
+# Hidden template: run forge verify doctor against the plugin verification
+# contract. Extend this in a concrete job; set PLUGIN_VERIFY_CONTRACT_PATH.
+# ---------------------------------------------------------------------------
+.forge_verify_doctor:
+  extends: .forge_plugin_setup
+  stage: smoke
+  script:
+    - forge verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
+  artifacts:
+    name: "forge-verify-doctor-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 14 days
+    paths:
+      - ci-logs/verify-doctor.log

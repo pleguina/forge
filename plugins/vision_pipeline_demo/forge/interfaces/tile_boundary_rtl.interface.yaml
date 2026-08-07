@@ -1,0 +1,90 @@
+# Integration contract for the tile_boundary_rtl module
+#
+# IP: tile_boundary_rtl
+# ip_info_key: tbnd
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: tile_boundary_rtl
+  ip_info_key: tbnd
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is the "tile-end summary" half of the per-tile path's tagged
+    elastic join. A fan-out sibling of tile_stats_hls (both driven
+    directly from pixel_normalizer), it independently re-derives the
+    tile-end event and holds {tile_id, frame_id, end_of_frame} for
+    HOLD_CYCLES cycles (bounded, no ack handshake) -- see
+    tile_boundary_rtl.v for the full
+    reasoning on why this is a real, independent re-derivation rather
+    than a tap off tile_stats_hls's own output.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    x:
+      raw_port: x
+      direction: input
+      width: 12
+
+    y:
+      raw_port: y
+      direction: input
+      width: 12
+
+    frame_id:
+      raw_port: frame_id
+      direction: input
+      width: 16
+
+    tile_id:
+      raw_port: tile_id
+      direction: input
+      width: 16
+
+    end_of_line:
+      raw_port: end_of_line
+      direction: input
+      width: 1
+
+    end_of_frame:
+      raw_port: end_of_frame
+      direction: input
+      width: 1
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+      notes: "Input valid strobe (driven from pixel_normalizer's normalized_valid)"
+
+    tag_valid:
+      raw_port: tag_valid
+      direction: output
+      width: 1
+      notes: "Held for HOLD_CYCLES cycles after latching -- the bounded side of the join (no ack handshake, see tile_boundary_rtl.v)"
+
+    tag_tile_id:
+      raw_port: tag_tile_id
+      direction: output
+      width: 16
+
+    tag_frame_id:
+      raw_port: tag_frame_id
+      direction: output
+      width: 16
+
+    tag_end_of_frame:
+      raw_port: tag_end_of_frame
+      direction: output
+      width: 1

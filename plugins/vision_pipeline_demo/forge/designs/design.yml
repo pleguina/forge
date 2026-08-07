@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Design Topology (quickstart tier)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Pipeline:
+#   external pixel stream -> pixel_normalizer (HLS) -> threshold_rtl (RTL)
+#     -> external result stream
+#
+# One clock domain, no CDC, no window-builder/Sobel/tile-stats -- those
+# capabilities are demonstrated in the richer designs alongside this one
+# (design_pixel_result.yml, design_tile_stats.yml, design_cdc.yml, and
+# further). This is deliberately the smallest possible mixed HLS/RTL
+# pipeline, meant as the first thing a new reader builds and runs.
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 4.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+modules:
+
+- name: norm
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+- name: thresh
+  ref: threshold_rtl
+  instances: 1
+  external_out_ports: [out_pixel, threshold_mask, out_x, out_y, out_frame_id, out_tile_id, out_end_of_line, out_end_of_frame, out_valid]
+
+connections:
+
+- from: norm
+  to: thresh
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]

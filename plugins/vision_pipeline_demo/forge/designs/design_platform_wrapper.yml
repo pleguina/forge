@@ -1,0 +1,335 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Design Topology (platform wrapper)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# A generic platform fixture: control clock/reset, pixel clock/reset,
+# output clock/reset, a real input stream, a real output stream, and a
+# status interface — all three domains genuinely distinct and genuinely
+# used, not relabeled ports.
+#
+#   control (clk_control, 50MHz)  --mailbox_transfer-->  pixel (ap_clk, 200MHz)
+#     ctrl_mailbox (threshold/kernel_mode/frame_limit bundle,
+#     ctrl_mailbox_platform_rtl.v -- the SAME real logic as
+#     ctrl_mailbox_rtl.v/design_cdc.yml's own module, a
+#     necessarily separate module since Verilog port names can't be
+#     parametrized and this design makes pixel (not control) its
+#     primary ap_clk domain, unlike design_cdc.yml -- see that .v
+#     file's own header and docs/development/adr/0002-cdc-primitive-semantics.md
+#     for the full reasoning)
+#
+#   pixel (ap_clk) -- this design's primary domain, unlike design_cdc.yml
+#     norm (pixel_normalizer) fans out to:
+#       winbld -> sobel  ─┐
+#       threshcfg (NEW: threshold_configurable_rtl -- takes its threshold
+#         from the mailbox crossing above, latched at frame boundaries,
+#         not from a compile-time parameter like
+#         threshold_rtl.v) ┴-> merge -> prpack ─┐
+#       tstats -> tjoin, tbnd -> tjoin -> tspack ┤
+#                                                  │ [async FIFO x2: pixel -> output]
+#   output (clk_output, 125MHz)                   ┴-> pktz -> external forge.packet_stream.v1
+#
+# The Blobfish-specific `forge framework emit-payload` path (payload.v
+# generation) does not apply here -- its generator hardcodes
+# GT-transceiver/CSP-framing/single-clock semantics into its own control
+# flow (forge/integration/payload_generator.py), not just its fixture
+# content, and is structurally incompatible with this plugin's real
+# 256-bit packet_stream output and genuine multi-clock-domain topology.
+# `forge topgen gen-top` (the same mechanism already used for every
+# other design in this reference project) is the real, already-generic
+# wrapper-generation path -- this design is a generic platform fixture
+# built the same way as every other design here, not new machinery.
+#
+# A real, previously-undiscovered framework bug was found and fixed
+# assembling this design: forge.analysis.latency_static.checker's
+# check_merge_points/_upstream_chain_latency treated a
+# mailbox_transfer/async_fifo edge's genuinely-unknown latency as "0
+# extra cycles" rather than propagating "unknown" -- invisible until
+# this design first wired a mailbox_transfer crossing into a node
+# (threshcfg) with a REAL fixed-latency-declared sibling predecessor
+# (norm) that itself feeds a further downstream merge point (merge)
+# alongside a real straight-line branch (sobel). Fixed by a new
+# LatencyEdge.unknown_cdc flag, propagated through both functions --
+# `forge analyze latency-check` now correctly reports 0 mismatches here
+# (real, hand-verified: sobel's branch is norm(3)+winbld(10)+sobel(4)=17;
+# threshcfg's branch is norm(3)+threshcfg(2)+delay_cycles(12)=17), where
+# before the fix it falsely reported a 3-cycle mismatch and a wrong
+# signal_delay suggestion that would have DE-aligned real, already-correct
+# hardware. See forge/analyze/latency_static/{graph.py,checker.py} and
+# forge/tests/test_latency_checker.py's two new regression tests.
+#
+# Status interface: `merge.tag_mismatch`/`tjoin.join_mismatch`/
+# `tjoin.out_end_of_frame` -- three real diagnostic/completion signals
+# every prior design left as dangling internal outputs ("OUTPUTS LEFT
+# OPEN" in every earlier `forge topgen gen-top` report) -- exposed here
+# as real top-level status ports, needing no new RTL.
+#
+# Frame scale: back to the 8x8 quickstart size, not
+# design_full_functional.yml's 16x16 -- this design's own job is proving
+# genuine three-domain assembly + real runtime configurability, a
+# separate, standalone capability from full-scale multi-tile throughput
+# (already proven by design_full_functional.yml). `winbld` therefore
+# uses the registry's own default FRAME_WIDTH=8 (no parameter override,
+# unlike design_full_functional.yml's FRAME_WIDTH=16 override) and
+# `merge`'s threshold-branch `delay_cycles` is the original 8x8-scale
+# value (12 = 2 + 12, matching window_builder(10) + sobel(4) = 14).
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 5.0   # pixel domain (ap_clk): 200MHz, matching design_full_functional.yml
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+# `ap_clk` is this design's primary domain -- pixel, not control (unlike
+# design_cdc.yml, where control is primary): the real 9-module pixel
+# pipeline reused unmodified below (winbld/sobel/threshcfg/merge/prpack/
+# tstats/tbnd/tjoin/tspack) is *literally* ap_clk/ap_rst in every design
+# it already ships in, and Verilog port names can't be parametrized --
+# see ctrl_mailbox_platform_rtl.v's own header for the full reasoning.
+# `clk_control` and `clk_output` are both real, genuinely distinct
+# top-level clocks, auto-resolved purely from ctrl_mailbox_platform_rtl's/
+# pktz's own non-"ap_clk" clock_primary raw_port names (same mechanism
+# design_full_functional.yml's own clk_output already relies on, no
+# separate top-level "clocks:" declaration needed) -- reset_domains:
+# below only needs to declare how EACH new clock's own reset gets
+# synchronized from the external ap_rst.
+reset_domains:
+  rst_control:
+    derived_from: ap_rst
+    sync: reset_sync
+  rst_output:
+    derived_from: ap_rst
+    sync: reset_sync
+
+modules:
+
+# ── Control domain (clk_control, 50MHz) — real configuration interface ─────
+- name: ctrl_mailbox
+  ref: ctrl_mailbox_platform_rtl
+  instances: 1
+  external_in_ports: [threshold_in, kernel_mode_in, frame_limit_in]
+
+# ── Pixel domain (clk_pixel, 200MHz) — real input stream + pipeline ────────
+- name: norm
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+- name: winbld
+  ref: window_builder_rtl
+  instances: 1
+
+- name: sobel
+  ref: sobel_hls
+  instances: 1
+
+- name: threshcfg
+  ref: threshold_configurable_rtl
+  instances: 1
+
+- name: merge
+  ref: edge_mask_merge_rtl
+  instances: 1
+  external_out_ports: [tag_mismatch]
+
+- name: prpack
+  ref: pixel_result_packer_rtl
+  instances: 1
+
+- name: tstats
+  ref: tile_stats_hls
+  instances: 1
+
+- name: tbnd
+  ref: tile_boundary_rtl
+  instances: 1
+
+- name: tjoin
+  ref: tile_summary_join_rtl
+  instances: 1
+  external_out_ports: [join_mismatch, out_end_of_frame]
+
+- name: tspack
+  ref: tile_stats_packer_rtl
+  instances: 1
+
+# ── Output domain (clk_output, 125MHz) — real output stream ────────────────
+- name: pktz
+  ref: packetizer_rtl
+  instances: 1
+  external_out_ports: [packet_data, packet_keep, packet_last, packet_valid]
+
+connections:
+
+# Control -> pixel: real configuration interface.
+- from: ctrl_mailbox
+  to: threshcfg
+  cdc:
+    kind: mailbox_transfer
+  port_map:
+    - [mailbox_out, mailbox_in]
+
+# Single-source fan-out: norm -> all four downstream consumers.
+- from: norm
+  to: winbld
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: threshcfg
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: tstats
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: tbnd
+  port_map:
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+# Pixel-result path.
+- from: winbld
+  to: sobel
+  port_map:
+    - [win_r0c0, win_r0c0]
+    - [win_r0c1, win_r0c1]
+    - [win_r0c2, win_r0c2]
+    - [win_r1c0, win_r1c0]
+    - [win_r1c1, win_r1c1]
+    - [win_r1c2, win_r1c2]
+    - [win_r2c0, win_r2c0]
+    - [win_r2c1, win_r2c1]
+    - [win_r2c2, win_r2c2]
+    - [out_x, x]
+    - [out_y, y]
+    - [out_frame_id, frame_id]
+    - [out_tile_id, tile_id]
+    - [out_end_of_line, end_of_line]
+    - [out_end_of_frame, end_of_frame]
+    - [out_valid, in_valid]
+
+- from: sobel
+  to: merge
+  port_map:
+    - [gradient_magnitude, sobel_magnitude]
+    - [x_out, sobel_x]
+    - [y_out, sobel_y]
+    - [frame_id_out, sobel_frame_id]
+    - [tile_id_out, sobel_tile_id]
+    - [end_of_line_out, sobel_end_of_line]
+    - [end_of_frame_out, sobel_end_of_frame]
+    - [out_valid, sobel_valid]
+
+- from: threshcfg
+  to: merge
+  delay_cycles: 12
+  port_map:
+    - [out_pixel, thresh_pixel]
+    - [threshold_mask, thresh_mask]
+    - [out_x, thresh_x]
+    - [out_y, thresh_y]
+    - [out_frame_id, thresh_frame_id]
+    - [out_tile_id, thresh_tile_id]
+    - [out_end_of_line, thresh_end_of_line]
+    - [out_end_of_frame, thresh_end_of_frame]
+    - [out_valid, thresh_valid]
+
+- from: merge
+  to: prpack
+  port_map:
+    - [normalized_pixel, in_normalized_pixel]
+    - [gradient_magnitude, in_gradient_magnitude]
+    - [threshold_mask, in_threshold_mask]
+    - [out_x, in_x]
+    - [out_y, in_y]
+    - [out_frame_id, in_frame_id]
+    - [out_tile_id, in_tile_id]
+    - [out_end_of_line, in_end_of_line]
+    - [out_end_of_frame, in_end_of_frame]
+    - [out_valid, in_valid]
+
+# Tile-statistics path.
+- from: tstats
+  to: tjoin
+  port_map:
+    - [minimum, stats_minimum]
+    - [maximum, stats_maximum]
+    - [mean, stats_mean]
+    - [variance, stats_variance]
+    - [tile_id_out, stats_tile_id]
+    - [frame_id_out, stats_frame_id]
+    - [out_valid, stats_valid]
+
+- from: tbnd
+  to: tjoin
+  port_map:
+    - [tag_valid, tag_valid]
+    - [tag_tile_id, tag_tile_id]
+    - [tag_frame_id, tag_frame_id]
+    - [tag_end_of_frame, tag_end_of_frame]
+
+- from: tjoin
+  to: tspack
+  port_map:
+    - [out_tile_id, in_tile_id]
+    - [out_minimum, in_minimum]
+    - [out_maximum, in_maximum]
+    - [out_mean, in_mean]
+    - [out_variance, in_variance]
+    - [out_frame_id, in_frame_id]
+    - [out_valid, in_valid]
+
+# Packetizer crossings (pixel -> output), each its own async FIFO with a
+# real per-record write_enable_pin -- identical shape to
+# design_packetizer.yml/design_full_functional.yml.
+- from: prpack
+  to: pktz
+  cdc:
+    kind: async_fifo
+    depth: 64
+    write_enable_pin: out_record_valid
+  port_map:
+    - [out_record, pr_record_in]
+
+- from: tspack
+  to: pktz
+  cdc:
+    kind: async_fifo
+    depth: 64
+    write_enable_pin: out_record_valid
+  port_map:
+    - [out_record, ts_record_in]

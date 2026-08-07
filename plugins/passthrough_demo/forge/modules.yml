@@ -1,0 +1,25 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# passthrough_demo — Module Registry
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# One RTL module, no HLS dependency. See plugins/trigger_demo/ for a
+# realistic multi-module HLS+RTL reference; this plugin exists purely to
+# be the smallest possible working, non-CMS-named FORGE consumer.
+# ═══════════════════════════════════════════════════════════════════════════
+registry_version: '1'
+
+defaults:
+  part: xcvu9p-flga2104-2L-e
+  clock_period: 4.0
+  vendor: passthrough_demo
+  version: '1.0'
+
+modules:
+
+- name: passthrough
+  kind: rtl
+  rtl_lang: verilog
+  top: passthrough
+  latency_hint: 1
+  interface_contract: interfaces/passthrough.interface.yaml
+  src: [../algo/rtl/passthrough.v]

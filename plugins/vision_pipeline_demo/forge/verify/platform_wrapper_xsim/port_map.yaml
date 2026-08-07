@@ -1,0 +1,90 @@
+format_version: '1'
+generated_by: forge gen-top --mode verilog
+source_file: /data3/home/pleguina/work/omtf-integration-test/workspace/arc-framework/gen-top/design_vision_pipeline_platform_wrapper/algo_top.v
+top_module: algo_top
+port_signature_hash: 17ece1f857c5c880
+port_groups:
+  clock_reset: []
+  bx0: []
+  outputs:
+  - name: merge_tag_mismatch
+    direction: output
+    width: 1
+    group: other
+  - name: pktz_packet_data
+    direction: output
+    width: 256
+    group: other
+  - name: pktz_packet_keep
+    direction: output
+    width: 32
+    group: other
+  - name: pktz_packet_last
+    direction: output
+    width: 1
+    group: other
+  - name: pktz_packet_valid
+    direction: output
+    width: 1
+    group: other
+  - name: tjoin_join_mismatch
+    direction: output
+    width: 1
+    group: other
+  - name: tjoin_out_end_of_frame
+    direction: output
+    width: 1
+    group: other
+  unclassified:
+  - name: ap_clk
+    direction: input
+    width: 1
+  - name: ap_rst
+    direction: input
+    width: 1
+  - name: clk_control
+    direction: input
+    width: 1
+  - name: clk_output
+    direction: input
+    width: 1
+  - name: ctrl_mailbox_frame_limit_in
+    direction: input
+    width: 16
+  - name: ctrl_mailbox_kernel_mode_in
+    direction: input
+    width: 2
+  - name: ctrl_mailbox_threshold_in
+    direction: input
+    width: 8
+  - name: norm_end_of_frame
+    direction: input
+    width: 1
+  - name: norm_end_of_line
+    direction: input
+    width: 1
+  - name: norm_frame_id
+    direction: input
+    width: 16
+  - name: norm_pixel
+    direction: input
+    width: 8
+  - name: norm_pixel_valid
+    direction: input
+    width: 1
+  - name: norm_tile_id
+    direction: input
+    width: 16
+  - name: norm_x
+    direction: input
+    width: 12
+  - name: norm_y
+    direction: input
+    width: 12
+  - name: rst_control
+    direction: input
+    width: 1
+  - name: rst_output
+    direction: input
+    width: 1
+tier2_probes: []

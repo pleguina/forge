@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Negative fixture: undeclared clock-domain crossing
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# invalid_direct_bus_cdc.yml — a direct (undeclared) wire crossing clock
+# domains: ctrl_mailbox_rtl (control, ap_clk) -> pixel_sink_rtl (pixel,
+# clk_pixel), with NO `cdc:` block on the connection. Must fail
+# `forge topgen validate`/`gen-top --strict` with a real ATG023
+# diagnostic (forge.contracts.cdc.verify_cdc) before any RTL is
+# generated — the same real, code-verified check design_cdc.yml's own
+# six real crossings are approved against, not a hypothetical.
+#
+# Real command run against this file:
+#   forge topgen validate plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 20.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+modules:
+
+- name: ctrl_mailbox
+  ref: ctrl_mailbox_rtl
+  instances: 1
+  external_in_ports: [threshold_in, kernel_mode_in, frame_limit_in]
+
+- name: pxsink
+  ref: pixel_sink_rtl
+  instances: 1
+  external_in_ports: [level_in, pulse_in, result_data_in]
+  external_out_ports: [enable_status, apply_count, mailbox_status]
+
+connections:
+
+# INVALID: ctrl_mailbox (ap_clk) -> pxsink (clk_pixel) is a genuine
+# clock-domain crossing with no cdc: declaration at all -- a bare
+# multi-bit wire crossing unrelated clock domains, which FORGE rejects
+# because no approved synchronizer resolves its metastability risk.
+- from: ctrl_mailbox
+  to: pxsink
+  port_map:
+    - [mailbox_out, mailbox_in]

@@ -1,0 +1,16 @@
+ports:
+  - name:       raw_hit
+    direction:  input
+    width:      32
+  - name:       raw_valid
+    direction:  input
+    width:      1
+  - name:       decoded_hit
+    direction:  output
+    width:      32
+  - name:       decoded_valid
+    direction:  output
+    width:      1
+  - name:       ap_rst
+    direction:  input
+    width:      1

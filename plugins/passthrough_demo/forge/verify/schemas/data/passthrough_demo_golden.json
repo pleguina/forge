@@ -1,0 +1,26 @@
+{
+  "schema": {
+    "name": "forge.dataset",
+    "version": "1.0"
+  },
+  "event_ids": ["0", "1"],
+  "events": [
+    {
+      "in": {"data_in": "0x3A", "data_in_valid": "1"},
+      "golden": {"data_out": "0x3A", "data_out_valid": "1"}
+    },
+    {
+      "in": {"data_in": "0x00", "data_in_valid": "0"},
+      "golden": {"data_out": "0x00", "data_out_valid": "0"}
+    }
+  ],
+  "semantic": {
+    "source_content_hash": "5d7cc017d45ba2a1b0099472ee59e836e2957677b0c602caad68a490e777f2a6",
+    "adapter_id": null,
+    "adapter_version": null,
+    "preprocessing_hash": null
+  },
+  "units": null,
+  "seed": null,
+  "generator_version": "1.0"
+}

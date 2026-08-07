@@ -1,0 +1,9 @@
+# ImageFolderAdapter config for a 32x32 user-image-folder import.
+#
+# Usage:
+#   python3 datasets/cli.py import-images --output forge/verify/generated/my_images \
+#     --dataset-id my_images_32x32 --source ./my_images --width 32 --height 32
+width: 32
+height: 32
+extensions: [".png", ".pgm", ".jpg", ".jpeg", ".bmp"]
+max_events: null

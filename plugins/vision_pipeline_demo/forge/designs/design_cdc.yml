@@ -1,0 +1,144 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Design Topology (multi-domain CDC path)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Three clock domains, genuinely different rates:
+#
+#   control (ap_clk, 50MHz / 20ns)   --level_sync---->  pixel (clk_pixel, 200MHz / 5ns)
+#     ctrl_level / ctrl_pulse /      --pulse_sync---->
+#     ctrl_mailbox                   --mailbox_transfer->
+#
+#   pixel   (clk_pixel)              --async_fifo----->  output (clk_output, 125MHz / 8ns)
+#     pixel_sink                                          outsink_level
+#
+#   output  (clk_output)             --level_sync---->  control
+#     outsink_level / outsink_pulse  --pulse_sync---->
+#
+# All five CDC kinds appear at least once (level_sync/pulse_sync twice
+# each, in both directions — control->pixel and output->control — plus
+# one mailbox_transfer and one async_fifo). `control` is this design's
+# primary domain (literal ap_clk/ap_rst, same convention every existing
+# module in this repo uses); `pixel`/`output` each get a real
+# reset_domains.*.sync: reset_sync destination, synchronized from the
+# same external ap_rst -- one external reset, synchronously released in
+# every destination domain (see
+# docs/development/adr/0002-cdc-primitive-semantics.md).
+#
+# One module per crossing kind on the *source* side (ctrl_level_rtl/
+# ctrl_pulse_rtl/ctrl_mailbox_rtl; outsink_level_rtl/outsink_pulse_rtl),
+# not one bigger register bank per domain: forge.generation.generators.
+# structural_verilog's cdc_map is keyed by (src_module, dst_module)
+# alone, not per-pin, so sourcing three different cdc kinds from one
+# instance to the same destination instance would silently collapse into
+# one (now a real forge.contracts.config ATG027 load-time error instead of
+# silently wrong hardware). pixel_sink_rtl stays a single module on the
+# *destination* side — receiving from three distinct source instances has
+# no collision risk (see ctrl_level_rtl.v's header for the full
+# reasoning).
+#
+# This design is standalone (its own instances, no shared instance with
+# design.yml/design_pixel_result.yml/design_tile_stats.yml) — each design
+# in this reference project demonstrates its own capability set in
+# isolation before later designs combine them.
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 20.0   # control domain (ap_clk): 50MHz
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+reset_domains:
+  rst_pixel:
+    derived_from: ap_rst
+    sync: reset_sync
+  rst_output:
+    derived_from: ap_rst
+    sync: reset_sync
+
+modules:
+
+- name: ctrl_level
+  ref: ctrl_level_rtl
+  instances: 1
+  external_in_ports: [enable_in]
+  external_out_ports: [error_level_status]
+
+- name: ctrl_pulse
+  ref: ctrl_pulse_rtl
+  instances: 1
+  external_in_ports: [apply_in]
+  external_out_ports: [frame_done_count]
+
+- name: ctrl_mailbox
+  ref: ctrl_mailbox_rtl
+  instances: 1
+  external_in_ports: [threshold_in, kernel_mode_in, frame_limit_in]
+
+- name: pxsink
+  ref: pixel_sink_rtl
+  instances: 1
+  external_in_ports: [result_data_in]
+  external_out_ports: [enable_status, apply_count, mailbox_status]
+
+- name: outsink_level
+  ref: outsink_level_rtl
+  instances: 1
+  external_in_ports: [error_in]
+  external_out_ports: [result_status]
+
+- name: outsink_pulse
+  ref: outsink_pulse_rtl
+  instances: 1
+  external_in_ports: [frame_done_pulse_in]
+
+connections:
+
+- from: ctrl_level
+  to: pxsink
+  cdc:
+    kind: level_sync
+  port_map:
+    - [level_out, level_in]
+
+- from: ctrl_pulse
+  to: pxsink
+  cdc:
+    kind: pulse_sync
+    min_spacing_cycles: 20
+  port_map:
+    - [pulse_out, pulse_in]
+
+- from: ctrl_mailbox
+  to: pxsink
+  cdc:
+    kind: mailbox_transfer
+  port_map:
+    - [mailbox_out, mailbox_in]
+
+- from: pxsink
+  to: outsink_level
+  cdc:
+    kind: async_fifo
+    depth: 8
+  port_map:
+    - [result_out, result_in]
+
+- from: outsink_level
+  to: ctrl_level
+  cdc:
+    kind: level_sync
+  port_map:
+    - [error_out, error_level_in]
+
+- from: outsink_pulse
+  to: ctrl_pulse
+  cdc:
+    kind: pulse_sync
+    min_spacing_cycles: 20
+  port_map:
+    - [frame_done_out, frame_done_in]

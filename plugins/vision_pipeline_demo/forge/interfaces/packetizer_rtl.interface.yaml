@@ -1,0 +1,64 @@
+# Integration contract for the packetizer_rtl module
+#
+# IP: packetizer_rtl
+# ip_info_key: pktz
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: packetizer_rtl
+  ip_info_key: pktz
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is the `output` domain's real multiplexing point for both
+    record kinds onto the 256-bit forge.packet_stream.v1 wire format.
+    Genuinely non-standard clock_primary/reset_primary names
+    (clk_output/rst_output) -- see packetizer_rtl.v. Both record inputs
+    are the destination side of a pixel -> output
+    cdc: {kind: async_fifo} connection (design_packetizer.yml). Fixed
+    latency 3 cycles, II=1.
+
+  roles:
+
+    clock_primary:
+      raw_port: clk_output
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: rst_output
+      direction: input
+      width: 1
+      active_level: high
+
+    pr_record_in:
+      raw_port: pr_record_in
+      direction: input
+      width: 129
+      notes: "Already synchronized -- destination of the pixel_result_packer_rtl async_fifo crossing"
+
+    ts_record_in:
+      raw_port: ts_record_in
+      direction: input
+      width: 129
+      notes: "Already synchronized -- destination of the tile_stats_packer_rtl async_fifo crossing"
+
+    packet_data:
+      raw_port: packet_data
+      direction: output
+      width: 256
+
+    packet_keep:
+      raw_port: packet_keep
+      direction: output
+      width: 32
+
+    packet_last:
+      raw_port: packet_last
+      direction: output
+      width: 1
+
+    packet_valid:
+      raw_port: packet_valid
+      direction: output
+      width: 1

@@ -1,0 +1,51 @@
+# Integration contract for the ctrl_pulse_rtl module
+#
+# IP: ctrl_pulse_rtl
+# ip_info_key: ctrlpls
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: ctrl_pulse_rtl
+  ip_info_key: ctrlpls
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is the `control` domain's pulse_sync endpoint pair. Literal ap_clk/ap_rst
+    (control is this design's primary domain) -- see ctrl_pulse_rtl.v
+    for why this is a dedicated module.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    apply_in:
+      raw_port: apply_in
+      direction: input
+      width: 1
+      notes: "Pulse"
+
+    frame_done_in:
+      raw_port: frame_done_in
+      direction: input
+      width: 1
+      notes: "Already synchronized pulse -- destination of the output -> control cdc: {kind: pulse_sync} connection"
+
+    pulse_out:
+      raw_port: pulse_out
+      direction: output
+      width: 1
+      notes: "cdc: {kind: pulse_sync} source -> pixel"
+
+    frame_done_count:
+      raw_port: frame_done_count
+      direction: output
+      width: 8

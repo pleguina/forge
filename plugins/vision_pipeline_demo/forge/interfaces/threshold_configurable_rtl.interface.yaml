@@ -1,0 +1,126 @@
+# Integration contract for the threshold_configurable_rtl module
+#
+# IP: threshold_configurable_rtl
+# ip_info_key: threshcfg
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: threshold_configurable_rtl
+  ip_info_key: threshcfg
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is a runtime-configurable variant of threshold_rtl.v --
+    threshold comes from the control domain's real
+    cdc: {kind: mailbox_transfer} crossing (ctrl_mailbox_rtl.v's
+    bundle), latched at frame boundaries so a mid-frame configuration
+    update never changes the threshold applied to pixels already in
+    flight. Fixed 2-cycle registered latency, same as threshold_rtl.v.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    normalized_pixel:
+      raw_port: normalized_pixel
+      direction: input
+      width: 8
+
+    x:
+      raw_port: x
+      direction: input
+      width: 12
+
+    y:
+      raw_port: y
+      direction: input
+      width: 12
+
+    frame_id:
+      raw_port: frame_id
+      direction: input
+      width: 16
+
+    tile_id:
+      raw_port: tile_id
+      direction: input
+      width: 16
+
+    end_of_line:
+      raw_port: end_of_line
+      direction: input
+      width: 1
+
+    end_of_frame:
+      raw_port: end_of_frame
+      direction: input
+      width: 1
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+      notes: "Input valid strobe (driven from pixel_normalizer's normalized_valid)"
+
+    mailbox_in:
+      raw_port: mailbox_in
+      direction: input
+      width: 26
+      notes: "Already synchronized -- destination of the control -> pixel cdc: {kind: mailbox_transfer} connection"
+
+    out_pixel:
+      raw_port: out_pixel
+      direction: output
+      width: 8
+      notes: "normalized_pixel, passed through"
+
+    threshold_mask:
+      raw_port: threshold_mask
+      direction: output
+      width: 1
+      notes: "(normalized_pixel >= active_threshold), active_threshold latched at frame boundaries"
+
+    out_x:
+      raw_port: out_x
+      direction: output
+      width: 12
+
+    out_y:
+      raw_port: out_y
+      direction: output
+      width: 12
+
+    out_frame_id:
+      raw_port: out_frame_id
+      direction: output
+      width: 16
+
+    out_tile_id:
+      raw_port: out_tile_id
+      direction: output
+      width: 16
+
+    out_end_of_line:
+      raw_port: out_end_of_line
+      direction: output
+      width: 1
+
+    out_end_of_frame:
+      raw_port: out_end_of_frame
+      direction: output
+      width: 1
+
+    out_valid:
+      raw_port: out_valid
+      direction: output
+      width: 1
+      notes: "Output valid strobe"

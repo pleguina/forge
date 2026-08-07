@@ -1,0 +1,54 @@
+# Integration contract for the ctrl_mailbox_platform_rtl module
+#
+# IP: ctrl_mailbox_platform_rtl
+# ip_info_key: ctrlmbxplat
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: ctrl_mailbox_platform_rtl
+  ip_info_key: ctrlmbxplat
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is the control-domain configuration source, genuinely separate
+    from this design's pixel domain -- clock_primary/reset_primary use
+    clk_control/rst_control (non-standard names, same "own real
+    top-level net" mechanism pixel_sink_rtl.interface.yaml's own
+    clk_pixel/rst_pixel already established -- see
+    forge.contracts.domains.resolve_domain_nets) rather than the literal
+    ap_clk/ap_rst this design's real 9-module pixel pipeline reuses
+    unmodified.
+
+  roles:
+
+    clock_primary:
+      raw_port: clk_control
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: rst_control
+      direction: input
+      width: 1
+      active_level: high
+
+    threshold_in:
+      raw_port: threshold_in
+      direction: input
+      width: 8
+
+    kernel_mode_in:
+      raw_port: kernel_mode_in
+      direction: input
+      width: 2
+
+    frame_limit_in:
+      raw_port: frame_limit_in
+      direction: input
+      width: 16
+
+    mailbox_out:
+      raw_port: mailbox_out
+      direction: output
+      width: 26
+      notes: "{threshold[7:0], kernel_mode[1:0], frame_limit[15:0]} -- cdc: {kind: mailbox_transfer} source -> pixel"

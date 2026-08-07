@@ -1,0 +1,50 @@
+# Integration contract for the ctrl_level_rtl module
+#
+# IP: ctrl_level_rtl
+# ip_info_key: ctrllvl
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: ctrl_level_rtl
+  ip_info_key: ctrllvl
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is the `control` domain's level_sync endpoint pair. Literal ap_clk/ap_rst
+    (control is this design's primary domain) -- see ctrl_level_rtl.v
+    for why this is a dedicated module.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    enable_in:
+      raw_port: enable_in
+      direction: input
+      width: 1
+
+    error_level_in:
+      raw_port: error_level_in
+      direction: input
+      width: 1
+      notes: "Already synchronized -- destination of the output -> control cdc: {kind: level_sync} connection"
+
+    level_out:
+      raw_port: level_out
+      direction: output
+      width: 1
+      notes: "cdc: {kind: level_sync} source -> pixel"
+
+    error_level_status:
+      raw_port: error_level_status
+      direction: output
+      width: 1

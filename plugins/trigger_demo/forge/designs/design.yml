@@ -1,0 +1,131 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Trigger Demo — Design Topology (Topology A)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Pipeline:
+#   hit_decoder × 4 ──(gather)──→ hit_collector ──→ trigger_logic
+#                                ├─(instance_assign)→ decoded_partition_sink
+#                                └─(contract_wiring)→ trigger_fanout → trigger_contract_sink → trigger_output
+#
+# Demonstrates:
+#   1. Fan-in via gather topology group (4 scalar decoders → 1 collector array)
+#   2. Partitioned topology groups via instance_assign (decoder partitions → RTL sink)
+#   3. Scalar chain via port_map (collector → trigger and sink → output)
+#   4. Array data-path connection via contract_wiring (fanout → contract sink)
+#   5. Zero port_map_ranges — richer wiring stays in contracts/topology_groups
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ─── Global Settings ─────────────────────────────────────────────────────
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 4.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+# ─── Modules ─────────────────────────────────────────────────────────────
+modules:
+
+- name: dec
+  ref: hit_decoder
+  instances: 4
+  external_in_ports: [raw_hit, raw_valid]
+
+- name: col
+  ref: hit_collector
+  instances: 1
+
+- name: trig
+  ref: trigger_logic
+  instances: 1
+
+- name: partmon
+  ref: decoded_partition_sink
+  instances: 1
+
+- name: tfan
+  ref: trigger_fanout
+  instances: 1
+
+- name: tsink
+  ref: trigger_contract_sink
+  instances: 1
+
+- name: tout
+  ref: trigger_output
+  instances: 1
+  external_out_ports: [trigger_word, out_valid]
+
+# ─── Scalar Connections (port_map chain) ─────────────────────────────────
+connections:
+
+- from: col
+  to: trig
+  register_stages: 2   # 2 pipeline register stages: balance latency across the col→trig boundary
+  port_map:
+    - [n_hits, n_hits]
+    - [phi_sum, phi_sum]
+    - [collector_valid, in_valid]
+
+- from: trig
+  to: tfan
+  delay_cycles: 3      # 3-cycle signal_delay: align trigger fanout with downstream RTL pipeline
+  port_map:
+    - [trigger_accept, trigger_accept]
+    - [trigger_quality, trigger_quality]
+    - [trigger_valid, trigger_valid]
+
+- from: tfan
+  to: tsink
+  contract_wiring: true
+
+- from: tsink
+  to: tout
+  port_map:
+    - [trigger_accept, trigger_accept]
+    - [trigger_quality, trigger_quality]
+    - [trigger_valid, trigger_valid]
+
+# ─── Topology Groups ────────────────────────────────────────────────────
+# Gather: 4 decoder instances' scalar outputs → collector's 4-element arrays
+#
+# dec_0.decoded_hit   → col.in_hit_0
+# dec_1.decoded_hit   → col.in_hit_1
+# dec_2.decoded_hit   → col.in_hit_2
+# dec_3.decoded_hit   → col.in_hit_3
+# (same pattern for decoded_valid → in_valid_0..3)
+
+topology_groups:
+
+- name: decoder_to_collector
+  family: trigger_decoded
+  from: dec
+  to: col
+  role_pairs:
+    - [decoded_hit, input_hit_array]
+    - [decoded_valid, input_valid_array]
+
+- name: decoder_hits_to_partition_sink
+  family: trigger_partition_probe
+  from: dec
+  to: partmon
+  wiring_kind: decoded_hit
+  instance_assign:
+    - instances: [0, 2]
+      partition: lower_pair
+    - instances: [2, 4]
+      partition: upper_pair
+
+- name: decoder_valids_to_partition_sink
+  family: trigger_partition_probe
+  from: dec
+  to: partmon
+  wiring_kind: decoded_valid
+  instance_assign:
+    - instances: [0, 2]
+      partition: lower_pair
+    - instances: [2, 4]
+      partition: upper_pair

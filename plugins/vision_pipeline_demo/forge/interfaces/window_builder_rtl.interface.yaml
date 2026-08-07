@@ -1,0 +1,167 @@
+# Integration contract for the window_builder_rtl module
+#
+# IP: window_builder_rtl
+# ip_info_key: winbld
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: window_builder_rtl
+  ip_info_key: winbld
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is a real 3x3 sliding-window generator between pixel_normalizer
+    and sobel_hls. Owns the N-dimensional (raw_port_tpl, dims:[3,3])
+    physical binding. Zero-padding border policy. Fixed latency
+    FRAME_WIDTH+2 cycles (9 for this design's FRAME_WIDTH=8) -- see
+    algo/rtl/window_builder_rtl.v for the full derivation, empirically
+    verified against an independent numpy zero-pad reference model.
+    Requires at least FRAME_WIDTH+2 idle cycles between frames
+    (video-blanking-style gap) -- real backpressure is handled
+    downstream by the packetizer/async-FIFO stage, not this module.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    normalized_pixel:
+      raw_port: normalized_pixel
+      direction: input
+      width: 8
+
+    x:
+      raw_port: x
+      direction: input
+      width: 12
+
+    y:
+      raw_port: y
+      direction: input
+      width: 12
+
+    frame_id:
+      raw_port: frame_id
+      direction: input
+      width: 16
+
+    tile_id:
+      raw_port: tile_id
+      direction: input
+      width: 16
+
+    end_of_line:
+      raw_port: end_of_line
+      direction: input
+      width: 1
+
+    end_of_frame:
+      raw_port: end_of_frame
+      direction: input
+      width: 1
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+      notes: "Input valid strobe (driven from pixel_normalizer's normalized_valid)"
+
+    win_r0c0:
+      raw_port: win_r0c0
+      direction: output
+      width: 8
+      notes: "Window tap (x-1, y-1), zero-padded at frame/row borders"
+
+    win_r0c1:
+      raw_port: win_r0c1
+      direction: output
+      width: 8
+      notes: "Window tap (x, y-1), zero-padded at the top border"
+
+    win_r0c2:
+      raw_port: win_r0c2
+      direction: output
+      width: 8
+      notes: "Window tap (x+1, y-1), zero-padded at frame/row borders"
+
+    win_r1c0:
+      raw_port: win_r1c0
+      direction: output
+      width: 8
+      notes: "Window tap (x-1, y), zero-padded at the left border"
+
+    win_r1c1:
+      raw_port: win_r1c1
+      direction: output
+      width: 8
+      notes: "Window tap (x, y) -- the center pixel itself"
+
+    win_r1c2:
+      raw_port: win_r1c2
+      direction: output
+      width: 8
+      notes: "Window tap (x+1, y), zero-padded at the right border"
+
+    win_r2c0:
+      raw_port: win_r2c0
+      direction: output
+      width: 8
+      notes: "Window tap (x-1, y+1), zero-padded at frame/row borders"
+
+    win_r2c1:
+      raw_port: win_r2c1
+      direction: output
+      width: 8
+      notes: "Window tap (x, y+1), zero-padded at the bottom border (last row)"
+
+    win_r2c2:
+      raw_port: win_r2c2
+      direction: output
+      width: 8
+      notes: "Window tap (x+1, y+1), zero-padded at frame/row borders"
+
+    out_x:
+      raw_port: out_x
+      direction: output
+      width: 12
+      notes: "x of the window's center pixel"
+
+    out_y:
+      raw_port: out_y
+      direction: output
+      width: 12
+      notes: "y of the window's center pixel"
+
+    out_frame_id:
+      raw_port: out_frame_id
+      direction: output
+      width: 16
+
+    out_tile_id:
+      raw_port: out_tile_id
+      direction: output
+      width: 16
+
+    out_end_of_line:
+      raw_port: out_end_of_line
+      direction: output
+      width: 1
+
+    out_end_of_frame:
+      raw_port: out_end_of_frame
+      direction: output
+      width: 1
+
+    out_valid:
+      raw_port: out_valid
+      direction: output
+      width: 1
+      notes: "Output valid strobe"

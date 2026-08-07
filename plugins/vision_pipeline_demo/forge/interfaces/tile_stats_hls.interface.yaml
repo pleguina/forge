@@ -1,0 +1,117 @@
+# Integration contract for the tile_stats_hls HLS module
+#
+# IP: tile_stats_hls
+# ip_info_key: tstats
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: tile_stats_hls
+  ip_info_key: tstats
+  source_type: hls
+  normalization_status: ready
+  # clock_free not set: tile_stats_hls uses HLS LATENCY min=6 max=6, so
+  # ap_clk IS present in the synthesized RTL (same convention as
+  # pixel_normalizer_ip.interface.yaml / sobel_hls.interface.yaml).
+  notes: >
+    This is a per-tile streaming statistics accumulator. Fan-out sibling
+    of window_builder_rtl/threshold_rtl (all driven directly from
+    pixel_normalizer, not chained after either) -- accumulates running
+    min/max/sum/sum-of-squares across one tile's 64 samples and emits
+    population mean/variance on the tile's last accepted sample. Fixed
+    6-cycle latency, II=2 -- an earlier bounded 6..10 estimate turned
+    out, once actually synthesized, to be one fixed depth; see
+    modules.yml for the full correction.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    normalized_pixel:
+      raw_port: normalized_pixel
+      direction: input
+      width: 8
+
+    x:
+      raw_port: x
+      direction: input
+      width: 12
+
+    y:
+      raw_port: y
+      direction: input
+      width: 12
+
+    frame_id:
+      raw_port: frame_id
+      direction: input
+      width: 16
+
+    tile_id:
+      raw_port: tile_id
+      direction: input
+      width: 16
+
+    end_of_line:
+      raw_port: end_of_line
+      direction: input
+      width: 1
+
+    end_of_frame:
+      raw_port: end_of_frame
+      direction: input
+      width: 1
+
+    in_valid:
+      raw_port: in_valid
+      direction: input
+      width: 1
+      notes: "Input valid strobe (driven from pixel_normalizer's normalized_valid)"
+
+    minimum:
+      raw_port: minimum
+      direction: output
+      width: 8
+      notes: "Running minimum over the tile, valid only when out_valid is set"
+
+    maximum:
+      raw_port: maximum
+      direction: output
+      width: 8
+      notes: "Running maximum over the tile, valid only when out_valid is set"
+
+    mean:
+      raw_port: mean
+      direction: output
+      width: 16
+      notes: "sum_of_64_pixels >> 6 (exact shift, no rounding, since tile size is a fixed power-of-two 64 samples)"
+
+    variance:
+      raw_port: variance
+      direction: output
+      width: 24
+      notes: "max(0, (sum_of_squares >> 6) - mean^2) -- population variance, clamped at 0 to absorb fixed-point rounding error that could otherwise drive it slightly negative"
+
+    tile_id_out:
+      raw_port: tile_id_out
+      direction: output
+      width: 16
+
+    frame_id_out:
+      raw_port: frame_id_out
+      direction: output
+      width: 16
+
+    out_valid:
+      raw_port: out_valid
+      direction: output
+      width: 1
+      notes: "Pulses one cycle per tile, on the tile's last accepted sample"

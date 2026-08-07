@@ -1,0 +1,133 @@
+# Integration contract for the pixel_normalizer HLS module
+#
+# IP: pixel_normalizer
+# ip_info_key: norm
+# Policy: docs/concepts/contracts-and-protocols.md
+#
+# Field set mirrors the logical forge.pixel_stream.v1 bus -- no
+# bus-grouping mechanism exists in the framework today (confirmed:
+# forge.contracts.contract_verifier.KNOWN_PROTOCOLS has no such concept),
+# so this is expressed as individual roles, exactly like every other
+# reference plugin's interface contract.
+
+ip_interface:
+  module_name: pixel_normalizer
+  ip_info_key: norm
+  source_type: hls
+  normalization_status: ready
+  # clock_free not set: pixel_normalizer uses HLS LATENCY min=3 max=3, so
+  # ap_clk IS present in the synthesized RTL (same convention as
+  # plugins/trigger_demo/algo/trigger_logic).
+  notes: >
+    Quickstart-tier normalizer: normalized = clamp(scale*pixel + offset,
+    0, 255). Every other forge.pixel_stream.v1 field is passed through
+    unchanged. Pipelined at II=1, fixed latency 3 cycles.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    pixel:
+      raw_port: pixel
+      direction: input
+      width: 8
+      notes: "Raw input pixel value"
+
+    x:
+      raw_port: x
+      direction: input
+      width: 12
+      notes: "Pixel column coordinate"
+
+    y:
+      raw_port: y
+      direction: input
+      width: 12
+      notes: "Pixel row coordinate"
+
+    frame_id:
+      raw_port: frame_id
+      direction: input
+      width: 16
+      notes: "Frame identifier"
+
+    tile_id:
+      raw_port: tile_id
+      direction: input
+      width: 16
+      notes: "Tile identifier -- passed through unchanged; pixel_normalizer itself does not compute tile geometry, so isolated tests of this module alone drive it as a fixed placeholder"
+
+    end_of_line:
+      raw_port: end_of_line
+      direction: input
+      width: 1
+      notes: "Asserted on the last pixel of a row"
+
+    end_of_frame:
+      raw_port: end_of_frame
+      direction: input
+      width: 1
+      notes: "Asserted on the last pixel of a frame"
+
+    pixel_valid:
+      raw_port: pixel_valid
+      direction: input
+      width: 1
+      notes: "Input valid strobe"
+
+    normalized_pixel:
+      raw_port: normalized_pixel
+      direction: output
+      width: 8
+      notes: "clamp(scale*pixel + offset, 0, 255)"
+
+    x_out:
+      raw_port: x_out
+      direction: output
+      width: 12
+      notes: "x, passed through"
+
+    y_out:
+      raw_port: y_out
+      direction: output
+      width: 12
+      notes: "y, passed through"
+
+    frame_id_out:
+      raw_port: frame_id_out
+      direction: output
+      width: 16
+      notes: "frame_id, passed through"
+
+    tile_id_out:
+      raw_port: tile_id_out
+      direction: output
+      width: 16
+      notes: "tile_id, passed through"
+
+    end_of_line_out:
+      raw_port: end_of_line_out
+      direction: output
+      width: 1
+      notes: "end_of_line, passed through"
+
+    end_of_frame_out:
+      raw_port: end_of_frame_out
+      direction: output
+      width: 1
+      notes: "end_of_frame, passed through"
+
+    normalized_valid:
+      raw_port: normalized_valid
+      direction: output
+      width: 1
+      notes: "Output valid strobe"

@@ -1,0 +1,46 @@
+# Normalized Signal Families - Framework Vocabulary
+
+version: 2
+status: framework-example
+
+purpose: >-
+  This file documents the framework concept of signal families: stable
+  semantic groups of wiring_kind values used by interface contracts and
+  topology groups. Domain-specific families belong in the plugin repository.
+
+families:
+  configuration:
+    description: Configuration words and validity strobes distributed to modules.
+    wiring_kinds:
+      - cfg_word
+      - cfg_valid
+
+  frontend_stream:
+    description: Packed frontend records entering a plugin pipeline.
+    wiring_kinds:
+      - frontend_record
+      - frontend_valid
+
+  processed_stream:
+    description: Processed records after an initial plugin-owned transform.
+    wiring_kinds:
+      - processed_record
+      - processed_valid
+
+  candidate_stream:
+    description: Candidate records selected or ranked by plugin logic.
+    wiring_kinds:
+      - candidate_record
+      - candidate_score
+      - candidate_valid
+
+validation_rules:
+  - Every wiring_kind value used by a plugin contract should be declared in that plugin's registry or in this framework example when it is truly generic.
+  - A wiring_kind belongs to exactly one family within a registry.
+  - Plugin-specific detector, trigger, or algorithm names should not be added to FORGE core.
+
+topology_groups_example:
+  - name: producer_to_consumer
+    family: processed_stream
+    producers: [producer_stage]
+    consumers: [consumer_stage]

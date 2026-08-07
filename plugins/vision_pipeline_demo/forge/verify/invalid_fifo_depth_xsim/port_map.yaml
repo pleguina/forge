@@ -1,0 +1,123 @@
+format_version: '1'
+generated_by: forge gen-top --mode verilog
+source_file: /data3/home/pleguina/work/omtf-integration-test/workspace/arc-framework/gen-top/design_vision_pipeline_invalid_fifo_depth/algo_top.v
+top_module: algo_top
+port_signature_hash: 8068fb042b00188a
+port_groups:
+  clock_reset: []
+  bx0: []
+  outputs:
+  - name: pktz_packet_data
+    direction: output
+    width: 256
+    group: other
+  - name: pktz_packet_keep
+    direction: output
+    width: 32
+    group: other
+  - name: pktz_packet_last
+    direction: output
+    width: 1
+    group: other
+  - name: pktz_packet_valid
+    direction: output
+    width: 1
+    group: other
+  unclassified:
+  - name: ap_clk
+    direction: input
+    width: 1
+  - name: ap_rst
+    direction: input
+    width: 1
+  - name: clk_output
+    direction: input
+    width: 1
+  - name: norm_px_end_of_frame
+    direction: input
+    width: 1
+  - name: norm_px_end_of_line
+    direction: input
+    width: 1
+  - name: norm_px_frame_id
+    direction: input
+    width: 16
+  - name: norm_px_pixel
+    direction: input
+    width: 8
+  - name: norm_px_pixel_valid
+    direction: input
+    width: 1
+  - name: norm_px_tile_id
+    direction: input
+    width: 16
+  - name: norm_px_x
+    direction: input
+    width: 12
+  - name: norm_px_y
+    direction: input
+    width: 12
+  - name: norm_tile_end_of_frame
+    direction: input
+    width: 1
+  - name: norm_tile_end_of_line
+    direction: input
+    width: 1
+  - name: norm_tile_frame_id
+    direction: input
+    width: 16
+  - name: norm_tile_pixel
+    direction: input
+    width: 8
+  - name: norm_tile_pixel_valid
+    direction: input
+    width: 1
+  - name: norm_tile_tile_id
+    direction: input
+    width: 16
+  - name: norm_tile_x
+    direction: input
+    width: 12
+  - name: norm_tile_y
+    direction: input
+    width: 12
+  - name: rst_output
+    direction: input
+    width: 1
+tier2_probes:
+- name: pr_full
+  net: dut.sync_net_prpack_pktz_out_record_full
+  width: 1
+- name: pr_empty
+  net: dut.sync_net_prpack_pktz_out_record_empty
+  width: 1
+- name: pr_overflow
+  net: dut.sync_net_prpack_pktz_out_record_overflow
+  width: 1
+- name: pr_underflow
+  net: dut.sync_net_prpack_pktz_out_record_underflow
+  width: 1
+- name: pr_occupancy
+  net: dut.sync_net_prpack_pktz_out_record_occupancy
+  width: 3
+- name: pr_high_water
+  net: dut.sync_net_prpack_pktz_out_record_high_water
+  width: 3
+- name: ts_full
+  net: dut.sync_net_tspack_pktz_out_record_full
+  width: 1
+- name: ts_empty
+  net: dut.sync_net_tspack_pktz_out_record_empty
+  width: 1
+- name: ts_overflow
+  net: dut.sync_net_tspack_pktz_out_record_overflow
+  width: 1
+- name: ts_underflow
+  net: dut.sync_net_tspack_pktz_out_record_underflow
+  width: 1
+- name: ts_occupancy
+  net: dut.sync_net_tspack_pktz_out_record_occupancy
+  width: 7
+- name: ts_high_water
+  net: dut.sync_net_tspack_pktz_out_record_high_water
+  width: 7

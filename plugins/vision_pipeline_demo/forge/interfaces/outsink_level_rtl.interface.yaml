@@ -1,0 +1,51 @@
+# Integration contract for the outsink_level_rtl module
+#
+# IP: outsink_level_rtl
+# ip_info_key: outlvl
+# Policy: docs/concepts/contracts-and-protocols.md
+
+ip_interface:
+  module_name: outsink_level_rtl
+  ip_info_key: outlvl
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    This is the `output` domain's async_fifo consumer and level_sync source.
+    Genuinely non-standard clock_primary/reset_primary names
+    (clk_output/rst_output) -- see outsink_level_rtl.v.
+
+  roles:
+
+    clock_primary:
+      raw_port: clk_output
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: rst_output
+      direction: input
+      width: 1
+      active_level: high
+
+    result_in:
+      raw_port: result_in
+      direction: input
+      width: 26
+      notes: "Already synchronized -- destination of the pixel -> output cdc: {kind: async_fifo} connection"
+
+    error_in:
+      raw_port: error_in
+      direction: input
+      width: 1
+      notes: "Testbench-driven"
+
+    result_status:
+      raw_port: result_status
+      direction: output
+      width: 26
+
+    error_out:
+      raw_port: error_out
+      direction: output
+      width: 1
+      notes: "cdc: {kind: level_sync} source -> control"

@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Design Topology (pixel-result path)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Pipeline:
+#
+#   external pixel stream -> pixel_normalizer (HLS)
+#     -> window_builder_rtl (RTL) -> sobel_hls (HLS)  ─┐
+#     -> threshold_rtl (RTL), +12-cycle alignment delay ┴-> edge_mask_merge_rtl (RTL)
+#     -> external edge_mask_stream
+#
+# One clock domain (no CDC, no tile statistics -- see design_cdc.yml and
+# design_tile_stats.yml for those) — the pixel-result path only.
+# delay_cycles: 12 on the threshold branch realigns it with the Sobel
+# branch's own total latency (window_builder_rtl 10 cycles + sobel_hls 4
+# cycles = 14, vs. threshold_rtl's 2 + 12 = 14), so both branches present
+# the same logical pixel to edge_mask_merge_rtl on the same cycle --
+# forge.analysis.latency_static's real exact_cycle merge-point check
+# verifies this statically at `forge topgen validate` time; the
+# tag_mismatch output on edge_mask_merge_rtl verifies it again at runtime.
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema_version: "1.0"
+part: xcvu9p-flga2104-2L-e
+clock_period: 4.0
+
+block_protocol: none
+connect_clock: true
+connect_reset: true
+
+registry: ../modules.yml
+
+modules:
+
+- name: norm
+  ref: pixel_normalizer
+  instances: 1
+  external_in_ports: [pixel, x, y, frame_id, tile_id, end_of_line, end_of_frame, pixel_valid]
+
+- name: winbld
+  ref: window_builder_rtl
+  instances: 1
+
+- name: sobel
+  ref: sobel_hls
+  instances: 1
+
+- name: thresh
+  ref: threshold_rtl
+  instances: 1
+
+- name: merge
+  ref: edge_mask_merge_rtl
+  instances: 1
+  external_out_ports:
+    - normalized_pixel
+    - gradient_magnitude
+    - threshold_mask
+    - out_x
+    - out_y
+    - out_frame_id
+    - out_tile_id
+    - out_end_of_line
+    - out_end_of_frame
+    - out_valid
+    - tag_mismatch
+
+connections:
+
+- from: norm
+  to: winbld
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: norm
+  to: thresh
+  port_map:
+    - [normalized_pixel, normalized_pixel]
+    - [x_out, x]
+    - [y_out, y]
+    - [frame_id_out, frame_id]
+    - [tile_id_out, tile_id]
+    - [end_of_line_out, end_of_line]
+    - [end_of_frame_out, end_of_frame]
+    - [normalized_valid, in_valid]
+
+- from: winbld
+  to: sobel
+  port_map:
+    - [win_r0c0, win_r0c0]
+    - [win_r0c1, win_r0c1]
+    - [win_r0c2, win_r0c2]
+    - [win_r1c0, win_r1c0]
+    - [win_r1c1, win_r1c1]
+    - [win_r1c2, win_r1c2]
+    - [win_r2c0, win_r2c0]
+    - [win_r2c1, win_r2c1]
+    - [win_r2c2, win_r2c2]
+    - [out_x, x]
+    - [out_y, y]
+    - [out_frame_id, frame_id]
+    - [out_tile_id, tile_id]
+    - [out_end_of_line, end_of_line]
+    - [out_end_of_frame, end_of_frame]
+    - [out_valid, in_valid]
+
+- from: sobel
+  to: merge
+  port_map:
+    - [gradient_magnitude, sobel_magnitude]
+    - [x_out, sobel_x]
+    - [y_out, sobel_y]
+    - [frame_id_out, sobel_frame_id]
+    - [tile_id_out, sobel_tile_id]
+    - [end_of_line_out, sobel_end_of_line]
+    - [end_of_frame_out, sobel_end_of_frame]
+    - [out_valid, sobel_valid]
+
+- from: thresh
+  to: merge
+  delay_cycles: 12
+  port_map:
+    - [out_pixel, thresh_pixel]
+    - [threshold_mask, thresh_mask]
+    - [out_x, thresh_x]
+    - [out_y, thresh_y]
+    - [out_frame_id, thresh_frame_id]
+    - [out_tile_id, thresh_tile_id]
+    - [out_end_of_line, thresh_end_of_line]
+    - [out_end_of_frame, thresh_end_of_frame]
+    - [out_valid, thresh_valid]

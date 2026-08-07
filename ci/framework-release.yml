@@ -1,0 +1,100 @@
+# ============================================================================
+# ci/framework-release.yml
+#
+# Defines the framework release gate jobs.
+#
+# forge:framework-release-gate runs run_trigger_demo.sh — the same
+# end-to-end pipeline a human runs manually to validate a change (see
+# plugins/trigger_demo/README.md):
+#   validate → gen-top → verify generate → doctor → HLS csim/synth →
+#   all 9 verification flows (4 csim, 4 single-module xsim, 1 full-chip xsim)
+#
+# forge:vision-pipeline-release-gate runs run_vision_pipeline_demo.sh
+# (release-plan Phase 10, slice 10.7D — see plugins/vision_pipeline_demo/
+# README.md and docs/tutorials/vision-pipeline-full-design.md):
+#   validate → HLS csim/synth (3 modules) → the invalid_direct_bus_cdc.yml
+#   negative fixture (gen-top --strict, expected to fail) → gen-top (8
+#   designs) → verify generate → gen_stimulus per flow → doctor → all 9
+#   verification flows (1 csim, 8 full-chip xsim — including
+#   invalid_fifo_depth_xsim, expected to fail as its own negative-fixture
+#   evidence)
+#
+# Both are the framework's real hardware-toolchain-dependent proof,
+# replacing a previous cmake install-tree/C++ package proof that targeted a
+# build target (framework::verif_core) which no longer exists — C++ verify
+# sources are now owned per-plugin (plugins/<plugin>/forge/verify/), not by
+# a shared top-level package.
+#
+# Each job:
+#   - runs automatically on the default branch (main) and version tags
+#   - is manually triggerable on merge requests (not blocking)
+#   - requires the vivado shell runner (Vitis HLS + Vivado xsim on PATH)
+#   - produces a structured log artifact for post-run inspection
+#
+# Consumed by: arc-framework/.gitlab-ci.yml (via include)
+# ============================================================================
+
+forge:framework-release-gate:
+  stage: release
+  tags:
+    - vivado
+  rules:
+    # Automatic on default branch
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    # Automatic on version tags
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+      when: on_success
+    # Manual trigger on merge requests (non-blocking — does not prevent merge)
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  before_script:
+    - pip install --quiet -e "forge[parser]" pytest pytest-cov
+  script:
+    - mkdir -p ci-logs
+    - bash run_trigger_demo.sh --jobs=4 2>&1 | tee ci-logs/release-gate.log
+  after_script:
+    - echo "Release gate exit code $CI_JOB_STATUS"
+  artifacts:
+    name: "forge-release-gate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 30 days
+    paths:
+      - ci-logs/release-gate.log
+
+forge:vision-pipeline-release-gate:
+  stage: release
+  tags:
+    - vivado
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  before_script:
+    - pip install --quiet -e "forge[parser]" pytest pytest-cov
+  script:
+    - mkdir -p ci-logs
+    - bash run_vision_pipeline_demo.sh --jobs=4 2>&1 | tee ci-logs/vision-pipeline-release-gate.log
+    - |
+      echo "--- forge report --plugin vision_pipeline_demo (final offline report bundle, fresh artifacts) ---" \
+        | tee -a ci-logs/vision-pipeline-release-gate.log
+      forge report plugins/vision_pipeline_demo/forge/designs/design_platform_wrapper.yml \
+        --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
+        --hls-build-root build_hls_vision_pipeline_demo \
+        --plugin vision_pipeline_demo \
+        --output build/vision_pipeline_demo/report \
+        2>&1 | tee -a ci-logs/vision-pipeline-release-gate.log
+  after_script:
+    - echo "Release gate exit code $CI_JOB_STATUS"
+  artifacts:
+    name: "forge-vision-pipeline-release-gate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 30 days
+    paths:
+      - ci-logs/vision-pipeline-release-gate.log
+      - build/vision_pipeline_demo/report/

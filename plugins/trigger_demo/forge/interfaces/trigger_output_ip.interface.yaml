@@ -1,0 +1,59 @@
+# Integration contract for the trigger_output HLS module
+#
+# IP: trigger_output
+# ip_info_key: tout
+# Policy: framework/IP_INTERFACE_POLICY.md
+
+ip_interface:
+  module_name: trigger_output
+  ip_info_key: tout
+  source_type: hls
+  normalization_status: ready
+  clock_free: true   # Synthesised as purely combinational (ap_ctrl_none, II=1) — no ap_clk port in RTL
+  notes: >
+    Packs trigger decision into a 32-bit readout word.
+    Word layout: [31]=accept, [23:16]=quality, [15:0]=reserved.
+    Pipelined at II=1.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    trigger_accept:
+      raw_port: trigger_accept
+      direction: input
+      width: 1
+      notes: "Trigger decision from trigger_logic"
+
+    trigger_quality:
+      raw_port: trigger_quality
+      direction: input
+      width: 8
+      notes: "Quality metric from trigger_logic"
+
+    trigger_valid:
+      raw_port: trigger_valid
+      direction: input
+      width: 1
+      notes: "Valid strobe from trigger_logic"
+
+    trigger_word:
+      raw_port: trigger_word
+      direction: output
+      width: 32
+      notes: "Packed trigger word for readout"
+
+    out_valid:
+      raw_port: out_valid
+      direction: output
+      width: 1
+      notes: "Output valid strobe"

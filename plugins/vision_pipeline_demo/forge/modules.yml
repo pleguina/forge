@@ -1,0 +1,313 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Vision Pipeline Demo — Module Registry
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Every HLS/RTL module used across this project's designs, one shared
+# registry. The smallest design (design.yml) uses only two entries:
+#
+#   pixel_normalizer (HLS) -> threshold_rtl (RTL) -> external result stream
+#
+# Larger designs (Sobel edge detection, tile statistics, multi-domain
+# CDC, throughput/backpressure via async FIFOs, a runtime-configurable
+# platform wrapper) reuse these same entries and add more, all defined
+# below.
+# ═══════════════════════════════════════════════════════════════════════════
+registry_version: '1'
+
+defaults:
+  part: xcvu9p-flga2104-2L-e
+  clock_period: 4.0
+  vendor: vision_pipeline_demo
+  version: '1.0'
+
+modules:
+
+# ─── Pixel Normalizer (HLS) ────────────────────────────────────────────────
+- name: pixel_normalizer
+  kind: hls
+  top: pixel_normalizer
+  # HLS LATENCY min=3 max=3 — a real fixed latency, not a rough estimate
+  # (same structured latency: {kind: fixed, ...} spelling
+  # plugins/trigger_demo/forge/modules.yml's trigger_logic entry uses).
+  latency:
+    kind: fixed
+    cycles: 3
+  interface_contract: interfaces/pixel_normalizer_ip.interface.yaml
+  src: [../algo/normalizer/pixel_normalizer.cpp]
+  includes: [../algo/normalizer, verify/include, verify/src]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+  verify:
+    tb_src:
+      - ../algo/normalizer/pixel_normalizer.cpp
+      - verify/src/logging.cpp
+      - verify/tests/tb_pixel_normalizer.cpp
+    tb_args: verify/schemas/data/vision_pipeline_quickstart_golden.xml
+    testbench_target: tb_pixel_normalizer
+
+# ─── Threshold Comparator (RTL) ────────────────────────────────────────────
+- name: threshold_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: threshold_rtl
+  # Fixed 2-cycle registered latency (see algo/rtl/threshold_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 2
+  interface_contract: interfaces/threshold_rtl.interface.yaml
+  src: [../algo/rtl/threshold_rtl.v]
+
+# ─── Configurable Threshold Comparator (RTL) ────────────────────────────────
+- name: threshold_configurable_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: threshold_configurable_rtl
+  # Fixed 2-cycle registered latency, identical to threshold_rtl.v (see
+  # algo/rtl/threshold_configurable_rtl.v) -- threshold comes from a real
+  # cdc: {kind: mailbox_transfer} crossing instead of a compile-time
+  # parameter, latched at frame boundaries.
+  latency:
+    kind: fixed
+    cycles: 2
+  interface_contract: interfaces/threshold_configurable_rtl.interface.yaml
+  src: [../algo/rtl/threshold_configurable_rtl.v]
+
+# ─── Control-domain configuration source (platform fixture) ────────────────
+- name: ctrl_mailbox_platform_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_mailbox_platform_rtl
+  # Fixed 1-cycle registered latency (see algo/rtl/ctrl_mailbox_platform_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_mailbox_platform_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_mailbox_platform_rtl.v]
+
+# ─── Window Builder (RTL) ────────────────────────────────────────────────
+- name: window_builder_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: window_builder_rtl
+  # Fixed FRAME_WIDTH+2 cycle latency (FRAME_WIDTH=8 here) -- empirically
+  # verified, not just derived; see algo/rtl/window_builder_rtl.v's header.
+  latency:
+    kind: fixed
+    cycles: 10
+  interface_contract: interfaces/window_builder_rtl.interface.yaml
+  src: [../algo/rtl/window_builder_rtl.v]
+
+# ─── Sobel Gradient (HLS) ────────────────────────────────────────────────
+- name: sobel_hls
+  kind: hls
+  top: sobel_hls
+  # Fixed 4-cycle latency (see algo/sobel/sobel_hls.cpp's LATENCY pragma).
+  latency:
+    kind: fixed
+    cycles: 4
+  interface_contract: interfaces/sobel_hls.interface.yaml
+  src: [../algo/sobel/sobel_hls.cpp]
+  includes: [../algo/sobel]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+# ─── Edge/Mask Merge (RTL) ───────────────────────────────────────────────
+- name: edge_mask_merge_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: edge_mask_merge_rtl
+  # Fixed 1-cycle latency (see algo/rtl/edge_mask_merge_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/edge_mask_merge_rtl.interface.yaml
+  src: [../algo/rtl/edge_mask_merge_rtl.v]
+
+# ─── Tile Statistics (HLS) ───────────────────────────────────────────────
+- name: tile_stats_hls
+  kind: hls
+  top: tile_stats_hls
+  # Fixed 1-cycle latency, real II=1 (was `kind: fixed, cycles: 6` at
+  # II=2 in an earlier revision, see git history).
+  # The original II=2 was a real, empirically-confirmed csynth result at
+  # the time (a single loop-carried sum-of-squares accumulator bound to
+  # a 3-cycle-latency DSP48 MACC), not a placeholder -- but it was not
+  # the *only* real constraint, and turned out to be fixable: rewriting
+  # the accumulator as 4 round-robin partial sums (hiding the DSP's own
+  # latency) plus removing the function's `if`/`else` control flow
+  # entirely (pure branch-free select-based dataflow -- Vitis's own
+  # branch-driven basic-block splitting was a second, independent
+  # blocker, only found by testing after the first fix alone still
+  # reported II=2) together closed a real csynth run at II=1, LATENCY=1,
+  # confirmed at both the registry's shared 4.0ns HLS target and the
+  # real 200MHz/5.0ns clock design_packetizer.yml actually runs this
+  # module at (algo/tile_stats/tile_stats_hls.cpp's own header has the
+  # full derivation). tile_boundary_rtl/tile_summary_join_rtl's own
+  # bounded/elastic declarations below are unaffected --
+  # forge.analysis.latency_static's check_merge_points still classifies
+  # their shared merge point `bounded_skew` (tile_boundary_rtl alone
+  # still declares `kind: bounded`) and confirms the real, now much
+  # tighter, 1-cycle figure still lands inside tile_boundary_rtl's own
+  # [1,17] hold window with room to spare.
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/tile_stats_hls.interface.yaml
+  src: [../algo/tile_stats/tile_stats_hls.cpp]
+  includes: [../algo/tile_stats]
+
+  build:
+    stages: [csim, synth, cosim, export]
+    csim_opts: -clean
+
+# ─── Tile Boundary / tile-end summary (RTL) ─────────────────────────────
+- name: tile_boundary_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: tile_boundary_rtl
+  # Bounded (see algo/rtl/tile_boundary_rtl.v): the tag latches 1 cycle
+  # after the triggering tile-last sample and stays valid for
+  # HOLD_CYCLES=16 cycles after that -- min_cycles=1/max_cycles=17
+  # declares the real window the held tag is guaranteed available in,
+  # which comfortably covers tile_stats_hls's own declared [6,10]
+  # bound (both branches are triggered by the same input cycle).
+  latency:
+    kind: bounded
+    min_cycles: 1
+    max_cycles: 17
+  interface_contract: interfaces/tile_boundary_rtl.interface.yaml
+  src: [../algo/rtl/tile_boundary_rtl.v]
+
+# ─── Tile Summary Join (RTL) ─────────────────────────────────────────────
+- name: tile_summary_join_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: tile_summary_join_rtl
+  # Elastic -- must not be reported as fixed. The join's
+  # real completion time is dominated by whichever of its two
+  # predecessors (one fixed, one bounded) is slower for a given tile,
+  # not this module's own 1-cycle match-and-forward step.
+  latency:
+    kind: elastic
+  interface_contract: interfaces/tile_summary_join_rtl.interface.yaml
+  src: [../algo/rtl/tile_summary_join_rtl.v]
+
+# ─── Control Level (RTL) ─────────────────────────────────────────────────
+- name: ctrl_level_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_level_rtl
+  # Fixed 1-cycle latency (see algo/rtl/ctrl_level_rtl.v). A dedicated
+  # module per crossing kind, not one bigger control-domain register
+  # bank -- see that file's header for why (ATG027, forge.contracts.config).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_level_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_level_rtl.v]
+
+# ─── Control Pulse (RTL) ─────────────────────────────────────────────────
+- name: ctrl_pulse_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_pulse_rtl
+  # Fixed 1-cycle latency (see algo/rtl/ctrl_pulse_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_pulse_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_pulse_rtl.v]
+
+# ─── Control Mailbox (RTL) ───────────────────────────────────────────────
+- name: ctrl_mailbox_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: ctrl_mailbox_rtl
+  # Fixed 1-cycle latency (see algo/rtl/ctrl_mailbox_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/ctrl_mailbox_rtl.interface.yaml
+  src: [../algo/rtl/ctrl_mailbox_rtl.v]
+
+# ─── Pixel Sink (RTL) ────────────────────────────────────────────────────
+- name: pixel_sink_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: pixel_sink_rtl
+  # Fixed 1-cycle latency (see algo/rtl/pixel_sink_rtl.v). Receives from
+  # three distinct source instances (ctrl_level_rtl/ctrl_pulse_rtl/
+  # ctrl_mailbox_rtl) -- no cdc_map collision risk on the destination
+  # side (only same-(src,dst)-pair collisions are a hazard, see
+  # ctrl_level_rtl.v), so this stays one module.
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/pixel_sink_rtl.interface.yaml
+  src: [../algo/rtl/pixel_sink_rtl.v]
+
+# ─── Output Level (RTL) ──────────────────────────────────────────────────
+- name: outsink_level_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: outsink_level_rtl
+  # Fixed 1-cycle latency (see algo/rtl/outsink_level_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/outsink_level_rtl.interface.yaml
+  src: [../algo/rtl/outsink_level_rtl.v]
+
+# ─── Output Pulse (RTL) ──────────────────────────────────────────────────
+- name: outsink_pulse_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: outsink_pulse_rtl
+  # Fixed 1-cycle latency (see algo/rtl/outsink_pulse_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/outsink_pulse_rtl.interface.yaml
+  src: [../algo/rtl/outsink_pulse_rtl.v]
+
+# ─── Pixel-Result Record Packer (RTL) ────────────────────────────────────
+- name: pixel_result_packer_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: pixel_result_packer_rtl
+  # Fixed 1-cycle latency (see algo/rtl/pixel_result_packer_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/pixel_result_packer_rtl.interface.yaml
+  src: [../algo/rtl/pixel_result_packer_rtl.v]
+
+# ─── Tile-Statistics Record Packer (RTL) ─────────────────────────────────
+- name: tile_stats_packer_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: tile_stats_packer_rtl
+  # Fixed 1-cycle latency (see algo/rtl/tile_stats_packer_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 1
+  interface_contract: interfaces/tile_stats_packer_rtl.interface.yaml
+  src: [../algo/rtl/tile_stats_packer_rtl.v]
+
+# ─── Packetizer (RTL) ────────────────────────────────────────────────────
+- name: packetizer_rtl
+  kind: rtl
+  rtl_lang: verilog
+  top: packetizer_rtl
+  # Fixed 3-cycle latency, a real 3-stage pipeline accepting one input
+  # per cycle (see algo/rtl/packetizer_rtl.v).
+  latency:
+    kind: fixed
+    cycles: 3
+  interface_contract: interfaces/packetizer_rtl.interface.yaml
+  src: [../algo/rtl/packetizer_rtl.v]

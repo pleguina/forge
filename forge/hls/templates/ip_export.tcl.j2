@@ -1,0 +1,65 @@
+# ip_export.tcl — auto-generated for {{ module_name }}. DO NOT EDIT BY HAND.
+
+# Absolute path to this module's HLS project directory
+set project_dir "{{ project_dir }}"
+
+# Open the HLS project + its default solution
+open_project $project_dir
+open_solution "solution1"
+
+# Target FPGA part
+set part_name "{{ part }}"
+set_part $part_name
+
+# Directory where the packaged IP .zip must be written
+# This is an absolute path to the repository's ip_packages directory, injected by Python
+set out_dir "{{ ip_packages_dir }}"
+file mkdir $out_dir
+
+# Name of the final output archive: <module_name>_ip.zip
+set output_zip [file join $out_dir "{{ module_name }}_ip.zip"]
+
+# Flow option: "impl" (place & route), "syn" (synthesis only), or blank (export only)
+{% if flow == "impl" %}
+set ip_opts "-flow impl"
+puts "▶ Using flow: impl (RTL synthesis + place & route - most accurate QoR, slowest)"
+{% elif flow == "syn" %}
+set ip_opts "-flow syn"
+puts "▶ Using flow: syn (RTL synthesis only - accurate timing, faster)"
+{% else %}
+set ip_opts ""
+puts "▶ Using flow: export only (no synthesis - fastest, no QoR data)"
+{% endif %}
+
+# Pretty logging
+set output_zip_abs [file normalize $output_zip]
+puts "▶ export_design $ip_opts → $output_zip_abs"
+
+# IP packaging metadata
+# These values will show up in the .xci/.core metadata
+config_export \
+    -description  "{{ module_name }} IP block" \
+    -display_name "{{ module_name }}" \
+    -vendor       "{{ vendor }}" \
+    -version      "{{ version }}"
+
+# Build the export_design command
+set cmd [list export_design -output $output_zip]
+if { $ip_opts ne "" } {
+    eval lappend cmd $ip_opts
+}
+
+# Run export_design and sanity check
+set status [catch {eval $cmd} errMsg]
+if {$status != 0} {
+    puts "❌ export_design failed: $errMsg"
+    exit 1
+} elseif {![file exists $output_zip_abs]} {
+    puts "❌ export_design failed: output file not found at $output_zip_abs"
+    exit 1
+} else {
+    puts "✅ IP exported → $output_zip_abs"
+}
+
+close_project
+exit

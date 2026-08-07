@@ -1,0 +1,466 @@
+# ============================================================================
+# arc-framework/.gitlab-ci.yml
+#
+# Pipeline for the arc-framework repository.
+#
+# Workflow:
+#   - runs on merge requests (blocking correctness jobs)
+#   - runs on the default branch (all jobs including release gate auto)
+#   - runs on version tags (all jobs including release gate auto)
+#   - skips on draft MRs
+#
+# Runner classes:
+#   docker  — Python 3.11 container; all public-contract correctness jobs
+#   vivado  — shell executor (local PC); cmake / ctest / Vivado / HLS
+#
+# Failure handling policy:
+#   MR health     : all docker jobs must pass; vivado jobs are manual/advisory
+#   main health   : all docker jobs auto; vivado release gate auto
+#   Release health: version tag triggers docker jobs + vivado release gate;
+#                   both must pass for a release to be considered clean
+#
+# Included fragments:
+#   ci/framework-base.yml    — stages, default image, cache, setup anchor
+#   ci/framework-release.yml — forge:framework-release-gate (vivado runner,
+#                               runs run_trigger_demo.sh end to end)
+# ============================================================================
+
+include:
+  - local: ci/framework-base.yml
+  - local: ci/framework-release.yml
+
+# ---------------------------------------------------------------------------
+# Workflow — which pipelines to create
+# ---------------------------------------------------------------------------
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^Draft:/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+# ---------------------------------------------------------------------------
+# forge:lint
+#
+# Python style (flake8) and YAML structure (yamllint) over the framework
+# source tree. Fails fast on obvious coding or schema mistakes.
+# ---------------------------------------------------------------------------
+forge:lint:
+  stage: lint
+  tags:
+    - default-x86_64
+  before_script:
+    - !reference [.forge_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- Python lint (flake8) ---" | tee ci-logs/lint.log
+      flake8 forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen \
+        2>&1 | tee -a ci-logs/lint.log
+    - |
+      echo "--- YAML lint ---" | tee -a ci-logs/lint.log
+      yamllint -d relaxed \
+        plugins/trigger_demo/forge/designs/design.yml \
+        plugins/trigger_demo/forge/modules.yml \
+        2>&1 | tee -a ci-logs/lint.log
+  artifacts:
+    name: "forge-lint-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/lint.log
+
+# ---------------------------------------------------------------------------
+# forge:type-check
+#
+# mypy over forge/ core. Report-only (allow_failure: true) — the codebase
+# currently has a real, non-trivial baseline of pre-existing type errors
+# (see CHANGELOG.md) that hasn't been paid down yet. This job exists so that
+# baseline is visible and doesn't silently grow, without blocking merges on
+# work nobody has scoped yet. Tighten to blocking once the baseline is at
+# or near zero.
+# ---------------------------------------------------------------------------
+forge:type-check:
+  stage: lint
+  tags:
+    - default-x86_64
+  allow_failure: true
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache -e "forge[dev]"
+  script:
+    - mkdir -p ci-logs
+    - |
+      mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen \
+        2>&1 | tee ci-logs/type-check.log
+  artifacts:
+    name: "forge-type-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/type-check.log
+
+# ---------------------------------------------------------------------------
+# forge:schema-validate
+#
+# Validates every reference plugin's design topology and module registry
+# (trigger_demo, passthrough_demo, vision_pipeline_demo — all 7 of its real
+# designs) without generating any output.
+# ---------------------------------------------------------------------------
+forge:schema-validate:
+  stage: validate
+  tags:
+    - default-x86_64
+  before_script:
+    - !reference [.forge_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- forge topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
+      forge topgen validate \
+        plugins/trigger_demo/forge/designs/design.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate-registry \
+        plugins/trigger_demo/forge/modules.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate passthrough_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate \
+        plugins/passthrough_demo/forge/designs/design.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate-registry passthrough_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate-registry \
+        plugins/passthrough_demo/forge/modules.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      echo "--- forge topgen validate-registry vision_pipeline_demo ---" | tee -a ci-logs/schema-validate.log
+      forge topgen validate-registry \
+        plugins/vision_pipeline_demo/forge/modules.yml \
+        2>&1 | tee -a ci-logs/schema-validate.log
+    - |
+      for d in design design_pixel_result design_tile_stats design_cdc \
+               design_packetizer design_full_functional design_platform_wrapper; do
+        echo "--- forge topgen validate vision_pipeline_demo/${d}.yml ---" | tee -a ci-logs/schema-validate.log
+        forge topgen validate \
+          "plugins/vision_pipeline_demo/forge/designs/${d}.yml" \
+          2>&1 | tee -a ci-logs/schema-validate.log
+      done
+  artifacts:
+    name: "forge-schema-validate-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/schema-validate.log
+
+# ---------------------------------------------------------------------------
+# forge:agnosticism-check
+#
+# Regression guard: forge/ core must not hardcode CMS/OMTF-specific
+# detector types, trigger role names, or accelerator timing constants.
+# See ci/agnosticism_check.sh for the exact scope and allowlist.
+# ---------------------------------------------------------------------------
+forge:agnosticism-check:
+  stage: validate
+  tags:
+    - default-x86_64
+  script:
+    - mkdir -p ci-logs
+    - bash ci/agnosticism_check.sh 2>&1 | tee ci-logs/agnosticism-check.log
+  artifacts:
+    name: "forge-agnosticism-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/agnosticism-check.log
+
+# ---------------------------------------------------------------------------
+# forge:stale-reference-check
+#
+# Guard against dead command/path references (fw_verify, bare topgen,
+# framework/verify/python) creeping back in. See
+# ci/stale_reference_check.sh's header for why this exists — this branch
+# found the same class of bug, in the same repo, more times than it should
+# have, always by actually running code instead of reading it.
+# ---------------------------------------------------------------------------
+forge:stale-reference-check:
+  stage: validate
+  tags:
+    - default-x86_64
+  script:
+    - mkdir -p ci-logs
+    - bash ci/stale_reference_check.sh 2>&1 | tee ci-logs/stale-reference-check.log
+  artifacts:
+    name: "forge-stale-reference-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/stale-reference-check.log
+
+# ---------------------------------------------------------------------------
+# forge:vision-pipeline-reference-check
+#
+# Guard against internal phase/slice/spec-section planning references
+# creeping back into vision_pipeline_demo's production files or its
+# public tutorial pages. See
+# ci/vision_pipeline_demo_reference_check.sh's header for scope and why
+# it's narrower than forge:stale-reference-check.
+# ---------------------------------------------------------------------------
+forge:vision-pipeline-reference-check:
+  stage: validate
+  tags:
+    - default-x86_64
+  script:
+    - mkdir -p ci-logs
+    - bash ci/vision_pipeline_demo_reference_check.sh 2>&1 | tee ci-logs/vision-pipeline-reference-check.log
+  artifacts:
+    name: "forge-vision-pipeline-reference-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/vision-pipeline-reference-check.log
+
+# ---------------------------------------------------------------------------
+# forge:import-direction-check
+#
+# Cheap dependency-direction linter (release-plan §19, revised per the
+# audit: a full 5-package split is premature — the dependency direction it
+# would enforce is already clean, so a CI grep is the right-sized fix).
+# See ci/import_direction_check.sh for the exact rules enforced.
+# ---------------------------------------------------------------------------
+forge:import-direction-check:
+  stage: validate
+  tags:
+    - default-x86_64
+  script:
+    - mkdir -p ci-logs
+    - bash ci/import_direction_check.sh 2>&1 | tee ci-logs/import-direction-check.log
+  artifacts:
+    name: "forge-import-direction-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/import-direction-check.log
+
+# ---------------------------------------------------------------------------
+# forge:docs-build
+#
+# Proves the MkDocs site actually builds with zero warnings (--strict)
+# and that exclude_docs: really keeps docs/plan/** and docs/internal/**
+# out of the built site, not just out of nav. Also runs the built-HTML
+# link/anchor checker, the no-external-runtime-asset check, and the
+# generated-page / root-mirror staleness checks — all run here for real
+# via pytest rather than re-implemented as shell checks (see
+# forge/tests/test_docs_site_*.py, test_docs_staleness.py). The
+# forge.docsgen unit tests themselves
+# (test_docsgen_*.py) run as part of forge:python-unit-tests already, and
+# ci/quickstart_commands.sh's exact command sequence is already exercised
+# for real by forge:fresh-user-check — neither is duplicated here.
+# ---------------------------------------------------------------------------
+forge:docs-build:
+  stage: validate
+  tags:
+    - default-x86_64
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache -e "forge[docs]"
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- vision-pipeline tutorial reference-asset staleness ---" | tee ci-logs/docs-build.log
+      python3 plugins/vision_pipeline_demo/tutorial/generate_reference_assets.py --check \
+        2>&1 | tee -a ci-logs/docs-build.log
+    - mkdocs build --strict 2>&1 | tee -a ci-logs/docs-build.log
+    - |
+      python3 -m pytest \
+        forge/tests/test_docs_site_build.py \
+        forge/tests/test_docs_site_links.py \
+        forge/tests/test_docs_site_offline.py \
+        forge/tests/test_docs_staleness.py \
+        forge/tests/test_docs_visual_language.py \
+        --tb=short -q 2>&1 | tee -a ci-logs/docs-build.log
+  artifacts:
+    name: "forge-docs-build-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/docs-build.log
+      - site/
+
+# ---------------------------------------------------------------------------
+# forge:python-unit-tests
+#
+# Runs the forge unit tests plus every reference plugin's own verification
+# proof suite (trigger_demo, passthrough_demo, vision_pipeline_demo). These
+# tests require only Python — no HLS build or Vivado needed.
+# ---------------------------------------------------------------------------
+forge:python-unit-tests:
+  stage: test
+  tags:
+    - default-x86_64
+  before_script:
+    - !reference [.forge_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - |
+      echo "--- forge unit tests ---" | tee ci-logs/unit-tests.log
+      python3 -m pytest forge/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/forge-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+    - |
+      echo "--- trigger_demo verify tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/trigger-demo-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+    - |
+      echo "--- passthrough_demo verify tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/passthrough_demo/forge/verify/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/passthrough-demo-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+    - |
+      echo "--- vision_pipeline_demo verify tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/vision_pipeline_demo/forge/verify/tools/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/vision-pipeline-demo-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+  artifacts:
+    name: "forge-unit-tests-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 14 days
+    reports:
+      junit:
+        - ci-logs/forge-junit.xml
+        - ci-logs/trigger-demo-junit.xml
+        - ci-logs/passthrough-demo-junit.xml
+        - ci-logs/vision-pipeline-demo-junit.xml
+    paths:
+      - ci-logs/unit-tests.log
+      - ci-logs/forge-junit.xml
+      - ci-logs/trigger-demo-junit.xml
+      - ci-logs/passthrough-demo-junit.xml
+      - ci-logs/vision-pipeline-demo-junit.xml
+
+# ---------------------------------------------------------------------------
+# forge:verify-smoke
+#
+# Confirms the forge verify CLI is healthy using only Python/config operations:
+#   - generate --dry-run on two trigger_demo flows, two vision_pipeline_demo
+#     flows (the quickstart tier — the cheapest real proof, matching spec
+#     §29's Fast MR CI "quickstart generation" bullet)
+#   - doctor on trigger_demo and vision_pipeline_demo design.verification.yml
+#
+# Confirmed pure Python/config path — no simulator or Vivado dependency.
+# ---------------------------------------------------------------------------
+forge:verify-smoke:
+  stage: smoke
+  tags:
+    - default-x86_64
+  before_script:
+    - !reference [.forge_python_setup, before_script]
+  script:
+    - mkdir -p ci-logs
+    - DESIGN_FILE="plugins/trigger_demo/forge/verify/design.verification.yml"
+    - |
+      echo "--- forge verify generate dry-run (hit_decoder_csim) ---" | tee ci-logs/verify-smoke.log
+      forge verify generate "${DESIGN_FILE}" \
+        --flow hit_decoder_csim --dry-run \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - |
+      echo "--- forge verify generate dry-run (trigger_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify generate "${DESIGN_FILE}" \
+        --flow trigger_pipeline_xsim --dry-run \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - |
+      echo "--- forge verify doctor (trigger_demo) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify doctor "${DESIGN_FILE}" \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - VPD_DESIGN_FILE="plugins/vision_pipeline_demo/forge/verify/design.verification.yml"
+    - |
+      echo "--- forge verify generate dry-run (pixel_normalizer_csim) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify generate "${VPD_DESIGN_FILE}" \
+        --flow pixel_normalizer_csim --dry-run \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - |
+      echo "--- forge verify generate dry-run (quickstart_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify generate "${VPD_DESIGN_FILE}" \
+        --flow quickstart_pipeline_xsim --dry-run \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+    - |
+      echo "--- forge verify doctor (vision_pipeline_demo) ---" | tee -a ci-logs/verify-smoke.log
+      forge verify doctor "${VPD_DESIGN_FILE}" \
+        2>&1 | tee -a ci-logs/verify-smoke.log
+  artifacts:
+    name: "forge-verify-smoke-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/verify-smoke.log
+
+# ---------------------------------------------------------------------------
+# forge:fresh-user-check
+#
+# Exercises the full framework onboarding path from package install through
+# forge verify init-plugin scaffold and doctor, and doubles as an
+# agnosticism regression guard (the scaffolded plugin uses a generic,
+# non-CMS name). Catches regressions that only surface on a clean install.
+# ---------------------------------------------------------------------------
+forge:fresh-user-check:
+  stage: smoke
+  tags:
+    - default-x86_64
+  script:
+    - mkdir -p ci-logs
+    - bash ci/fresh_user_check.sh 2>&1 | tee ci-logs/fresh-user-check.log
+  artifacts:
+    name: "forge-fresh-user-check-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 7 days
+    paths:
+      - ci-logs/fresh-user-check.log
+
+# ---------------------------------------------------------------------------
+# forge:docs-versioned-artifact
+#
+# Release-plan Phase 9, slice 9.5: builds the complete, versioned `mike`
+# documentation artifact (docs/status: build/artifact DONE this phase) and
+# publishes it only as a downloadable CI artifact — it is never pushed to
+# any remote. Public documentation *publication* stays explicitly OPEN,
+# blocked on the canonical-host decision (see CONTRIBUTING.md's "Where
+# this lives": the CERN GitLab origin is provisional; the project is
+# migrating to a public host not yet finalized). This is a deliberate,
+# honestly-reported terminal state for this slice, not a shortfall.
+#
+# Gated the same way as forge:framework-release-gate: automatic on the
+# default branch and on version tags, manual (non-blocking) on MRs.
+# ---------------------------------------------------------------------------
+forge:docs-versioned-artifact:
+  stage: release
+  tags:
+    - default-x86_64
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  before_script:
+    - pip install --quiet --cache-dir .pip-cache -e "forge[docs]"
+    - git config user.email "ci@forge.local"
+    - git config user.name "forge-ci"
+  script:
+    - mkdir -p ci-logs
+    - bash ci/docs_publish.sh --output-dir docs-site-artifact 2>&1 | tee ci-logs/docs-publish.log
+  artifacts:
+    name: "forge-docs-site-${CI_COMMIT_SHORT_SHA}"
+    when: always
+    expire_in: 30 days
+    paths:
+      - ci-logs/docs-publish.log
+      - docs-site-artifact/

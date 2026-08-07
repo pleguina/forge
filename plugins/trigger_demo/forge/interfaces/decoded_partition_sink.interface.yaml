@@ -1,0 +1,58 @@
+# Integration contract for the decoded_partition_sink RTL helper
+
+ip_interface:
+  module_name: decoded_partition_sink
+  source_type: rtl
+  normalization_status: ready
+  notes: >
+    Consumes decoder outputs through partitioned topology_groups.
+    This module is a pure sink used to prove instance_assign wiring.
+
+  roles:
+
+    clock_primary:
+      raw_port: ap_clk
+      direction: input
+      width: 1
+
+    reset_primary:
+      raw_port: ap_rst
+      direction: input
+      width: 1
+      active_level: high
+
+    lower_hit_array:
+      array: true
+      raw_port_prefix: lower_hit_
+      count: 2
+      direction: input
+      width: 32
+      wiring_kind: decoded_hit
+      partition: lower_pair
+
+    lower_valid_array:
+      array: true
+      raw_port_prefix: lower_valid_
+      count: 2
+      direction: input
+      width: 1
+      wiring_kind: decoded_valid
+      partition: lower_pair
+
+    upper_hit_array:
+      array: true
+      raw_port_prefix: upper_hit_
+      count: 2
+      direction: input
+      width: 32
+      wiring_kind: decoded_hit
+      partition: upper_pair
+
+    upper_valid_array:
+      array: true
+      raw_port_prefix: upper_valid_
+      count: 2
+      direction: input
+      width: 1
+      wiring_kind: decoded_valid
+      partition: upper_pair

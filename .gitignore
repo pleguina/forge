@@ -1,0 +1,43 @@
+# Generated build and cache artifacts
+**/build/
+**/__pycache__/
+**/.pytest_cache/
+*.pyc
+
+# MkDocs build output (mkdocs.yml, site_dir: site)
+/site/
+.pip-cache/
+
+# Python packaging artifacts
+**/*.egg-info/
+.coverage
+htmlcov/
+
+# Local editor/runtime noise
+.vscode/
+
+# Local plugin mounts should be named explicitly by developers and kept out of commits.
+plugins/*_local/
+
+# HLS build outputs
+build_hls_trigger_demo/
+build_hls_vision_pipeline_demo/
+
+# Testbench run artifacts
+tb_*.csv
+tb_*.json
+
+# Simulation/tool logs and artifacts
+vitis_hls.log
+xvlog.log
+xvlog.pb
+xelab.log
+xelab.pb
+
+# Generated outputs
+out/
+gen-top/
+**/xsim_work/
+
+instructions.md
+docs/plan/

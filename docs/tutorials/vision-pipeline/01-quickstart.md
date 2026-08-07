@@ -1,0 +1,170 @@
+# 01 — Quickstart
+
+<nav class="forge-step-strip" aria-label="Chapter progress" markdown="span">
+**01** [02](02-project-structure-and-contracts.md) [03](03-mixed-rtl-hls.md) [04](04-parallel-paths-and-latency.md) [05](05-bounded-and-elastic-processing.md) [06](06-clock-domains-and-cdc.md) [07](07-throughput-backpressure-and-fifos.md) [08](08-datasets-and-golden-models.md) [09](09-full-functional-design.md) [10](10-platform-integration.md) [11](11-inspect-report-and-reproduce.md) [12](12-diagnostics-and-negative-fixtures.md)
+</nav>
+
+*Step 1 of 12*
+
+**Step in this chapter:** `quickstart` · **Tools needed:** Python, Vitis HLS, Vivado XSim
+
+## Goal
+
+Build and run the smallest possible mixed HLS/RTL pipeline in FORGE, end
+to end, so every later chapter can assume you've seen the basic
+validate → generate → verify shape once.
+
+## What you will learn
+
+- How a `design.yml` + `modules.yml` pair becomes real generated RTL.
+- How FORGE tells project-authored files apart from generated ones.
+- How a golden model replaces hand-typed expected values.
+
+## Starting design
+
+There is no smaller design in this tutorial — this is the first rung.
+
+## What you add
+
+```
+external pixel stream
+  -> pixel_normalizer (HLS): normalized = clamp(scale*pixel + offset, 0, 255)
+  -> threshold_rtl (RTL):    threshold_mask = (normalized_pixel >= THRESHOLD)
+  -> external result stream
+```
+
+Two module instances, one clock domain, no CDC, no tiling.
+
+## Files you edit
+
+| File | Ownership |
+|---|---|
+| `plugins/vision_pipeline_demo/algo/normalizer/pixel_normalizer.cpp` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/algo/rtl/threshold_rtl.v` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/forge/modules.yml` | <span class="badge badge-source">PROJECT SOURCE</span> |
+| `plugins/vision_pipeline_demo/forge/designs/design.yml` | <span class="badge badge-source">PROJECT SOURCE</span> |
+
+## What FORGE generates
+
+| Artifact | Ownership |
+|---|---|
+| `gen-top/design_vision_pipeline_quickstart/algo_top.v` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| `plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml`, `tb_algo_top.sv`, `stimulus_current.svh` | <span class="badge badge-generated">FORGE GENERATED</span> |
+| `build_hls_vision_pipeline_demo/pixel_normalizer/solution1/` | <span class="badge badge-toolchain">TOOLCHAIN OUTPUT</span> |
+
+## Command to run
+
+The one-line version, real and tested:
+
+```bash
+pip install -e forge/
+./run_vision_pipeline_demo.sh --step quickstart
+```
+
+Or the full manual sequence, so you can see what that one line does:
+
+```bash
+forge topgen validate           plugins/vision_pipeline_demo/forge/designs/design.yml
+forge topgen validate-registry  plugins/vision_pipeline_demo/forge/modules.yml
+
+forge hls gen-tcl --hls-config plugins/vision_pipeline_demo/forge/modules.yml \
+  --output-dir build_hls_vision_pipeline_demo
+forge hls run --registry plugins/vision_pipeline_demo/forge/modules.yml \
+  --hls-build-root build_hls_vision_pipeline_demo --stages csim,synth \
+  --modules pixel_normalizer
+
+forge topgen gen-top plugins/vision_pipeline_demo/forge/designs/design.yml \
+  --mode verilog \
+  --consumer-root . \
+  --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
+  --hls-build-root build_hls_vision_pipeline_demo \
+  --output gen-top/design_vision_pipeline_quickstart/algo_top.v
+
+forge verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+python3 plugins/vision_pipeline_demo/forge/verify/tools/gen_stimulus.py \
+  --flow quickstart_pipeline_xsim --event-id 0
+
+forge verify doctor plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+
+export CSIM_TB_TB_PIXEL_NORMALIZER="build_hls_vision_pipeline_demo/pixel_normalizer/solution1/csim/build/csim.exe"
+forge verify run plugins/vision_pipeline_demo/forge/verify/pixel_normalizer_csim/verify.flow.yml \
+  --plugin vision_pipeline_demo --consumer-root .
+forge verify run plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml \
+  --plugin vision_pipeline_demo --consumer-root .
+```
+
+## Expected terminal result
+
+```
+Scoreboard check: PASS
+...
+All 2 flow(s)/check(s) behaved as expected.
+```
+
+Both flows pass: `pixel_normalizer_csim` exercises just the HLS module's
+C-sim binary; `quickstart_pipeline_xsim` runs the generated `algo_top`
+end to end. A passing run means the live golden-model output —
+normalized pixel, threshold mask, valid — matched the RTL exactly.
+
+## Artifacts to inspect
+
+- `gen-top/design_vision_pipeline_quickstart/algo_top.v` — the generated
+  top level. Port names are instance-prefixed (`norm_x`,
+  `thresh_out_pixel`, …), not the bare interface-contract role names.
+- `plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/xsim_work/simulate.log`
+  — the real Vivado xsim transcript.
+
+## Visual result
+
+Rendered directly from the real golden dataset and this plugin's own
+`GoldenModelProvider` — not invented pixel values:
+
+<div class="forge-figure-grid" markdown>
+
+<figure markdown>
+  ![Input pixel grid: an 8x8 synthetic ramp frame, darkest at the top-left corner and brightest at the bottom-right](../../assets/generated/vision-pipeline/figures/quickstart-input.png)
+  <figcaption>Input: 8x8 synthetic ramp frame (pixel = (i*4) &amp; 0xFF).</figcaption>
+</figure>
+
+<figure markdown>
+  ![Normalized pixel grid after pixel_normalizer's clamp(scale*pixel + offset, 0, 255)](../../assets/generated/vision-pipeline/figures/quickstart-normalized.png)
+  <figcaption>Normalized: after pixel_normalizer's clamp(scale*pixel + offset, 0, 255).</figcaption>
+</figure>
+
+<figure markdown>
+  ![Threshold mask: black where normalized pixel is below THRESHOLD, white where at or above it](../../assets/generated/vision-pipeline/figures/quickstart-mask.png)
+  <figcaption>Threshold mask: black below THRESHOLD, white at or above it.</figcaption>
+</figure>
+
+</div>
+
+Topology (rendered by FORGE core's generic `forge inspect --svg`, not project-specific code):
+
+<figure markdown>
+  ![Quickstart topology: pixel_normalizer feeding threshold_rtl, one clock domain](../../assets/generated/vision-pipeline/diagrams/quickstart.svg){ width=500 }
+  <figcaption>norm → thresh, one clock domain (ap_clk).</figcaption>
+</figure>
+
+## Why the capability matters
+
+Every later design in this tutorial reuses this exact validate →
+gen-top → verify generate → verify run shape. Learning it once here,
+on the smallest possible design, means chapter 03 onward can focus on
+just what's new.
+
+## Common failure
+
+No standalone `single_module_rtl` flow exists for `pixel_normalizer` —
+its generated testbench would drive the raw Vitis-synthesized RTL's port
+names directly, which aren't known until real HLS synthesis has
+actually run once. `quickstart_pipeline_xsim` exercises the same module
+through FORGE's own generator instead, which handles that translation
+via the interface contract.
+
+## What changed from the previous chapter
+
+Nothing — this is the first chapter.
+
+## Next chapter
+
+[02 — Project structure and contracts](02-project-structure-and-contracts.md)

@@ -1,0 +1,64 @@
+{
+  "schema": {
+    "name": "forge.throughput_result",
+    "version": "1.0"
+  },
+  "design_hash": "0d6fdd15e6ea9a63473c3c144074b7cca4fa5ffa0085348f9cbd57a38bd2794e",
+  "dataset_hash": null,
+  "scenario_hash": null,
+  "static": [
+    {
+      "module_name": "pixel_normalizer",
+      "clock_frequency_mhz": 200.0,
+      "pipeline_ii": 1,
+      "records_per_cycle": 1.0,
+      "data_width_bits": 8,
+      "nominal_capacity_records_per_sec": 200000000.0
+    },
+    {
+      "module_name": "sobel_hls",
+      "clock_frequency_mhz": 200.0,
+      "pipeline_ii": 1,
+      "records_per_cycle": 1.0,
+      "data_width_bits": 12,
+      "nominal_capacity_records_per_sec": 200000000.0
+    },
+    {
+      "module_name": "tile_stats_hls",
+      "clock_frequency_mhz": 200.0,
+      "pipeline_ii": 1,
+      "records_per_cycle": 1.0,
+      "data_width_bits": 24,
+      "nominal_capacity_records_per_sec": 200000000.0
+    }
+  ],
+  "runtime": [
+    {
+      "fifo_object_id": "xform:pr_record_out:async_fifo",
+      "accepted_transactions": 256,
+      "emitted_transactions": 256,
+      "stall_cycles": 80,
+      "high_water_mark": 100,
+      "full_events": 0,
+      "empty_events": 2,
+      "measured_rate_records_per_sec": 167280163.599182,
+      "dropped_transactions": 0,
+      "duplicated_transactions": 0
+    },
+    {
+      "fifo_object_id": "xform:ts_record_out:async_fifo",
+      "accepted_transactions": 4,
+      "emitted_transactions": 4,
+      "stall_cycles": 481,
+      "high_water_mark": 1,
+      "full_events": 0,
+      "empty_events": 5,
+      "measured_rate_records_per_sec": 3271983.6400817996,
+      "dropped_transactions": 0,
+      "duplicated_transactions": 0
+    }
+  ],
+  "predicted_rate": 200000000.0,
+  "observed_rate": 170552147.2392638,
+  "bottleneck": "pixel_normalizer"
+}

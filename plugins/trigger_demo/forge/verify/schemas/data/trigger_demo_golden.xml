@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Trigger Demo — Golden stimulus and expected results
+  4 events exercising all trigger outcomes:
+    Event 0: 3 hits → trigger ACCEPT  (majority)
+    Event 1: 1 hit  → trigger REJECT  (below threshold)
+    Event 2: 4 hits → trigger ACCEPT  (max occupancy)
+    Event 3: 0 hits → trigger REJECT  (empty, collector_valid=0)
+
+  Decoder correction: phi_out = phi_in + 1
+-->
+<trigger_events>
+
+  <event id="0" bx="0">
+    <ch id="0" raw="0x00A00050" valid="1"/>
+    <ch id="1" raw="0x00B00060" valid="1"/>
+    <ch id="2" raw="0x00000000" valid="0"/>
+    <ch id="3" raw="0x00C00070" valid="1"/>
+    <golden n_hits="3" phi_sum="0x0213" accept="1" quality="3" word="0x80030000"/>
+  </event>
+
+  <event id="1" bx="1">
+    <ch id="0" raw="0x00D00080" valid="1"/>
+    <ch id="1" raw="0x00000000" valid="0"/>
+    <ch id="2" raw="0x00000000" valid="0"/>
+    <ch id="3" raw="0x00000000" valid="0"/>
+    <golden n_hits="1" phi_sum="0x00D1" accept="0" quality="1" word="0x00010000"/>
+  </event>
+
+  <event id="2" bx="2">
+    <ch id="0" raw="0x01000100" valid="1"/>
+    <ch id="1" raw="0x02000200" valid="1"/>
+    <ch id="2" raw="0x03000300" valid="1"/>
+    <ch id="3" raw="0x04000400" valid="1"/>
+    <golden n_hits="4" phi_sum="0x0A04" accept="1" quality="4" word="0x80040000"/>
+  </event>
+
+  <event id="3" bx="3">
+    <ch id="0" raw="0x00000000" valid="0"/>
+    <ch id="1" raw="0x00000000" valid="0"/>
+    <ch id="2" raw="0x00000000" valid="0"/>
+    <ch id="3" raw="0x00000000" valid="0"/>
+    <golden n_hits="0" phi_sum="0x0000" accept="0" quality="0" word="0x00000000"/>
+  </event>
+
+</trigger_events>

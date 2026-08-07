@@ -1,0 +1,19 @@
+ports:
+  - name:       trigger_accept
+    direction:  input
+    width:      1
+  - name:       trigger_quality
+    direction:  input
+    width:      8
+  - name:       trigger_valid
+    direction:  input
+    width:      1
+  - name:       trigger_word
+    direction:  output
+    width:      32
+  - name:       out_valid
+    direction:  output
+    width:      1
+  - name:       ap_rst
+    direction:  input
+    width:      1
