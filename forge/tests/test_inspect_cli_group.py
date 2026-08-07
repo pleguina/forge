@@ -82,7 +82,7 @@ def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) 
 
 def test_inspect_never_writes_without_emit_ir(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     """forge inspect is read-only by default — the same invariant as
-    topgen gen-top --dry-run, verified the same way (tree snapshot)."""
+    `topgen gen-top --dry-run`, verified the same way (tree snapshot)."""
     tree_before = _tree_snapshot(tmp_path)
 
     import os

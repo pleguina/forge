@@ -13,7 +13,20 @@
 #
 # MIGRATION.md and CHANGELOG.md are intentionally excluded — their entire
 # purpose is documenting the old, dead names for historical/migration
-# reference, not using them live.
+# reference, not using them live. Same reasoning extends to:
+#   - docs/development/migration.md — MIGRATION.md's byte-synchronized
+#     mirror (see docs/development/cli_exit_codes.md's "Pointer pages"
+#     pattern) — excluding the source without excluding its mirror was a
+#     real gap, found in a real release audit.
+#   - forge/generation/migrate.py and its tests (test_migrate.py,
+#     test_topgen_migrate_cli.py) — the migration tool that specifically
+#     detects/rewrites these exact legacy patterns; it necessarily
+#     contains the literal strings it's built to find, same class of
+#     false positive MIGRATION.md/CHANGELOG.md are already excused for.
+#   - docs/internal/ and docs/plan/ — internal release-audit/planning
+#     material that legitimately discusses these same dead patterns as
+#     findings, in prose, not live references (docs/plan/ is gitignored
+#     and won't even exist in a real CI checkout).
 #
 # Usage:
 #   bash ci/stale_reference_check.sh
@@ -46,6 +59,12 @@ check() {
         | grep -v /__pycache__/ \
         | grep -v /third_party/ \
         | grep -v '^ci/stale_reference_check.sh:' \
+        | grep -v '^docs/development/migration\.md:' \
+        | grep -v '^forge/generation/migrate\.py:' \
+        | grep -v '^forge/tests/test_migrate\.py:' \
+        | grep -v '^forge/tests/test_topgen_migrate_cli\.py:' \
+        | grep -v '^docs/internal/' \
+        | grep -v '^docs/plan/' \
         || true)"
     if [[ -n "$hits" ]]; then
         echo "FAIL: $description" >&2
@@ -67,9 +86,14 @@ check "dead 'framework/verify/python' path reference" 'framework/verify/python'
 # 'topgen <subcommand>' as a bare, unprefixed CLI invocation predates the
 # CLI unification into a single 'forge' entry point. Uses a negative
 # lookbehind rather than a blanket word search so it doesn't flag the
-# correct 'forge topgen ...' form.
+# correct 'forge topgen ...' form, or backtick-quoted prose/docstring
+# references like `` `topgen gen-top` `` / ` ``topgen gen-top`` ` (an
+# inline-code-quoted mention of the command, not a literal invocation —
+# found as a real, widespread false positive in a release audit: this
+# codebase's docstrings routinely cross-reference the CLI command this
+# way).
 check "bare (unprefixed) 'topgen <subcommand>' invocation" \
-    '(?<!forge )(?<!forge --debug )\btopgen (validate|gen-top|ip-summary|match-ports|unpack-ips|clean|lint|validate-registry)\b'
+    '(?<!forge )(?<!forge --debug )(?<!`)\btopgen (validate|gen-top|ip-summary|match-ports|unpack-ips|clean|lint|validate-registry)\b'
 
 if [[ "$FAILED" -eq 1 ]]; then
     echo "One or more dead command/path references found above." >&2

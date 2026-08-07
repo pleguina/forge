@@ -1,7 +1,8 @@
 """Regression guard for CLI help/hint drift.
 
-`ci/stale_reference_check.sh` greps for known-dead patterns (fw_verify,
-bare topgen, etc.) but never asserted that `forge --help` / subcommand
+`ci/stale_reference_check.sh` greps for known-dead patterns (the legacy
+pre-arc verify package name, bare topgen, etc.) but never asserted that
+`forge --help` / subcommand
 `--help` text actually matches the live argparse tree. That gap let the
 `framework` group go missing from the top-level epilog and `--group` help
 without anything failing. These tests walk the *real* parser built by
