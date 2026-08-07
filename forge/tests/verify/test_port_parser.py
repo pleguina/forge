@@ -1,8 +1,7 @@
-"""Coverage for forge/verify/port_parser.py (previously 0%).
+"""Coverage for forge/verification/port_parser.py (previously 0%).
 
-This module is a documented backward-compatibility shim that delegates
-entirely to forge.verification.rtl_introspection — kept for external plugin
-callers that haven't migrated their imports yet, not itself dead code.
+This module delegates its HLS-Verilog port-parsing logic entirely to
+forge.verification.rtl_introspection.
 """
 
 from __future__ import annotations

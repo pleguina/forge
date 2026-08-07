@@ -4,7 +4,7 @@ existing mtime-based staleness checkers ("Modification times may remain
 an optimization, but must not be the source of truth").
 
 ``forge/core/stale_detection.py`` (``gen-top``'s own staleness check) and
-``forge/verify/stale_artifact.py`` (verify-flow artifact staleness) both
+``forge/verification/stale_artifact.py`` (verify-flow artifact staleness) both
 compare source/artifact modification times only. This module adds an
 optional *confirmation* step on top, without replacing either checker's
 own logic or call sites: when a ``provenance.json`` (written by

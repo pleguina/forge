@@ -2,13 +2,17 @@ site_name: FORGE
 site_description: >-
   Framework for Orchestrated RTL Generation & Evaluation — a plugin-agnostic,
   contract-driven integration and verification framework for RTL/HLS firmware.
-# site_url is deliberately unset: the canonical public host is not yet
-# decided. A placeholder URL here (e.g. the repo's own
-# "https://github.com/<org>/forge/" convention) makes MkDocs Material emit
-# absolute-path links on pages like 404.html that don't resolve locally — a
-# real bug this exact placeholder caused during development (see
-# forge/tests/test_docs_site_links.py). Set this for real only once the
-# public host is decided.
+# site_url is deliberately still unset: the source repo is now decided
+# (https://github.com/pleguina/forge) but whether/where the docs site
+# itself gets published (e.g. GitHub Pages at
+# https://pleguina.github.io/forge/) hasn't been confirmed. A URL here
+# that doesn't match where the site actually lands makes MkDocs Material
+# emit absolute-path links on pages like 404.html that don't resolve
+# locally — a real bug this exact placeholder caused during development
+# (see forge/tests/test_docs_site_links.py). Set this for real only once
+# docs publishing is confirmed.
+repo_url: https://github.com/pleguina/forge
+repo_name: pleguina/forge
 docs_dir: docs
 site_dir: site
 strict: true

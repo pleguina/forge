@@ -2,7 +2,7 @@
 Tests for design.yml-level parsing/validation of the schema
 additions: `Connection.cdc` and the top-level `clock_domains:`/
 `reset_domains:` relationship-declaration blocks
-(`forge/topgen/config.py::DesignConfig.load`), plus the CDC primitive
+(`forge/contracts/config.py::DesignConfig.load`), plus the CDC primitive
 family expansion (`level_sync`/`2ff_sync` alias, `pulse_sync`,
 `mailbox_transfer`, `async_fifo`'s now-required `depth`, and
 `reset_domains.*.sync`).

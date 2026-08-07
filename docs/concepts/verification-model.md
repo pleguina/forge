@@ -49,7 +49,7 @@ waveform? a probe CSV? does it need a vendor toolchain environment?) and
 `required_artifacts`, so framework code dispatches on these flags instead
 of hardcoding backend-specific conditionals anywhere else. Framework-owned
 backends (`xsim`, `csim`, `verilator`) auto-register on import
-(`forge/verify/__init__.py`); a plugin can override or add its own via
+(`forge/verification/__init__.py`); a plugin can override or add its own via
 `register_backend()` in its `bootstrap.py`.
 
 ## `FlowResult`: what a run actually produced

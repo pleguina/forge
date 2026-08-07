@@ -37,7 +37,7 @@ This inventory defines the support status for maintained surfaces referenced by 
 | `forge/hls/visualize_hls_pipeline.py` | Supported convenience only | optional visualization helper |
 | `plugins/<plugin>/` local mounts | Downstream consumer only | optional local mounts for development; not committed FORGE core |
 | plugin-specific regression scripts | Downstream consumer only | plugin-owned verification gates |
-| `forge/topgen/` Python internals | Internal / not supported | implementation detail behind installed CLI |
+| `forge/contracts/`/`forge/generation/` Python internals | Internal / not supported | implementation detail behind installed CLI |
 | `build/`, `build_hls/`, `build_targeted/`, `out/`, `ips/`, `ip_packages/` | Internal / not supported | generated working directories |
 
 ## Enforcement Rule

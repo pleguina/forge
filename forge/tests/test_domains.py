@@ -1,7 +1,7 @@
 """
 Tests for forge.contracts.domains.resolve_domain_nets — the shared
 clock/reset domain resolution algorithm used by both the canonical IR
-(forge/ir/build.py) and the CDC checker (forge/topgen/ip/cdc.py).
+(forge/ir/build.py) and the CDC checker (forge/contracts/cdc.py).
 """
 
 from __future__ import annotations

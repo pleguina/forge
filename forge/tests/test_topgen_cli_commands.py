@@ -359,7 +359,7 @@ def test_gen_top_run_twice_produces_stable_plan_hash_and_output_bytes(
     from the byte-identity check — both embed a real
     `datetime.datetime.now().isoformat()` generation timestamp
     (`forge/core/cli/groups/topgen.py::generate_build_manifest`,
-    `forge/topgen/generators/design_parameters.py`), confirmed by
+    `forge/generation/generators/design_parameters.py`), confirmed by
     inspection to be the *only* reason they'd ever differ between two
     runs of the same design — build_manifest.json's structural content
     (everything except that one field) is checked separately below.

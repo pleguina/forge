@@ -35,7 +35,7 @@ def test_covers_both_families() -> None:
 
 
 def test_scanner_ignores_docstring_only_mentions(tmp_path: Path) -> None:
-    """forge/verify/exceptions.py documents FWV codes in prose
+    """forge/verification/exceptions.py documents FWV codes in prose
     ('Corresponds to diagnostic code FWV001.') without emitting them — a
     text grep would false-positive on this; the AST scanner must not."""
     src = tmp_path / "sample.py"

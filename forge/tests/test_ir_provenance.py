@@ -2,7 +2,7 @@
 Tests for forge.ir.provenance — content-hash provenance for the canonical
 IR. See the module docstring for what
 this does and does not replace (the existing mtime-based
-forge/core/stale_detection.py and forge/verify/stale_artifact.py are
+forge/core/stale_detection.py and forge/verification/stale_artifact.py are
 untouched this session).
 """
 

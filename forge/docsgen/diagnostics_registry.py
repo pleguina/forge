@@ -4,21 +4,21 @@ Diagnostic codes are emitted through several different real mechanisms in
 this codebase, not one:
 
 1. Structured construction — ``Diagnostic(code="FWV021", ...)`` /
-   ``ATGDiagnostic(code="ATG007", ...)`` (``forge/verify/results.py``).
+   ``ATGDiagnostic(code="ATG007", ...)`` (``forge/verification/results.py``).
 2. Convenience-method calls — ``report.note("FWV000", ...)`` /
    ``.warn(...)`` / ``.error(...)`` / ``.critical(...)`` on
-   ``DiagnosticReport``/``ATGDiagnosticReport`` (``forge/verify/__main__.py``,
-   ``forge/verify/release_check.py``), where the code is the first
+   ``DiagnosticReport``/``ATGDiagnosticReport`` (``forge/verification/__main__.py``,
+   ``forge/verification/release_check.py``), where the code is the first
    *positional* argument, not a keyword.
 3. Raw dict literals — ``{"code": "ATG007", ...}``
    (``forge/core/cli/groups/topgen.py``), building a JSON-envelope
    diagnostic without going through either dataclass.
 4. Bare ``[FWVxxx]``/``[ATGxxx]``-prefixed string literals embedded in an
    f-string or plain string — ``add_issue(f"[FWV003] ...")``
-   (``forge/verify/supported_path_validator.py``, ``forge/core/stale_detection.py``).
+   (``forge/verification/supported_path_validator.py``, ``forge/core/stale_detection.py``).
 
 A text grep for ``FWV\\d+``/``ATG\\d+`` would false-positive on comments,
-docstrings (``forge/verify/exceptions.py`` documents FWV codes in prose
+docstrings (``forge/verification/exceptions.py`` documents FWV codes in prose
 without emitting them), and tests. This module instead walks the real AST
 of every production source file (``forge/``, excluding ``forge/tests/``)
 and structurally recognizes all four mechanisms above, so

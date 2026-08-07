@@ -1,6 +1,6 @@
 """Shared pytest fixtures.
 
-Plugin bootstrap (``forge/verify/plugin_registry.py``) imports each
+Plugin bootstrap (``forge/verification/plugin_registry.py``) imports each
 plugin's ``tools/bootstrap.py``/``gen_stimulus.py``/``flow_config.py``/
 ``runtime_context.py`` via bare, non-namespaced module names, after
 inserting that plugin's own ``tools/`` directory onto ``sys.path``.
@@ -17,7 +17,7 @@ This autouse fixture clears both the module cache and the plugin
 registry's bootstrap-declaration state around every test, so each test's
 tmp_path-scoped plugin tooling is always loaded fresh.
 
-``sys.path`` itself needs the same treatment: ``forge/verify/__main__.py``'s ``_bootstrap()`` does
+``sys.path`` itself needs the same treatment: ``forge/verification/__main__.py``'s ``_bootstrap()`` does
 ``sys.path.insert(0, tools_dir)`` per test but this fixture never undid
 it, so a real plugin's real (not tmp_path-copied) ``tools/`` directory —
 e.g. ``plugins/vision_pipeline_demo/forge/verify/tools`` — stays in
@@ -60,10 +60,10 @@ def _clear_plugin_bootstrap_state() -> None:
 
     # _reset_for_testing() also clears the backend registry
     # (forge.verification.backend_registry._BACKEND_MODULE_NAMES) — including the
-    # framework-owned xsim/csim defaults that forge/verify/__init__.py only
+    # framework-owned xsim/csim defaults that forge/verification/__init__.py only
     # registers once, at first import. Since that import already happened
     # earlier in the session, it never re-runs — re-register those defaults
-    # here exactly as forge/verify/__init__.py does, or every xsim/csim flow
+    # here exactly as forge/verification/__init__.py does, or every xsim/csim flow
     # in every later test would fail with "flow.backend must be one of ()".
     from forge.verification.backend_registry import register_backend
 

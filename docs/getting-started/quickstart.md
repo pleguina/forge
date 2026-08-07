@@ -1,7 +1,7 @@
 # Five-Minute Quickstart
 
 This walks through the exact command sequence FORGE's CI runs to prove a
-fresh install works — [`ci/quickstart_commands.sh`](https://github.com/<org>/forge)
+fresh install works — [`ci/quickstart_commands.sh`](https://github.com/pleguina/forge)
 (also sourced by `ci/fresh_user_check.sh`), so what you run here is not a
 simplified retelling, it's the same commands.
 

@@ -26,7 +26,7 @@ used if it's absent).
 There is no separately-published PyPI package, and there won't be one under
 the name `forge` — that name is already taken on public PyPI by an
 unrelated, actively-maintained package. Downstream repos (`ci/plugin-consumer.yml`)
-install directly from this git repo (`pip install git+https://.../arc-framework.git@<ref>#subdirectory=forge`).
+install directly from this git repo (`pip install git+https://github.com/pleguina/forge.git@<ref>#subdirectory=forge`).
 This is the permanent installation story for this project — not a
 placeholder waiting for a PyPI slot, and not a sign it's meant to stay
 private; it's simply the name collision. If you stand up a package index
@@ -35,18 +35,18 @@ private; it's simply the name collision. If you stand up a package index
 
 ### Where this lives
 
-The canonical repo is migrating to a public host
-(`https://github.com/<org>/forge` — placeholder until the destination is
-finalized; the CERN GitLab origin remains authoritative until then). Until
-the migration lands, treat any `gitlab.cern.ch` URL you find in this repo
-(`pyproject.toml` metadata, `README.md`) as provenance, not a claim that
-the project is CERN-only.
+The canonical repo is [`https://github.com/pleguina/forge`](https://github.com/pleguina/forge).
+The project originated on a CERN GitLab instance
+(`gitlab.cern.ch/p2u-omtf-ops/arc-framework`), which is retained for its
+history but is no longer the primary source — treat any `gitlab.cern.ch`
+URL you still find in this repo as provenance, not a claim that the
+project is CERN-only.
 
 ## Running things locally before you push
 
 ```bash
 # Lint
-flake8 forge/core forge/contracts forge/generation forge/topgen forge/hls forge/verify forge/integration forge/analysis
+flake8 forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis
 yamllint -d relaxed plugins/trigger_demo/forge/designs/design.yml plugins/trigger_demo/forge/modules.yml
 
 # Agnosticism guard — forge/ core must not hardcode detector/algorithm assumptions

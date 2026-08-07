@@ -4,7 +4,7 @@ Clock/reset domain resolution.
 Resolves which net (raw port name) drives each module's clock/reset —
 the shared algorithm both the canonical IR (``forge/ir/build.py``, for
 ``forge inspect``/``forge.ir.build.assemble_project_ir``) and the CDC
-checker (``forge/topgen/ip/cdc.py``) need, kept in one place so they can
+checker (``forge/contracts/cdc.py``) need, kept in one place so they can
 never disagree about what a module's domain is.
 
 A domain's identity is the resolved net name itself (e.g. ``"ap_clk"``),
@@ -33,7 +33,7 @@ from .contract_loader import LoadedContract
 # Same conservative name lists forge.contracts.matcher.auto_match_ports
 # uses for compat-mode clock/reset heuristics (function-local there, not a
 # public constant — duplicated here rather than imported, same choice
-# already made in forge/topgen/migrate.py's infer_contract_skeleton).
+# already made in forge/generation/migrate.py's infer_contract_skeleton).
 CLOCK_HEURISTIC_NAMES = ("ap_clk", "clk", "clock")
 RESET_HEURISTIC_NAMES = ("ap_rst", "rst", "reset", "rst_n")
 

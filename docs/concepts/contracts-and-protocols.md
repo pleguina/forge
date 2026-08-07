@@ -116,7 +116,7 @@ using either of two equivalent forms:
   more named axes, matched as a set (axis order doesn't matter).
 
 Both forms normalize to the same internal comparison key (see
-`forge/topgen/ip/coordinates.py`), so:
+`forge/contracts/coordinates.py`), so:
 - a `design.yml`'s `instance_assign` entries may use `partition:` or
   `coordinates:` independently of which form the target interface contract's
   roles use, as long as the resolved key matches;
@@ -269,7 +269,7 @@ roles:
       fanout: forbidden              # sugar for consumers: {max: 1}
 ```
 
-Fields (see `forge/topgen/ip/cardinality.py`):
+Fields (see `forge/contracts/cardinality.py`):
 
 - `producers: {min, max}` — **input roles only**. How many distinct
   producer pins may drive this role. `max` may be an integer or the

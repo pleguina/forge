@@ -12,7 +12,7 @@ Legend: **Stable** / **Beta** / **Experimental** / **Deprecated** /
 | Capability | Classification | Evidence / notes |
 |---|---|---|
 | Project initialization (`forge init`) | **Stable** | Full clean-install smoke test: scaffold → validate → build → test (real XSim) → report, all green, from a wheel installed into an empty venv. |
-| Module registry | **Stable** | `forge/topgen/config.py`; core of every reference plugin. |
+| Module registry | **Stable** | `forge/contracts/config.py`; core of every reference plugin. |
 | Contracts (canonical roles/protocols/interface members) | **Stable** | Generated reference pages (`docs/reference/{canonical-roles,protocols,interface-members}.md`), AST-verified against source. |
 | Topology resolution (matching, scatter/gather, N-D/prefix arrays) | **Stable** | Exercised by all 3 reference plugins; `docs/concepts/contracts-and-protocols.md`. |
 | Canonical IR (`forge/ir/`) | **Stable** | Byte-identical-to-legacy proofs (`test_generation_ir_equivalence.py` et al.); drives all 3 generation modes (verilog/vhdl/bd). |
@@ -22,15 +22,15 @@ Legend: **Stable** / **Beta** / **Experimental** / **Deprecated** /
 | Vitis HLS integration | **Stable** | `forge hls`; `trigger_demo`/`vision_pipeline_demo` both mix HLS+RTL. |
 | XSim | **Stable** | Real tool present and exercised in this environment; primary supported simulator. |
 | Verilator | **Beta** | `doctor` confirms it's lint-only, not a simulation backend — narrower than XSim's role. Matches README's documented scope, not a gap. |
-| Domains and CDC | **Stable** for the 5 implemented kinds (`level_sync`, `2ff_sync`, `pulse_sync`, `mailbox_transfer`, `async_fifo`) | `forge/topgen/ip/cdc.py`; real generated synchronizer/FIFO RTL, not stubs (see audit — one stale docstring claiming otherwise was found and fixed this session). `clock_secondary`/`reset_secondary` roles are **Deferred** (reserved, no functional effect, documented as such in README/docs/index.md). |
-| Latency analysis (fixed/bounded/elastic) | **Stable** | `forge/analyze/latency_static/`; exercised by `vision_pipeline_demo`. |
-| Throughput and occupancy (static) | **Stable** | `forge/analyze/throughput_static/`. |
-| Throughput and occupancy (runtime probe) | **Beta** | `forge/analyze/throughput_runtime/probe.py` — real, but reporting depends on a cached probe CSV that isn't always present (several tests skip without it in this environment); matches plan §3.1's own Beta classification. |
+| Domains and CDC | **Stable** for the 5 implemented kinds (`level_sync`, `2ff_sync`, `pulse_sync`, `mailbox_transfer`, `async_fifo`) | `forge/contracts/cdc.py`; real generated synchronizer/FIFO RTL, not stubs (see audit — one stale docstring claiming otherwise was found and fixed this session). `clock_secondary`/`reset_secondary` roles are **Deferred** (reserved, no functional effect, documented as such in README/docs/index.md). |
+| Latency analysis (fixed/bounded/elastic) | **Stable** | `forge/analysis/latency_static/`; exercised by `vision_pipeline_demo`. |
+| Throughput and occupancy (static) | **Stable** | `forge/analysis/throughput_static/`. |
+| Throughput and occupancy (runtime probe) | **Beta** | `forge/analysis/throughput_runtime/probe.py` — real, but reporting depends on a cached probe CSV that isn't always present (several tests skip without it in this environment); matches plan §3.1's own Beta classification. |
 | Verification backends (XSim, csim, Verilator-lint) | **Stable** (XSim, csim) / **Beta** (Verilator, GHDL — `doctor` reports GHDL as an optional, currently-missing tool in this environment) | |
 | Datasets (XML-backed) | **Stable** | `design.verification.yml` + XML golden data; all 3 reference plugins. |
 | Golden-model providers | **Stable** protocol, **Beta** in breadth | Protocol is real and tested; only XML-backed datasets are exercised end-to-end today (README: "XML-backed only"). |
 | Structured results (`FlowResult`, golden-comparison, CDC-verification artifacts) | **Stable** | Schema-versioned, generated reference at `docs/reference/artifacts.md`. |
-| DOT/SVG design explorer | **Stable** | `forge/analyze/design_explorer/`; exercised in the `forge init` smoke test's `report/` output. |
+| DOT/SVG design explorer | **Stable** | `forge/analysis/design_explorer/`; exercised in the `forge init` smoke test's `report/` output. |
 | HTML explorer | **Stable** | Same; offline, self-contained (`test_docs_site_offline.py`-equivalent checks apply to the explorer's own vendored-JS discipline). |
 | Report generation (`forge report`) | **Stable** | Produces `dashboard.html`, `summary.md`, `topology.{dot,svg}`, `maturity.md`, `latency_check.md`, `verification_results.md` — all confirmed present in the clean-install smoke test. |
 | Reference plugins (`passthrough_demo`, `trigger_demo`, `vision_pipeline_demo`) | **Stable** | All 3 real, CI-exercised, not placeholders (`docs/explanation/project-scope.md`). |

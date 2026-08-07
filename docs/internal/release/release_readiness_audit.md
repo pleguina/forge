@@ -64,7 +64,7 @@ auto-discovery instead of a hand-maintained list to prevent recurrence —
 not done this session per the freeze principle of minimal, low-risk
 changes; the explicit list is safer to verify quickly.
 
-### P0-2: `<org>` placeholder — no decided public host
+### P0-2: `<org>` placeholder — no decided public host (RESOLVED)
 
 `forge/pyproject.toml [project.urls]`, `README.md`, and `CONTRIBUTING.md`
 all point at `https://github.com/<org>/forge` — a literal placeholder, not
@@ -75,6 +75,25 @@ specifically, not RC-candidate work. **Not fixed this session** — this is
 a real decision (which org, whether the CERN GitLab origin migrates or a
 new host is chosen) that only you can make; flagged here rather than
 guessed at.
+
+**Later session update**: resolved. The decision is
+`https://github.com/pleguina/forge`. Every `<org>` placeholder and
+CERN-GitLab install URL was updated to match (pyproject.toml, README,
+CONTRIBUTING, mkdocs.yml, CHANGELOG, getting-started docs,
+`ci/plugin-consumer.yml`'s functional pip-install default). A broader
+sweep triggered by this pass also found and fixed ~35 files with a
+different, previously-missed stale-reference shape: slash-form core
+package paths (`forge/topgen/...`, `forge/verify/...`, `forge/analyze/...`
+in prose/docstrings/CI lint commands, including two functionally broken
+`.gitlab-ci.yml` lint jobs that were linting nonexistent directories) —
+`ci/stale_reference_check.sh`'s existing checks only caught the dotted
+Python-import form (`forge\.verify`), not this slash-path form, which is
+harder to check automatically without false-positiving on plugins' own
+legitimate `<plugin>/forge/verify/` capsule directories (left alone,
+confirmed intentional and current). The GitHub repo starts from a single
+squashed commit, not the full CERN GitLab history (deliberate — GitLab
+remains the full-history record). GitHub Actions CI is a deliberately
+separate, not-yet-done follow-up.
 
 ## P1 — must fix before stable
 

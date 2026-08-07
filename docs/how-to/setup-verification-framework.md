@@ -153,7 +153,7 @@ Install FORGE from `arc-framework/`, then execute the plugin-owned verification 
 ## 8. Repo layout reference
 
 ```
-forge/verify/                         <- framework verification Python package source
+forge/verification/                   <- framework verification Python package source
 plugins/trigger_demo/               <- supported proof consumer
 <plugin-repo>/forge/verify/tools/     <- plugin-owned Python files
 <plugin-repo>/forge/verify/*_xsim/    <- plugin-owned generated or maintained XSIM flows

@@ -1,6 +1,6 @@
 """Resolve dataclass field annotations into real type objects, working
 around a real cross-version gap: several modules this package walks
-(``forge/verify/results.py``, ``forge/verify/dataset_format.py``,
+(``forge/verification/results.py``, ``forge/verification/dataset_format.py``,
 ``forge/ir/provenance.py``) write PEP 604 union annotations as quoted
 strings (``"int | None"``) for readability, but ``X | None`` is only
 *executable* on Python 3.10+ — evaluating that string via

@@ -3,7 +3,7 @@ Content-hash provenance for the canonical IR.
 
 This is a bounded, honest slice — it does **not** replace the
 existing mtime-based staleness checks used by `topgen gen-top`/`verify`
-(`forge/core/stale_detection.py`, `forge/verify/stale_artifact.py`), which
+(`forge/core/stale_detection.py`, `forge/verification/stale_artifact.py`), which
 are intentionally left untouched. It provides a new, parallel,
 content-hash-based provenance manifest attached to the canonical IR
 (`forge inspect --provenance`/`--explain-staleness`), covering:

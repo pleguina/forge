@@ -12,7 +12,7 @@ decided, closing both inconsistencies at once.
 
 This module is deliberately placed in ``forge/core/cli/`` rather than
 ``forge/core/`` — it is CLI-layer-only, importable from both
-``forge/core/cli/groups/*`` and ``forge/verify/__main__.py`` (a separate
+``forge/core/cli/groups/*`` and ``forge/verification/__main__.py`` (a separate
 CLI entry point that does not import ``forge/core/cli/_shared.py``
 today).
 

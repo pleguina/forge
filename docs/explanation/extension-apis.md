@@ -49,8 +49,9 @@ this one, overridable field.
 Both patterns above only mean something if `forge/` core doesn't quietly
 grow a second, hardcoded assumption alongside them. `ci/agnosticism_check.sh`
 is the real, running guard against that: it greps `forge/core`,
-`forge/topgen`, `forge/hls`, `forge/verify`, `forge/analysis`, and
-`forge/integration` (deliberately excluding `plugins/` — plugins are
+`forge/contracts`, `forge/generation`, `forge/hls`, `forge/verification`,
+`forge/analysis`, and `forge/integration` (deliberately excluding
+`plugins/` — plugins are
 expected to use domain-specific vocabulary freely, and `forge/tests/`,
 whose fixtures intentionally exercise one concrete example without that
 implying the mechanism itself is hardcoded) for a blocklist of

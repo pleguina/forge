@@ -27,6 +27,20 @@ for the versioning policy.
   until that lands; `ci/plugin-consumer.yml`'s real install source was
   deliberately left untouched since it's live CI configuration, not
   policy documentation.
+- **Public host decided**: `github.com/pleguina/forge` is now the
+  canonical repository. `README.md`, `CONTRIBUTING.md`,
+  `forge/pyproject.toml`'s `[project.urls]`, `mkdocs.yml`, and the
+  getting-started docs' install instructions now point at it instead of
+  the `<org>` placeholder. The CERN GitLab origin
+  (`gitlab.cern.ch/p2u-omtf-ops/arc-framework`) is retained for its
+  commit history but is no longer the primary source; the GitHub history
+  starts fresh from a single squashed commit rather than carrying that
+  history over. `ci/plugin-consumer.yml`'s install source was updated to
+  match (it's the one file the prior entry above deliberately left
+  untouched, since it's live CI configuration rather than policy
+  documentation — now updated because it's a functional install URL that
+  needs to stay correct). GitHub Actions CI is a separate, not-yet-done
+  follow-up; `.gitlab-ci.yml` remains the only CI pipeline for now.
 
 ### Added
 - `forge topgen init-plugin <plugin_id>`: scaffolds the topgen side of a

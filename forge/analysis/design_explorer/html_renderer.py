@@ -1,8 +1,8 @@
 """Self-contained, offline, interactive HTML design explorer.
 
 Follows the same self-contained-HTML pattern already twice-established in
-this codebase (``forge/analyze/dashboards/renderer.py``,
-``forge/analyze/hls_reports/formatter.py``): plain Python string
+this codebase (``forge/analysis/dashboards/renderer.py``,
+``forge/analysis/hls_reports/formatter.py``): plain Python string
 concatenation, one inline ``_HTML_STYLE`` constant, zero
 ``<script src=...>``/``<link href=...>``/external-CDN references. The one
 genuinely new thing here is vendoring Cytoscape.js *core* — see

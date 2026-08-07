@@ -96,7 +96,7 @@ The following are public Layer 2 behavior for the current release line:
 
 The following are not public Layer 2 API:
 
-- internal Python package structure under `forge/topgen/`
+- internal Python package structure under `forge/contracts/`/`forge/generation/`
 - private validation helpers and internal matcher implementation details
 - repo-local wrappers that are not support-classified
 

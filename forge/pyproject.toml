@@ -63,15 +63,11 @@ all = [
     "forge[dev,parser,docs]",
 ]
 
-# Migrating to a public host; <org> is a placeholder until finalized (see
-# CONTRIBUTING.md's "Where this lives"). The CERN GitLab origin
-# (gitlab.cern.ch/p2u-omtf-ops/arc-framework) remains authoritative until
-# the migration lands — update these once it does.
 [project.urls]
-Homepage = "https://github.com/<org>/forge"
-Documentation = "https://github.com/<org>/forge/blob/main/forge/README.md"
-Repository = "https://github.com/<org>/forge"
-Issues = "https://github.com/<org>/forge/issues"
+Homepage = "https://github.com/pleguina/forge"
+Documentation = "https://github.com/pleguina/forge/blob/main/forge/README.md"
+Repository = "https://github.com/pleguina/forge"
+Issues = "https://github.com/pleguina/forge/issues"
 
 [project.scripts]
 forge = "forge.core.cli.main:main"

@@ -60,7 +60,7 @@ hits="$(grep -rnE "$PATTERN" "${EXISTING_PATHS[@]}" \
     || true)"
 # The two exclusions above are FORGE-generated files ("DO NOT EDIT —
 # regenerate with ..."): tb_algo_top.sv's one flagged line originates
-# from forge/verify/gen_sim.py (FORGE core, out of scope for this pass);
+# from forge/verification/gen_sim.py (FORGE core, out of scope for this pass);
 # stimulus_current.svh's flagged line originates from this plugin's own
 # gen_stimulus_*.py, already cleaned — the checked-in file just predates
 # its last regeneration and self-heals on the next `forge verify

@@ -340,7 +340,7 @@ def write_structural_vhdl(
         Check user-declared external_in_ports / external_out_ports on a
         *name or prefix* basis — cross-checked against *pname*'s own real
         direction (see the identical fix + rationale in
-        forge/topgen/generators/structural_verilog.py's own
+        forge/generation/generators/structural_verilog.py's own
         ``_is_user_external`` — this
         VHDL generator carries the same bug, unexercised by any existing
         test).

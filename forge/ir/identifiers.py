@@ -2,7 +2,7 @@
 downstream consumers must agree on.
 
 Before this module, ``forge/ir/build.py`` and
-``forge/analyze/latency_static/graph.py`` each re-derived their own
+``forge/analysis/latency_static/graph.py`` each re-derived their own
 instance-id string independently. They agreed for every single-instance
 module (both reduce to the bare module name) but silently diverged for any
 multi-instance module: the IR used ``"dec_0"`` while the latency graph used

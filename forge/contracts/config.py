@@ -108,8 +108,8 @@ class TestBenchConfig:
 
 # The three timing kinds this module requires. Duplicated (not
 # imported) from forge.analysis.latency_model.LATENCY_KINDS deliberately —
-# forge/topgen is the schema/config layer and forge/analyze is a
-# downstream consumer of it; importing analyze from here would be a
+# forge/contracts is the schema/config layer and forge/analysis is a
+# downstream consumer of it; importing analysis from here would be a
 # wrong-direction dependency. Three fixed, closed values, unlikely to
 # drift; if it ever needs to grow, both copies grow together.
 _LATENCY_KINDS = ("fixed", "bounded", "elastic")

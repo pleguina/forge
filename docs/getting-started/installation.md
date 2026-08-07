@@ -40,7 +40,7 @@ by an unrelated, actively-maintained project. This is FORGE's permanent
 installation story, not a placeholder waiting for a PyPI slot: install
 directly from this git repository, either in editable mode as above (for
 local development) or as
-`pip install git+https://.../arc-framework.git@<ref>#subdirectory=forge`
+`pip install git+https://github.com/pleguina/forge.git@<ref>#subdirectory=forge`
 (the pattern downstream CI consumers use). See `CONTRIBUTING.md`'s
 "Distribution: git install, not PyPI" section for the full rationale.
 

@@ -33,7 +33,7 @@ collapse behavior.
 
 Read via `importlib.resources` (never a `<script src=...>` — the
 explorer must load fully offline) and inlined as one `<script>` block by
-`forge/analyze/design_explorer/html_renderer.py`.
+`forge/analysis/design_explorer/html_renderer.py`.
 
 ## Verifying the pin
 

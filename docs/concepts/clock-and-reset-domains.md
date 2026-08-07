@@ -11,7 +11,7 @@ one `reset_primary` role (see
 verifier assume a single functional clock/reset domain **per module** —
 that part of the model is not in flux.
 
-The canonical role vocabulary (`forge/topgen/ip/canonical_roles.yaml`)
+The canonical role vocabulary (`forge/contracts/canonical_roles.yaml`)
 also declares two further roles, `clock_secondary` and `reset_secondary`,
 explicitly marked `status: reserved`. A contract may declare them today —
 `ContractVerifier` accepts them and emits a warning, never an error — but

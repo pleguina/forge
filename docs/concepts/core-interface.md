@@ -61,7 +61,7 @@ The following are considered public Layer 1 behavior for the current release lin
 
 The following are not Layer 1 API and may change without being treated as a public compatibility break:
 
-- internal Python module layout under `forge/verify/`
+- internal Python module layout under `forge/verification/`
 - internal helper functions and private module names
 - repo-local test fixtures and maintainer-only scripts
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/images/forge-logo.png" alt="FORGE logo" width="120">
+</p>
+
 # FORGE
 
 Framework for Orchestrated RTL Generation & Evaluation.
@@ -15,11 +19,12 @@ a user of the framework, not its scope. See `CONTRIBUTING.md` for the
 provenance note and current distribution story (git-install-only, no
 PyPI publish — a closed decision, not a placeholder pending one).
 
-Repository target:
+Repository:
 
-- Migrating to a public host (`https://github.com/<org>/forge` —
-  placeholder until finalized). Until then, the CERN GitLab origin
-  (`https://gitlab.cern.ch/pleguina/arc-framework`) remains authoritative.
+- Canonical public host: [`https://github.com/pleguina/forge`](https://github.com/pleguina/forge).
+  The project originated on a CERN GitLab instance
+  (`gitlab.cern.ch/p2u-omtf-ops/arc-framework`); that origin is retained
+  for its history but is no longer the primary source.
 
 ## Current scope
 
@@ -138,43 +143,40 @@ things and are not expected to match:
   behavior). It changes far less often than the package version, and did
   not change in `2.0.0`.
 
-## Documentation Index
+## Documentation
 
-This index lists the minimum user-facing documentation required to adopt and use FORGE.
+The full documentation is an [MkDocs Material](https://squidfunk.github.io/mkdocs-material/)
+site under [`docs/`](docs/) (build it locally with `pip install -e "forge[docs]"` then
+`mkdocs serve`). Start here:
 
-### Introduction
+- **[Quickstart](docs/getting-started/quickstart.md)** — five minutes from
+  install to a working DUT, using the exact commands CI runs to prove a
+  fresh install works.
+- **[Vision Pipeline tutorial](docs/tutorials/vision-pipeline/index.md)** —
+  a progressive, 12-chapter, fully worked reference project (mixed HLS/RTL,
+  parallel paths, CDC, throughput/backpressure, datasets and golden
+  models, platform integration, diagnostics), every command actually run
+  while writing it, real captioned figures generated from the real
+  design/dataset, not invented.
+- **[Golden-Path Tutorial](docs/tutorials/golden-path.md)**,
+  **[RTL Example](docs/tutorials/rtl-example.md)**, and
+  **[Mixed HLS/RTL Example](docs/tutorials/mixed-hls-rtl-example.md)** —
+  shorter, single-design walkthroughs.
 
-- `forge/README.md` - CLI command reference and generated output summary
+Full index (mirrors the site nav):
 
-### Quickstart
+| Section | Covers |
+|---|---|
+| [How-To Guides](docs/how-to/) | Author topology contracts, integrate verification, set up the verification framework, analyze performance, use the visual design explorer |
+| [Concepts](docs/concepts/) | Core/Tooling interface layers, contracts and protocols, clock/reset domains, latency model, verification model, datasets and provenance, visual design explorer |
+| [Reference](docs/reference/) | CLI reference, public Python API, canonical roles/protocols/interface members/transformations, diagnostic catalogue, support matrix, artifact model, support classification — all generated from live source, not hand-maintained |
+| [Explanation](docs/explanation/) | Architecture rationale, extension APIs, project scope, scope and interoperability |
+| [Development](docs/development/) | Contributing, ADRs, migration notes, CLI exit codes |
 
-- `docs/MINIMAL_CONSUMER_QUICKSTART.md` - shortest supported adoption path
-
-### Authoring and Contracts
-
-- `docs/PLUGIN_AUTHOR_GUIDE.md` - plugin contract authoring and topology wiring
-- `docs/IP_INTERFACE_POLICY.md` - interface contract policy and constraints
-- `normalized_signal_families.yaml` - canonical signal family vocabulary
-
-### Runtime and Verification
-
-- `docs/FRAMEWORK_CORE_INTERFACE.md` - Layer 1 runtime and verification interface
-- `docs/VERIFY_PLUGIN_AUTHOR_GUIDE.md` - verification integration for plugin authors
-- `docs/VERIFY_FRAMEWORK_SETUP.md` - framework-side setup and runnable proof path
-
-### Tooling
-
-- `docs/FRAMEWORK_TOOLING_INTERFACE.md` - Layer 2 topology/HLS tooling interface
-- `forge/README.md` - forge CLI command usage and outputs
-
-### Support Boundaries
-
-- `docs/SUPPORT_CLASSIFICATION.md` - supported versus internal surfaces
-
-### Validation Gate
-
-- `run_trigger_demo.sh` - end-to-end release gate (`ci/framework-release.yml`)
-- `ci/agnosticism_check.sh` - guard against hardcoded algorithm assumptions
+`forge/README.md` also has the CLI command reference and generated output
+summary. `run_trigger_demo.sh` (`ci/framework-release.yml`) is the actual
+hardware-toolchain-dependent release gate; `ci/agnosticism_check.sh` guards
+against hardcoded algorithm assumptions creeping into FORGE core.
 
 ### Project
 

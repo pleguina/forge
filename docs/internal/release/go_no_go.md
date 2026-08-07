@@ -4,6 +4,20 @@ Per `docs/plan/FORGE_framework_freeze_and_public_release_plan.md` §15.
 Evaluated against the real, current state of `rename/forge` (latest
 commit at time of writing: `dbaf17b`), not the plan's aspirational text.
 
+## Later update: the public-host decision is made
+
+The one real blocker below (`<org>` placeholder) is resolved: the
+canonical public host is `https://github.com/pleguina/forge`. All 4+
+files referencing the placeholder were updated (see
+`CHANGELOG.md`'s "Public host decided" entry), plus the git-install pip
+refs in `CONTRIBUTING.md`/`docs/getting-started/installation.md`/
+`ci/plugin-consumer.yml`. The GitHub repo starts from a single squashed
+"initial public release" commit rather than carrying over the full CERN
+GitLab history (a deliberate choice — GitLab retains the full history).
+The two secondary items below (real second-machine fresh-user test,
+dependency-vulnerability audit) remain genuinely open — not resolved by
+this update.
+
 ## Verdict: **NO-GO for public stable release. GO-adjacent — one real decision away.**
 
 This is not "lots more cleaning needed." Every P0 blocker found this
@@ -23,7 +37,7 @@ entirely decisions only you can make, not engineering work.
 | Licensing/security review passes | ⚠️ **Partial.** Secrets scan (targeted grep) clean, vendored-asset attribution confirmed, dependency surface is minimal (`pyyaml`, `jinja2` only). Full dependency-vulnerability audit (plan §12.1) not run. |
 | Stable scope is documented | ✅ `docs/internal/release/release_scope.md`. |
 | Release artifacts are final | N/A — no RC has been cut yet (by design; not attempted this session). |
-| **Public hosting targets are ready** | ❌ **Blocking.** `<org>` is still a literal placeholder in `forge/pyproject.toml`, `README.md`, `CONTRIBUTING.md`. Nothing can be tagged as "the" release location until this is decided. |
+| **Public hosting targets are ready** | ✅ **Resolved.** `https://github.com/pleguina/forge` is the canonical public host; every `<org>` placeholder is updated. |
 
 ## What's actually blocking
 
