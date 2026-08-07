@@ -1,24 +1,26 @@
 # Migration Notes
 
-## `forge.verify`/`forge.analyze` → `forge.verification`/`forge.analysis` package renames
+## `forge.verify`/`forge.analyze`/`forge.topgen` package renames
 
 Per `docs/development/adr/0005-package-and-cli-naming.md`,
 `forge/verify/` and `forge/analyze/` were renamed to `forge/verification/`
-and `forge/analysis/` (packages are nouns; CLI commands are verbs).
-Unlike the ARC → FORGE rename below, **both ship a permanent
-compatibility shim** — the old names keep working indefinitely as thin
-aliases re-exporting everything from the new location, since existing
-plugin code (`bootstrap.py`, dashboard/throughput tool scripts) imports
-`forge.verify.plugin_registry`/`forge.analyze.dashboards.attachments`
-directly and FORGE doesn't control when those get updated. Nothing
-breaks; new code should just prefer the new names.
+and `forge/analysis/`, and `forge/topgen/` was split into
+`forge/contracts/` and `forge/generation/` (packages are nouns; CLI
+commands are verbs). Like the ARC → FORGE rename below, these are
+**breaking renames with no compatibility shim** — FORGE has no public
+release yet and no confirmed consumer outside this repository, so there
+was nothing to stay compatible with; every in-repo caller (including
+plugin `bootstrap.py`/dashboard/throughput tool scripts) was updated in
+the same commit as each rename instead of aliasing the old path.
 
 | Old | New |
 |---|---|
-| `forge.verify` (module) | `forge.verification` (module; `forge.verify` still works, permanently) |
-| `forge.analyze` (module) | `forge.analysis` (module; `forge.analyze` still works, permanently) |
-| `python -m forge.verify` | `python -m forge.verification` (old form still works) |
-| `forge verify`/`forge analyze` (CLI commands) | unchanged — CLI names don't change with package renames |
+| `forge.verify` (module) | `forge.verification` (module) |
+| `forge.analyze` (module) | `forge.analysis` (module) |
+| `forge.topgen.ip` (module) | `forge.contracts` (module) |
+| `forge.topgen.generators`/`forge.topgen.config`/`forge.topgen.validation`/`forge.topgen.migrate` | `forge.generation.generators`/`forge.generation.config`/`forge.generation.validation`/`forge.generation.migrate` |
+| `python -m forge.verify` | `python -m forge.verification` |
+| `forge verify`/`forge analyze`/`forge topgen` (CLI commands) | unchanged — CLI names don't change with package renames |
 
 ## ARC → FORGE rename
 

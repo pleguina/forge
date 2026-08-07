@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Framework CLI entry point.
 
-Provides ``python -m forge.verification <command>`` for any consumer
-(``python -m forge.verify`` also still works via the compatibility shim).
+Provides ``python -m forge.verification <command>`` for any consumer.
 When installed as a package, also available as ``forge verify <command>``.
 
 Commands

@@ -422,60 +422,6 @@
       "module": "forge.ir",
       "name": "write_provenance",
       "summary": ""
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.generators",
-      "name": "write_bd_tcl",
-      "summary": ""
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.generators",
-      "name": "write_structural_verilog",
-      "summary": "Generate a structural Verilog top that wires algorithm modules together."
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.generators",
-      "name": "write_structural_vhdl",
-      "summary": "Generate a structural RTL top that wires algorithm modules together."
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.ip",
-      "name": "auto_match_ports",
-      "summary": "Build:"
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.ip",
-      "name": "collect_all",
-      "summary": "Return {module.name: component-dict | None}, prioritising component.xml;"
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.ip",
-      "name": "load_ip_info",
-      "summary": "Thin YAML wrapper used by several sub-packages."
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.ip",
-      "name": "parse_component",
-      "summary": "Parse a single HLS-exported component.xml into a dict:"
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.ip",
-      "name": "unpack_ip_archives",
-      "summary": "Extract IP archives from source directory into IP root."
-    },
-    {
-      "kind": "function",
-      "module": "forge.topgen.ip",
-      "name": "write_summary",
-      "summary": "Write the summary dict out in either JSON or YAML form."
     }
   ]
 }

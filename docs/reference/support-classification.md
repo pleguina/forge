@@ -19,7 +19,7 @@ This inventory defines the support status for maintained surfaces referenced by 
 | Surface | Class | Why |
 |---|---|---|
 | `forge` CLI (`forge topgen validate`, `forge topgen gen-top`, `forge topgen ip-summary`, `forge topgen match-ports`, `forge topgen unpack-ips`, `forge core resources`, `forge core verify-contract`) | Public framework API | primary installed framework entrypoint |
-| `forge.verify` Python package (`forge/verify/`) | Public framework API | installed verification package boundary; `verify/src/xsi_loader.cpp` at repo root is a standalone XSI loader, not a built/linked library — plugins own their own C++ verify headers/sources under `plugins/<plugin>/forge/verify/include` and `.../src` |
+| `forge.verification` Python package (`forge/verification/`) | Public framework API | installed verification package boundary; `verify/src/xsi_loader.cpp` at repo root is a standalone XSI loader, not a built/linked library — plugins own their own C++ verify headers/sources under `plugins/<plugin>/forge/verify/include` and `.../src` |
 | `docs/concepts/core-interface.md` | Public framework API | defines Layer 1 contract |
 | `docs/getting-started/quickstart.md` | Public framework API | shortest supported adoption path |
 | downstream plugin guides | Downstream consumer only | plugin-specific integration guides belong in plugin repositories, not FORGE core |

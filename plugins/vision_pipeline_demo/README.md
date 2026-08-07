@@ -21,8 +21,8 @@ mixing HLS and RTL — is the golden model: the golden dataset carries only
 input values, no hand-typed expected outputs. Expected outputs are
 computed live by a real `GoldenModelProvider`
 (`forge/verify/tools/golden_model_provider.py`), routed through
-`forge.verify.dataset_service.DatasetService` +
-`forge.verify.golden_model.run_golden_model` machinery — the concrete
+`forge.verification.dataset_service.DatasetService` +
+`forge.verification.golden_model.run_golden_model` machinery — the concrete
 fix for the "hand-typed, never cross-checked golden values" pattern
 every prior reference plugin used. See
 `docs/development/adr/0004-golden-model-provider-boundary.md` for the

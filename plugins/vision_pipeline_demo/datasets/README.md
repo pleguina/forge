@@ -18,7 +18,7 @@ Three real, project-owned dataset adapters producing the canonical
 
 `serialize_xml.py` flattens canonical events into FORGE's existing
 per-pixel XML event shape (the same shape
-`forge.verify.dataset_format.XmlDatasetLoader` reads) and writes real
+`forge.verification.dataset_format.XmlDatasetLoader` reads) and writes real
 `.xml` fixture files. `manifest.py` builds the `forge.dataset_manifest`
 sidecar (source/preprocessing/canonical-event/serialized-dataset hashes)
 and provides `check_staleness()` — a pure content-hash comparison against
@@ -28,7 +28,7 @@ Each adapter also has a thin `ProjectDatasetAdapter` wrapper registered
 with FORGE under `vision_pipeline.synthetic` /
 `vision_pipeline.image-folder` / `vision_pipeline.numpy-array`
 (`../forge/verify/tools/dataset_adapter.py`), reachable through the real
-`forge.verify.dataset_service.DatasetService` — the same path
+`forge.verification.dataset_service.DatasetService` — the same path
 `gen_stimulus.py`/`forge test run` already use for the checked-in XML
 fixtures.
 

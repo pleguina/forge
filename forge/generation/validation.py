@@ -655,7 +655,7 @@ class RegistryValidator:
         defense-in-depth backstop for direct programmatic construction, not
         the primary path. Coexistence with the flat latency_cycles/
         latency_hint/variable_latency fields is enforced separately (at
-        construction time in ``topgen.config._pop_timing``) — this method
+        construction time in ``contracts.config._pop_timing``) — this method
         only validates the structural shape of the ``latency:`` block
         itself.
         """

@@ -28,7 +28,7 @@
 // post_stimulus_drain_cycles comments already use elsewhere. No ack
 // handshake back from the join: closing that loop would require a
 // combinational-cycle-free but still genuinely cyclic connection
-// between two module instances, which forge.topgen's design-graph
+// between two module instances, which forge.analysis's design-graph
 // tooling has no precedent for anywhere in this repo -- a bounded,
 // self-timing hold (declared `latency: {kind: bounded, min_cycles: 1,
 // max_cycles: HOLD_CYCLES+1}` in modules.yml) gets the same correctness

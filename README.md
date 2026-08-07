@@ -69,13 +69,13 @@ shown below.
 flowchart TD
     design[design.yml / modules.yml / *.interface.yaml]
 
-    design --> DesignConfig[topgen.config.DesignConfig]
-    design --> LoadedContract[topgen.ip.contract_loader.LoadedContract]
+    design --> DesignConfig[contracts.config.DesignConfig]
+    design --> LoadedContract[contracts.contract_loader.LoadedContract]
     design --> IpInfo[ip_info.yaml IP/RTL port metadata]
-    design --> VerifyContract[verify.design_contract.VerifyDesignContract]
-    design --> TBParams[topgen.generators.design_parameters testbench-param extractor]
+    design --> VerifyContract[verification.design_contract.VerifyDesignContract]
+    design --> TBParams[generation.generators.design_parameters testbench-param extractor]
 
-    DesignConfig --> LatencyGraph["analyze.latency_static.graph.LatencyGraph\n(DesignConfig-driven, no IP matching needed)"]
+    DesignConfig --> LatencyGraph["analysis.latency_static.graph.LatencyGraph\n(DesignConfig-driven, no IP matching needed)"]
     DesignConfig --> Matching[auto_match_ports]
     LoadedContract --> Matching
     IpInfo --> Matching
@@ -107,6 +107,20 @@ forge inspect design.yml --contracts-from modules.yml --explain-staleness build/
 Each `ResolvedConnection` in the IR carries a `wiring_method`
 (`contract_wiring`/`topology_group`/`port_map`/`auto_match`/`heuristic`) —
 the first slice of matching evidence (release-plan §3.5).
+
+### Package layout
+
+`forge/` is organized by capability, not by history — `forge.contracts`,
+`forge.generation`, `forge.verification`, `forge.analysis`,
+`forge.integration`, alongside `forge.core`, `forge.ir`, `forge.hls`, and
+`forge.docsgen`. There is no old-name compatibility layer: FORGE has no
+public release yet and no external consumers depend on any prior package
+name, so each rename (`framework`→`integration`, `verify`→`verification`,
+`analyze`→`analysis`, `topgen`→`contracts`+`generation`) was done as a
+clean, breaking move with the old path deleted outright rather than
+aliased. See
+[ADR 0005](docs/development/adr/0005-package-and-cli-naming.md) for the
+full rationale and package-ownership boundaries.
 
 ## Versioning
 

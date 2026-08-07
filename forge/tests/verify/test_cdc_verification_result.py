@@ -101,7 +101,7 @@ def _port(name, direction, width=8):
 
 
 def test_build_cdc_verification_result_wraps_report_all_crossings():
-    # forge/tests/ is exempt from the forge.topgen<->forge.verification
+    # forge/tests/ is exempt from the forge.contracts/forge.generation<->forge.verification
     # cross-import rule (ci/import_direction_check.sh) — real production
     # code never imports both directly; the CLI layer composes them (see
     # forge/core/cli/groups/topgen.py's cmd_validate).

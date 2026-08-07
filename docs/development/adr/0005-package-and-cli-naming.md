@@ -2,24 +2,49 @@
 
 ## Status
 
-Accepted and **fully executed**: `forge/framework/` → `forge/integration/`,
-`forge/verify/` → `forge/verification/`, `forge/analyze/` →
-`forge/analysis/` (both with a permanent compatibility shim at the old
-path), and `forge/topgen/` split into `forge/contracts/` +
-`forge/generation/` (deprecation-window shim). One correction found while
-executing the `verify` rename: `forge.analyze` turned out to have the
-**same** plugin-facing dependency `forge.verify` did —
+Accepted and **fully executed, with no compatibility shims**:
+`forge/framework/` → `forge/integration/`, `forge/verify/` →
+`forge/verification/`, `forge/analyze/` → `forge/analysis/`, and
+`forge/topgen/` split into `forge/contracts/` + `forge/generation/`. Every
+rename is a clean, breaking move — the old import path was deleted
+outright, not aliased.
+
+**History, for anyone wondering why real plugin code once imported
+`forge.verify`/`forge.analyze` directly**: this rename was originally
+executed with compatibility shims for `verify`→`verification` and
+`analyze`→`analysis` (kept permanent, since
+`plugins/vision_pipeline_demo/forge/verify/tools/bootstrap.py` and three
+other plugin tool files imported `forge.verify.*`/`forge.analyze.*`
+submodules directly) and a deprecation-window shim for the `topgen`
+split (since `forge.topgen.generators`/`forge.topgen.ip` were part of the
+frozen public Python API). All three shims were built and verified —
+then deleted in full once it was confirmed that FORGE has no public
+release yet and no consumer outside this repository has installed it or
+written code against any of the old names. The in-repo plugins that used
+the old paths were themselves updated in the same pass. Carrying
+permanent compatibility aliases for names nobody outside this repo has
+ever depended on was pure complexity with no corresponding benefit — see
+[MIGRATION.md](../migration.md) for the same reasoning applied
+consistently across every rename in this project, including
+`framework`→`integration`, which was always a breaking rename with no
+shim. If FORGE ships a real public release and later needs to rename a
+package again, *that* rename should get a deprecation-window shim; this
+one didn't need one because there was nothing yet to be compatible with.
+
+One correction found while originally executing the `verify` rename (kept
+here because it still explains why `forge.analyze`'s consumer surface was
+non-trivial, not because a shim still exists): `forge.analyze` turned out
+to have the **same** plugin-facing dependency `forge.verify` did —
 `plugins/vision_pipeline_demo/forge/verify/tools/bootstrap.py` itself
-imports `forge.analyze.dashboards.attachments` directly — so it got the
-same permanent-shim treatment as `verify`, not a lighter one (an earlier
-version of this ADR claimed otherwise; that was wrong). A second
-correction found while executing the `topgen` split: `config.py`
-(`DesignConfig`/`Module`/`Connection`) turned out to be depended on by
-`forge/contracts/` itself (6 of its files need `DesignConfig`), not just
-by the generators — it joined `forge/contracts/` rather than
-`forge/generation/` as originally sketched below, keeping the
-dependency direction strictly one-way (`generation` → `contracts`,
-never the reverse).
+imported `forge.analyze.dashboards.attachments` directly (an earlier
+version of this ADR claimed no plugin depended on `forge.analyze`; that
+was wrong). A second correction found while executing the `topgen` split:
+`config.py` (`DesignConfig`/`Module`/`Connection`) turned out to be
+depended on by `forge/contracts/` itself (6 of its files need
+`DesignConfig`), not just by the generators — it joined `forge/contracts/`
+rather than `forge/generation/` as originally sketched, keeping the
+dependency direction strictly one-way (`generation` → `contracts`, never
+the reverse).
 
 ## Context
 
@@ -72,6 +97,15 @@ subsystem-specific code is allowed under `core/` because command routing
 *is* the cross-cutting concern, and every subsystem needs exactly one
 place to register a command group. Nothing else gets this exception.
 
+**No compatibility shim policy (pre-release)**: for as long as FORGE has
+no public release and no confirmed external consumer, a package rename
+is executed as a clean `git mv` plus a full fix of every internal and
+in-repo-plugin consumer — never as a shim at the old path. This keeps the
+tree free of duplicate-looking directories and avoids shipping dead
+aliases nobody asked for. Once FORGE has real external consumers, a
+future rename should reconsider a deprecation-window shim on a
+case-by-case basis.
+
 ## Package tree (as executed)
 
 ```
@@ -93,68 +127,54 @@ forge/
   hls/           unchanged
   docsgen/       unchanged
 
-  # deprecation-window compat shim only, no real logic:
-  topgen/{generators,ip}/   DeprecationWarning, removable after one
-                            minor release once the public-API freeze
-                            no longer needs them
-  # permanent compat shims, no real logic, never removed:
-  verify/, analyze/, framework/ (-> integration/ handled separately)
+  # no framework/, verify/, analyze/, or topgen/ directories —
+  # deleted outright, no compat shim at any old path.
 ```
 
-## `forge/verify` → `forge/verification` (done)
+## `forge/verify` → `forge/verification`
 
-`forge/verify/__init__.py` ran a real import-time side effect
+`git mv forge/verify forge/verification`, then every internal absolute
+self-import (`forge.verify.X` → `forge.verification.X`) and every
+external consumer across `forge/`, `plugins/`, `docs/` fixed in the same
+pass, including the in-repo plugin `bootstrap.py` files that imported
+`forge.verify.plugin_registry` directly. `forge/verify/__init__.py` had
+run a real import-time side effect
 (`_register_framework_backends()`, registering xsim/csim/verilator into
-a global registry) — the shim's `__init__.py` triggers this exactly once
-by importing `forge.verification` rather than re-implementing the
-registration. Every plugin's `bootstrap.py` does `from
-forge.verify.plugin_registry import declare_plugin_bootstrap` directly;
-the shim is a real package at `forge/verify/` (one thin
-`from forge.verification.X import *` file per real submodule, generated
-programmatically), kept **permanently**, not on a deprecation timer —
-verified by an identity check (`forge.verify.plugin_registry.declare_plugin_bootstrap
-is forge.verification.plugin_registry.declare_plugin_bootstrap`) and a
-real `python -m forge.verify --help` invocation, both passing.
+a global registry) — this now runs once, at `forge.verification` import
+time, with no shim layer relaying it.
 
-## `forge/analyze` → `forge/analysis` (done)
+## `forge/analyze` → `forge/analysis`
 
 Same recipe as `verify`, adapted for a nested-subpackage tree (8
 subpackages — `dashboards`, `hls_reports`, `latency_runtime`,
 `latency_static`, `result_plots`, `design_explorer`, `throughput_static`,
 `throughput_runtime` — plus one top-level module, `latency_model.py`).
-`forge.analyze.design_explorer` is one of the modules already in the
-frozen public API (real `__all__`); the shim's `from
-forge.analysis.design_explorer import *` respects that `__all__`
-directly, verified explicitly (`DesignGraph`/`build_design_graph`
-identity checks). Also verified: the exact import statements real plugin
-tool files use (`forge.analyze.dashboards.attachments.register_report_attachment_provider`,
-`forge.analyze.hls_reports.extractor.collect_reports`,
-`forge.analyze.throughput_static.model.build_static_throughput_analysis`).
+`forge.analysis.design_explorer` is part of the frozen public API (real
+`__all__`). The in-repo plugin tool files that previously imported
+`forge.analyze.dashboards.attachments.register_report_attachment_provider`,
+`forge.analyze.hls_reports.extractor.collect_reports`, and
+`forge.analyze.throughput_static.model.build_static_throughput_analysis`
+directly were updated to the `forge.analysis.*` path in the same commit.
 
-## `forge/topgen` → `forge/contracts` + `forge/generation` (done)
+## `forge/topgen` → `forge/contracts` + `forge/generation`
 
-A split, not a 1:1 rename. `forge.topgen.generators` and `forge.topgen.ip`
-were both part of the frozen public Python API
-(`docs/reference/public-python-api.md`); their shims carry a real
-`DeprecationWarning` (via `from warnings import warn as _warn; _warn(...)`
-— a bare-name import, not `warnings.warn(...)`, to avoid colliding with
-`forge.docsgen.diagnostics_registry`'s AST scanner, which treats *any*
-`.warn(...)` attribute call as a diagnostic-code emission site) for at
-least one minor release, per this project's compatibility policy, unlike
-`verify`/`analyze`'s permanent, silent shims. No plugin imported
-`forge.topgen.*` submodules directly (confirmed by grep), so only
-`forge/__init__.py`'s 5 top-level re-exports and internal callers needed
-fixing — no plugin-facing smoke test was required here, unlike
-`verify`/`analyze`. `forge/ir/build.py` and `forge/ir/model.py` (not
-moving) had relative imports reaching into the old `topgen/`, corrected
-to `forge/contracts`/`forge/generation` — the highest-value correctness
-check, since `forge/ir/` is this repo's most heavily-tested subsystem.
-Also found and fixed one lazy, function-body-level relative import
-(`forge/contracts/config.py`'s `coordinate_key()` did `from .ip.coordinates
-import ...`, missed by the initial line-anchored sweep since it wasn't at
-module level) and 11 pre-existing bare `from topgen.X import Y` test
-imports (same sys.path-quirk bug class found and fixed during the
-`analyze` rename).
+A split, not a 1:1 rename. `git mv forge/topgen/ip forge/contracts`;
+`forge/topgen/{config,validation,migrate}.py` and
+`forge/topgen/generators/` moved into a new `forge/generation/`.
+`forge.topgen.generators` and `forge.topgen.ip` had been part of the
+frozen public Python API (`docs/reference/public-python-api.md`), which
+is now regenerated to list `forge.contracts`/`forge.generation.generators`
+instead — no alias kept at the old dotted path. `forge/ir/build.py` and
+`forge/ir/model.py` (not moving) had relative imports reaching into the
+old `topgen/`, corrected to `forge/contracts`/`forge/generation` — the
+highest-value correctness check here, since `forge/ir/` is this repo's
+most heavily-tested subsystem. Also found and fixed one lazy,
+function-body-level relative import (`forge/contracts/config.py`'s
+`coordinate_key()` did `from .ip.coordinates import ...`, missed by the
+initial line-anchored sweep since it wasn't at module level) and several
+pre-existing bare `from topgen.X import Y` test imports (a recurring
+sys.path-quirk bug class, also found and fixed during the `analyze`
+rename).
 
 ## Consequences
 
@@ -163,7 +183,7 @@ imports (same sys.path-quirk bug class found and fixed during the
 - CLI command names (`forge verify`, `forge analyze`, `forge framework`)
   are stable independent of the packages backing them; a future package
   rename is not, by itself, a CLI-breaking change.
-- `forge/topgen/generators` and `forge/topgen/ip` should be removed
-  (not just deprecated) once the next minor version ships, per the
-  compatibility policy — track this as a real follow-up, not left to
-  linger indefinitely the way a "permanent" shim would.
+- No package in `forge/` has a compatibility alias at an old name. Any
+  future rename follows the same no-shim policy until FORGE has a real
+  public release with confirmed external consumers to be compatible
+  with.

@@ -78,15 +78,6 @@ path.
 | `forge.ir` | `to_json_dict` | function | Return a plain, JSON-serializable dict for *project*. |
 | `forge.ir` | `to_json_str` | function | Human/CI-friendly JSON rendering, with sorted keys for stable diffs. |
 | `forge.ir` | `write_provenance` | function |  |
-| `forge.topgen.generators` | `write_bd_tcl` | function |  |
-| `forge.topgen.generators` | `write_structural_verilog` | function | Generate a structural Verilog top that wires algorithm modules together. |
-| `forge.topgen.generators` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
-| `forge.topgen.ip` | `auto_match_ports` | function | Build: |
-| `forge.topgen.ip` | `collect_all` | function | Return {module.name: component-dict \| None}, prioritising component.xml; |
-| `forge.topgen.ip` | `load_ip_info` | function | Thin YAML wrapper used by several sub-packages. |
-| `forge.topgen.ip` | `parse_component` | function | Parse a single HLS-exported component.xml into a dict: |
-| `forge.topgen.ip` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
-| `forge.topgen.ip` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
 
 ## Known inconsistencies
 

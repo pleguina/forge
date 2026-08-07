@@ -370,10 +370,11 @@ def test_resolved_module_definition_carries_latency_declaration(tmp_path):
     )
     project = build_project_ir(design)
     mod = project.design.modules[0]
-    # Field-by-field, not a full dataclass == : forge.ir.build imports
-    # LatencyDeclaration via the "forge.contracts.config" module path while
-    # this test file uses the short "topgen.config" path — same source
-    # file, but two distinct sys.modules entries/classes, so a direct
-    # dataclass equality would spuriously fail despite identical data.
+    # Field-by-field, not a full dataclass ==: this test previously
+    # imported LatencyDeclaration via a different module path than
+    # forge.ir.build does internally, making them distinct classes for
+    # equality purposes despite identical data — both now import via
+    # forge.contracts.config, so this is no longer strictly required, but
+    # field-by-field stays the more robust assertion regardless.
     assert mod.latency.kind == "fixed"
     assert mod.latency.cycles == 4

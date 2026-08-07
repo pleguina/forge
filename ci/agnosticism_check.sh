@@ -8,7 +8,7 @@
 # constants. Those belong in a plugin's own config (design.yml,
 # detector_io.yml, policies YAML) or as an explicit, documented default that
 # a plugin can override — see forge/integration/__init__.py and
-# forge/topgen/config.py's `reference_period_ns` for the pattern.
+# forge/generation/config.py's `reference_period_ns` for the pattern.
 #
 # This is a real (if necessarily imprecise) regression guard, not a proof of
 # agnosticism — a determined author can still write something this grep
@@ -32,7 +32,7 @@ cd "$REPO_ROOT"
 # forge/tests/ is excluded because its fixtures intentionally use realistic
 # example data (DT/CSC/blobfish) to prove the *generic* mechanism handles
 # one concrete example correctly, not because the mechanism is hardcoded.
-SCAN_DIRS=(forge/core forge/contracts forge/generation forge/hls forge/verify forge/analysis forge/integration)
+SCAN_DIRS=(forge/core forge/contracts forge/generation forge/hls forge/verification forge/analysis forge/integration)
 
 # Whole-word, case-sensitive: catches literal detector/role enum values
 # like "DT": ... or name_lower in ['dt', 'csc'], without flagging unrelated
@@ -51,7 +51,7 @@ if [[ -n "$FILTERED_HITS" ]]; then
     echo "$FILTERED_HITS" >&2
     echo "" >&2
     echo "FORGE core must stay algorithm-agnostic. If this is a config default a" >&2
-    echo "plugin can override (like forge/topgen/config.py's reference_period_ns" >&2
+    echo "plugin can override (like forge/generation/config.py's reference_period_ns" >&2
     echo "or forge/integration/io_resolver.py's detector_input_roles parameter)," >&2
     echo "keep the override mechanism and document the default inline. If it's a" >&2
     echo "genuinely generic term this check misidentified, extend the allowlist" >&2

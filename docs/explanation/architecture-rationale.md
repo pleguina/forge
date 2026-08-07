@@ -47,8 +47,8 @@ directly:
 ```mermaid
 flowchart TD
     design[design.yml / modules.yml / *.interface.yaml]
-    design --> DesignConfig[topgen.config.DesignConfig]
-    design --> LoadedContract[topgen.ip.contract_loader.LoadedContract]
+    design --> DesignConfig[contracts.config.DesignConfig]
+    design --> LoadedContract[contracts.contract_loader.LoadedContract]
     design --> IpInfo[ip_info.yaml IP/RTL port metadata]
 
     DesignConfig --> Matching[auto_match_ports]

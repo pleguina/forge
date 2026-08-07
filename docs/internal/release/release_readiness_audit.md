@@ -295,6 +295,22 @@ Current test count: **1286 passed, 12 skipped, 0 failed** (up from 1274
 at the original audit, net of intentional test removals/additions along
 the way).
 
+## Later session update: compat shims deleted (post-audit, post-rename)
+
+The `forge/verify`/`forge/analyze` permanent shims and the
+`forge/topgen` deprecation-window shim described immediately above were
+built, verified, and then **deleted in full** in a follow-up pass, once
+it was confirmed FORGE has no public release yet and no external
+consumer to stay compatible with (the in-repo plugins that used the old
+paths were updated in the same pass instead of relying on an alias). No
+compat shim exists anywhere in `forge/` today — every rename is a clean,
+breaking move, consistent with how `framework`→`integration` was already
+handled. See `docs/development/adr/0005-package-and-cli-naming.md`'s
+"History" note for the full reasoning. Test count after shim removal:
+**1270 passed, 12 skipped, 0 failed** (down from 1286 — the removed
+count is exactly the 3 deleted compat-shim test files' tests, no
+regressions).
+
 ## Not attempted this session (still open — real decisions, not more cleaning)
 
 - **P0-2 is still open**: the `<org>` public-host placeholder

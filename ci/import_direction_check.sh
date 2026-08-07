@@ -36,11 +36,11 @@
 #      to depend on forge.contracts (the schema/matching/CDC layer it
 #      resolves against).
 #
-# Note: forge/verify/, forge/analyze/, and forge/topgen/{generators,ip}/
-# still exist as thin compatibility shims (forge/verify and forge/analyze
-# permanently; forge/topgen/generators and forge/topgen/ip on a
-# deprecation timer — both are part of the frozen public API). None has
-# real logic and none is scanned separately here.
+# Note: forge/verify/, forge/analyze/, and forge/topgen/ no longer exist
+# in any form (no compatibility shim) — see
+# docs/development/adr/0005-package-and-cli-naming.md. Every consumer was
+# updated to forge/verification/, forge/analysis/, forge/contracts/, and
+# forge/generation/ directly.
 # forge/tests/ is excluded from all rules — test modules legitimately
 # drive the real CLI entry point and cross-subsystem behavior end to end.
 #

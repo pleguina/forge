@@ -27,6 +27,10 @@
 #     material that legitimately discusses these same dead patterns as
 #     findings, in prose, not live references (docs/plan/ is gitignored
 #     and won't even exist in a real CI checkout).
+#   - docs/development/adr/ — Architecture Decision Records are historical
+#     by design; an ADR that renames or removes something necessarily
+#     names the old, now-dead pattern in prose to explain the decision
+#     (same reasoning as MIGRATION.md/CHANGELOG.md above).
 #
 # Usage:
 #   bash ci/stale_reference_check.sh
@@ -65,6 +69,7 @@ check() {
         | grep -v '^forge/tests/test_topgen_migrate_cli\.py:' \
         | grep -v '^docs/internal/' \
         | grep -v '^docs/plan/' \
+        | grep -v '^docs/development/adr/' \
         || true)"
     if [[ -n "$hits" ]]; then
         echo "FAIL: $description" >&2
@@ -75,8 +80,10 @@ check() {
 }
 
 # The framework was fw_verify before it was arc.verify, before it was
-# forge.verify. Neither the package nor the CLI command has been named
-# that since before this branch existed.
+# forge.verify (since renamed again to forge.verification -- the CLI
+# command has always stayed "forge verify" throughout, only the Python
+# package name changed each time). None of these predecessor names have
+# referred to anything real for a long time.
 check "dead 'fw_verify' package/command reference" '\bfw_verify\b'
 
 # framework/verify/python hasn't existed since before the arc/ flatten;
@@ -94,6 +101,22 @@ check "dead 'framework/verify/python' path reference" 'framework/verify/python'
 # way).
 check "bare (unprefixed) 'topgen <subcommand>' invocation" \
     '(?<!forge )(?<!forge --debug )(?<!`)\btopgen (validate|gen-top|ip-summary|match-ports|unpack-ips|clean|lint|validate-registry)\b'
+
+# forge.verify / forge.analyze / forge.topgen.ip / forge.topgen.generators
+# were real packages, then permanent/deprecation-window compat shims,
+# then deleted outright once it was confirmed no external consumer
+# existed yet (pre-first-release — see
+# docs/development/adr/0005-package-and-cli-naming.md). Unlike the
+# checks above, dotted-import syntax makes this one unambiguous: 'forge
+# verify' (space, the CLI command) can never match 'forge\.verify' (dot,
+# the dead Python import path), so no lookbehind/backtick handling is
+# needed here.
+check "dead 'forge.verify' package import (renamed to forge.verification)" \
+    '\bforge\.verify\b'
+check "dead 'forge.analyze' package import (renamed to forge.analysis)" \
+    '\bforge\.analyze\b'
+check "dead 'forge.topgen.ip' / 'forge.topgen.generators' package import (split into forge.contracts / forge.generation.generators)" \
+    '\bforge\.topgen\.(ip|generators)\b'
 
 if [[ "$FAILED" -eq 1 ]]; then
     echo "One or more dead command/path references found above." >&2

@@ -87,10 +87,11 @@ def build_cdc_verification_result(
     :func:`forge.contracts.cdc.report_all_crossings` returns.
 
     Takes already-computed plain dicts, not a live ``design_cfg``/
-    ``match_report``/etc., and does not import ``forge.topgen`` itself —
-    ``forge.topgen`` and ``forge.verification`` must never cross-import each
-    other (``ci/import_direction_check.sh`` enforces this; they're
-    independent subsystems composed by the CLI layer, not by each
+    ``match_report``/etc., and does not import ``forge.contracts`` itself —
+    ``forge.contracts``/``forge.generation`` and ``forge.verification`` must
+    never cross-import each other (``ci/import_direction_check.sh``
+    enforces this; they're independent subsystems composed by the CLI
+    layer, not by each
     other). The CLI layer calls ``report_all_crossings(...)`` itself and
     passes its return value straight into this function.
     """

@@ -200,7 +200,7 @@ def test_real_reference_designs_report_zero_false_mismatches():
     latency_hint: 0 and no register_stages/delay_cycles is declared on
     either topology group."""
     from pathlib import Path
-    from analyze.latency_static.graph import build_graph
+    from forge.analysis.latency_static.graph import build_graph
 
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -285,7 +285,7 @@ def test_vision_pipeline_demo_pixel_result_design_has_zero_merge_skew():
     sobel_hls's own latency), producing a false "balanced" or a bogus
     delta depending on what the threshold branch happened to total."""
     from pathlib import Path
-    from analyze.latency_static.graph import build_graph
+    from forge.analysis.latency_static.graph import build_graph
 
     repo_root = Path(__file__).resolve().parents[2]
     g = build_graph(

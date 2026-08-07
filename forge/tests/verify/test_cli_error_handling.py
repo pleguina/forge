@@ -7,7 +7,7 @@ from pathlib import Path
 
 def _run_forge_verify(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "forge.verify", *args],
+        [sys.executable, "-m", "forge.verification", *args],
         capture_output=True,
         text=True,
     )
