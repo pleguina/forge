@@ -353,6 +353,23 @@ class Connection:
     # cdc: mailbox_transfer/async_fifo edge is already exempted for a
     # different reason (genuinely unknowable, not deliberately scheduled).
     control_strobe: bool = False
+    # The data on this connection *enters the design at the source node* —
+    # through one of that node's ``external_in_ports`` — rather than flowing
+    # into it from its own predecessors. A node can be both a merge point for
+    # some inputs and an injection point for others (a concentrator that
+    # gathers already-decoded streams while a second detector's raw streams
+    # arrive straight at its top-level ports), and a single scalar node
+    # latency cannot express that: every branch leaving the node inherits the
+    # deepest arrival time among its predecessors, including branches whose
+    # data never traversed that path. Setting this stops the latency
+    # chain-fold at the source node, charging the branch only that node's own
+    # latency, so an injected stream is not billed for an upstream it never
+    # travelled. Found on a real external consumer's topology, where an
+    # RPC stream entering at the concentrator was charged the DT/CSC
+    # decode depth on top of its own alignment delay, reporting a large
+    # phantom mismatch at two downstream merge points on a design whose
+    # paths are in fact aligned.
+    external_source: bool = False
 
 @dataclass
 class InstanceAssign:
@@ -383,6 +400,10 @@ class TopologyGroup:
     role_pairs: Optional[List[Tuple[str, str]]] = None  # explicit role pairing override
     src_instance_offset: int = 0  # source instance index offset for diagonal instance mapping
     notes: Optional[str] = None
+    # Same meaning as Connection.external_source: the streams this group
+    # carries enter the design at ``from_`` through that module's
+    # ``external_in_ports``, so the latency chain-fold must stop there.
+    external_source: bool = False
 
 @dataclass
 class ControlSignalTarget:
@@ -606,6 +627,7 @@ class DesignConfig:
             boundary = c.get("boundary", None)
             cdc = c.get("cdc", None)
             control_strobe = bool(c.get("control_strobe", False))
+            external_source = bool(c.get("external_source", False))
 
             # Validation: a boundary tag without an actual register stage is
             # meaningless — the generator cannot emit a protected crossing delay
@@ -700,6 +722,7 @@ class DesignConfig:
                         boundary        = boundary,
                         cdc             = cdc,
                         control_strobe  = control_strobe,
+                        external_source = external_source,
                     )
                 )
 
@@ -788,6 +811,7 @@ class DesignConfig:
                     role_pairs=rp,
                     src_instance_offset=src_offset,
                     notes=tg.get("notes"),
+                    external_source=bool(tg.get("external_source", False)),
                 ))
 
         # ── Control Signals

@@ -145,6 +145,13 @@ class LatencyEdge:
     # not genuinely unknowable. See Connection.control_strobe's own
     # docstring for the real external-consumer example this was found on.
     control_strobe: bool = False
+    # The data on this edge enters the design at ``src`` — through one of
+    # that node's ``external_in_ports`` — rather than flowing into it from
+    # its own predecessors (Connection.external_source). The chain-fold must
+    # stop at ``src`` and charge only ``src``'s own latency, or an injected
+    # stream is billed for an upstream path it never travelled. See
+    # Connection.external_source for the topology that motivated it.
+    external_source: bool = False
 
 
 @dataclasses.dataclass
@@ -544,12 +551,14 @@ def _build_graph_from_ir(
     def _add_edge(
         src: str, dst: str, latency: Optional[LatencyValue] = None,
         unknown_cdc: bool = False, control_strobe: bool = False,
+        external_source: bool = False,
     ) -> None:
         if src in nodes and dst in nodes and (src, dst) not in seen_pairs:
             seen_pairs.add((src, dst))
             edges.append(LatencyEdge(
                 src=src, dst=dst, latency=latency,
                 unknown_cdc=unknown_cdc, control_strobe=control_strobe,
+                external_source=external_source,
             ))
 
     def _conn_map_pairs(src_mod_name: str, dst_mod_name: str, src_names: list, dst_names: list) -> Optional[List[tuple]]:
@@ -579,6 +588,7 @@ def _build_graph_from_ir(
         src_mod_name: str, dst_mod_name: str,
         latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
         positional_pairs: Optional[List[tuple]] = None, control_strobe: bool = False,
+        external_source: bool = False,
     ) -> None:
         src_mod = mod_by_name.get(src_mod_name)
         dst_mod = mod_by_name.get(dst_mod_name)
@@ -595,11 +605,12 @@ def _build_graph_from_ir(
         if pairs is not None:
             for i_s, i_d in pairs:
                 if 0 <= i_s < len(src_names) and 0 <= i_d < len(dst_names):
-                    _add_edge(src_names[i_s], dst_names[i_d], latency, unknown_cdc, control_strobe)
+                    _add_edge(src_names[i_s], dst_names[i_d], latency, unknown_cdc,
+                              control_strobe, external_source)
             return
         for s in src_names:
             for d in dst_names:
-                _add_edge(s, d, latency, unknown_cdc, control_strobe)
+                _add_edge(s, d, latency, unknown_cdc, control_strobe, external_source)
 
     for conn in cfg.connections:
         conn_cdc_kind = conn.cdc.get("kind") if conn.cdc else None
@@ -611,13 +622,17 @@ def _build_graph_from_ir(
             unknown_cdc=conn_cdc_kind in ("mailbox_transfer", "async_fifo"),
             positional_pairs=pairs,
             control_strobe=conn.control_strobe,
+            external_source=getattr(conn, "external_source", False),
         )
     for tg in cfg.topology_groups:
         # TopologyGroup carries no register_stages/delay_cycles/cdc field —
         # honestly latency=None (no data source), not a fabricated 0. Its
         # real per-instance pairing (partition/instance_assign-based) is
         # only resolvable via conn_map — see _conn_map_pairs above.
-        _add_instance_edges(tg.from_, tg.to)
+        _add_instance_edges(
+            tg.from_, tg.to,
+            external_source=getattr(tg, "external_source", False),
+        )
 
     return LatencyGraph(nodes=nodes, edges=edges)
 

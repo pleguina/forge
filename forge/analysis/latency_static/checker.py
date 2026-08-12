@@ -185,7 +185,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
         for p in real_preds:
             p_edge = edges_by_pred.get(p)
             p_edge_cycles = p_edge.latency.cycles if (p_edge and p_edge.latency and p_edge.latency.cycles) else 0
-            p_upstream, p_unknown = _upstream_chain_latency(graph, p)
+            p_upstream, p_unknown = _branch_upstream(graph, p, p_edge)
             if p_unknown:
                 return (own_cycles, False)  # can't confirm balance — stay conservative
             totals.append(p_upstream + p_edge_cycles)
@@ -224,10 +224,30 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     edge = edges_by_pred.get(pred)
     edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
 
-    upstream_cycles, upstream_unknown = _upstream_chain_latency(graph, pred)
+    upstream_cycles, upstream_unknown = _branch_upstream(graph, pred, edge)
     if upstream_unknown:
         return (None, True)
     return (upstream_cycles + edge_cycles + own_cycles, False)
+
+
+def _branch_upstream(graph: LatencyGraph, pred: str, edge) -> "tuple[Optional[int], bool]":
+    """Upstream total to charge a branch arriving from *pred* over *edge*.
+
+    Normally the full folded chain above *pred*. When *edge* is
+    ``external_source`` the data entered the design at *pred* (through one of
+    its ``external_in_ports``) instead of flowing through it, so only *pred*'s
+    own latency applies — folding its predecessors in would bill this branch
+    for a path it never travelled.
+    """
+    if edge is not None and getattr(edge, "external_source", False):
+        pred_node = graph.nodes.get(pred)
+        if pred_node is None:
+            return (None, True)
+        own = pred_node.latency_cycles
+        if own is None or pred_node.is_variable:
+            return (None, True)
+        return (own, False)
+    return _upstream_chain_latency(graph, pred)
 
 
 def check_merge_points(
@@ -275,9 +295,9 @@ def check_merge_points(
         kinds: Set[str] = set()
         for src in sorted(preds):
             src_node = graph.nodes[src]
-            node_cycles, unknown = _upstream_chain_latency(graph, src)
-
             edge = edge_by_pair.get((src, node_name))
+            node_cycles, unknown = _branch_upstream(graph, src, edge)
+
             if edge and edge.unknown_cdc:
                 # This path's own final hop is a mailbox_transfer/async_fifo
                 # crossing into the merge node itself — genuinely unbounded

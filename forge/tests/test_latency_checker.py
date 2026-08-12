@@ -678,3 +678,49 @@ def test_consumer_protocols_defaults_to_no_effect():
     reports = check_merge_points(graph)
     assert reports[0].alignment == "exact_cycle"
     assert reports[0].is_mismatch
+
+
+# ── external_source: injection at a merge node ────────────────────────────
+
+def _graph_with_injection(external_source: bool):
+    """concentrator merges two 13-deep decode chains; a third stream enters
+    *at* the concentrator and leaves through a 13-deep alignment delay.
+    Both branches then meet at a downstream consumer, where they are in fact
+    aligned (13 each, measured from their own external inputs)."""
+    from forge.analysis.latency_static.graph import LatencyGraph, LatencyNode, LatencyEdge
+    from forge.analysis.latency_model import LatencyValue
+
+    def node(name, cycles):
+        return LatencyNode(name=name, ref=name, instances=1, kind="hls",
+                           latency=LatencyValue(kind="fixed", cycles=cycles))
+
+    nodes = {n.name: n for n in [
+        node("dec_a", 13), node("dec_b", 13), node("conc", 0),
+        node("align", 13), node("sink", 0),
+    ]}
+    edges = [
+        LatencyEdge(src="dec_a", dst="conc"),
+        LatencyEdge(src="dec_b", dst="conc"),
+        LatencyEdge(src="conc", dst="align", external_source=external_source),
+        LatencyEdge(src="align", dst="sink"),
+        LatencyEdge(src="conc", dst="sink"),
+    ]
+    return LatencyGraph(nodes=nodes, edges=edges)
+
+
+def test_external_source_branch_is_not_billed_for_upstream_it_never_travelled():
+    graph = _graph_with_injection(external_source=True)
+    sink = {r.merge_node: r for r in check_merge_points(graph)}["sink"]
+    # conc folds to 13 (both decode chains agree); the injected branch is
+    # charged only conc's own 0 plus the 13-cycle alignment delay.
+    assert sorted(p.total_cycles for p in sink.paths) == [13, 13]
+    assert sink.delta == 0
+
+
+def test_without_external_source_the_injected_branch_is_double_counted():
+    graph = _graph_with_injection(external_source=False)
+    sink = {r.merge_node: r for r in check_merge_points(graph)}["sink"]
+    # conc's folded 13 is charged to the injected branch on top of its own
+    # 13, reporting a phantom 13-cycle mismatch on an aligned design.
+    assert sorted(p.total_cycles for p in sink.paths) == [13, 26]
+    assert sink.delta == 13
