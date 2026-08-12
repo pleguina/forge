@@ -31,7 +31,7 @@
       "kind": "class",
       "module": "forge",
       "name": "Connection",
-      "summary": "Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None)"
+      "summary": "Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None, control_strobe: 'bool' = False)"
     },
     {
       "kind": "class",

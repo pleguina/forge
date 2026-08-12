@@ -7,6 +7,97 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Fixed
+- **`forge analyze latency-check`**: connections between two multi-instance
+  modules wired via a single 1-D `port_map_ranges` entry (`count` matching
+  the smaller side's instance count — the common array-role pattern, e.g.
+  "52 array-input modules each feeding their own delay-line instance")
+  were silently expanded into the full producer × consumer Cartesian
+  product instead of the declared 1:1 positional pairing. This broke
+  `_upstream_chain_latency`'s single-real-predecessor chain-folding for
+  any merge point reachable through such a connection, silently dropping
+  upstream latency from the accumulated total. Found on a real,
+  production external consumer's design: a 52-instance ranged connection
+  was expanding to 2704 edges. Fixed in both `_build_graph_from_ir` and
+  the `_build_graph_legacy` fallback (kept in sync, per
+  `test_latency_graph_ir_equivalence.py`'s existing equivalence
+  guarantee); 2 new regression tests
+  (`test_ranged_multi_instance_connection_pairs_positionally_not_cartesian`,
+  `test_ranged_multi_instance_chain_folds_through_into_a_real_merge_point`).
+  Neither reference plugin exercises this connection shape, so this had
+  no test surface before. Narrow, deliberate scope: multiple
+  `port_map_ranges` entries on one connection, the N-D `dims` form, and
+  `topology_group` connections all keep the existing conservative
+  Cartesian-product fallback — see `graph.py`'s module docstring for why
+  that default is otherwise correct, not a bug, for the genuinely
+  ambiguous cases it still covers.
+- **`forge analyze latency-check`**: added `resolve_conn_map()`, an
+  optional, best-effort real per-instance connection map (same contract
+  resolution `forge.ir.build` uses — `load_contracts_for_design` +
+  `synthesize_ip_info` + `auto_match_ports`, no built IP required, just
+  contracts) that the CLI now resolves automatically whenever
+  `--contracts-from` is given. When it resolves, it supersedes both the
+  plain Cartesian-product default and the `port_map_ranges`-only fix
+  above for *every* connection and `topology_group` uniformly — including
+  partition/`instance_assign`-based wiring, which neither of those can
+  resolve without contract data. Found needed on the same real
+  production design: several real merge points (a region-filter/priority-
+  arbiter fan-in fed by 5 differently-sized RPC delay-line arrays) were
+  only resolvable this way. Falls back silently to the existing
+  contract-free heuristics when contracts aren't available or don't
+  resolve, so nothing changes for a design.yml checked before any
+  contract exists.
+- **`forge analyze latency-check`**: `_upstream_chain_latency` was
+  treating a node's single real predecessor's *explicit*
+  `variable_latency`/`elastic` declaration (e.g. an async config-tap
+  module) as poisoning the *current* node's own, separately-known, fixed
+  latency to "unknown" — even though that node's own declared/HLS-report
+  value already fully describes its own behavior regardless of when the
+  async signal arrives. Found on the same real design: `dt_interface`/
+  `csc_interface` instances each have exactly one graph predecessor
+  (their config tap, not their true unmodelled top-level-external data
+  input), which was turning an otherwise real, balanced merge point into
+  a false "unknown". Fixed to stop folding at an *explicitly*
+  variable/elastic predecessor and keep the current node's own value —
+  deliberately narrower than "any predecessor without a usable cycle
+  count": a predecessor with no declared latency at all (genuinely
+  missing data, not an architectural fact) still propagates as unknown,
+  unchanged. 2 new regression tests
+  (`test_explicitly_variable_predecessor_does_not_poison_a_node_with_its_own_known_latency`,
+  `test_undeclared_zero_cycle_predecessor_still_propagates_as_unknown`).
+- **`forge analyze latency-check`**: added `Connection.control_strobe`, a
+  new declaration marking a connection as a control/reset/output-stamp
+  pulse rather than a data path, excluded entirely from merge-point
+  detection (not merely marked "unknown" the way an `unknown_cdc` edge
+  is — a node fed by one real data predecessor plus a control strobe is
+  not a merge point at all). Found needed on the same real design: a
+  bunch-crossing timing controller distributes several such strobes
+  (reset/bank-swap/output-stamp pulses) whose arrival cycle is
+  deliberately derived, by the receiving design's own logic, from each
+  stage's accumulated datapath depth — not a second data source
+  requiring exact-cycle reconciliation against a sibling data path. This
+  was previously producing false mismatches comparing the strobe
+  source's own flat latency against real datapath predecessors. 2 new
+  regression tests
+  (`test_control_strobe_predecessor_is_excluded_from_merge_point_detection`,
+  `test_control_strobe_alongside_two_real_predecessors_leaves_a_real_merge_point`).
+- **`forge analyze latency-check`**: `_upstream_chain_latency` never
+  folded through a real merge point (>=2 real predecessors), even once
+  independently confirmed balanced (every real predecessor resolving to
+  the same known total) — discarding that node's real accumulated total
+  in favor of just its own scalar latency for every downstream
+  comparison. Fixed to fold through when — and only when — a merge point
+  is confirmed balanced; a genuinely mismatched or unknown one still
+  keeps the previous conservative (own-latency-only) behavior, so
+  `check_merge_points`'s own loop remains the one place that flags a
+  real issue. Found on the same real design: a genuinely balanced
+  concentrator merge point (two real predecessors both totalling 11) was
+  reporting "0" to every merge point downstream of it, turning a real
+  ~2-cycle discrepancy further downstream into a misleading ~13. 2 new
+  regression tests
+  (`test_chain_folds_through_a_confirmed_balanced_merge_point`,
+  `test_chain_stays_conservative_through_a_genuinely_mismatched_merge_point`).
+
 ### Changed
 - **Open-source policy**: `CONTRIBUTING.md` previously stated this is
   "private CMS/OMTF-internal tooling, not a general-purpose public

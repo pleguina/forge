@@ -114,6 +114,213 @@ def test_node_with_one_real_and_one_unknown_cdc_predecessor_folds_through_the_re
     assert merge_totals == {"sobel": 17, "threshcfg": 17}
 
 
+def test_explicitly_variable_predecessor_does_not_poison_a_node_with_its_own_known_latency():
+    """A node whose *only* real graph predecessor is an explicitly
+    variable-latency config tap (e.g. cfg64_from_framework-style async
+    config synchronizer) must keep its own, separately-known, fixed
+    latency — not have it silently overwritten to "unknown" just because
+    its one modeled predecessor happens to be async.
+
+    Found on OMTF's real topology: dt_interface/csc_interface each have
+    exactly one graph predecessor (their config tap `cfg`, not their true
+    top-level-external detector-hit input, which isn't modeled as an edge
+    at all), which was turning `subdet` — a real, balanced merge point —
+    into a false "unknown", even though dt/csc both carry real,
+    HLS-synthesised latencies (8/9 cycles)."""
+    graph = LatencyGraph(
+        nodes={
+            "cfg": _node("cfg", None, is_variable=True),
+            "dt": _node("dt", 8),
+            "direct": _node("direct", 8),
+            "subdet": _node("subdet", 0),
+        },
+        edges=[
+            LatencyEdge(src="cfg", dst="dt", latency=None),
+            LatencyEdge(src="dt", dst="subdet", latency=None),
+            LatencyEdge(src="direct", dst="subdet", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    by_node = {r.merge_node: r for r in reports}
+
+    subdet_report = by_node["subdet"]
+    subdet_totals = {p.path[0]: p.total_cycles for p in subdet_report.paths}
+    assert subdet_totals == {"dt": 8, "direct": 8}
+    assert not subdet_report.is_mismatch
+    assert not subdet_report.has_unknowns
+
+
+def test_chain_folds_through_a_confirmed_balanced_merge_point():
+    """A merge point (>=2 real predecessors) that is itself confirmed
+    balanced (all real predecessors agree on total) must have its real
+    accumulated total folded through to a FURTHER downstream merge
+    point — not reset to just its own isolated latency, which would
+    silently discard the confirmed-real upstream total and inflate an
+    unrelated downstream comparison.
+
+    Found on a real external consumer's topology: `concentrator` (own
+    latency 0) has two real predecessors both totalling 11 (a genuinely
+    balanced merge) — but a further downstream merge point comparing
+    `concentrator`'s branch against a sibling `rpc`-array branch (real
+    total 13) was seeing `concentrator` contribute only its own 0
+    cycles, inflating a real ~2-cycle discrepancy into a misleading 13."""
+    graph = LatencyGraph(
+        nodes={
+            "dt": _node("dt", 11),
+            "csc": _node("csc", 9),
+            "csc_delay": _node("csc_delay", 2),
+            "concentrator": _node("concentrator", 0),
+            "rpc": _node("rpc", 13),
+            "rgf": _node("rgf", 2),
+        },
+        edges=[
+            LatencyEdge(src="dt", dst="concentrator", latency=None),
+            LatencyEdge(src="csc", dst="csc_delay", latency=None),
+            LatencyEdge(src="csc_delay", dst="concentrator", latency=None),
+            LatencyEdge(src="concentrator", dst="rgf", latency=None),
+            LatencyEdge(src="rpc", dst="rgf", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    by_node = {r.merge_node: r for r in reports}
+
+    # concentrator itself: dt(11) vs csc(9)+csc_delay(2)=11 -> balanced.
+    concentrator_report = by_node["concentrator"]
+    assert not concentrator_report.is_mismatch
+    concentrator_totals = {p.path[0]: p.total_cycles for p in concentrator_report.paths}
+    assert concentrator_totals == {"dt": 11, "csc_delay": 11}
+
+    # rgf: concentrator's real folded total (11, its input-side
+    # accumulated latency — rgf's own 2 cycles are not part of this
+    # input-side comparison) vs rpc's 13 -> a real 2-cycle mismatch, not
+    # the false 13-cycle one the unfolded (concentrator contributing
+    # just its own isolated 0) computation would have shown.
+    rgf_report = by_node["rgf"]
+    rgf_totals = {p.path[0]: p.total_cycles for p in rgf_report.paths}
+    assert rgf_totals == {"concentrator": 11, "rpc": 13}
+    assert rgf_report.is_mismatch
+    assert rgf_report.delta == 2
+
+
+def test_chain_stays_conservative_through_a_genuinely_mismatched_merge_point():
+    """Contrast: when the upstream merge point is NOT balanced, folding
+    through it must not happen — a further downstream comparison keeps
+    seeing just the merge point's own isolated latency, so
+    check_merge_points' own loop is the one place that flags the real
+    mismatch, not a fabricated pick of one branch over another."""
+    graph = LatencyGraph(
+        nodes={
+            "dt": _node("dt", 8),
+            "csc": _node("csc", 9),
+            "csc_delay": _node("csc_delay", 2),
+            "concentrator": _node("concentrator", 0),
+            "rpc": _node("rpc", 13),
+            "rgf": _node("rgf", 2),
+        },
+        edges=[
+            LatencyEdge(src="dt", dst="concentrator", latency=None),
+            LatencyEdge(src="csc", dst="csc_delay", latency=None),
+            LatencyEdge(src="csc_delay", dst="concentrator", latency=None),
+            LatencyEdge(src="concentrator", dst="rgf", latency=None),
+            LatencyEdge(src="rpc", dst="rgf", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    by_node = {r.merge_node: r for r in reports}
+
+    # concentrator: dt(8) vs csc(9)+csc_delay(2)=11 -> a real mismatch.
+    assert by_node["concentrator"].is_mismatch
+
+    # rgf: concentrator contributes only its own isolated 0 (not folded
+    # through an unresolved merge) vs rpc's 13.
+    rgf_totals = {p.path[0]: p.total_cycles for p in by_node["rgf"].paths}
+    assert rgf_totals == {"concentrator": 0, "rpc": 13}
+
+
+def test_control_strobe_predecessor_is_excluded_from_merge_point_detection():
+    """A node fed by exactly one real data predecessor plus a
+    control_strobe predecessor (e.g. bx_timing's new_event_arb reset
+    pulse alongside arb's real upstream data path) must not be treated
+    as a merge point at all — the strobe's timing is deliberately
+    scheduled by the receiving design, not a second data source
+    requiring exact-cycle reconciliation against the real data path.
+
+    Found on OMTF's real topology: `arb` has exactly 2 graph
+    predecessors (`bx_timing` via a control-strobe connection, `rgf` via
+    real data), and was being falsely flagged as an unresolvable
+    mismatch (bx_timing's own flat latency, 0, compared against rgf's
+    real accumulated latency) even though bx_timing's strobe is not
+    really "data" reaching `arb` in the sense the merge-balance check is
+    for."""
+    graph = LatencyGraph(
+        nodes={
+            "bx_timing": _node("bx_timing", 0),
+            "rgf": _node("rgf", 2),
+            "arb": _node("arb", 5),
+        },
+        edges=[
+            LatencyEdge(src="bx_timing", dst="arb", latency=None, control_strobe=True),
+            LatencyEdge(src="rgf", dst="arb", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    # arb has only one *real* predecessor (rgf) once the control strobe
+    # is excluded -> not a merge point, no report at all.
+    assert not any(r.merge_node == "arb" for r in reports)
+
+
+def test_control_strobe_alongside_two_real_predecessors_leaves_a_real_merge_point():
+    """Contrast: a control_strobe predecessor must not hide a *genuine*
+    2-real-predecessor merge point either — only the strobe itself is
+    excluded from the comparison, not the whole node."""
+    graph = LatencyGraph(
+        nodes={
+            "bx_timing": _node("bx_timing", 0),
+            "subdet": _node("subdet", 0),
+            "rpc": _node("rpc", 13),
+            "rgf": _node("rgf", 2),
+        },
+        edges=[
+            LatencyEdge(src="bx_timing", dst="rgf", latency=None, control_strobe=True),
+            LatencyEdge(src="subdet", dst="rgf", latency=None),
+            LatencyEdge(src="rpc", dst="rgf", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    rgf_report = next(r for r in reports if r.merge_node == "rgf")
+    paths = {p.path[0]: p.total_cycles for p in rgf_report.paths}
+    # Only the two real data predecessors participate; bx_timing's
+    # strobe is absent entirely, not just marked unknown.
+    assert paths == {"subdet": 0, "rpc": 13}
+    assert rgf_report.is_mismatch  # 0 vs 13 is a real data-path imbalance
+
+
+def test_undeclared_zero_cycle_predecessor_still_propagates_as_unknown():
+    """Contrast with the fix above: a predecessor with no declared
+    latency at all (genuinely missing data — not an explicit
+    variable_latency/elastic architectural declaration) must still
+    poison the chain, exactly as before this fix. Only an *explicit*
+    variable/elastic declaration earns the special treatment."""
+    graph = LatencyGraph(
+        nodes={
+            "unknown_upstream": _node("unknown_upstream", None),
+            "dt": _node("dt", 8),
+            "direct": _node("direct", 8),
+            "subdet": _node("subdet", 0),
+        },
+        edges=[
+            LatencyEdge(src="unknown_upstream", dst="dt", latency=None),
+            LatencyEdge(src="dt", dst="subdet", latency=None),
+            LatencyEdge(src="direct", dst="subdet", latency=None),
+        ],
+    )
+    reports = check_merge_points(graph)
+    subdet_report = {r.merge_node: r for r in reports}["subdet"]
+    subdet_totals = {p.path[0]: p.total_cycles for p in subdet_report.paths}
+    assert subdet_totals == {"dt": None, "direct": 8}
+    assert subdet_report.has_unknowns
+
+
 def test_edge_latency_is_folded_into_the_path_total():
     """Two predecessors with EQUAL node latency, but one edge carries extra
     cycles (e.g. register_stages) the other doesn't — must now be flagged,

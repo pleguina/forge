@@ -25,12 +25,21 @@ with exactly one instance (or vice versa) are expanded into N real
 per-instance edges — structurally certain regardless of which physical
 port each instance drives, since there is only one possible destination
 (or source) instance to connect to. When *both* sides have more than one
-instance, the exact per-instance pairing is genuinely ambiguous without
+instance, the exact per-instance pairing is generally ambiguous without
 consuming contract/port-matching data this module deliberately doesn't
-depend on (see the "usable before synthesis" note below) — that case
-(not present in either reference design today) conservatively expands to
-the full producer x consumer Cartesian product rather than guessing a
-single pairing, so it never *under*-reports a possible merge point.
+depend on (see the "usable before synthesis" note below), so the default
+is the full producer x consumer Cartesian product rather than guessing a
+single pairing — it never *under*-reports a possible merge point. One
+narrow, unambiguous exception (see ``_single_range_instance_pairs``): a
+connection wired via a single 1-D ``port_map_ranges`` entry whose
+``count`` matches the smaller side's instance count already fully
+determines the intended pairing from ``src_start``/``dst_start``/
+``count`` alone, with no port-level data needed — used for real
+array-role connections (e.g. a real external consumer's 52-instance
+``producer -> delay-line`` connection), where the Cartesian-product
+default previously broke ``_upstream_chain_latency``'s
+single-real-predecessor chain-folding for every downstream merge point
+reachable through the connection.
 
 Latency resolution order
 ------------------------
@@ -128,6 +137,14 @@ class LatencyEdge:
     # ``_upstream_chain_latency`` and ``check_merge_points`` propagate the
     # real "unknown" instead of silently treating the crossing as free.
     unknown_cdc: bool = False
+    # This edge is a control/reset strobe (Connection.control_strobe),
+    # not a data path — excluded from exact-cycle merge-point comparison
+    # the same way an unknown_cdc edge is, but for the opposite reason:
+    # its timing is deliberately, knowably scheduled by the receiving
+    # design (e.g. derived from a maintained per-module latency table),
+    # not genuinely unknowable. See Connection.control_strobe's own
+    # docstring for the real external-consumer example this was found on.
+    control_strobe: bool = False
 
 
 @dataclasses.dataclass
@@ -250,6 +267,56 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
     )
 
 
+def _single_range_instance_pairs(conn, src_mod, dst_mod) -> Optional[List[tuple]]:
+    """Return an unambiguous list of ``(src_instance_idx, dst_instance_idx)``
+    pairs for *conn* when its ``port_map_ranges`` data is enough to derive
+    one, or ``None`` to fall back to this module's existing conservative
+    Cartesian-product expansion (see the module docstring's "genuinely
+    ambiguous without... contract/port-matching data" note — that reasoning
+    stands for the general case; this only narrows it where the ambiguity
+    doesn't actually exist).
+
+    Real gap this closes: when both ``src_mod``/``dst_mod`` declare more
+    than one instance and the connection wires them via a single 1-D
+    ``port_map_ranges`` entry whose ``count`` matches the smaller instance
+    count (the common "array-role" pattern — e.g. 52 ``csc`` instances each
+    driving their own ``signal_delay`` instance one-to-one), the intended
+    pairing is already fully determined by ``src_start``/``dst_start``/
+    ``count`` alone — no port-level scalar/indexed distinction (which *does*
+    require ip_info this module deliberately avoids) is needed to know
+    *which instances* pair up, only *which physical pins* would, and this
+    function never touches pins. Found on a real external consumer's
+    topology: a 52-instance ``csc -> csc_data_dly`` connection was silently expanding
+    to 2704 Cartesian-product edges, which broke
+    ``_upstream_chain_latency``'s single-real-predecessor chain-folding for
+    every downstream merge point reachable through it.
+
+    Deliberately narrow: multiple ``port_map_ranges`` entries on one
+    connection, any entry using the N-D ``dims`` form, or a ``count`` that
+    doesn't match either side's instance count, all return ``None`` — those
+    genuinely need the port-level data this module doesn't have, so they
+    keep the existing, already-correct-by-design conservative behaviour.
+    """
+    if src_mod is None or dst_mod is None:
+        return None
+    if src_mod.instances <= 1 or dst_mod.instances <= 1:
+        return None  # already unambiguous via the existing N-vs-1 expansion
+    ranges = conn.port_map_ranges
+    if len(ranges) != 1:
+        return None
+    rng = ranges[0]
+    if "dims" in rng:
+        return None  # N-D case: out of scope, keep the conservative fallback
+    count = rng.get("count")
+    if not isinstance(count, int) or count <= 0:
+        return None
+    if count != min(src_mod.instances, dst_mod.instances):
+        return None
+    src_start = rng.get("src_start", 0)
+    dst_start = rng.get("dst_start", 0)
+    return [(src_start + k, dst_start + k) for k in range(count)]
+
+
 def _build_latency_map(
     registry: dict,
     hls_reports: Optional[Dict[str, int]],
@@ -308,10 +375,60 @@ def _resolved_registry_path(design_path: Path) -> Optional[Path]:
 # Public API
 # ---------------------------------------------------------------------------
 
+def resolve_conn_map(
+    design_path: Path,
+    modules_yml_path: Optional[Path] = None,
+) -> "Optional[Dict[tuple, list]]":
+    """Best-effort real per-instance connection map for *design_path*, via
+    the same contract resolution :func:`forge.ir.build.build_project_ir`
+    uses — ``load_contracts_for_design`` + ``synthesize_ip_info`` (a
+    projected ip_info built from contract-declared ports, no built IP
+    required) + :func:`forge.contracts.matcher.auto_match_ports`.
+
+    This is the authoritative source of truth for "which specific
+    producer instance really drives which specific consumer instance" —
+    the same ``conn_map`` the real structural generators wire from. Used
+    by :func:`build_graph` (when it resolves successfully) to replace
+    both the plain Cartesian-product fallback *and*
+    ``_single_range_instance_pairs``'s narrower heuristic for
+    ``port_map_ranges``, for every connection *and* every
+    ``topology_group`` uniformly — including partition/``instance_assign``-
+    based wiring (e.g. "auto-match by partition"), which neither of those
+    can resolve without contract data.
+
+    Returns ``None`` (not raises) when contracts can't be loaded/resolved
+    at all — callers fall back to :func:`build_graph`'s existing
+    contract-free heuristics, exactly as if this had never been called.
+    """
+    try:
+        from forge.contracts.config import DesignConfig
+        from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
+        from forge.contracts.matcher import auto_match_ports
+
+        cfg = DesignConfig.load_relaxed(design_path)
+        registry_path = modules_yml_path or _resolved_registry_path(design_path)
+        if registry_path is None or not registry_path.exists():
+            return None
+        contracts = load_contracts_for_design(registry_path, design_path.parent)
+        if not contracts:
+            return None
+        mapped = {}
+        for m in cfg.modules:
+            c = contracts.get(m.name) or (m.ip_info_key and contracts.get(m.ip_info_key))
+            if c:
+                mapped[m.name] = c
+        ip_info = synthesize_ip_info(mapped)
+        conn_map, _global_nets, _report = auto_match_ports(cfg, ip_info, contracts=contracts)
+        return conn_map
+    except Exception:
+        return None
+
+
 def build_graph(
     design_path: Path,
     modules_yml_path: Optional[Path] = None,
     hls_reports: Optional[Dict[str, int]] = None,
+    conn_map: "Optional[Dict[tuple, list]]" = None,
 ) -> LatencyGraph:
     """Build a :class:`LatencyGraph` from *design_path*.
 
@@ -331,6 +448,15 @@ def build_graph(
     hls_reports:
         Optional mapping ``{module_name: worst_case_latency_cycles}`` produced
         by :func:`forge.analysis.hls_reports.extractor.latency_map_from_reports`.
+    conn_map:
+        Optional real per-instance connection map, typically from
+        :func:`resolve_conn_map`. When given, it is the authoritative
+        source for which instance pairs are real edges — see
+        :func:`resolve_conn_map`'s docstring. Ignored on the legacy
+        raw-YAML fallback path (a ``modules_yml_path`` override that
+        genuinely differs from design.yml's own ``registry:`` is already
+        a narrow, undocumented case; layering contract resolution onto it
+        too isn't warranted).
     """
     design_path = Path(design_path).resolve()
     modules_yml_path = Path(modules_yml_path).resolve() if modules_yml_path is not None else None
@@ -343,12 +469,13 @@ def build_graph(
 
     if override_differs:
         return _build_graph_legacy(design_path, modules_yml_path, hls_reports)
-    return _build_graph_from_ir(design_path, hls_reports)
+    return _build_graph_from_ir(design_path, hls_reports, conn_map=conn_map)
 
 
 def _build_graph_from_ir(
     design_path: Path,
     hls_reports: Optional[Dict[str, int]] = None,
+    conn_map: "Optional[Dict[tuple, list]]" = None,
 ) -> LatencyGraph:
     """Migration step 7: build the LatencyGraph from ``DesignConfig`` — the
     same shared loader the canonical IR itself is built from
@@ -415,33 +542,81 @@ def _build_graph_from_ir(
     seen_pairs: set = set()
 
     def _add_edge(
-        src: str, dst: str, latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
+        src: str, dst: str, latency: Optional[LatencyValue] = None,
+        unknown_cdc: bool = False, control_strobe: bool = False,
     ) -> None:
         if src in nodes and dst in nodes and (src, dst) not in seen_pairs:
             seen_pairs.add((src, dst))
-            edges.append(LatencyEdge(src=src, dst=dst, latency=latency, unknown_cdc=unknown_cdc))
+            edges.append(LatencyEdge(
+                src=src, dst=dst, latency=latency,
+                unknown_cdc=unknown_cdc, control_strobe=control_strobe,
+            ))
+
+    def _conn_map_pairs(src_mod_name: str, dst_mod_name: str, src_names: list, dst_names: list) -> Optional[List[tuple]]:
+        """When a real conn_map was resolved, translate its
+        (src_instance_id, dst_instance_id) keys — filtered to this specific
+        module pair, and only where at least one real port pair exists —
+        into (index, index) pairs ``_add_instance_edges`` already knows how
+        to consume. Returns ``None`` if conn_map wasn't supplied, so the
+        caller falls through to its next-best heuristic unchanged."""
+        if conn_map is None:
+            return None
+        src_ids = [resolved_instance_id(src_mod_name, i, len(src_names)) for i in range(len(src_names))]
+        dst_ids = [resolved_instance_id(dst_mod_name, i, len(dst_names)) for i in range(len(dst_names))]
+        src_idx_by_id = {sid: i for i, sid in enumerate(src_ids)}
+        dst_idx_by_id = {did: i for i, did in enumerate(dst_ids)}
+        pairs: List[tuple] = []
+        for (src_id, dst_id), port_pairs in conn_map.items():
+            if not port_pairs:
+                continue
+            i_s = src_idx_by_id.get(src_id)
+            i_d = dst_idx_by_id.get(dst_id)
+            if i_s is not None and i_d is not None:
+                pairs.append((i_s, i_d))
+        return pairs
 
     def _add_instance_edges(
         src_mod_name: str, dst_mod_name: str,
         latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
+        positional_pairs: Optional[List[tuple]] = None, control_strobe: bool = False,
     ) -> None:
         src_mod = mod_by_name.get(src_mod_name)
         dst_mod = mod_by_name.get(dst_mod_name)
         src_names = _instance_node_names(src_mod) if src_mod else [src_mod_name]
         dst_names = _instance_node_names(dst_mod) if dst_mod else [dst_mod_name]
+        # conn_map, when resolved, is authoritative — takes priority over
+        # both the plain Cartesian-product default and the narrower
+        # port_map_ranges-only positional heuristic (see resolve_conn_map's
+        # docstring for why: it's the same real matching the structural
+        # generators wire from, correct for topology_groups too).
+        pairs = _conn_map_pairs(src_mod_name, dst_mod_name, src_names, dst_names)
+        if pairs is None:
+            pairs = positional_pairs
+        if pairs is not None:
+            for i_s, i_d in pairs:
+                if 0 <= i_s < len(src_names) and 0 <= i_d < len(dst_names):
+                    _add_edge(src_names[i_s], dst_names[i_d], latency, unknown_cdc, control_strobe)
+            return
         for s in src_names:
             for d in dst_names:
-                _add_edge(s, d, latency, unknown_cdc)
+                _add_edge(s, d, latency, unknown_cdc, control_strobe)
 
     for conn in cfg.connections:
         conn_cdc_kind = conn.cdc.get("kind") if conn.cdc else None
+        src_mod = mod_by_name.get(conn.from_)
+        dst_mod = mod_by_name.get(conn.to)
+        pairs = _single_range_instance_pairs(conn, src_mod, dst_mod)
         _add_instance_edges(
             conn.from_, conn.to, _edge_latency_from_connection(conn),
             unknown_cdc=conn_cdc_kind in ("mailbox_transfer", "async_fifo"),
+            positional_pairs=pairs,
+            control_strobe=conn.control_strobe,
         )
     for tg in cfg.topology_groups:
         # TopologyGroup carries no register_stages/delay_cycles/cdc field —
-        # honestly latency=None (no data source), not a fabricated 0.
+        # honestly latency=None (no data source), not a fabricated 0. Its
+        # real per-instance pairing (partition/instance_assign-based) is
+        # only resolvable via conn_map — see _conn_map_pairs above.
         _add_instance_edges(tg.from_, tg.to)
 
     return LatencyGraph(nodes=nodes, edges=edges)
@@ -528,10 +703,49 @@ def _build_graph_legacy(
             out.extend(_instance_names_raw(name, instances))
         return out
 
+    def _raw_single_range_instance_pairs(conn: dict, src_name: str, dst_name: str) -> Optional[List[tuple]]:
+        """Raw-dict mirror of ``_single_range_instance_pairs`` — same rule,
+        same narrow scope, kept in sync so this fallback path can't
+        silently diverge from ``_build_graph_from_ir`` (see that
+        function's docstring for the full rationale)."""
+        src_m = design_mod_by_name.get(src_name)
+        dst_m = design_mod_by_name.get(dst_name)
+        src_instances = src_m.get("instances", 1) if src_m else 1
+        dst_instances = dst_m.get("instances", 1) if dst_m else 1
+        if src_instances <= 1 or dst_instances <= 1:
+            return None
+        ranges = conn.get("port_map_ranges") or []
+        if len(ranges) != 1:
+            return None
+        rng = ranges[0]
+        if "dims" in rng:
+            return None
+        count = rng.get("count")
+        if not isinstance(count, int) or count <= 0:
+            return None
+        if count != min(src_instances, dst_instances):
+            return None
+        src_start = rng.get("src_start", 0)
+        dst_start = rng.get("dst_start", 0)
+        return [(src_start + k, dst_start + k) for k in range(count)]
+
     edges: List[LatencyEdge] = []
     for conn in design.get("connections", []):
-        for src in _instance_endpoints(_endpoints(conn.get("from", ""))):
-            for dst in _instance_endpoints(_endpoints(conn.get("to", ""))):
+        from_names = _endpoints(conn.get("from", ""))
+        to_names = _endpoints(conn.get("to", ""))
+        pairs = (
+            _raw_single_range_instance_pairs(conn, from_names[0], to_names[0])
+            if len(from_names) == 1 and len(to_names) == 1 else None
+        )
+        if pairs is not None:
+            src_insts = _instance_endpoints(from_names)
+            dst_insts = _instance_endpoints(to_names)
+            for i_s, i_d in pairs:
+                if 0 <= i_s < len(src_insts) and 0 <= i_d < len(dst_insts):
+                    _add_edge(src_insts[i_s], dst_insts[i_d], edges)
+            continue
+        for src in _instance_endpoints(from_names):
+            for dst in _instance_endpoints(to_names):
                 _add_edge(src, dst, edges)
     for tg in design.get("topology_groups", []):
         for src in _instance_endpoints(_endpoints(tg.get("from", ""))):

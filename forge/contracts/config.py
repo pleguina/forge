@@ -340,6 +340,20 @@ class Connection:
     # what actually checks a connection against this declaration.
     cdc: Optional[Dict[str, Any]] = None
 
+    # Declares this connection as a control/reset strobe (e.g. an
+    # event-boundary reset, a bank-swap pulse, an output-stamp tag) rather
+    # than a data path. Found needed on a real external consumer's
+    # topology: a bunch-crossing timing controller distributes several
+    # such strobes (new_event_rgf/mem/arb/best/nn) whose arrival cycle is
+    # deliberately derived from each receiving stage's own accumulated datapath depth —
+    # not required to exact-cycle-align with a sibling *data* predecessor
+    # the way two real data paths into the same merge point must. See
+    # forge.analysis.latency_static.graph for how this exempts the
+    # connection from exact-cycle merge-point comparison, the same way a
+    # cdc: mailbox_transfer/async_fifo edge is already exempted for a
+    # different reason (genuinely unknowable, not deliberately scheduled).
+    control_strobe: bool = False
+
 @dataclass
 class InstanceAssign:
     """Maps a range of producer instances to a consumer coordinate.
@@ -591,6 +605,7 @@ class DesignConfig:
             contract_wiring = c.get("contract_wiring", False)
             boundary = c.get("boundary", None)
             cdc = c.get("cdc", None)
+            control_strobe = bool(c.get("control_strobe", False))
 
             # Validation: a boundary tag without an actual register stage is
             # meaningless — the generator cannot emit a protected crossing delay
@@ -684,6 +699,7 @@ class DesignConfig:
                         contract_wiring = contract_wiring,
                         boundary        = boundary,
                         cdc             = cdc,
+                        control_strobe  = control_strobe,
                     )
                 )
 
