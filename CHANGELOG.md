@@ -186,6 +186,19 @@ for the versioning policy.
   checks those too, carefully enough not to flag a plugin's own
   `forge/verify/` capsule directory, which is a real and current path.
 
+- **Verilog port scanner corrupted multi-name declarations.**
+  `output wire [W-1:0] a, b, c` declares three identical ports, but the
+  ANSI header blob is split on commas before being matched, so only `a`
+  arrived carrying a direction and width — `b` and `c` fell through to a
+  hardcoded `('in', 1)` default, turning 8-bit outputs into 1-bit inputs.
+  Found in `vision_pipeline_demo`'s `window_builder_rtl`, where all six
+  affected window taps were invisible because the hand-written interface
+  contract restated the correct values on top of them; it would bite
+  immediately in compat mode, where no contract exists to correct the
+  scan. Bare names in an ANSI port list now inherit from the preceding
+  item, as Verilog specifies, without shadowing the non-ANSI path where a
+  bare header name resolves from a body declaration. 2 regression tests.
+
 ### Changed
 - **`forge --help` is tiered.** Twelve top-level entries were listed flat,
   with the golden-path verbs (`init`/`inspect`/`build`/`test`/`report`)
