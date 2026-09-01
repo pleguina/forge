@@ -224,6 +224,27 @@ for the versioning policy.
   silently dropping the role from contract-driven wiring and surfacing
   much later as "role not found in producer contract".
 - **`forge contract infer`** — a real home for contract authoring.
+- **`forge.hls.cpp_signature` and `forge contract infer --predict`** — the
+  C++ front end that makes port prediction usable. It reads the top
+  function's signature and pragmas out of the source, resolving `#define`
+  and `static const int` constants, typedef chains, array typedefs and
+  struct definitions, following local includes transitively (a top's .cpp
+  includes its own header, which includes the project's shared types
+  header — the widths live in that third file).
+
+  End to end on `golden_proc_hls`, from the C++ alone with nothing
+  hand-fed: **260 of 261 ports exact** in name, direction and width. The
+  one exception is the padded struct return, reported unknown rather than
+  guessed. Across all seven HLS modules in this repo, every scalar role
+  agrees with the contract that was hand-written against the built IP,
+  with no warnings.
+
+  One more packing rule came out of the fixture: a struct is **bit-packed
+  as an array element** (so the field sum is exact) and **padded as a
+  scalar argument or return**. The same `packed_t` synthesises to 16 bits
+  in one position and 48 in the other — which is why `T_GP_HIT` resolves
+  to 1+11+9=21 in a real design. Summed widths are now used exactly where
+  synthesis says they hold, and withheld where they do not.
 - **`forge.hls.port_prediction`** — predicts the RTL ports Vitis HLS will
   generate for an HLS module, so a contract can be drafted and reviewed
   before the first synthesis run. This is what closes the gap left by the

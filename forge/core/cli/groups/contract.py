@@ -37,6 +37,7 @@ def cmd_infer(args) -> None:
         module = args.module
         entry: dict
         source_type = "rtl"
+        predict_warnings: list = []
 
         if args.ip_info:
             # Explicit port list: the only route for an HLS module before
@@ -53,6 +54,57 @@ def cmd_infer(args) -> None:
                 )
             entry = ip_info[module] or {}
             source_type = args.source_type or "hls"
+        elif args.predict:
+            # An HLS module has no HDL to scan, but its RTL ports can be
+            # predicted from the C++ signature and pragmas — see
+            # forge.hls.port_prediction, whose rules come from real
+            # synthesis. Lets a contract be drafted and reviewed before the
+            # first build.
+            from forge.hls.cpp_signature import parse_signature
+            from forge.hls.port_prediction import predict_ports
+
+            registry_path = Path(args.contracts_from).expanduser().resolve()
+            if not registry_path.is_file():
+                raise FileNotFoundError(f"registry not found: {registry_path}")
+            registry = yaml.safe_load(registry_path.read_text()) or {}
+            mod_entry = next(
+                (m for m in (registry.get("modules") or []) if m.get("name") == module),
+                None,
+            )
+            if mod_entry is None:
+                available = ", ".join(
+                    sorted(str(m.get("name")) for m in (registry.get("modules") or []))
+                ) or "(none)"
+                raise ValueError(
+                    f"module {module!r} not found in {registry_path.name}. "
+                    f"Available: {available}")
+
+            sources = [
+                (registry_path.parent / str(src)).resolve()
+                for src in (mod_entry.get("src") or [])
+            ]
+            cpp = next((s for s in sources
+                        if s.is_file() and s.suffix.lower() in (".cpp", ".cc", ".cxx")), None)
+            if cpp is None:
+                raise ValueError(
+                    f"--predict needs a C++ source for {module!r}; none of its "
+                    f"src entries is a .cpp/.cc/.cxx file")
+
+            top = str(mod_entry.get("top") or module)
+            sig = parse_signature(cpp, top)
+            if not sig.args and sig.warnings:
+                raise ValueError("; ".join(sig.warnings))
+            prediction = predict_ports(
+                sig.args, block_protocol=sig.block_protocol,
+                returns_value=sig.returns_value, return_width=sig.return_width)
+            predict_warnings = sig.warnings + prediction.warnings
+            entry = {"ports": [
+                {"name": p.name,
+                 "direction": "IN" if p.direction == "input" else "OUT",
+                 "width": p.width}
+                for p in prediction.ports
+            ]}
+            source_type = "hls"
         else:
             registry_path = Path(args.contracts_from).expanduser().resolve()
             if not registry_path.is_file():
@@ -97,6 +149,11 @@ def cmd_infer(args) -> None:
             artifacts.append(str(output))
 
         if not json_mode:
+            if predict_warnings:
+                print("⚠️  predicted from source — confirm against the built IP:")
+                for w in predict_warnings:
+                    print(f"     {w}")
+                print()
             print(skeleton)
             if artifacts:
                 print(f"✅ wrote {artifacts[0]}")
@@ -109,7 +166,9 @@ def cmd_infer(args) -> None:
         envelope = CommandEnvelope(
             status="pass",
             artifacts=artifacts,
-            metrics={"module": module, "source_type": source_type, "roles": n_roles},
+            metrics={"module": module, "source_type": source_type,
+                     "roles": n_roles, "predicted": bool(args.predict)},
+            diagnostics=[{"severity": "warning", "message": w} for w in predict_warnings],
             next_actions=[
                 "Review the role names, add the wiring_kind/protocol/partition "
                 "semantics that can't be inferred from a port name, then set "
@@ -163,6 +222,11 @@ def register(sub) -> None:
     infer.add_argument(
         "--source-type", dest="source_type", choices=("rtl", "hls"), default=None,
         help="Override the source type (default: the module's 'kind')",
+    )
+    infer.add_argument(
+        "--predict", action="store_true", default=False,
+        help="Predict an HLS module's RTL ports from its C++ source instead of "
+             "scanning HDL — for a module whose IP has not been built yet",
     )
     infer.add_argument("--output", "-o", default=None, help="Write the skeleton to this path")
     infer.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,

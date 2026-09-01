@@ -14,14 +14,18 @@ right.
 | `m_scalars.cpp` | `ap_ctrl_none`; scalar `ap_none` / `ap_vld` / `ap_ack` / `ap_hs` / `ap_stable`, in both directions |
 | `m_arrays.cpp` | `ap_ctrl_hs`; `ARRAY_PARTITION complete dim=0` vs `dim=1`; `ap_memory` read and write; `ap_fifo`; struct argument; struct return |
 | `m_axi.cpp` | `axis` streams; `s_axilite` bundles; `m_axi` master |
+| `m_structs.cpp` | the same struct as a scalar argument, an array element, and a return value |
 | `m_dimdefault.cpp` | `ARRAY_PARTITION complete` with and without `dim=0`, on the same array shape |
 
-## Four things the real output settles
+## Five things the real output settles
 
-1. **A struct is padded, not concatenated.** `packed_t` declares 16 bits of
-   fields (`ap_uint<1>` + `ap_uint<11>` + `ap_int<4>`) and synthesises to
-   **48**. Summing declared widths is wrong in a way that looks right, so
-   struct widths are reported as unknown rather than computed.
+1. **A struct's packing depends on where it sits.** `m_structs.cpp` puts
+   the same `packed_t` (16 bits of declared fields) in three positions:
+   as a scalar argument it synthesises to **48** bits (members padded), as
+   an **array element** to **16** (bit-packed, the exact field sum), and as
+   a return value to **48**. So a summed width is right for array elements
+   and wrong for scalars and returns — which is why `T_GP_HIT` resolves to
+   1+11+9=21 in a real design while the fixture's scalar does not.
 2. **AXI-Stream `TDATA` rounds up to a byte multiple.** A 12-bit element
    gives a 16-bit `TDATA`.
 3. **A bare `complete` partitions `dim=1`, not every dimension.**
@@ -40,7 +44,7 @@ right.
 Needs `vitis_hls` on PATH. From this directory:
 
 ```bash
-for top in m_scalars m_arrays m_axi m_dimdefault; do
+for top in m_scalars m_arrays m_axi m_dimdefault m_structs; do
   cat > run_$top.tcl <<TCL
 open_project -reset prj_$top
 add_files src/$top.cpp -cflags "-Isrc"

@@ -911,5 +911,52 @@
       "direction": "output",
       "width": "1"
     }
+  ],
+  "m_structs": [
+    {
+      "name": "as_scalar",
+      "direction": "input",
+      "width": "47:0"
+    },
+    {
+      "name": "as_array_elem_0_0",
+      "direction": "input",
+      "width": "15:0"
+    },
+    {
+      "name": "as_array_elem_0_1",
+      "direction": "input",
+      "width": "15:0"
+    },
+    {
+      "name": "as_array_elem_1_0",
+      "direction": "input",
+      "width": "15:0"
+    },
+    {
+      "name": "as_array_elem_1_1",
+      "direction": "input",
+      "width": "15:0"
+    },
+    {
+      "name": "o",
+      "direction": "output",
+      "width": "11:0"
+    },
+    {
+      "name": "o_ap_vld",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "ap_return",
+      "direction": "output",
+      "width": "47:0"
+    },
+    {
+      "name": "ap_rst",
+      "direction": "input",
+      "width": "1"
+    }
   ]
 }

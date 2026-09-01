@@ -143,3 +143,44 @@ def test_unknown_module_in_registry_names_the_available_ones(capsys, tmp_path):
 
     assert result.returncode == 1
     assert "Available: m" in result.stderr
+
+
+def test_predict_drafts_a_contract_for_an_unbuilt_hls_module(capsys, tmp_path):
+    """`--predict` reads the C++ instead of scanning HDL, so an HLS module's
+    contract can be drafted before its IP exists."""
+    repo = Path(__file__).resolve().parents[2]
+    out = tmp_path / "hd.interface.yaml"
+
+    result = _run(capsys, "infer", "hit_decoder",
+                  "--contracts-from", str(repo / "plugins/trigger_demo/forge/modules.yml"),
+                  "--predict", "--output", str(out))
+
+    assert result.returncode == 0, result.stderr
+    spec = yaml.safe_load(out.read_text())["ip_interface"]
+    assert spec["source_type"] == "hls"
+    assert spec["normalization_status"] == "draft"
+    roles = spec["roles"]
+    assert {"clock_primary", "reset_primary", "raw_hit", "decoded_hit"} <= set(roles)
+    # HLS roles carry the port facts, since there is no HDL to derive from.
+    assert roles["raw_hit"]["width"] == 32
+    assert roles["decoded_hit"]["direction"] == "output"
+
+
+def test_predict_reports_what_it_could_not_resolve(capsys, tmp_path):
+    """A prediction is a draft to confirm against the built IP, so anything
+    unresolved is surfaced rather than silently omitted."""
+    (tmp_path / "m.cpp").write_text(
+        "struct big_t { int a; int b; };\n"
+        "big_t m(mystery_t x) {\n"
+        "#pragma HLS INTERFACE ap_ctrl_none port=return\n"
+        "#pragma HLS INTERFACE ap_none port=x\n"
+        "}\n")
+    (tmp_path / "modules.yml").write_text(yaml.safe_dump({
+        "modules": [{"name": "m", "kind": "hls", "top": "m", "src": ["m.cpp"]}]}))
+
+    result = _run(capsys, "infer", "m", "--contracts-from", str(tmp_path / "modules.yml"),
+                  "--predict")
+
+    assert result.returncode == 0, result.stderr
+    assert "confirm against the built IP" in result.stdout
+    assert "could not resolve the width" in result.stdout

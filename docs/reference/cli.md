@@ -291,7 +291,8 @@ optional arguments:
 
 ```text
 usage: forge contract infer [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
-                            [--source-type {rtl,hls}] [--output OUTPUT] [--dry-run] [--json]
+                            [--source-type {rtl,hls}] [--predict] [--output OUTPUT] [--dry-run]
+                            [--json]
                             module
 
 Emit an interface-contract skeleton with every observed port as a role. RTL roles are emitted by
@@ -309,6 +310,8 @@ optional arguments:
                         an HLS module before its IP is built)
   --source-type {rtl,hls}
                         Override the source type (default: the module's 'kind')
+  --predict             Predict an HLS module's RTL ports from its C++ source instead of scanning
+                        HDL — for a module whose IP has not been built yet
   --output OUTPUT, -o OUTPUT
                         Write the skeleton to this path
   --dry-run             Print the skeleton without writing it
