@@ -98,6 +98,23 @@ for the versioning policy.
   (`test_chain_folds_through_a_confirmed_balanced_merge_point`,
   `test_chain_stays_conservative_through_a_genuinely_mismatched_merge_point`).
 
+- **Reference-plugin test rot**: `passthrough_demo`'s
+  `test_single_flow_declared` still asserted a single declared flow long
+  after the plugin grew to a real 4-flow matrix (xsim/verilator x
+  svh_include/readmemh). Replaced with `test_declared_flow_matrix`,
+  which pins the whole (name, backend, stimulus_mode) matrix instead of
+  just its first entry.
+- **Vision-pipeline tutorial reference assets**: the committed
+  `docs/assets/generated/vision-pipeline/manifest.json` recorded stale
+  `design_content_hash` values for all six diagrams, failing both
+  `generate_reference_assets.py --check` (the docs-build CI job) and
+  `test_check_passes_against_the_currently_committed_assets`.
+  Regenerated. Root cause worth knowing: `content_hash()` digests the
+  entire canonical IR JSON, so the purely additive declared-latency
+  fields added to `forge/contracts/config.py` above shifted every
+  design's hash even for designs that never set them. The rendered SVGs
+  and PNGs are byte-identical -- only the recorded hashes moved.
+
 ### Changed
 - **Open-source policy**: `CONTRIBUTING.md` previously stated this is
   "private CMS/OMTF-internal tooling, not a general-purpose public

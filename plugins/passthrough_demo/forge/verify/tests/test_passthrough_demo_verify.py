@@ -28,11 +28,16 @@ def test_design_contract_loads():
     assert contract.plugin == "passthrough_demo"
 
 
-def test_single_flow_declared():
+def test_declared_flow_matrix():
+    """One DUT, four flows: both real backends x both stimulus mechanisms."""
     contract = load_verify_design(_DESIGN_YML)
-    assert len(contract.flows) == 1
-    assert contract.flows[0].name == "passthrough_xsim"
-    assert contract.flows[0].kind == "full_chip_rtl"
+    assert [(f.name, f.backend, f.stimulus_mode) for f in contract.flows] == [
+        ("passthrough_xsim", "xsim", "svh_include"),
+        ("passthrough_verilator", "verilator", "svh_include"),
+        ("passthrough_readmemh", "xsim", "readmemh"),
+        ("passthrough_readmemh_verilator", "verilator", "readmemh"),
+    ]
+    assert all(f.kind == "full_chip_rtl" for f in contract.flows)
 
 
 def test_golden_dataset_declared():
