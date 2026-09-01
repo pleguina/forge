@@ -73,7 +73,15 @@ class LoadedContract:
         self._spec = spec
         iface = spec.get("ip_interface", {})
         self._iface = iface
-        self._roles: Dict[str, dict] = iface.get("roles", {})
+        # A role that declares nothing at all is written `role_name:` in
+        # YAML, which parses to None. Normalise it to {} here so every
+        # consumer can treat a role spec as a dict unconditionally, rather
+        # than each guarding for None (and silently skipping the role when
+        # it forgets to).
+        self._roles: Dict[str, dict] = {
+            name: (spec_or_none if isinstance(spec_or_none, dict) else {})
+            for name, spec_or_none in (iface.get("roles") or {}).items()
+        }
 
     # ── Identity ──────────────────────────────────────────────────────────────
 
@@ -117,6 +125,38 @@ class LoadedContract:
         )
 
     # ── Role access ───────────────────────────────────────────────────────────
+
+    @property
+    def needs_port_resolution(self) -> bool:
+        """True if any role omits a field derivable from the port list.
+
+        Callers use this to decide whether scanning the module's source is
+        worth the cost — a fully-declared contract (every contract written
+        before this was supported) never triggers a scan.
+        """
+        for role_name, spec in self._roles.items():
+            if not isinstance(spec, dict):
+                continue
+            if "raw_port_prefix" in spec or "raw_port_tpl" in spec or spec.get("array"):
+                continue
+            if any(f not in spec for f in ("raw_port", "direction", "width")):
+                return True
+        return False
+
+    def resolve_against_ports(self, ports: Dict[str, dict]) -> List[str]:
+        """Fill every role's derivable fields from *ports*, in place.
+
+        Returns a list of conflicts, where the contract declares a value the
+        real port contradicts. Idempotent: resolving twice changes nothing.
+        """
+        conflicts: List[str] = []
+        for role_name, spec in list(self._roles.items()):
+            if not isinstance(spec, dict):
+                continue
+            resolved, role_conflicts = _derive_role_fields(role_name, spec, ports)
+            self._roles[role_name] = resolved
+            conflicts.extend(role_conflicts)
+        return conflicts
 
     def has_role(self, role: str) -> bool:
         """Return True if the contract declares this role."""
@@ -256,6 +296,125 @@ class LoadedContract:
 # Loaders
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Port-fact derivation
+# ──────────────────────────────────────────────────────────────────────────────
+
+#: Role fields that restate a fact already declared by the module's own
+#: HDL/HLS source. Measured across this repo's 27 contracts, these account
+#: for ~55% of all contract content lines, and 308 of 324 roles carry
+#: *nothing else* — they are pure transcription of the port list. Declaring
+#: them stays supported (and is then verified against the real ports, which
+#: is what `forge core verify-contract` has always done); omitting them lets
+#: the scanned source answer instead.
+DERIVABLE_ROLE_FIELDS = ("raw_port", "direction", "width", "active_level")
+
+#: Suffixes that mark an active-low reset by near-universal HDL convention.
+_ACTIVE_LOW_SUFFIXES = ("_n", "_b", "_l")
+
+
+def _derive_role_fields(
+    role_name: str, spec: dict, ports: Dict[str, dict],
+) -> tuple[dict, List[str]]:
+    """Fill a role's derivable fields from *ports*; report contradictions.
+
+    Returns ``(resolved_spec, conflicts)``. A field the contract declares is
+    never overwritten — it is compared, and any disagreement is reported so
+    a contract that has drifted from its RTL fails loudly instead of
+    silently winning over the source.
+
+    Array/template roles (``raw_port_prefix``/``raw_port_tpl``) are returned
+    untouched: their physical binding is a real authoring decision, not a
+    transcription, and expanding it needs ``count``/``dims`` the port list
+    alone can't supply.
+    """
+    spec = dict(spec or {})
+    if "raw_port_prefix" in spec or "raw_port_tpl" in spec or spec.get("array"):
+        return spec, []
+
+    raw = spec.get("raw_port", role_name)
+    port = ports.get(raw)
+    if port is None:
+        # Not an error here: a contract may legitimately describe a module
+        # whose source this caller couldn't scan. Leave it alone and let
+        # `forge core verify-contract` be the place that reports it.
+        return spec, []
+
+    direction = "input" if str(port.get("direction", "")).upper().startswith("IN") else "output"
+    derived: Dict[str, object] = {
+        "raw_port": raw,
+        "direction": direction,
+        "width": port.get("width", 1),
+    }
+    if role_name.startswith("reset_"):
+        derived["active_level"] = "low" if raw.endswith(_ACTIVE_LOW_SUFFIXES) else "high"
+
+    conflicts: List[str] = []
+    for field, value in derived.items():
+        if field in spec and spec[field] != value:
+            conflicts.append(
+                f"role {role_name!r}: contract declares {field}={spec[field]!r} "
+                f"but port {raw!r} is {field}={value!r}"
+            )
+    return {**derived, **spec}, conflicts
+
+
+#: Conflicts found while resolving contracts against their real port lists.
+#: Collected rather than raised so a single load reports every disagreement,
+#: and so this module stays free of CLI/diagnostic dependencies. Callers that
+#: care (``forge core verify-contract``, ``topgen validate``) drain it.
+_CONTRACT_CONFLICTS: List[str] = []
+
+
+def drain_contract_conflicts() -> List[str]:
+    """Return and clear conflicts recorded during contract loading."""
+    global _CONTRACT_CONFLICTS
+    found, _CONTRACT_CONFLICTS = _CONTRACT_CONFLICTS, []
+    return found
+
+
+def _scan_module_ports(mod_entry: dict, plugin_root: Path) -> Dict[str, dict]:
+    """Best-effort port list for one modules.yml entry, by scanning its source.
+
+    Returns ``{port_name: {"direction": "IN"|"OUT", "width": int}}``, or an
+    empty dict when nothing could be scanned — a contract that can't be
+    resolved simply keeps whatever it declared.
+    """
+    from forge.core.utils.hdl_parser import _scan_ports, _scan_verilog_ports
+
+    srcs: List[Path] = []
+    for entry in (mod_entry.get("src") or []):
+        candidate = (plugin_root / str(entry)).resolve()
+        if candidate.is_file():
+            srcs.append(candidate)
+        elif candidate.is_dir():
+            for pattern in ("*.v", "*.sv", "*.vhd"):
+                srcs.extend(sorted(candidate.rglob(pattern)))
+
+    top = str(mod_entry.get("top") or mod_entry.get("name") or "")
+
+    def _score(f: Path) -> int:
+        if top and f.stem.lower() == top.lower():
+            return 100
+        if top and top.lower() in f.name.lower():
+            return 50
+        return 1
+
+    for f in sorted((p for p in srcs if p.suffix.lower() in (".v", ".sv", ".vhd")),
+                    key=_score, reverse=True):
+        try:
+            raw = _scan_ports(f) if f.suffix.lower() == ".vhd" else _scan_verilog_ports(f)
+        except Exception:
+            continue
+        if raw:
+            return {
+                name: {"direction": "IN" if str(d).lower().startswith("in") else "OUT",
+                       "width": w}
+                for name, (d, w) in raw.items()
+            }
+    return {}
+
+
 def load_contracts_for_design(
     modules_yml: Path,
     repo_root: Path | None = None,
@@ -301,6 +460,39 @@ def load_contracts_for_design(
 
         spec = yaml.safe_load(contract_path.read_text()) or {}
         contract = LoadedContract(contract_path, spec)
+
+        # A contract may omit the port facts its own source already states
+        # (raw_port/direction/width/active_level). Resolve those against a
+        # scan of the module's HDL, but only when something is actually
+        # missing — a fully-declared contract costs nothing here.
+        if contract.needs_port_resolution:
+            ports = _scan_module_ports(mod_entry, plugin_root)
+            if ports:
+                for conflict in contract.resolve_against_ports(ports):
+                    _CONTRACT_CONFLICTS.append(f"{contract_path.name}: {conflict}")
+            if contract.needs_port_resolution:
+                # Still incomplete: nothing scannable. This is the normal
+                # state for an HLS module before its IP is built — there is
+                # no HDL yet, and the contract is itself the stand-in for the
+                # port list (see synthesize_ip_info_from_contract). Say so
+                # here, because the downstream symptom is a role silently
+                # dropping out of contract-driven wiring and a much later
+                # "role not found in producer contract".
+                missing = sorted(
+                    name for name, role in contract._roles.items()
+                    if not any(k in role for k in ("raw_port_prefix", "raw_port_tpl"))
+                    and not role.get("array")
+                    and any(f not in role for f in ("raw_port", "direction", "width"))
+                )
+                _CONTRACT_CONFLICTS.append(
+                    f"{contract_path.name}: role(s) {', '.join(missing)} omit "
+                    f"raw_port/direction/width, and module "
+                    f"{mod_entry.get('name', '?')!r}'s ports could not be scanned "
+                    f"(source_type={contract.source_type!r}"
+                    + (" — an HLS module has no HDL to scan until it is built"
+                       if contract.source_type != "rtl" else "")
+                    + "). Declare those fields explicitly in the contract."
+                )
 
         # Key by the modules.yml module name — this is the value stored in
         # Module.ip_info_key (= the ref: name from design.yml) so the matcher

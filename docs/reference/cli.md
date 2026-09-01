@@ -17,7 +17,7 @@ FORGE framework CLI — topology generation, HLS build, verification orchestrati
 
 positional arguments:
   GROUP       Golden path: init | inspect | build | test | report | doctor. Direct stage access:
-              topgen | verify | hls | analyze | framework | core.
+              topgen | contract | verify | hls | analyze | framework | core.
     init      Scaffold a new plugin and chain validate -> build -> test -> report
     inspect   Resolve a design into the canonical IR and inspect it (read-only)
     build     Compute (and optionally apply) a deterministic generation plan
@@ -26,6 +26,7 @@ positional arguments:
               provenance, dashboard)
     doctor    Check the local forge install/environment (toolchains, optional deps)
     topgen    Generate hardware topology structure
+    contract  Author interface contracts (infer a skeleton from a module's ports)
     verify    Run simulations and check correctness
     hls       Build HLS modules and IPs
     analyze   Performance analysis, latency checks, and reporting
@@ -52,6 +53,7 @@ passing simulation and an HTML dashboard in one command. Start there.
 Direct stage access — the individual stages the commands above orchestrate.
 Reach for these when you need a flag or a stage the golden path doesn't expose:
   topgen      Topology generation, validation, linting, migration helpers
+  contract    Author interface contracts from a module's real ports
   verify      Verification generate/prepare/run/doctor/release-check
   hls         Vitis HLS TCL generation and parallel job execution
   analyze     HLS reports, latency checks, result plots, dashboards
@@ -78,6 +80,7 @@ Examples — direct stage access:
   forge build design.yml --accept-plan-hash <hash> --json
   forge topgen gen-top design.yml --mode verilog --output algo_top.v
   forge topgen validate design.yml
+  forge contract infer my_module --contracts-from modules.yml -o m.interface.yaml
   forge hls gen-tcl --hls-config catalog.yml
   forge hls run --registry catalog.yml --stages csim,synth --jobs 4
   forge verify generate plugins/my_plugin/verify/design.verification.yml
@@ -266,6 +269,49 @@ optional arguments:
   --explain-staleness EXPLAIN_STALENESS
                         Compare against a previously --provenance'd manifest and explain why it's
                         stale
+  --json                Machine-readable JSON output
+```
+
+### `forge contract`
+
+```text
+usage: forge contract [-h] COMMAND ...
+
+Author and inspect module interface contracts.
+
+positional arguments:
+  COMMAND
+    infer     Infer an interface contract skeleton from a module's real ports
+
+optional arguments:
+  -h, --help  show this help message and exit
+```
+
+#### `forge contract infer`
+
+```text
+usage: forge contract infer [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
+                            [--source-type {rtl,hls}] [--output OUTPUT] [--dry-run] [--json]
+                            module
+
+Emit an interface-contract skeleton with every observed port as a role. RTL roles are emitted by
+name alone — raw_port, direction and width are derived from the module's own source at load time.
+HLS roles carry direction and width, since an HLS module has no HDL to scan until its IP is built.
+
+positional arguments:
+  module                Module name (as it appears in modules.yml)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --contracts-from CONTRACTS_FROM
+                        Module registry to look the module up in (default: modules.yml)
+  --ip-info IP_INFO     Use an ip_info.yaml port list instead of scanning the source (required for
+                        an HLS module before its IP is built)
+  --source-type {rtl,hls}
+                        Override the source type (default: the module's 'kind')
+  --output OUTPUT, -o OUTPUT
+                        Write the skeleton to this path
+  --dry-run             Print the skeleton without writing it
   --json                Machine-readable JSON output
 ```
 
@@ -706,8 +752,7 @@ positional arguments:
     init-plugin      Scaffold the topgen side of a new plugin (modules.yml, design.yml, interface
                      contract, RTL stub)
     migrate          Migration helpers: schema-version insertion, partition->coordinates, legacy
-                     plugin layout, legacy verify-contract filename, compat-mode contract
-                     inference
+                     plugin layout, legacy verify-contract filename
 
 optional arguments:
   -h, --help         show this help message and exit
@@ -891,16 +936,15 @@ optional arguments:
 
 ```text
 usage: forge topgen migrate [-h] --kind
-                            {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract,infer-contract}
+                            {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
                             [--file FILE]
                             [--schema-kind {design,registry,interface,verify_contract}]
                             [--contract CONTRACT] [--axis AXIS] [--role ROLE]
-                            [--plugin-root PLUGIN_ROOT] [--ip-info IP_INFO] [--module MODULE]
-                            [--output OUTPUT] [--dry-run]
+                            [--plugin-root PLUGIN_ROOT] [--dry-run]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --kind {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract,infer-contract}
+  --kind {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
                         Which migration to run
   --file FILE           [schema-version] path to the
                         design.yml/modules.yml/*.interface.yaml/design.verification.yml file to
@@ -914,9 +958,6 @@ optional arguments:
   --plugin-root PLUGIN_ROOT
                         [legacy-plugin-layout, rename-verify-contract] plugin root directory (the
                         directory containing verify/ or forge/)
-  --ip-info IP_INFO     [infer-contract] path to an ip_info.yaml file
-  --module MODULE       [infer-contract] module/ip_info key to infer a contract skeleton for
-  --output OUTPUT       [infer-contract] path to write the inferred *.interface.yaml to
   --dry-run             Show the planned change/diff without writing anything
 ```
 

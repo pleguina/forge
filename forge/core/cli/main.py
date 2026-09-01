@@ -11,7 +11,7 @@ import argparse
 import sys
 
 from forge import __version__
-from forge.core.cli.groups import core, topgen, hls, verify, analyze, framework, doctor, inspect, build, test, report, init
+from forge.core.cli.groups import contract, core, topgen, hls, verify, analyze, framework, doctor, inspect, build, test, report, init
 from forge.core.cli import _shared
 
 
@@ -42,6 +42,7 @@ passing simulation and an HTML dashboard in one command. Start there.
 Direct stage access — the individual stages the commands above orchestrate.
 Reach for these when you need a flag or a stage the golden path doesn't expose:
   topgen      Topology generation, validation, linting, migration helpers
+  contract    Author interface contracts from a module's real ports
   verify      Verification generate/prepare/run/doctor/release-check
   hls         Vitis HLS TCL generation and parallel job execution
   analyze     HLS reports, latency checks, result plots, dashboards
@@ -68,6 +69,7 @@ Examples — direct stage access:
   forge build design.yml --accept-plan-hash <hash> --json
   forge topgen gen-top design.yml --mode verilog --output algo_top.v
   forge topgen validate design.yml
+  forge contract infer my_module --contracts-from modules.yml -o m.interface.yaml
   forge hls gen-tcl --hls-config catalog.yml
   forge hls run --registry catalog.yml --stages csim,synth --jobs 4
   forge verify generate plugins/my_plugin/verify/design.verification.yml
@@ -96,7 +98,7 @@ Examples — direct stage access:
         metavar="GROUP",
         help=(
             "Golden path: init | inspect | build | test | report | doctor. "
-            "Direct stage access: topgen | verify | hls | analyze | framework | core."
+            "Direct stage access: topgen | contract | verify | hls | analyze | framework | core."
         ),
     )
 
@@ -110,6 +112,7 @@ Examples — direct stage access:
     doctor.register(sub)
     # Direct stage access.
     topgen.register(sub)
+    contract.register(sub)
     verify.register(sub)
     hls.register(sub)
     analyze.register(sub)

@@ -199,7 +199,52 @@ for the versioning policy.
   item, as Verilog specifies, without shadowing the non-ANSI path where a
   bare header name resolves from a body declaration. 2 regression tests.
 
+### Added
+- **Interface contracts may omit the port facts their own source states.**
+  `raw_port`, `direction`, `width` and `active_level` are now optional:
+  `contract_loader` derives them from the module's Verilog/VHDL at load
+  time, and *verifies* rather than overwrites anything the contract does
+  declare, so a declaration stays available as an assertion. Measured
+  across this repo's 27 contracts, those four fields are ~55% of all
+  content lines and 308 of 324 roles carry nothing else — they restate
+  the port list the module already declares, which is also why a contract
+  verifier had to exist to catch them drifting. A role that decides
+  nothing collapses to its name. Fully backward compatible: a contract
+  that declares everything never triggers a scan.
+
+  Measured on the reference plugins, contracts shrink ~2.4x with prose
+  notes kept (3.5x counting structure alone), and `passthrough_demo`'s
+  generated top level is byte-identical before and after slimming.
+
+  Scope is honest about where port truth exists: 73% of roles are RTL and
+  resolve pre-build. An HLS module has no HDL to scan until its IP is
+  built — the contract is itself the pre-build stand-in for its ports —
+  so those must stay explicit. A contract that omits fields nothing can
+  resolve now says so at load, naming the roles and the reason, instead of
+  silently dropping the role from contract-driven wiring and surfacing
+  much later as "role not found in producer contract".
+- **`forge contract infer`** — a real home for contract authoring.
+
 ### Changed
+- **`forge contract infer` replaces `forge topgen migrate --kind
+  infer-contract`.** Writing an interface contract is the most common
+  authoring task in a FORGE project; it was filed under a verb meaning
+  "convert an old project". The command also required the caller to
+  produce an `ip_info.yaml` first, and returned every data port as a TODO
+  *comment* to be retyped as YAML — useless for exactly the bulk of the
+  work. It now emits every observed port as a real role (by name alone
+  for RTL, with direction/width for HLS, since those can't be derived
+  pre-build), and for RTL it scans the module's source straight from
+  `modules.yml` with no intermediate file. `window_builder_rtl`'s
+  generated contract is 75 lines against 167 hand-written, and resolves
+  with no conflicts. Removed from `migrate` outright rather than
+  shimmed, per ADR 0005's pre-release policy.
+- **`normalization_status: draft` is now enforced.** The field was
+  declared on every contract and read by nothing, so a generated skeleton
+  could be committed and built against as though a human had checked its
+  wiring semantics. `forge topgen validate` reports a draft contract, and
+  `--strict` fails on it.
+
 - **`forge --help` is tiered.** Twelve top-level entries were listed flat,
   with the golden-path verbs (`init`/`inspect`/`build`/`test`/`report`)
   as undifferentiated peers of the stage groups they wrap, so nothing
@@ -222,8 +267,6 @@ for the versioning policy.
   `forge init`. Scaffolded files no longer credit
   `forge topgen init-plugin` for work the user did with `forge init`.
 
-### Changed
-- **Open-source policy**: `CONTRIBUTING.md` previously stated this is
   "private CMS/OMTF-internal tooling, not a general-purpose public
   release" as the explicit reason git-install (not PyPI) is the
   permanent distribution story. That framing is now retired — FORGE

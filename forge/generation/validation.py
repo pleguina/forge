@@ -538,7 +538,39 @@ class RegistryValidator:
                 if 'verify' in mod:
                     self._validate_verify_section(mod['verify'], name, f"{loc}.verify")
                 self._validate_unknown_keys(mod, _KNOWN_MODULE_KEYS, loc)
+                self._validate_contract_status(mod, name, loc)
         return len(self.errors) == 0
+
+    def _validate_contract_status(self, mod: Dict[str, Any], name: str, loc: str) -> None:
+        """Flag an interface contract still marked ``normalization_status: draft``.
+
+        `forge contract infer` emits draft skeletons: every port becomes a
+        role, but the integration semantics that cannot be inferred from a
+        port name (wiring_kind, protocol, partition, coordinates) still need
+        a human. Without this check a generated skeleton could be committed
+        and built against as though it had been reviewed — the field existed
+        but nothing ever read it.
+        """
+        contract_rel = mod.get('interface_contract')
+        if not contract_rel or self.registry_path is None:
+            return
+        contract_path = self.registry_path.parent / str(contract_rel)
+        if not contract_path.is_file():
+            return
+        try:
+            import yaml as _y
+            spec = (_y.safe_load(contract_path.read_text()) or {}).get('ip_interface', {})
+        except Exception:
+            return  # unreadable contracts are the contract verifier's business
+        if str(spec.get('normalization_status', '')).lower() == 'draft':
+            self.add_warning(
+                'contract',
+                f"Module '{name}' uses an unreviewed contract "
+                f"({contract_rel}): normalization_status is 'draft'",
+                location=loc,
+                suggestion="Add the wiring_kind/protocol/partition semantics the "
+                           "generator can't infer, then set normalization_status: ready",
+            )
 
     def has_errors(self) -> bool:
         return len(self.errors) > 0

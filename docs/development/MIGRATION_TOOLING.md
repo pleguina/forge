@@ -3,7 +3,7 @@
 Release-plan §2.8: migration commands (or an equivalent supported
 workflow) for partition strings → structured coordinates, schema-version
 insertion, old project layout, deprecated command/configuration names,
-and compatibility-mode contract inference — each supporting dry-run and a
+each supporting dry-run and a
 readable diff.
 
 All five are implemented as one CLI command, `forge topgen migrate --kind <kind>`,
@@ -93,23 +93,21 @@ Renames the deprecated `verify.design.yml` filename to the current
 accepts either as a fallback, but `design.verification.yml` is canonical).
 A pure filesystem rename, so there's no comment-loss risk here at all.
 
-## `--kind infer-contract`
+## Contract inference has moved
+
+Contract inference used to live here as
+`forge topgen migrate --kind infer-contract`. Writing an interface
+contract is the most common *authoring* task in a FORGE project, not a
+migration, so it now has its own command:
 
 ```bash
-forge topgen migrate --kind infer-contract --ip-info ip_info.yaml --module NAME --output NAME.interface.yaml [--dry-run]
+forge contract infer NAME --contracts-from modules.yml -o NAME.interface.yaml
 ```
 
-Generates a conservative `*.interface.yaml` skeleton for a module
-currently running in compatibility mode (no interface contract — see
-`MatchReport.compat_mode_modules`, `forge/contracts/matcher.py`). Only
-`clock_primary`/`reset_primary` are inferred, using the same conservative
-name heuristics (`ap_clk`/`clk`/`clock`, `ap_rst`/`rst`/`reset`/`rst_n`)
-`auto_match_ports` already uses for compat-mode wiring. **Every other
-port is listed as an explicit TODO comment, never assigned a role** — a
-data port's semantics (wiring_kind, direction beyond what ip_info already
-states, coordinates, protocol) cannot be safely guessed from its name
-alone, and a migration tool that fabricated them would be worse than no
-contract at all. Refuses to overwrite an existing file at `--output`.
+It no longer needs a pre-generated `ip_info.yaml`: for an RTL module it
+scans the module's own source directly. Pass `--ip-info` instead for an
+HLS module, whose ports don't exist until its IP is built. See
+`forge contract infer --help`.
 
 ## Not automated (and why)
 

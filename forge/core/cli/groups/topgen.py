@@ -15,7 +15,11 @@ from forge.contracts.config import DesignConfig
 from forge.contracts.unpacker import unpack_ip_archives
 from forge.contracts.parser import collect_all, write_summary
 from forge.contracts.matcher import load_ip_info, auto_match_ports
-from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
+from forge.contracts.contract_loader import (
+    drain_contract_conflicts,
+    load_contracts_for_design,
+    synthesize_ip_info,
+)
 from forge.generation.generators.structural_vhdl import write_structural_vhdl
 from forge.generation.generators.structural_verilog import write_structural_verilog
 from forge.generation.generators.block_design import write_bd_tcl
@@ -1521,6 +1525,11 @@ def compute_gen_top_plan(
                 contracts = load_contracts_for_design(_modules_yml_path, c_root)
                 if emit_progress:
                     print(f"📜 Contracts loaded: {len(contracts)} module(s) covered")
+                # Contracts whose omitted port facts couldn't be resolved, or
+                # that contradict their real ports. Silence here shows up much
+                # later as a role mysteriously absent from contract wiring.
+                for _conflict in drain_contract_conflicts():
+                    print(f"⚠️  {_conflict}")
             except Exception as _ce:
                 if emit_progress:
                     print(f"⚠️  Contract loading failed (falling back to heuristics): {_ce}")
@@ -2437,7 +2446,6 @@ def cmd_migrate(args):
         apply_rename_verify_contract,
         find_legacy_plugin_layout,
         find_legacy_verify_contract_name,
-        infer_contract_skeleton,
         migrate_schema_version,
         partition_to_coordinates,
         unified_diff_text,
@@ -2522,30 +2530,6 @@ def cmd_migrate(args):
         if not dry_run:
             apply_rename_verify_contract(legacy)
             print(f"✅ renamed to {new_path}")
-        sys.exit(0)
-
-    elif kind == "infer-contract":
-        if not args.ip_info or not args.module or not args.output:
-            print("❌ --ip-info, --module, and --output are required for --kind infer-contract", file=sys.stderr)
-            sys.exit(2)
-        if not args.ip_info.exists():
-            print(f"❌ file not found: {args.ip_info}", file=sys.stderr)
-            sys.exit(2)
-        import yaml as _yaml
-        ip_info = _yaml.safe_load(args.ip_info.read_text()) or {}
-        entry = ip_info.get(args.module)
-        if entry is None:
-            print(f"❌ module {args.module!r} not found in {args.ip_info}", file=sys.stderr)
-            sys.exit(2)
-        if args.output.exists():
-            print(f"❌ {args.output} already exists — refusing to overwrite", file=sys.stderr)
-            sys.exit(2)
-        skeleton = infer_contract_skeleton(args.module, entry)
-        print(skeleton)
-        if not dry_run:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(skeleton)
-            print(f"✅ wrote {args.output}")
         sys.exit(0)
 
     else:
@@ -2790,14 +2774,13 @@ def register(sub) -> None:
     p_migrate = tg_sub.add_parser(
         "migrate",
         help="Migration helpers: schema-version insertion, partition->coordinates, "
-             "legacy plugin layout, legacy verify-contract filename, compat-mode "
-             "contract inference",
+             "legacy plugin layout, legacy verify-contract filename",
     )
     p_migrate.add_argument(
         "--kind", required=True,
         choices=[
             "schema-version", "partition-to-coordinates", "legacy-plugin-layout",
-            "rename-verify-contract", "infer-contract",
+            "rename-verify-contract",
         ],
         help="Which migration to run",
     )
@@ -2828,18 +2811,6 @@ def register(sub) -> None:
         "--plugin-root", type=Path,
         help="[legacy-plugin-layout, rename-verify-contract] plugin root directory "
              "(the directory containing verify/ or forge/)",
-    )
-    p_migrate.add_argument(
-        "--ip-info", type=Path, dest="ip_info",
-        help="[infer-contract] path to an ip_info.yaml file",
-    )
-    p_migrate.add_argument(
-        "--module", default=None,
-        help="[infer-contract] module/ip_info key to infer a contract skeleton for",
-    )
-    p_migrate.add_argument(
-        "--output", type=Path,
-        help="[infer-contract] path to write the inferred *.interface.yaml to",
     )
     p_migrate.add_argument(
         "--dry-run", dest="dry_run", action="store_true", default=False,
