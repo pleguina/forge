@@ -264,3 +264,52 @@ def test_explicit_ap_none_on_an_output_still_wins():
         block_protocol="ap_ctrl_none",
     ).by_name
     assert "dout_ap_vld" not in pred
+
+
+# ── the partitioning default, and why it costs ports ───────────────────────
+
+def test_bare_complete_partitions_only_dim1_not_every_dimension():
+    """`ARRAY_PARTITION complete` with no `dim=` means dim=1, not dim=0.
+
+    m_dimdefault.cpp puts both spellings on the same word_t[3][4] in one
+    function. The bare form leaves depth-4 memories (18 ports: 3 memories x
+    address0/ce0/q0 + a second port set); `dim=0` scalarises everything
+    (12 plain wires). This one-word difference is why two identically
+    shaped hit_t[18][14] arguments in this project produced completely
+    different port sets.
+    """
+    real = _real("m_dimdefault")
+
+    bare = {n for n in real if n.startswith("a_bare")}
+    dim0 = {n for n in real if n.startswith("b_dim0")}
+
+    assert dim0 == {f"b_dim0_{i}_{j}" for i in range(3) for j in range(4)}
+    assert bare == {
+        f"a_bare_{i}_{sig}"
+        for i in range(3)
+        for sig in ("address0", "ce0", "q0", "address1", "ce1", "q1")
+    }
+
+    pred = predict_ports(
+        [Argument("b_dim0", 12, dims=(3, 4), mode="ap_none", partition_dim=0)],
+        block_protocol="ap_ctrl_none",
+    )
+    assert {p.name for p in pred.ports if p.role_hint == "b_dim0"} == dim0
+
+
+def test_the_second_port_set_is_what_the_predictor_warns_about():
+    """a_bare's `_address1/_ce1/_q1` are the ports the predictor knowingly
+    omits: HLS adds them because the unrolled body needs more reads per
+    cycle than one BRAM port supplies. That depends on the function body,
+    which a signature-level prediction never sees."""
+    real = _real("m_dimdefault")
+    second = {n for n in real if n.endswith(("address1", "ce1", "q1"))}
+    assert second, "fixture should contain a second port set"
+
+    pred = predict_ports(
+        [Argument("a_bare", 12, dims=(3, 4), partition_dim=1)],
+        block_protocol="ap_ctrl_none",
+    )
+
+    assert not ({p.name for p in pred.ports} & second)
+    assert any("second port set" in w for w in pred.warnings)

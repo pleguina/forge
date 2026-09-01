@@ -14,8 +14,9 @@ right.
 | `m_scalars.cpp` | `ap_ctrl_none`; scalar `ap_none` / `ap_vld` / `ap_ack` / `ap_hs` / `ap_stable`, in both directions |
 | `m_arrays.cpp` | `ap_ctrl_hs`; `ARRAY_PARTITION complete dim=0` vs `dim=1`; `ap_memory` read and write; `ap_fifo`; struct argument; struct return |
 | `m_axi.cpp` | `axis` streams; `s_axilite` bundles; `m_axi` master |
+| `m_dimdefault.cpp` | `ARRAY_PARTITION complete` with and without `dim=0`, on the same array shape |
 
-## Three things the real output settles
+## Four things the real output settles
 
 1. **A struct is padded, not concatenated.** `packed_t` declares 16 bits of
    fields (`ap_uint<1>` + `ap_uint<11>` + `ap_int<4>`) and synthesises to
@@ -23,7 +24,14 @@ right.
    struct widths are reported as unknown rather than computed.
 2. **AXI-Stream `TDATA` rounds up to a byte multiple.** A 12-bit element
    gives a 16-bit `TDATA`.
-3. **An AXI interface flips the block reset.** `m_axi.cpp` has `ap_rst_n`
+3. **A bare `complete` partitions `dim=1`, not every dimension.**
+   `m_dimdefault.cpp` puts both spellings on one `word_t[3][4]`:
+   `complete` leaves depth-4 memories (**18** ports, including a second
+   port set), `complete dim=0` gives **12** plain wires. One missing word,
+   and the port list changes shape entirely — this is why two identically
+   shaped `hit_t[18][14]` arguments in this project synthesise completely
+   differently.
+4. **An AXI interface flips the block reset.** `m_axi.cpp` has `ap_rst_n`
    where the other two have `ap_rst` — a whole-block consequence of an
    unrelated argument's interface mode.
 
@@ -32,7 +40,7 @@ right.
 Needs `vitis_hls` on PATH. From this directory:
 
 ```bash
-for top in m_scalars m_arrays m_axi; do
+for top in m_scalars m_arrays m_axi m_dimdefault; do
   cat > run_$top.tcl <<TCL
 open_project -reset prj_$top
 add_files src/$top.cpp -cflags "-Isrc"
