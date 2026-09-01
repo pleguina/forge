@@ -115,6 +115,100 @@ for the versioning policy.
   design's hash even for designs that never set them. The rendered SVGs
   and PNGs are byte-identical -- only the recorded hashes moved.
 
+- **`forge init` no longer requires a simulator.** The scaffolded flow
+  simulates with xsim, so on any machine without Vivado the flagship
+  onboarding command died at stage 6 of 7 — scaffold, validate, build and
+  report all work fine without one. A missing simulator now skips just
+  that stage with a visible note and a `next_actions` entry saying how to
+  run it later, and `forge init` still reports PASS. Found by running the
+  command with the toolchain off `PATH`.
+- **`forge init` output**: 281 lines down to ~36. Every stage is a full
+  `forge` command with its own banners and epilogue, and relaying all
+  seven verbatim printed the same design-validation report three times
+  and recommended two "Next steps" blocks of commands `forge init` had
+  already run. Stages now report one line each; `--verbose` restores the
+  full transcript, and a failing stage still dumps its own output.
+- **Design validation false positives.** Two warnings fired on designs
+  that were entirely correct, so no reference plugin — and no fresh
+  scaffold — could validate clean. `validate_connections` warned "No
+  connections defined between modules" without checking `topology_groups`
+  (the contract-driven style the docs recommend) or the module count,
+  telling users of a correctly-wired design to adopt the legacy scalar
+  style; `validate_consistency` in the same file already handled
+  topology_groups correctly. `validate_timing` compared the clock against
+  a *fallback* reference period of 25.0 ns — the LHC 40 MHz BX period —
+  even when the design declared none, so every detector-agnostic scaffold
+  was told its clock didn't divide a period it had never heard of. The
+  check now runs only against a declared reference period.
+  `generators/design_parameters.py`'s fallback is unchanged: it feeds
+  generated testbench timing, and changing it would alter existing
+  designs' output.
+- **Unknown keys in a design.yml** surfaced as a bare
+  `TypeError: __init__() got an unexpected keyword argument 'part_name'`
+  — realistically the most common first-hour mistake, with the worst
+  error message in the CLI. `DesignConfig.load` now rejects unrecognised
+  keys with the file, the key, and the closest real field name
+  (`'part_name' — did you mean 'part'?`), via a new
+  `UnknownConfigKeyError`.
+- **Exit code 2 for user config errors**, against the policy in
+  `docs/development/cli_exit_codes.md` — which reserves 2 for a command
+  that could not run and says it is "never a real finding". A malformed
+  design.yml is a real finding, but `forge topgen validate` returned 2
+  where `forge build` returned 1 for the identical file, and the error
+  advised `--debug` for a traceback, framing the user's typo as a FORGE
+  crash. New `envelope.status_for_exception()` classifies input errors as
+  `fail`/1 in one shared place; `print_cli_error` no longer offers a
+  traceback for them.
+- **`forge report`'s "self-contained" bundle embedded absolute paths.**
+  `render_markdown_summary`'s `_section` interpolated the full `Path`
+  where the topology block three lines above correctly used `path.name`,
+  so `summary.md` broke as soon as the report directory was moved,
+  published, or opened elsewhere. Links are now relative to the summary
+  itself, with paths that genuinely live outside the bundle keeping their
+  absolute form.
+- **`forge inspect`** printed a raw Python dict for contract maturity
+  (`{'total': 1, 'contract_driven': 1, …}`) and misaligned its first
+  label by one character. Maturity now renders as `1/1 contract-driven`
+  for humans (the dict is unchanged in `--json`) and every label is
+  padded to one column.
+- **`ip_info_key` footgun**: the scaffolded interface contract carried a
+  comment warning that this field must match the design *instance* name,
+  noting that getting it wrong "is a real, previously-hit bug" — the
+  knowledge lived only in a comment. The field now defaults to
+  `module_name`, and a key that doesn't resolve reports the keys that are
+  actually present plus what the field must match.
+- **Stale package paths in docs and plugin comments** after the
+  shim-free `verify`/`analyze`/`topgen` renames — `forge/topgen/config.py`,
+  `forge/verify/design_contract.py` and four others, in
+  `cli_exit_codes.md`, `MIGRATION_TOOLING.md` and two vision_pipeline
+  design comments. `ci/stale_reference_check.sh` only guarded dotted
+  *import* paths, so dead slash *file* paths drifted freely; it now
+  checks those too, carefully enough not to flag a plugin's own
+  `forge/verify/` capsule directory, which is a real and current path.
+
+### Changed
+- **`forge --help` is tiered.** Twelve top-level entries were listed flat,
+  with the golden-path verbs (`init`/`inspect`/`build`/`test`/`report`)
+  as undifferentiated peers of the stage groups they wrap, so nothing
+  told a newcomer where to start. The epilog and the subcommand
+  registration order now lead with the golden path and file the stage
+  groups under "Direct stage access". `forge build --apply` also stopped
+  printing "delegating to `topgen gen-top`", which taught the older verb
+  at the moment the newer one was working.
+- **The Quickstart now starts the tool up instead of failing it.** It
+  scaffolded with `forge verify init-plugin` (half a plugin: the
+  verification side only), ended on a `doctor` `FAIL`, and spent a
+  paragraph explaining why that failure was expected — never running a
+  simulation or producing an artifact, and never mentioning `forge init`.
+  It now runs `doctor`, `init` and `inspect`, and ends on a dashboard.
+  `ci/quickstart_commands.sh` (its single source of truth, sourced by
+  `ci/fresh_user_check.sh`) was rewritten to match.
+- **`forge topgen init-plugin`'s "Next steps"** recommended
+  `forge topgen gen-top` and told the reader to scaffold the verify half
+  next; it now names the golden-path equivalents and points at
+  `forge init`. Scaffolded files no longer credit
+  `forge topgen init-plugin` for work the user did with `forge init`.
+
 ### Changed
 - **Open-source policy**: `CONTRIBUTING.md` previously stated this is
   "private CMS/OMTF-internal tooling, not a general-purpose public

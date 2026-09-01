@@ -63,6 +63,7 @@ check() {
         | grep -v /__pycache__/ \
         | grep -v /third_party/ \
         | grep -v '^ci/stale_reference_check.sh:' \
+        | grep -v '^ci/import_direction_check.sh:' \
         | grep -v '^docs/development/migration\.md:' \
         | grep -v '^forge/generation/migrate\.py:' \
         | grep -v '^forge/tests/test_migrate\.py:' \
@@ -117,6 +118,28 @@ check "dead 'forge.analyze' package import (renamed to forge.analysis)" \
     '\bforge\.analyze\b'
 check "dead 'forge.topgen.ip' / 'forge.topgen.generators' package import (split into forge.contracts / forge.generation.generators)" \
     '\bforge\.topgen\.(ip|generators)\b'
+
+# The dotted checks above catch dead *imports*. They don't catch dead
+# *file paths* -- "see forge/topgen/config.py" in a doc kept passing long
+# after that file moved to forge/contracts/config.py. Slash paths need more
+# care than dotted ones, because a plugin's capsule layout is also called
+# `forge/`: `plugins/<x>/forge/verify/design.verification.yml` is a real,
+# current path and must never be flagged.
+#
+# `forge/topgen/` and `forge/analyze/` are unambiguous -- no plugin capsule
+# has ever had either directory (a capsule holds designs/, interfaces/,
+# verify/, modules.yml), so any occurrence is the dead Python tree.
+check "dead 'forge/topgen/' file path (split into forge/contracts/ and forge/generation/)" \
+    'forge/topgen/'
+check "dead 'forge/analyze/' file path (renamed to forge/analysis/)" \
+    'forge/analyze/'
+
+# `forge/verify/` IS a real plugin-capsule directory, so only flag the
+# specific Python modules that moved to forge/verification/. A capsule's
+# own files (tools/*.py, schemas/, include/, src/, design.verification.yml)
+# keep their paths and stay unflagged.
+check "dead 'forge/verify/<module>.py' file path (renamed to forge/verification/)" \
+    'forge/verify/(__main__|design_contract|diagnostics|backend_\w+|supported_\w+|throughput_result|subprocess_wrapper)\.py'
 
 if [[ "$FAILED" -eq 1 ]]; then
     echo "One or more dead command/path references found above." >&2

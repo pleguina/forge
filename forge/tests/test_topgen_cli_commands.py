@@ -61,21 +61,65 @@ def test_validate_passes_on_real_design(capsys: pytest.CaptureFixture[str]) -> N
     assert "Design is valid and ready for generation" in result.stdout
 
 
-def test_validate_strict_fails_on_warnings(capsys: pytest.CaptureFixture[str]) -> None:
-    result = _run_topgen(capsys, "validate", str(DESIGN_YML), "--strict")
+def _warning_design(tmp_path: Path) -> Path:
+    """A design that genuinely earns exactly two warnings.
 
-    # passthrough_demo's design.yml has a non-fatal clock-period warning and
-    # a "no connections" warning; --strict promotes those to failures.
+    Deliberately *not* one of the reference plugins: those are expected to
+    validate clean (see `test_reference_design_validates_without_warnings`).
+    Two modules with no `connections:`/`topology_groups:` earns the
+    unwired-design warning, and a declared reference period 4.0 ns does not
+    divide earns the timing warning.
+    """
+    design = yaml.safe_load(DESIGN_YML.read_text())
+    design["registry"] = str(MODULES_YML)
+    design["reference_period_ns"] = 25.0
+    second = dict(design["modules"][0])
+    second["name"] = "pt_second"
+    design["modules"] = [design["modules"][0], second]
+
+    out = tmp_path / "warning.design.yml"
+    out.write_text(yaml.safe_dump(design, sort_keys=False))
+    return out
+
+
+def test_reference_design_validates_without_warnings(capsys: pytest.CaptureFixture[str]) -> None:
+    """A reference plugin's own design must be warning-clean.
+
+    passthrough_demo is single-module and declares no reference period, so
+    neither the unwired-design nor the clock-divisibility check applies to
+    it. Both used to fire here anyway, which meant FORGE's own scaffolding
+    and examples could never validate clean.
+    """
+    result = _run_topgen(capsys, "validate", str(DESIGN_YML), "--json")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "pass"
+    assert payload["diagnostics"] == []
+
+
+def test_validate_strict_fails_on_warnings(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    design = _warning_design(tmp_path)
+
+    result = _run_topgen(capsys, "validate", str(design), "--strict")
+
+    # --strict promotes warning-severity diagnostics to a failing exit code.
     assert result.returncode == 1
 
 
-def test_validate_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
+def test_validate_json_output_is_well_formed(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
     """The bespoke `{"passed","registry","design","stale"}` shape is a
-    CommandEnvelope — passthrough_demo's real design genuinely has 2
-    warning-severity diagnostics (a non-evenly-dividing clock period, no
-    `connections:` section) and 0 errors, so `status` is genuinely
-    `"warn"`."""
-    result = _run_topgen(capsys, "validate", str(DESIGN_YML), "--json")
+    CommandEnvelope — this design genuinely has 2 warning-severity
+    diagnostics (a declared reference period the clock doesn't divide, and
+    two modules with nothing wiring them together) and 0 errors, so
+    `status` is genuinely `"warn"`."""
+    design = _warning_design(tmp_path)
+
+    result = _run_topgen(capsys, "validate", str(design), "--json")
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)

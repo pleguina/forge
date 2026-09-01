@@ -26,24 +26,31 @@ import contextlib
 import io
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
-def _run_forge_command(argv: List[str], *, quiet: bool) -> int:
+def _run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
     """Run a real `forge <argv>` invocation in-process through the full
     parser — the same argv a user would type, so every step here is a
-    real command, not a hand-built call into internals."""
+    real command, not a hand-built call into internals.
+
+    Returns ``(exit_code, captured_stdout)``. When *quiet*, the step's own
+    output is captured rather than printed, so `forge init` can report one
+    line per stage instead of relaying seven commands' full output — and
+    can still show the captured text if that stage fails.
+    """
     from forge.core.cli.main import build_parser
 
     parser = build_parser()
     parsed = parser.parse_args(argv)
-    ctx = contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
+    buffer = io.StringIO()
+    ctx = contextlib.redirect_stdout(buffer) if quiet else contextlib.nullcontext()
     with ctx:
         try:
             result = parsed.func(parsed)
         except SystemExit as exc:
-            return 0 if exc.code is None else int(exc.code)
-    return 0 if result is None else int(result)
+            return (0 if exc.code is None else int(exc.code)), buffer.getvalue()
+    return (0 if result is None else int(result)), buffer.getvalue()
 
 
 def cmd_init(args) -> None:
@@ -78,8 +85,21 @@ def cmd_init(args) -> None:
     report_dir = plugins_root / plugin_id / "report"
 
     steps_completed: List[str] = []
+    skipped_steps: List[str] = []
 
-    def _fail(step: str, code: int) -> None:
+    # Each stage below is a full `forge` command with its own report banners
+    # and "next steps" epilogue. Relaying all seven verbatim printed the same
+    # design-validation report three times and recommended commands `forge
+    # init` had already run. Capture them by default; `--verbose` restores
+    # the full transcript.
+    verbose = getattr(args, "verbose", False)
+    quiet = json_mode or not verbose
+
+    def _fail(step: str, code: int, output: str = "") -> None:
+        if output and quiet:
+            # The step's own output is the only useful diagnosis here, so it
+            # stops being noise the moment something actually breaks.
+            print(output, end="" if output.endswith("\n") else "\n", file=sys.stderr)
         envelope = CommandEnvelope(
             status="fail",
             diagnostics=[{
@@ -90,25 +110,31 @@ def cmd_init(args) -> None:
         )
         sys.exit(emit(envelope, json_mode=json_mode))
 
+    def _step(name: str, label: str, argv: List[str]) -> None:
+        """Run one stage, record it, and report it as a single line."""
+        code, output = _run_forge_command(argv, quiet=quiet)
+        if code != 0:
+            _fail(name, code, output)
+        steps_completed.append(name)
+        if not json_mode and not verbose:
+            print(f"  ✅ {label}")
+
+    if not json_mode:
+        print(f"forge init — scaffolding {plugin_id!r}")
+
     # ── Step 1: topgen-side scaffold ────────────────────────────────────────
-    code = _run_forge_command([
+    _step("topgen-init-plugin", "topology scaffold", [
         "topgen", "init-plugin", plugin_id,
         "--plugins-root", str(plugins_root), "--algo-root", str(algo_root),
         *(["--dry-run"] if dry_run else []),
-    ], quiet=json_mode)
-    if code != 0:
-        _fail("topgen-init-plugin", code)
-    steps_completed.append("topgen-init-plugin")
+    ])
 
     # ── Step 2: verify-side scaffold ────────────────────────────────────────
-    code = _run_forge_command([
+    _step("verify-init-plugin", "verification scaffold", [
         "verify", "init-plugin", plugin_id,
         "--plugins-root", str(plugins_root),
         *(["--dry-run"] if dry_run else []),
-    ], quiet=json_mode)
-    if code != 0:
-        _fail("verify-init-plugin", code)
-    steps_completed.append("verify-init-plugin")
+    ])
 
     if dry_run:
         envelope = CommandEnvelope(
@@ -122,52 +148,51 @@ def cmd_init(args) -> None:
         sys.exit(emit(envelope, json_mode=json_mode))
 
     # ── Step 3: validate immediately ────────────────────────────────────────
-    code = _run_forge_command(["topgen", "validate", str(design_yml)], quiet=json_mode)
-    if code != 0:
-        _fail("validate", code)
-    steps_completed.append("validate")
+    _step("validate", "design validated", ["topgen", "validate", str(design_yml)])
 
     # ── Step 4: build immediately (real generation) ────────────────────────
-    code = _run_forge_command([
+    _step("build", f"top level generated ({gen_top_output.name})", [
         "build", str(design_yml),
         "--contracts-from", str(modules_yml),
         "--consumer-root", str(consumer_root),
         "--output", str(gen_top_output),
         "--apply",
-    ], quiet=json_mode)
-    if code != 0:
-        _fail("build", code)
-    steps_completed.append("build")
+    ])
 
     # ── Step 5: run at least one test ───────────────────────────────────────
-    code = _run_forge_command([
-        "test", "prepare", str(design_verification_yml),
-        "--flow", flow_name, "--consumer-root", str(consumer_root),
-    ], quiet=json_mode)
-    if code != 0:
-        _fail("test-prepare", code)
-    steps_completed.append("test-prepare")
+    # The scaffolded flow simulates with xsim. Scaffold, validate, build and
+    # report all work fine without a simulator installed, so a missing
+    # toolchain skips the simulation with a note rather than failing the
+    # whole command — otherwise `forge init`, the first thing a new user
+    # runs, dies at stage 6 of 7 on any machine without Vivado.
+    from forge.core.toolchain_versions import tool_present
 
-    code = _run_forge_command([
-        "test", "run", str(design_verification_yml),
-        "--flow", flow_name, "--plugin", plugin_id,
-        "--consumer-root", str(consumer_root),
-        "--event-id", "0", "--junit-xml", str(junit_path),
-    ], quiet=json_mode)
-    if code != 0:
-        _fail("test-run", code)
-    steps_completed.append("test-run")
+    simulator_available = all(tool_present(t) for t in ("xvlog", "xelab", "xsim"))
+    if not simulator_available:
+        if not json_mode:
+            print("  ⏭️  simulation skipped — xsim not on PATH (run `forge doctor`)")
+        skipped_steps.append("test-run")
+
+    if simulator_available:
+        _step("test-prepare", "testbench prepared", [
+            "test", "prepare", str(design_verification_yml),
+            "--flow", flow_name, "--consumer-root", str(consumer_root),
+        ])
+
+        _step("test-run", f"simulation passed ({flow_name})", [
+            "test", "run", str(design_verification_yml),
+            "--flow", flow_name, "--plugin", plugin_id,
+            "--consumer-root", str(consumer_root),
+            "--event-id", "0", "--junit-xml", str(junit_path),
+        ])
 
     # ── Step 6: generate a report ────────────────────────────────────────────
-    code = _run_forge_command([
+    _step("report", "report written", [
         "report", str(design_yml),
         "--contracts-from", str(modules_yml),
         "--output", str(report_dir),
-        "--junit-xml", str(junit_path),
-    ], quiet=json_mode)
-    if code != 0:
-        _fail("report", code)
-    steps_completed.append("report")
+        *(["--junit-xml", str(junit_path)] if junit_path.exists() else []),
+    ])
 
     artifacts = [
         str(p) for p in (
@@ -183,8 +208,19 @@ def cmd_init(args) -> None:
     envelope = CommandEnvelope(
         status="pass",
         artifacts=artifacts,
-        metrics={"steps_completed": steps_completed, "plugin_id": plugin_id},
+        metrics={
+            "steps_completed": steps_completed,
+            "steps_skipped": skipped_steps,
+            "plugin_id": plugin_id,
+        },
         next_actions=[
+            *([
+                "Install a simulator (Vivado xsim) and re-run `forge init`, or run "
+                f"`forge test run {design_verification_yml} --flow {flow_name}` once "
+                "one is on PATH, to simulate the design"
+            ] if skipped_steps else []),
+            f"Open {report_dir / 'dashboard.html'} to see the generated topology, "
+            f"latency check and simulation result",
             f"Replace the scaffolded RTL stub ({rtl_stub}) with your real algorithm, "
             f"then replace {golden_xml} with real golden data",
         ],
@@ -214,6 +250,10 @@ def register(sub) -> None:
     p.add_argument(
         "--dry-run", dest="dry_run", action="store_true", default=False,
         help="Preview the scaffold only — validate/build/test/report are skipped entirely",
+    )
+    p.add_argument(
+        "--verbose", "-v", action="store_true", default=False,
+        help="Print each underlying command's full output instead of one line per stage",
     )
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p.set_defaults(func=cmd_init)

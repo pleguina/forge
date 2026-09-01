@@ -257,29 +257,47 @@ def _compute_next_actions(diagnostics: list, maturity: dict) -> list:
     return actions
 
 
+#: Width every label in `forge inspect`'s human output is padded to, so the
+#: colons line up in one column. Previously hand-padded per line, which drifted.
+_LABEL_W = 18
+
+
+def _row(label: str, value) -> str:
+    return f"  {label:<{_LABEL_W}}: {value}"
+
+
 def _print_human(project, ir_hash: str, envelope) -> None:
     d = project.design
     print(f"forge inspect — {d.name}")
-    print(f"  IR schema version : {project.schema_version}")
-    print(f"  content hash       : {ir_hash}")
-    print(f"  modules            : {len(d.modules)}")
+    print(_row("IR schema version", project.schema_version))
+    print(_row("content hash", ir_hash))
+    print(_row("modules", len(d.modules)))
     for m in d.modules:
         flag = "" if m.ports_resolved else "  ⚠️  ports not resolved"
         print(f"    - {m.name} ({m.kind}, top={m.top}, {len(m.interfaces)} interface(s)){flag}")
-    print(f"  instances          : {len(d.instances)}")
-    print(f"  connections        : {len(d.connections)}")
-    print(f"  clock domains      : {[c.name for c in d.clock_domains]}")
-    print(f"  reset domains      : {[r.name for r in d.reset_domains]}")
+    print(_row("instances", len(d.instances)))
+    print(_row("connections", len(d.connections)))
+    print(_row("clock domains", ", ".join(c.name for c in d.clock_domains) or "(none)"))
+    print(_row("reset domains", ", ".join(r.name for r in d.reset_domains) or "(none)"))
     if d.diagnostics:
         print(f"  diagnostics ({len(d.diagnostics)}):")
         for diag in d.diagnostics:
             icon = {"error": "❌", "warning": "⚠️ ", "info": "ℹ️ "}.get(diag.severity, "•")
             print(f"    {icon} {diag.message}")
     else:
-        print("  diagnostics        : (none)")
+        print(_row("diagnostics", "(none)"))
 
-    maturity = envelope.metrics.get("maturity", {})
-    print(f"  contract maturity  : {maturity.get('modules', {})}")
+    # A raw dict repr is fine in --json and unreadable in a terminal.
+    modules_maturity = envelope.metrics.get("maturity", {}).get("modules", {}) or {}
+    if modules_maturity:
+        total = modules_maturity.get("total", 0)
+        driven = modules_maturity.get("contract_driven", 0)
+        compat = modules_maturity.get("compat_mode", 0)
+        summary = f"{driven}/{total} contract-driven"
+        if compat:
+            names = ", ".join(modules_maturity.get("compat_mode_names", []))
+            summary += f", {compat} in compat mode ({names})"
+        print(_row("contract maturity", summary))
     if envelope.next_actions:
         print("  next actions:")
         for action in envelope.next_actions:

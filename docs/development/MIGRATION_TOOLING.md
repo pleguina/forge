@@ -7,7 +7,7 @@ and compatibility-mode contract inference — each supporting dry-run and a
 readable diff.
 
 All five are implemented as one CLI command, `forge topgen migrate --kind <kind>`,
-backed by pure functions in `forge/topgen/migrate.py`. Every kind:
+backed by pure functions in `forge/generation/migrate.py`. Every kind:
 
 - computes its change fully in memory first;
 - always prints a readable diff (`difflib.unified_diff` for text-content
@@ -66,7 +66,7 @@ forge topgen migrate --kind legacy-plugin-layout --plugin-root plugins/my_plugin
 ```
 
 Fixes the one documented "old project layout" case (`MIGRATION.md`):
-plugins scaffolded before a `forge/verify/__main__.py` fix had
+plugins scaffolded before a `forge/verification/__main__.py` fix had
 `<plugin>/verify/` instead of `<plugin>/forge/verify/`, with a dead
 `_FW_PYTHON` `sys.path` hack in generated `bootstrap.py`/
 `gen_stimulus.py`. This command moves the directory and, only when it
@@ -89,7 +89,7 @@ forge topgen migrate --kind rename-verify-contract --plugin-root plugins/my_plug
 ```
 
 Renames the deprecated `verify.design.yml` filename to the current
-`design.verification.yml` (same schema — `forge/verify/design_contract.py`
+`design.verification.yml` (same schema — `forge/verification/design_contract.py`
 accepts either as a fallback, but `design.verification.yml` is canonical).
 A pure filesystem rename, so there's no comment-loss risk here at all.
 
@@ -101,7 +101,7 @@ forge topgen migrate --kind infer-contract --ip-info ip_info.yaml --module NAME 
 
 Generates a conservative `*.interface.yaml` skeleton for a module
 currently running in compatibility mode (no interface contract — see
-`MatchReport.compat_mode_modules`, `forge/topgen/ip/matcher.py`). Only
+`MatchReport.compat_mode_modules`, `forge/contracts/matcher.py`). Only
 `clock_primary`/`reset_primary` are inferred, using the same conservative
 name heuristics (`ap_clk`/`clk`/`clock`, `ap_rst`/`rst`/`reset`/`rst_n`)
 `auto_match_ports` already uses for compat-mode wiring. **Every other
@@ -116,10 +116,10 @@ contract at all. Refuses to overwrite an existing file at `--output`.
 - **The ARC → FORGE rename** (`MIGRATION.md`) is fully historical and
   closed — there's no live old-layout path left in this repository to
   migrate away from, so there is nothing to script.
-- **`--use-kind-subdir`** (`forge/verify/__main__.py`) already prints its
+- **`--use-kind-subdir`** (`forge/verification/__main__.py`) already prints its
   own runtime deprecation warning at the point of use; it's a behavior
   flag, not a file-schema migration concern.
-- **`bx_counter`** (silently dropped, `forge/topgen/config.py`) has no
+- **`bx_counter`** (silently dropped, `forge/contracts/config.py`) has no
   dedicated migration command — it's already a complete no-op wherever it
   appears, so there's nothing broken to fix; a future major version may
   add a cleanup pass if stray keys become a documentation/clarity concern.

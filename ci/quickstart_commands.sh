@@ -6,9 +6,8 @@
 # This is the exact, runnable command sequence for FORGE's five-minute
 # quickstart. It is the one place these commands are written down:
 #
-#   - docs/getting-started/quickstart.md embeds this file's contents
-#     verbatim (via forge.docsgen) rather than re-typing the commands, so
-#     the published doc can never drift from a sequence that actually runs.
+#   - docs/getting-started/quickstart.md walks through this exact sequence,
+#     so the published doc can never drift from commands that actually run.
 #   - ci/fresh_user_check.sh sources this file for its early stages, so CI
 #     keeps proving these exact commands work on every pipeline run.
 #
@@ -42,19 +41,19 @@ if [[ "${SKIP_INSTALL}" != "true" ]]; then
     pip install -q -e "forge[parser]"
 fi
 
-# 2. Confirm the CLI is on PATH and healthy.
-forge --help > /dev/null
+# 2. Check the install and the local toolchain. Read-only; tells you which
+#    optional tools are missing rather than failing on them.
+forge doctor
 
-# 3. Scaffold a new plugin. This creates
-#    <PLUGINS_ROOT>/<PLUGIN_ID>/forge/verify/ with a starter
-#    design.verification.yml, tools/bootstrap.py, tools/gen_stimulus.py,
-#    and a golden XML dataset — everything needed for Stage 4 below.
-forge verify init-plugin "${PLUGIN_ID}" --plugins-root "${PLUGINS_ROOT}"
+# 3. Scaffold a plugin and run the whole chain: topology + verification
+#    scaffold, validate, generate the top level, simulate, and write a
+#    report bundle. One command, no files to edit first.
+#
+#    The simulation stage is skipped with a note if no simulator (Vivado
+#    xsim) is on PATH — everything else still runs, so this works on a
+#    machine that has never had an EDA tool installed.
+forge init "${PLUGIN_ID}" --plugins-root "${PLUGINS_ROOT}"
 
-# 4. Health-check the scaffolded plugin. This is read-only and safe to run
-#    at any time; --json is available for machine-readable output. A fresh
-#    scaffold reports FAIL here — that's expected and useful: doctor is
-#    telling you what `forge verify generate` still needs to create, not
-#    reporting a broken install. `|| true` keeps this script running so you
-#    can see that output rather than have it treated as a hard error.
-forge verify doctor "${PLUGINS_ROOT}/${PLUGIN_ID}/forge/verify/design.verification.yml" || true
+# 4. Read back what was generated, straight from the canonical IR.
+forge inspect "${PLUGINS_ROOT}/${PLUGIN_ID}/forge/designs/design.yml" \
+    --contracts-from "${PLUGINS_ROOT}/${PLUGIN_ID}/forge/modules.yml"

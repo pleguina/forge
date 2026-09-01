@@ -29,13 +29,13 @@
 #
 # `winbld`'s FRAME_WIDTH is overridden to 16 (design-level `parameters:`,
 # a real per-instance Verilog `#(...)` mechanism -- see
-# forge/topgen/generators/structural_verilog.py's parameter-emission path
-# and forge/topgen/config.py's Module.parameters field) with a
+# forge/generation/generators/structural_verilog.py's parameter-emission path
+# and forge/contracts/config.py's Module.parameters field) with a
 # correspondingly recomputed `latency:` override (18 cycles = FRAME_WIDTH+2
 # at FRAME_WIDTH=16, vs. modules.yml's registry default of 10 cycles at
 # FRAME_WIDTH=8) -- both real, working, previously-unexercised design.yml
 # mechanisms (design-level `latency:` replaces the registry's for this one
-# instance only, confirmed against forge/topgen/config.py's ref-merge +
+# instance only, confirmed against forge/contracts/config.py's ref-merge +
 # forge/ir/build.py's per-instance ResolvedModuleDefinition resolution).
 # `sobel`'s own 4-cycle latency is frame-size-independent (pure 3x3
 # compute, no state) and needs no override. The sobel-branch total is

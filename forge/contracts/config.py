@@ -1,9 +1,10 @@
 # config.py
 from __future__ import annotations
 
+import difflib
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dataclass_fields
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Dict, Any
 import yaml
@@ -31,6 +32,38 @@ def resolve_declared_path(path_value: str | Path, root: Path) -> Path:
     if not expanded.is_absolute():
         expanded = root / expanded
     return expanded.resolve()
+
+
+class UnknownConfigKeyError(ValueError):
+    """A design/registry file declares a key the schema doesn't define.
+
+    Its own class so callers can distinguish "the user's file is wrong"
+    (a real, reportable finding — exit 1) from "FORGE fell over"
+    (exit 2). See docs/development/cli_exit_codes.md.
+    """
+
+
+def _reject_unknown_keys(cls: type, data: Dict[str, Any], source: Path) -> None:
+    """Fail with a readable message on keys the dataclass doesn't define.
+
+    Passing an unrecognised key through to a dataclass constructor produces
+    `__init__() got an unexpected keyword argument 'x'` — technically true,
+    useless to the person who typed it. This names the file, the key, and
+    the closest real field, which is almost always the actual typo.
+    """
+    known = {f.name for f in dataclass_fields(cls)}
+    unknown = [k for k in data if k not in known]
+    if not unknown:
+        return
+
+    lines = [f"{source}: unrecognised key" + ("s" if len(unknown) > 1 else "") + ":"]
+    for key in sorted(unknown):
+        near = difflib.get_close_matches(key, sorted(known), n=1, cutoff=0.6)
+        hint = f" — did you mean {near[0]!r}?" if near else ""
+        lines.append(f"  {key!r}{hint}")
+    if not any("did you mean" in ln for ln in lines):
+        lines.append(f"  valid top-level keys: {', '.join(sorted(known))}")
+    raise UnknownConfigKeyError("\n".join(lines))
 
 
 def _load_registry(registry_path: Path) -> dict[str, dict]:
@@ -915,6 +948,15 @@ class DesignConfig:
                     f"interface_metadata_file must contain a mapping: {metadata_path}"
                 )
             interface_metadata = _deep_merge_dict(loaded_metadata, interface_metadata)
+
+        # Every key this method understands has been popped by now, so
+        # anything still in `data` is passed straight to the dataclass
+        # constructor. An unrecognised key used to surface as a bare
+        # `TypeError: __init__() got an unexpected keyword argument 'x'`
+        # with no file, no line and no suggestion — for what is realistically
+        # the most common mistake anyone makes in a design.yml. Check it here
+        # instead and report it as a normal, actionable error.
+        _reject_unknown_keys(cls, data, yaml_path)
 
         cfg = cls(
             modules=modules,

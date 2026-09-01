@@ -28,19 +28,25 @@ def build_parser() -> argparse.ArgumentParser:
             "verification orchestration, and performance analysis"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""Groups:
-  core      Shared schema, CLI, and plugin utilities
-  topgen    Generate hardware topology structure
-  hls       Build HLS modules and IPs
-  verify    Run simulations and check correctness
-  analyze   Performance analysis, latency checks, and reporting
-  framework External framework import and detector I/O resolution
-  doctor    Check the local forge install/environment (not a group — a single command)
-  inspect   Resolve a design into the canonical IR and inspect it (not a group — a single command)
-  build     Compute (and optionally apply) a deterministic generation plan (not a group — a single command)
-  test      Wrap verification preparation and execution (check-only | prepare | run)
-  report    Generate a self-contained report bundle (not a group — a single command)
-  init      Scaffold a new plugin and chain validate -> build -> test -> report (not a group)
+        epilog="""Start here — the golden path, in the order you need it:
+  init        Scaffold a plugin and run validate -> build -> test -> report
+  inspect     Resolve a design into the canonical IR and read it back (read-only)
+  build       Generate the structural top level from a design
+  test        Prepare and run a design's verification flows
+  report      Collect topology, latency and results into one report bundle
+  doctor      Check the local forge install/environment
+
+`forge init my_plugin` takes an empty directory to a generated top level, a
+passing simulation and an HTML dashboard in one command. Start there.
+
+Direct stage access — the individual stages the commands above orchestrate.
+Reach for these when you need a flag or a stage the golden path doesn't expose:
+  topgen      Topology generation, validation, linting, migration helpers
+  verify      Verification generate/prepare/run/doctor/release-check
+  hls         Vitis HLS TCL generation and parallel job execution
+  analyze     HLS reports, latency checks, result plots, dashboards
+  framework   External framework import and detector I/O resolution
+  core        Shared schema, CLI, and plugin utilities
 
 Exit codes and --json output shape are documented once, for the whole
 CLI, in docs/development/cli_exit_codes.md: 0 = pass (or warn without
@@ -49,13 +55,16 @@ unexpected internal exception (never a real finding). Every --json-
 supporting command emits the same {schema_version, status, diagnostics,
 artifacts, metrics, next_actions} envelope shape.
 
-Examples:
+Examples — the golden path:
+  forge init my_plugin
   forge doctor
   forge inspect design.yml --contracts-from modules.yml
-  forge inspect design.yml --json
-  forge inspect design.yml --emit-ir build/forge/design.ir.json
-  forge build design.yml --contracts-from modules.yml --plan
   forge build design.yml --contracts-from modules.yml --apply --output algo_top.v
+  forge test run design.verification.yml --flow my_flow_xsim --event-id 0
+  forge report design.yml --contracts-from modules.yml --output out/report
+
+Examples — direct stage access:
+  forge inspect design.yml --emit-ir build/forge/design.ir.json
   forge build design.yml --accept-plan-hash <hash> --json
   forge topgen gen-top design.yml --mode verilog --output algo_top.v
   forge topgen validate design.yml
@@ -70,9 +79,6 @@ Examples:
   forge analyze latency-check design.yml --contracts-from modules.yml
   forge analyze dashboard --input out/reports --output out/dashboard
   forge framework import --provider blobfish --abi payload_abi.json --endpoints payload_endpoints.json --out out/
-  forge init my_plugin
-  forge test run design.verification.yml --flow my_flow_xsim --event-id 0
-  forge report design.yml --contracts-from modules.yml --output out/report
         """,
     )
 
@@ -88,21 +94,27 @@ Examples:
         dest="group",
         required=True,
         metavar="GROUP",
-        help="Command group (core | topgen | hls | verify | analyze | framework | doctor | inspect | build | test | report | init)",
+        help=(
+            "Golden path: init | inspect | build | test | report | doctor. "
+            "Direct stage access: topgen | verify | hls | analyze | framework | core."
+        ),
     )
 
-    core.register(sub)
-    topgen.register(sub)
-    hls.register(sub)
-    verify.register(sub)
-    analyze.register(sub)
-    framework.register(sub)
-    doctor.register(sub)
+    # Golden path first — argparse lists subcommands in registration order,
+    # so this is what a newcomer reads before anything else.
+    init.register(sub)
     inspect.register(sub)
     build.register(sub)
     test.register(sub)
     report.register(sub)
-    init.register(sub)
+    doctor.register(sub)
+    # Direct stage access.
+    topgen.register(sub)
+    verify.register(sub)
+    hls.register(sub)
+    analyze.register(sub)
+    framework.register(sub)
+    core.register(sub)
 
     return parser
 

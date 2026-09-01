@@ -52,7 +52,7 @@ def test_inspect_human_output(capsys: pytest.CaptureFixture[str]) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "forge inspect" in result.stdout
     assert "content hash" in result.stdout
-    assert "modules            : 1" in result.stdout
+    assert "modules           : 1" in result.stdout
 
 
 def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
@@ -65,11 +65,13 @@ def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) 
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    # passthrough_demo's real design genuinely has 2 IR warning diagnostics
-    # (a non-evenly-dividing clock period, no connections: section) and no
-    # errors — exit code stays 0 (warn only fails a build under --strict,
-    # which forge inspect does not have), but the status is genuinely warn.
-    assert payload["status"] == "warn"
+    # passthrough_demo is single-module and declares no reference period, so
+    # neither the unwired-design nor the clock-divisibility check applies —
+    # a reference plugin inspects clean. (Both used to fire here as false
+    # positives; see test_topgen_cli_commands.py's
+    # test_reference_design_validates_without_warnings.)
+    assert payload["status"] == "pass"
+    assert payload["diagnostics"] == []
     assert payload["schema_version"]
     assert payload["metrics"]["content_hash"]
     assert payload["metrics"]["counts"]["modules"] == 1

@@ -67,7 +67,7 @@ def resolve_framework_resources() -> "dict[str, dict[str, object]]":
 
 def cmd_resources(args):
     """Print installed framework resource paths."""
-    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.core.cli.envelope import CommandEnvelope, emit, status_for_exception
 
     json_mode = getattr(args, "json", False) or getattr(args, "format", None) == "json"
     resources = resolve_framework_resources()
@@ -120,7 +120,7 @@ def cmd_resources(args):
 
 def cmd_verify_contract(args):
     """Verify one or more ip_interface.yaml contracts against ip_info.yaml."""
-    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.core.cli.envelope import CommandEnvelope, emit, status_for_exception
 
     json_mode = getattr(args, "json", False)
 
@@ -216,7 +216,10 @@ def cmd_verify_contract(args):
     except SystemExit:
         raise
     except Exception as exc:
-        envelope = CommandEnvelope(status="error", diagnostics=[{"severity": "error", "message": str(exc)}])
+        envelope = CommandEnvelope(
+            status=status_for_exception(exc),
+            diagnostics=[{"severity": "error", "message": str(exc)}],
+        )
         if json_mode:
             sys.exit(emit(envelope, json_mode=True))
         print(f"❌ Contract verification failed: {exc}", file=sys.stderr)

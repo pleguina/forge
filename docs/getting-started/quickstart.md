@@ -5,60 +5,96 @@ fresh install works — [`ci/quickstart_commands.sh`](https://github.com/pleguin
 (also sourced by `ci/fresh_user_check.sh`), so what you run here is not a
 simplified retelling, it's the same commands.
 
-## 1. Install and confirm the CLI works
+## 1. Install
 
 ```bash
 pip install -e "forge[parser]"
-forge --help
 ```
 
-`forge --help` lists every command group (`core`, `topgen`, `hls`,
-`verify`, `analyze`, `framework`) and standalone command (`doctor`,
-`inspect`, `build`, `test`, `report`, `init`). If it prints without error,
-the install is healthy.
+The `parser` extra enables structured RTL port parsing via pyverilog. It's
+optional — a regex fallback is used without it (see
+[installation](installation.md)).
 
-## 2. Scaffold a new plugin
+## 2. Check the install
 
 ```bash
-forge verify init-plugin my_plugin --plugins-root <plugins_root>
+forge doctor
 ```
 
-This creates `<plugins_root>/my_plugin/forge/verify/` with a starter
-`design.verification.yml`, `tools/bootstrap.py`, `tools/gen_stimulus.py`,
-and a golden XML dataset — everything the next stage needs. It only
-scaffolds the *verification* side of a plugin (`forge/verify/`); pairing
-it with a real topology (`design.yml`/`modules.yml`) and RTL/HLS source is
-covered in the [golden-path tutorial](../tutorials/golden-path.md).
+`forge doctor` is read-only and safe to run at any time. It reports the
+FORGE version, the Python version, every simulation and synthesis tool it
+can find on `PATH`, and the resolved location of each framework resource.
+Optional tools are reported as warnings, not failures — a clean install
+with no EDA tools installed still passes.
 
-## 3. Health-check it
+## 3. Scaffold and run a plugin
 
 ```bash
-forge verify doctor <plugins_root>/my_plugin/forge/verify/design.verification.yml
+forge init my_plugin
 ```
 
-`doctor` is read-only and safe to run at any time (`--json` gives
-machine-readable output for scripting). **A freshly-scaffolded plugin
-reports `FAIL` here — this is expected, not a broken install.** `doctor`
-is telling you what `forge verify generate` still needs to create
-(`verify.flow.yml`, testbenches, wave scripts), not reporting that
-something is wrong with FORGE itself. Re-run `doctor` after
-`forge verify generate` and it should report clean.
+This is the whole loop in one command. It scaffolds the topology side
+(`design.yml`, `modules.yml`, an interface contract, an RTL stub) and the
+verification side (`design.verification.yml`, stimulus tooling, a golden
+dataset), then validates the design, generates the structural top level,
+simulates it, and writes a report bundle:
+
+```
+forge init — scaffolding 'my_plugin'
+  ✅ topology scaffold
+  ✅ verification scaffold
+  ✅ design validated
+  ✅ top level generated (algo_top.v)
+  ✅ testbench prepared
+  ✅ simulation passed (my_plugin_xsim)
+  ✅ report written
+✅ status: PASS
+```
+
+Open `plugins/my_plugin/report/dashboard.html` — it has the generated
+topology, an interactive explorer, the static latency check, and the
+simulation result.
+
+!!! note "No simulator installed?"
+    The simulation stage needs Vivado xsim on `PATH`. Without it that one
+    stage is skipped with a note and everything else still runs, so this
+    command works on a machine that has never had an EDA tool installed.
+    `forge doctor` tells you what's missing.
+
+Add `--verbose` to see each underlying stage's full output instead of one
+line per stage, or `--json` for the machine-readable envelope.
+
+## 4. Read the design back
+
+```bash
+forge inspect plugins/my_plugin/forge/designs/design.yml \
+    --contracts-from plugins/my_plugin/forge/modules.yml
+```
+
+`forge inspect` resolves the design into FORGE's canonical IR and prints
+what it found — modules, instances, connections, clock and reset domains,
+any diagnostics, and how much of the design is contract-driven rather than
+matched heuristically. It never writes anything unless you ask it to with
+`--emit-ir`.
 
 ## What just happened
 
-- The `parser` extra enabled structured RTL port parsing (a regex
-  fallback is used without it — see [installation](installation.md)).
-- `init-plugin` scaffolded a verification capsule under a real plugin
-  directory layout (`forge/verify/...`), matching the layout
-  `plugins/passthrough_demo/` and `plugins/trigger_demo/` both use.
-- `doctor` gave you an honest, specific status of what's built versus
-  what's still missing, rather than a generic pass/fail.
+- `doctor` gave you an honest, specific status of your toolchain rather
+  than a generic pass/fail.
+- `init` scaffolded a plugin under a real layout (`forge/…` capsule plus
+  `algo/`), matching the one `plugins/passthrough_demo/` and
+  `plugins/trigger_demo/` both use — then took it all the way to a
+  simulated, reported design without asking you to edit a file first.
+- `inspect` read that design back through the same IR every other FORGE
+  command uses, so what it printed is what the generator saw.
 
 ## Next
 
-- [The golden-path tutorial](../tutorials/golden-path.md) — scaffold a
-  topology alongside the verification capsule, generate a top level, and
-  run a real simulation, using `passthrough_demo` as the running example.
+- [The golden-path tutorial](../tutorials/golden-path.md) — the same
+  ground at a slower pace, using `passthrough_demo` as the running
+  example, including the individual stage commands `init` runs for you.
 - [Authoring topology contracts](../how-to/author-topology-contracts.md)
-  — how to write the `design.yml`/`modules.yml`/interface-contract files
-  a real plugin needs.
+  — how to write the `design.yml`/`modules.yml`/interface-contract files a
+  real plugin needs once you replace the scaffolded stub.
+- [Integrating verification](../how-to/integrate-verification.md) — adding
+  verification to RTL you already have, rather than scaffolding fresh.

@@ -45,6 +45,27 @@ _EXIT_CODES: Dict[str, int] = {
 }
 
 
+#: Exceptions that mean "the file the user handed us is wrong", as opposed
+#: to "FORGE fell over". Per docs/development/cli_exit_codes.md, exit 2 is
+#: reserved for a command that *could not run* — a usage error or an
+#: unexpected internal exception — and is explicitly "never a real finding".
+#: A malformed design.yml is a real finding, so it must exit 1. Config
+#: loaders raise ValueError (bad content) and FileNotFoundError (a declared
+#: path that isn't there) for exactly this case.
+_USER_INPUT_ERRORS = (ValueError, FileNotFoundError, IsADirectoryError, NotADirectoryError)
+
+
+def status_for_exception(exc: BaseException) -> str:
+    """Classify an exception as a reportable finding or an internal error.
+
+    Returns ``"fail"`` (exit 1) when the exception describes something wrong
+    with the user's input, and ``"error"`` (exit 2) otherwise. Keeping this
+    in one place is what stops two commands disagreeing about the same bad
+    file — `topgen validate` used to exit 2 where `build` exited 1.
+    """
+    return "fail" if isinstance(exc, _USER_INPUT_ERRORS) else "error"
+
+
 @dataclass
 class CommandEnvelope:
     """Uniform structured result for a ``forge`` CLI command.

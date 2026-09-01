@@ -62,11 +62,18 @@ def test_epilog_groups_match_registered_groups() -> None:
     registered = set(group_action.choices)
 
     epilog = parser.epilog or ""
-    groups_block = epilog.split("Examples:")[0]
-    documented = set(re.findall(r"^\s{2}(\S+)", groups_block, flags=re.MULTILINE))
+    # The epilog lists groups in two tiers ("Start here — the golden path"
+    # and "Direct stage access"), so match on the *shape* of a listing line
+    # — two-space indent, a name, then two or more spaces before its
+    # description — rather than on section headings. Example lines
+    # ("  forge init my_plugin") have a single space after the first token
+    # and so don't match; neither does prose, which isn't indented.
+    documented = set(
+        re.findall(r"^ {2}(\w[\w-]*) {2,}\S", epilog, flags=re.MULTILINE)
+    )
 
     assert documented == registered, (
-        f"epilog 'Groups:' list is out of sync with registered CLI groups.\n"
+        f"epilog group listing is out of sync with registered CLI groups.\n"
         f"documented={documented} registered={registered}"
     )
 
@@ -90,9 +97,14 @@ def test_epilog_examples_use_real_groups_subcommands_and_flags() -> None:
     assert group_action is not None
 
     epilog = parser.epilog or ""
-    examples = epilog.split("Examples:")[1]
+    # Examples are grouped under more than one "Examples …" heading (golden
+    # path vs direct stage access), so collect every example line in the
+    # epilog rather than only those under one heading.
+    assert "Examples" in epilog, "epilog has no examples section"
+    examples = epilog.split("Examples", 1)[1]
     example_lines = [
-        line.strip() for line in examples.strip().splitlines() if line.strip()
+        line.strip() for line in examples.splitlines()
+        if line.strip().startswith("forge ")
     ]
     assert example_lines, "expected at least one example command in the epilog"
 

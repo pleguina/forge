@@ -9,6 +9,8 @@ import sys
 import traceback
 from pathlib import Path
 
+from forge.core.cli.envelope import status_for_exception
+
 
 # ---------------------------------------------------------------------------
 # Debug flag (set by main() from --debug arg)
@@ -36,7 +38,10 @@ def print_cli_error(prefix: str, exc: Exception, *, hint: str | None = None) -> 
         print(f"   → {hint}", file=sys.stderr)
     if debug_enabled():
         traceback.print_exc(file=sys.stderr)
-    else:
+    elif status_for_exception(exc) != "fail":
+        # Only offer a traceback for errors that might actually be FORGE's
+        # fault. Telling someone with a typo in their design.yml to re-run
+        # with --debug sends them looking for a bug in the framework.
         print("   Re-run with --debug for traceback details.", file=sys.stderr)
 
 

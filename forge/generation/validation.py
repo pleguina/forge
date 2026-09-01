@@ -116,9 +116,15 @@ class DesignValidator:
         if not self.cfg.clock_period:
             return  # Already reported in basic validation
         
-        # Calculate batches against the design's reference period (defaults
-        # to the LHC 40 MHz / 25 ns BX period when not declared).
-        ref_period = self.cfg.reference_period_ns if self.cfg.reference_period_ns is not None else 25.0
+        # Only check divisibility against a reference period the design
+        # actually declares. Warning against the *fallback* (see
+        # generators/design_parameters.py, which still assumes the LHC
+        # 40 MHz / 25 ns BX period for testbench timing) meant every
+        # freshly-scaffolded, detector-agnostic design was told its clock
+        # didn't divide a period it had never heard of.
+        if self.cfg.reference_period_ns is None:
+            return
+        ref_period = self.cfg.reference_period_ns
         batches = round(ref_period / self.cfg.clock_period)
 
         if abs(batches * self.cfg.clock_period - ref_period) > 0.5:
@@ -249,8 +255,18 @@ class DesignValidator:
     def validate_connections(self):
         """Validate module connections."""
         if not self.cfg.connections:
-            self.add_warning('connection', "No connections defined between modules",
-                          suggestion="Add 'connections:' section to wire modules together")
+            # Only a genuinely unwired *multi-module* design is worth warning
+            # about. A single-module design has nothing to connect, and a
+            # design wired entirely through `topology_groups` is using the
+            # contract-driven style the docs recommend — telling either of
+            # them to "add a connections: section" is wrong advice.
+            # `validate_consistency` below already treats topology_groups as
+            # real connections; this check has to agree with it.
+            topology_groups = getattr(self.cfg, 'topology_groups', None) or []
+            if len(self.cfg.modules) > 1 and not topology_groups:
+                self.add_warning('connection', "No connections defined between modules",
+                              suggestion="Wire the modules with a 'topology_groups:' section "
+                                         "(contract-driven), or 'connections:' for scalar signals")
             return
         
         module_names = {m.name for m in self.cfg.modules}

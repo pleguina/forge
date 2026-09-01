@@ -1,7 +1,7 @@
 {
   "diagrams": {
     "cdc": {
-      "design_content_hash": "b754421a93d9c18deeb4bce7205a7174c277eaa46480235fa623518f0b47cc45",
+      "design_content_hash": "2f8022f17dcb1c8fdf1e5aa69933f46860f537b670f1ceb33925885992d82d3c",
       "source_design": "forge/designs/design_cdc.yml"
     },
     "full-functional": {
@@ -9,7 +9,7 @@
       "source_design": "forge/designs/design_full_functional.yml"
     },
     "pixel-result": {
-      "design_content_hash": "d0434dbba8444232b25635659af4e9aa9c6b1b98feed7c8f83c3463212a99a1a",
+      "design_content_hash": "bdfe6355586b0344f10ab01573aae5b673401d24415482c2a373413ce334921b",
       "source_design": "forge/designs/design_pixel_result.yml"
     },
     "platform-wrapper": {
@@ -17,11 +17,11 @@
       "source_design": "forge/designs/design_platform_wrapper.yml"
     },
     "quickstart": {
-      "design_content_hash": "c5a1a269e5de3631b92add1dba937d6e38c102b08e7be1df11a90952417ad1aa",
+      "design_content_hash": "95a70947ced4321aad99cc3c1b77c428c7c8987d2210aeba73f8368add980aeb",
       "source_design": "forge/designs/design.yml"
     },
     "tile-stats": {
-      "design_content_hash": "858c839a03f8640aadcafd69c714ec73e973e9794d96c90975236a5c1b894bca",
+      "design_content_hash": "36163fa7ea200723274c0dfbcf2fd47601fef237ffc8a6d8dad5340c6ce93344",
       "source_design": "forge/designs/design_tile_stats.yml"
     }
   },

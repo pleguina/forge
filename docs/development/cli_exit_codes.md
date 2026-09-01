@@ -53,7 +53,7 @@ warnings without losing the distinction between "found a real problem" and
 ```
 
 - `diagnostics` reuses the same per-item shape `Diagnostic.to_dict()`
-  (`forge/verify/diagnostics.py`) and `ATGDiagnostic.to_dict()`
+  (`forge/verification/diagnostics.py`) and `ATGDiagnostic.to_dict()`
   (`forge/core/diagnostics.py`) already produce — those two stable code
   families (`FWVxxxx`, `ATGxxxx`) are **bridged** onto the envelope, not
   merged into one registry (a full merge is out of scope: the two
