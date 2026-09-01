@@ -1,0 +1,743 @@
+{
+  "m_scalars": [
+    {
+      "name": "ap_clk",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "ap_rst",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "in_none",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "in_vld",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "in_vld_ap_vld",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "in_ack",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "in_ack_ap_ack",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "in_hs",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "in_hs_ap_vld",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "in_hs_ap_ack",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "in_stable",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "in_signed",
+      "direction": "input",
+      "width": "7:0"
+    },
+    {
+      "name": "out_none",
+      "direction": "output",
+      "width": "11:0"
+    },
+    {
+      "name": "out_vld",
+      "direction": "output",
+      "width": "11:0"
+    },
+    {
+      "name": "out_vld_ap_vld",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "out_ack",
+      "direction": "output",
+      "width": "11:0"
+    },
+    {
+      "name": "out_ack_ap_ack",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "out_hs",
+      "direction": "output",
+      "width": "11:0"
+    },
+    {
+      "name": "out_hs_ap_vld",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "out_hs_ap_ack",
+      "direction": "input",
+      "width": "1"
+    }
+  ],
+  "m_arrays": [
+    {
+      "name": "ap_clk",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "ap_rst",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "ap_start",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "ap_done",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "ap_idle",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "ap_ready",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "grid_full_0_0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_0_1",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_0_2",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_0_3",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_1_0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_1_1",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_1_2",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_1_3",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_2_0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_2_1",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_2_2",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_full_2_3",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_dim1_0_address0",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "grid_dim1_0_ce0",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "grid_dim1_0_q0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_dim1_1_address0",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "grid_dim1_1_ce0",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "grid_dim1_1_q0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "grid_dim1_2_address0",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "grid_dim1_2_ce0",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "grid_dim1_2_q0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "line_mem_address0",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "line_mem_ce0",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "line_mem_q0",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "line_fifo_dout",
+      "direction": "input",
+      "width": "11:0"
+    },
+    {
+      "name": "line_fifo_empty_n",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "line_fifo_read",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "st_in",
+      "direction": "input",
+      "width": "47:0"
+    },
+    {
+      "name": "line_out_address0",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "line_out_ce0",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "line_out_we0",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "line_out_d0",
+      "direction": "output",
+      "width": "11:0"
+    },
+    {
+      "name": "ap_return",
+      "direction": "output",
+      "width": "47:0"
+    }
+  ],
+  "m_axi": [
+    {
+      "name": "ap_clk",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "ap_rst_n",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_AWVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_AWREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_AWADDR",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_ADDR_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_AWID",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_ID_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_AWLEN",
+      "direction": "output",
+      "width": "7:0"
+    },
+    {
+      "name": "m_axi_gmem_AWSIZE",
+      "direction": "output",
+      "width": "2:0"
+    },
+    {
+      "name": "m_axi_gmem_AWBURST",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "m_axi_gmem_AWLOCK",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "m_axi_gmem_AWCACHE",
+      "direction": "output",
+      "width": "3:0"
+    },
+    {
+      "name": "m_axi_gmem_AWPROT",
+      "direction": "output",
+      "width": "2:0"
+    },
+    {
+      "name": "m_axi_gmem_AWQOS",
+      "direction": "output",
+      "width": "3:0"
+    },
+    {
+      "name": "m_axi_gmem_AWREGION",
+      "direction": "output",
+      "width": "3:0"
+    },
+    {
+      "name": "m_axi_gmem_AWUSER",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_AWUSER_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_WVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_WREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_WDATA",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_DATA_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_WSTRB",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_WSTRB_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_WLAST",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_WID",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_ID_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_WUSER",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_WUSER_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_ARVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_ARREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_ARADDR",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_ADDR_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_ARID",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_ID_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_ARLEN",
+      "direction": "output",
+      "width": "7:0"
+    },
+    {
+      "name": "m_axi_gmem_ARSIZE",
+      "direction": "output",
+      "width": "2:0"
+    },
+    {
+      "name": "m_axi_gmem_ARBURST",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "m_axi_gmem_ARLOCK",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "m_axi_gmem_ARCACHE",
+      "direction": "output",
+      "width": "3:0"
+    },
+    {
+      "name": "m_axi_gmem_ARPROT",
+      "direction": "output",
+      "width": "2:0"
+    },
+    {
+      "name": "m_axi_gmem_ARQOS",
+      "direction": "output",
+      "width": "3:0"
+    },
+    {
+      "name": "m_axi_gmem_ARREGION",
+      "direction": "output",
+      "width": "3:0"
+    },
+    {
+      "name": "m_axi_gmem_ARUSER",
+      "direction": "output",
+      "width": "C_M_AXI_GMEM_ARUSER_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_RVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_RREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_RDATA",
+      "direction": "input",
+      "width": "C_M_AXI_GMEM_DATA_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_RLAST",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_RID",
+      "direction": "input",
+      "width": "C_M_AXI_GMEM_ID_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_RUSER",
+      "direction": "input",
+      "width": "C_M_AXI_GMEM_RUSER_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_RRESP",
+      "direction": "input",
+      "width": "1:0"
+    },
+    {
+      "name": "m_axi_gmem_BVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_BREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "m_axi_gmem_BRESP",
+      "direction": "input",
+      "width": "1:0"
+    },
+    {
+      "name": "m_axi_gmem_BID",
+      "direction": "input",
+      "width": "C_M_AXI_GMEM_ID_WIDTH - 1:0"
+    },
+    {
+      "name": "m_axi_gmem_BUSER",
+      "direction": "input",
+      "width": "C_M_AXI_GMEM_BUSER_WIDTH - 1:0"
+    },
+    {
+      "name": "strm_in_TDATA",
+      "direction": "input",
+      "width": "15:0"
+    },
+    {
+      "name": "strm_in_TVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "strm_in_TREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "strm_out_TDATA",
+      "direction": "output",
+      "width": "15:0"
+    },
+    {
+      "name": "strm_out_TVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "strm_out_TREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_AWVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_AWREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_AWADDR",
+      "direction": "input",
+      "width": "C_S_AXI_CONTROL_ADDR_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_control_WVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_WREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_WDATA",
+      "direction": "input",
+      "width": "C_S_AXI_CONTROL_DATA_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_control_WSTRB",
+      "direction": "input",
+      "width": "C_S_AXI_CONTROL_WSTRB_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_control_ARVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_ARREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_ARADDR",
+      "direction": "input",
+      "width": "C_S_AXI_CONTROL_ADDR_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_control_RVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_RREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_RDATA",
+      "direction": "output",
+      "width": "C_S_AXI_CONTROL_DATA_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_control_RRESP",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "s_axi_control_BVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_BREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_control_BRESP",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "s_axi_ctrl_AWVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_AWREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_AWADDR",
+      "direction": "input",
+      "width": "C_S_AXI_CTRL_ADDR_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_ctrl_WVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_WREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_WDATA",
+      "direction": "input",
+      "width": "C_S_AXI_CTRL_DATA_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_ctrl_WSTRB",
+      "direction": "input",
+      "width": "C_S_AXI_CTRL_WSTRB_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_ctrl_ARVALID",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_ARREADY",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_ARADDR",
+      "direction": "input",
+      "width": "C_S_AXI_CTRL_ADDR_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_ctrl_RVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_RREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_RDATA",
+      "direction": "output",
+      "width": "C_S_AXI_CTRL_DATA_WIDTH - 1:0"
+    },
+    {
+      "name": "s_axi_ctrl_RRESP",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "s_axi_ctrl_BVALID",
+      "direction": "output",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_BREADY",
+      "direction": "input",
+      "width": "1"
+    },
+    {
+      "name": "s_axi_ctrl_BRESP",
+      "direction": "output",
+      "width": "1:0"
+    },
+    {
+      "name": "interrupt",
+      "direction": "output",
+      "width": "1"
+    }
+  ]
+}

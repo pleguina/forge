@@ -224,6 +224,38 @@ for the versioning policy.
   silently dropping the role from contract-driven wiring and surfacing
   much later as "role not found in producer contract".
 - **`forge contract infer`** — a real home for contract authoring.
+- **`forge.hls.port_prediction`** — predicts the RTL ports Vitis HLS will
+  generate for an HLS module, so a contract can be drafted and reviewed
+  before the first synthesis run. This is what closes the gap left by the
+  contract-derivation work above: an HLS module has no HDL to scan
+  pre-build, and its port names shift substantially with the interface
+  pragma and argument shape.
+
+  The rules come from **real Vitis HLS 2024.1 output**, not documentation.
+  `forge/tests/fixtures/hls_port_matrix/` holds three top functions
+  covering the interface/pragma combinations plus the exact port list each
+  synthesises to; the tests assert the predictor reproduces it, and the
+  fixture is the specification when they disagree.
+
+  Validated against two independent real production modules never used to
+  write the rules: `golden_proc_hls` predicts **261 of 261 ports exactly**
+  — every name, direction and width, including 252 from a
+  `hit_t[18][14]` argument scalarised by `ARRAY_PARTITION complete dim=0`.
+  `inputProcessor`, the same array shape under a bare `complete` (which
+  defaults to `dim=1`, leaving a BRAM interface), predicts with **zero
+  spurious ports**.
+
+  What it declines to predict is as deliberate as what it does. Struct
+  widths are reported unknown, because HLS pads members rather than
+  concatenating them — a 16-bit-logical struct in the fixture synthesises
+  to 48 bits, so a summed width is wrong in a way that looks right.
+  `s_axilite`/`m_axi` bundles depend on widths chosen at synthesis. And a
+  memory interface is predicted single-port with a warning, since HLS adds
+  a second port set when the schedule needs two accesses per cycle — a
+  scheduler decision, and on `inputProcessor` exactly the set the
+  prediction missed. Two further findings the matrix settled: AXI-Stream
+  `TDATA` rounds up to a byte multiple, and adding any AXI interface flips
+  the block reset from `ap_rst` to `ap_rst_n`.
 
 ### Changed
 - **`forge contract infer` replaces `forge topgen migrate --kind
