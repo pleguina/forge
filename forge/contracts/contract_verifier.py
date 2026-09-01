@@ -182,7 +182,13 @@ class ContractVerifier:
             )
             return result
 
-        roles_in_spec: Dict[str, Any] = spec.get("roles", {})
+        # A role that declares nothing is written `role_name:` and parses to
+        # None. Normalise so every check below can treat a spec as a dict —
+        # the same normalisation LoadedContract applies.
+        roles_in_spec: Dict[str, Any] = {
+            name: (body if isinstance(body, dict) else {})
+            for name, body in (spec.get("roles") or {}).items()
+        }
         if not roles_in_spec:
             warn("(meta)", "No roles defined in contract; nothing to verify")
             return result
@@ -304,9 +310,13 @@ class ContractVerifier:
         err,
         warn,
     ) -> None:
-        raw_port = role_spec.get("raw_port")
-        if raw_port is None:
-            err(role_name, "Scalar role is missing 'raw_port' field")
+        # An omitted raw_port defaults to the role name — the same rule
+        # contract_loader applies when deriving port facts from the module's
+        # source. Verifying against the *real* built ports here is the check
+        # that makes omitting them safe.
+        raw_port = role_spec.get("raw_port") or role_name
+        if not raw_port:
+            err(role_name, "Scalar role has no 'raw_port' and no usable name")
             return
 
         if raw_port not in raw_ports:

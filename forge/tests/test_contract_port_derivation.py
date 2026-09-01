@@ -170,3 +170,54 @@ def test_unresolvable_gap_is_reported_rather_than_silently_dropped(tmp_path):
     assert "data_in" in conflicts[0]
     assert "HLS" in conflicts[0]
     assert "Declare those fields explicitly" in conflicts[0]
+
+
+def test_verify_contract_accepts_a_slim_contract_against_real_ports(tmp_path):
+    """`forge core verify-contract` reads the contract file directly rather
+    than through contract_loader, so it needs the same defaulting rule —
+    otherwise a slim contract that builds correctly fails verification.
+    Checking the omitted fields against the *real* built ports is exactly
+    what makes omitting them safe."""
+    from forge.contracts.contract_verifier import ContractVerifier
+
+    ip_info = tmp_path / "ip_info.yaml"
+    ip_info.write_text(yaml.safe_dump({"m": {"ports": [
+        {"name": "ap_clk", "direction": "IN", "width": 1},
+        {"name": "ap_rst", "direction": "IN", "width": 1},
+        {"name": "data_in", "direction": "IN", "width": 8},
+        {"name": "data_out", "direction": "OUT", "width": 8},
+    ]}}))
+    contract = tmp_path / "m.interface.yaml"
+    contract.write_text(yaml.safe_dump({"ip_interface": {
+        "module_name": "m", "ip_info_key": "m", "source_type": "rtl",
+        "roles": {
+            "clock_primary": {"raw_port": "ap_clk"},
+            "reset_primary": {"raw_port": "ap_rst"},
+            "data_in": None,     # declares nothing at all
+            "data_out": None,
+        },
+    }}))
+
+    result = ContractVerifier(ip_info, contract).verify()
+
+    assert [i for i in result.issues if i.severity == "error"] == []
+
+
+def test_verify_contract_still_catches_a_role_naming_no_real_port(tmp_path):
+    """Defaulting raw_port to the role name must not mask a typo."""
+    from forge.contracts.contract_verifier import ContractVerifier
+
+    ip_info = tmp_path / "ip_info.yaml"
+    ip_info.write_text(yaml.safe_dump({"m": {"ports": [
+        {"name": "data_in", "direction": "IN", "width": 8}]}}))
+    contract = tmp_path / "m.interface.yaml"
+    contract.write_text(yaml.safe_dump({"ip_interface": {
+        "module_name": "m", "ip_info_key": "m", "source_type": "rtl",
+        "clock_free": True, "reset_free": True,
+        "roles": {"data_inn": None},          # typo
+    }}))
+
+    result = ContractVerifier(ip_info, contract).verify()
+
+    errors = [i for i in result.issues if i.severity == "error"]
+    assert any("data_inn" in i.message or "data_inn" == i.role for i in errors)

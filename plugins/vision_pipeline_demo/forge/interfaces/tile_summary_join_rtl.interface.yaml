@@ -22,114 +22,49 @@ ip_interface:
 
     clock_primary:
       raw_port: ap_clk
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: ap_rst
-      direction: input
-      width: 1
-      active_level: high
 
     stats_minimum:
-      raw_port: stats_minimum
-      direction: input
-      width: 8
 
     stats_maximum:
-      raw_port: stats_maximum
-      direction: input
-      width: 8
 
     stats_mean:
-      raw_port: stats_mean
-      direction: input
-      width: 16
 
     stats_variance:
-      raw_port: stats_variance
-      direction: input
-      width: 24
 
     stats_tile_id:
-      raw_port: stats_tile_id
-      direction: input
-      width: 16
 
     stats_frame_id:
-      raw_port: stats_frame_id
-      direction: input
-      width: 16
 
     stats_valid:
-      raw_port: stats_valid
-      direction: input
-      width: 1
       notes: "Driven from tile_stats_hls's out_valid"
 
     tag_valid:
-      raw_port: tag_valid
-      direction: input
-      width: 1
       notes: "Driven from tile_boundary_rtl's tag_valid"
 
     tag_tile_id:
-      raw_port: tag_tile_id
-      direction: input
-      width: 16
 
     tag_frame_id:
-      raw_port: tag_frame_id
-      direction: input
-      width: 16
 
     tag_end_of_frame:
-      raw_port: tag_end_of_frame
-      direction: input
-      width: 1
 
     out_tile_id:
-      raw_port: out_tile_id
-      direction: output
-      width: 16
 
     out_frame_id:
-      raw_port: out_frame_id
-      direction: output
-      width: 16
 
     out_minimum:
-      raw_port: out_minimum
-      direction: output
-      width: 8
 
     out_maximum:
-      raw_port: out_maximum
-      direction: output
-      width: 8
 
     out_mean:
-      raw_port: out_mean
-      direction: output
-      width: 16
 
     out_variance:
-      raw_port: out_variance
-      direction: output
-      width: 24
 
     out_end_of_frame:
-      raw_port: out_end_of_frame
-      direction: output
-      width: 1
 
     out_valid:
-      raw_port: out_valid
-      direction: output
-      width: 1
 
     join_mismatch:
-      raw_port: join_mismatch
-      direction: output
-      width: 1
       notes: "Real diagnostic: stats_valid asserted with no matching pending tag (tile_id/frame_id mismatch or missing) -- edge_mask_merge_rtl's tag_mismatch precedent, adapted to bounded/elastic alignment"

@@ -22,43 +22,20 @@ ip_interface:
 
     clock_primary:
       raw_port: clk_output
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: rst_output
-      direction: input
-      width: 1
-      active_level: high
 
     pr_record_in:
-      raw_port: pr_record_in
-      direction: input
-      width: 129
       notes: "Already synchronized -- destination of the pixel_result_packer_rtl async_fifo crossing"
 
     ts_record_in:
-      raw_port: ts_record_in
-      direction: input
-      width: 129
       notes: "Already synchronized -- destination of the tile_stats_packer_rtl async_fifo crossing"
 
     packet_data:
-      raw_port: packet_data
-      direction: output
-      width: 256
 
     packet_keep:
-      raw_port: packet_keep
-      direction: output
-      width: 32
 
     packet_last:
-      raw_port: packet_last
-      direction: output
-      width: 1
 
     packet_valid:
-      raw_port: packet_valid
-      direction: output
-      width: 1

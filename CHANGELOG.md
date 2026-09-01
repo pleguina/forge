@@ -270,6 +270,32 @@ for the versioning policy.
   the block reset from `ap_rst` to `ap_rst_n`.
 
 ### Changed
+- **The reference plugins' contracts now use the slim form.** The
+  derivation machinery landed without the examples adopting it, so anyone
+  reading `vision_pipeline_demo` still saw — and would copy — the fully
+  transcribed style. All 20 RTL contracts are slimmed: **1792 -> 1137
+  content lines**, 655 removed. Done by line surgery rather than a YAML
+  round-trip, so every prose comment and the deliberate blank-line
+  structure survive intact. Verified semantics-preserving three ways:
+  `passthrough_demo`'s generated top level is byte-identical to its
+  pre-slim baseline, the vision-pipeline tutorial's design content hashes
+  are unchanged (so no reference-asset churn), and the full suite passes.
+  The 7 HLS contracts are deliberately untouched — their ports don't exist
+  until the IP is built.
+- **`forge core verify-contract` understands slim contracts.** It reads the
+  contract file directly rather than through `contract_loader`, so it
+  needed the same defaulting rule: an omitted `raw_port` resolves to the
+  role name, and a role declaring nothing at all no longer crashes the
+  verifier on a `None` spec. Checking the omitted fields against the real
+  built ports is precisely what makes omitting them safe, and a role whose
+  name matches no real port is still an error — defaulting must not mask a
+  typo.
+- **`docs/how-to/author-topology-contracts.md`** taught the transcribed
+  style as the way to write a contract. It now starts from
+  `forge contract infer`, shows the slim form, and states the rule plainly:
+  declare decisions, not transcription — with the two exceptions (HLS
+  modules and array/template roles) called out.
+
 - **`forge contract infer` replaces `forge topgen migrate --kind
   infer-contract`.** Writing an interface contract is the most common
   authoring task in a FORGE project; it was filed under a verb meaning

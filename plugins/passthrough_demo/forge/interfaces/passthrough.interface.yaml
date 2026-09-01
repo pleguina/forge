@@ -14,33 +14,16 @@ ip_interface:
 
     clock_primary:
       raw_port: ap_clk
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: ap_rst
-      direction: input
-      width: 1
-      active_level: high
 
     data_in:
-      raw_port: data_in
-      direction: input
-      width: 8
       notes: "External stimulus input."
 
     data_in_valid:
-      raw_port: data_in_valid
-      direction: input
-      width: 1
 
     data_out:
-      raw_port: data_out
-      direction: output
-      width: 8
       notes: "External readout output."
 
     data_out_valid:
-      raw_port: data_out_valid
-      direction: output
-      width: 1
