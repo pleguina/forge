@@ -290,7 +290,32 @@ for the versioning policy.
   `TDATA` rounds up to a byte multiple, and adding any AXI interface flips
   the block reset from `ap_rst` to `ap_rst_n`.
 
-### Changed
+### Added
+- **`docs/capabilities.md` — "What FORGE Does".** There was no single page
+  answering "what can this framework do": the README and `docs/index.md`
+  carried a support-*scope* table (which axes are supported, which vendors
+  are not), and the CLI reference is 1194 generated lines of argparse.
+  Neither orients anyone. The new page tours every capability — golden
+  path, topology generation, contracts, HLS orchestration and port
+  prediction, verification, analysis and reporting, the canonical IR and
+  provenance, external-framework integration, machine-readable output —
+  and links into the existing detail pages rather than restating them. It
+  ends with what FORGE deliberately does *not* do. Linked first from both
+  the README's documentation index and the site's "Where to go next".
+- **Two staleness guards for hand-written overview pages.** Neither can be
+  generated (they are prose, and the README renders on GitHub outside
+  MkDocs), so they are checked instead: `docs/capabilities.md` must
+  mention every registered CLI command group, and the support-scope table
+  must state the same thing in `README.md` and `docs/index.md`.
+
+### Fixed
+- **The support-scope table had already drifted between `README.md` and
+  `docs/index.md`** — the new guard caught it immediately. Two rows of the
+  README's copy pointed at `docs/IP_INTERFACE_POLICY.md`, which is now a
+  "Page moved" redirect stub, while `docs/index.md` pointed at the current
+  Contracts-and-Protocols and Clock-and-Reset-Domains pages. The README is
+  reconciled to the current wording, with GitHub-correct link paths.
+
 - **The reference plugins' contracts now use the slim form.** The
   derivation machinery landed without the examples adopting it, so anyone
   reading `vision_pipeline_demo` still saw — and would copy — the fully

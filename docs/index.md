@@ -36,6 +36,8 @@ is driven by it end-to-end, see
 
 ## Where to go next
 
+- Want the whole picture first? [What FORGE Does](capabilities.md) tours
+  every capability on one page and links into the detail.
 - New to FORGE? Start with the [Quickstart](getting-started/quickstart.md)
   to get from zero to a working environment.
 - Want a guided, end-to-end walkthrough? Follow the

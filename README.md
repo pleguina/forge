@@ -36,8 +36,8 @@ FORGE's public identity for this release is deliberately narrower than
 | Toolchains | Vivado (structural Verilog/VHDL, Block Design TCL), Vitis HLS, XSim |
 | Simulation backends | `xsim`, `csim`; Verilator is available as a lint tool only, not a simulation backend |
 | Verification datasets | XML-backed only (`design.verification.yml` + XML golden data) |
-| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect (see `docs/IP_INTERFACE_POLICY.md` "Reserved roles"). Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist (`forge.contracts.cdc.verify_cdc`), gated behind `gen-top --strict` |
-| Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see `docs/IP_INTERFACE_POLICY.md`) |
+| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect. Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist, gated behind `gen-top --strict` (see [Clock and Reset Domains](docs/concepts/clock-and-reset-domains.md)) |
+| Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see [Contracts and Protocols](docs/concepts/contracts-and-protocols.md)) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
 
 ## Architecture (canonical IR — generation is IR-driven for all three modes)
@@ -133,6 +133,9 @@ The full documentation is an [MkDocs Material](https://squidfunk.github.io/mkdoc
 site under [`docs/`](docs/) (build it locally with `pip install -e "forge[docs]"` then
 `mkdocs serve`). Start here:
 
+- **[What FORGE Does](docs/capabilities.md)** — a single-page tour of the
+  framework's capabilities, from topology generation to verification,
+  latency analysis and HLS port prediction, linking into the detail.
 - **[Quickstart](docs/getting-started/quickstart.md)** — five minutes from
   install to a working DUT, using the exact commands CI runs to prove a
   fresh install works.
