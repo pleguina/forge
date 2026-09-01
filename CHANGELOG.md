@@ -253,7 +253,19 @@ for the versioning policy.
   memory interface is predicted single-port with a warning, since HLS adds
   a second port set when the schedule needs two accesses per cycle — a
   scheduler decision, and on `inputProcessor` exactly the set the
-  prediction missed. Two further findings the matrix settled: AXI-Stream
+  prediction missed.
+
+  Coverage is the same for data ports and for the single-bit signal ports
+  the interface mode generates — the strobes, enables and handshakes that
+  appear in no form in the C++ (`_ap_vld`, `_ap_ack`, `_ce0`, `_we0`,
+  `_empty_n`, `_read`, `TVALID`/`TREADY`, and the block-protocol
+  `ap_start`/`ap_done`/`ap_idle`/`ap_ready`). Stratified by width across
+  all four validation modules: 1-bit and wide ports both predict exactly,
+  with zero spurious ports anywhere, and the only misses are the
+  second-memory-port set already described. One rule came out of that
+  check — with no INTERFACE pragma a by-value input defaults to `ap_none`
+  but a by-reference output defaults to `ap_vld`, and so carries a
+  `_ap_vld` strobe. Two further findings the matrix settled: AXI-Stream
   `TDATA` rounds up to a byte multiple, and adding any AXI interface flips
   the block reset from `ap_rst` to `ap_rst_n`.
 

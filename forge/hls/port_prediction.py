@@ -120,8 +120,15 @@ def _scalar_ports(arg: Argument, base: str) -> List[PredictedPort]:
     Handshake direction follows the data direction: on an input, ``_ap_vld``
     is an input and ``_ap_ack`` an output; on an output they swap. Confirmed
     against the synthesised fixture rather than assumed.
+
+    With no explicit ``#pragma HLS INTERFACE``, a by-value input defaults to
+    ``ap_none`` but an output passed by reference defaults to ``ap_vld`` and
+    so gains a ``_ap_vld`` strobe. Found on a real module: inputProcessor
+    declares no INTERFACE pragmas at all, and its ``proc_out`` reference
+    output has a ``proc_out_ap_vld`` port that assuming ``ap_none``
+    everywhere would miss.
     """
-    mode = arg.mode or "ap_none"
+    mode = arg.mode or ("ap_vld" if arg.is_output else "ap_none")
     d = "output" if arg.is_output else "input"
     opposite = "input" if arg.is_output else "output"
     ports = [PredictedPort(base, d, arg.width, arg.name)]

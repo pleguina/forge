@@ -243,3 +243,24 @@ def test_memory_interfaces_warn_that_a_second_port_set_may_appear():
     # Exactly one warning for the argument, not one per generated memory.
     assert sum("second port set" in w for w in pred.warnings) == 1
     assert "hits_in_0_address0" in pred.by_name
+
+
+def test_reference_output_defaults_to_ap_vld_not_ap_none():
+    """With no INTERFACE pragma, a by-value input is ap_none but a
+    by-reference output is ap_vld. Found on inputProcessor, which declares
+    no INTERFACE pragmas and still has a proc_out_ap_vld port."""
+    pred = predict_ports(
+        [Argument("din", 12), Argument("dout", 12, is_output=True)],
+        block_protocol="ap_ctrl_none",
+    ).by_name
+
+    assert "din_ap_vld" not in pred
+    assert pred["dout_ap_vld"].direction == "output"
+
+
+def test_explicit_ap_none_on_an_output_still_wins():
+    pred = predict_ports(
+        [Argument("dout", 12, is_output=True, mode="ap_none")],
+        block_protocol="ap_ctrl_none",
+    ).by_name
+    assert "dout_ap_vld" not in pred
