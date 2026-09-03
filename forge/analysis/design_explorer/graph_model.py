@@ -239,6 +239,58 @@ class ObjectRecord:
 
 
 @dataclass(frozen=True)
+class OpenDecision:
+    """One connection the design has not made, and what could make it.
+
+    The explorer's authoring half (Phase J): an unwired producer with
+    candidate consumers, or a consumer with competing producers.
+
+    Computed **nowhere near here**. ``forge.project.discovery`` is what
+    decides that a port is unwired and which candidates are equally valid;
+    this carries its answer, and ``declaration``/``command`` carry the exact
+    ``forge.yml`` entry and CLI invocation that record a choice. The
+    explorer therefore never resolves topology, never infers a candidate,
+    and never holds a decision the project file does not — which is the
+    difference between an authoring view and a private parallel state.
+    """
+    id: str
+    subject: str            # "module.port" the question is about
+    question: str
+    #: What the subject could be connected to — a real candidate list, in
+    #: the order discovery reported it.
+    candidates: Tuple[str, ...] = ()
+    #: Is *subject* the producer (candidates are consumers), or the reverse?
+    subject_is_producer: bool = True
+    #: The node id the question attaches to, so the UI can highlight it.
+    node_id: str = ""
+
+    def declaration_for(self, candidate: str) -> Dict[str, str]:
+        """The ``connections:`` entry that records choosing *candidate*."""
+        producer, consumer = (
+            (self.subject, candidate) if self.subject_is_producer
+            else (candidate, self.subject)
+        )
+        return {"from": producer, "to": consumer}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "subject": self.subject,
+            "question": self.question,
+            "candidates": list(self.candidates),
+            "subject_is_producer": self.subject_is_producer,
+            "node_id": self.node_id,
+            "choices": [
+                {
+                    "candidate": candidate,
+                    "declaration": self.declaration_for(candidate),
+                }
+                for candidate in self.candidates
+            ],
+        }
+
+
+@dataclass(frozen=True)
 class DesignGraph:
     schema: ArtifactSchema
     source_ir_schema_version: str
@@ -247,6 +299,9 @@ class DesignGraph:
     nodes: Tuple[GraphNode, ...]
     edges: Tuple[GraphEdge, ...]
     objects: Tuple[ObjectRecord, ...]
+    #: Connections the design has not made — empty unless the caller
+    #: supplied them (see :func:`build_design_graph`).
+    open_decisions: Tuple[OpenDecision, ...] = ()
 
 
 # ── Construction helpers ─────────────────────────────────────────────────
@@ -281,6 +336,7 @@ def build_design_graph(
     *,
     latency_by_instance: Optional[Dict[str, Any]] = None,
     verification_flow_entry_points: Optional[Dict[str, str]] = None,
+    open_decisions: Optional[Sequence[OpenDecision]] = None,
     source_roots: Optional[Sequence["str | Path"]] = None,
 ) -> DesignGraph:
     """Build a ``DesignGraph`` projection of *project*.
@@ -299,6 +355,12 @@ def build_design_graph(
     ("this flow's declared entry point is this module"), never rendered
     or labeled as proof of behavioral coverage.
 
+    *open_decisions*: optional :class:`OpenDecision` list — the connections
+    the design has not made and the candidates for each, as
+    ``forge.project.discovery`` reported them. Supplied by the caller for
+    the same reason latency and verification data are: this module projects
+    and enriches, it never resolves topology itself.
+
     *source_roots*: paths every absolute source-file path is made
     portable against (``forge.core.utils.portable_path.portable_display_path``)
     — closes the absolute-path leak at construction time rather than
@@ -308,6 +370,7 @@ def build_design_graph(
     roots = [Path(r) for r in (source_roots or [])]
     latency_by_instance = latency_by_instance or {}
     verification_flow_entry_points = verification_flow_entry_points or {}
+    open_decisions = tuple(open_decisions or ())
 
     instance_module = {inst.id: inst.module for inst in design.instances}
     module_by_name = {m.name: m for m in design.modules}
@@ -541,12 +604,15 @@ def build_design_graph(
         })
     if verification_flow_entry_points:
         overlay_hashes["verification"] = _hash_json(dict(sorted(verification_flow_entry_points.items())))
+    if open_decisions:
+        overlay_hashes["authoring"] = _hash_json([d.to_dict() for d in open_decisions])
 
     return DesignGraph(
         schema=DESIGN_GRAPH_SCHEMA,
         source_ir_schema_version=project.schema_version,
         source_ir_content_hash=ir_content_hash(project),
         overlay_hashes=overlay_hashes,
+        open_decisions=open_decisions,
         nodes=tuple(nodes),
         edges=tuple(edges),
         objects=tuple(objects),

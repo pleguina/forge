@@ -138,11 +138,10 @@ def load_verify_flow_entries(verify_design_path: Path) -> list[tuple[str, str | 
 # ---------------------------------------------------------------------------
 
 def build_explorer_overlay_data(design_path: Path, project, args):
-    """Compute the two overlays ``build_design_graph``
-    (``forge.analysis.design_explorer.graph_model``) has always accepted
-    but that neither ``forge report`` nor ``forge inspect`` ever
-    populated with real data before now:
-    ``latency_by_instance`` and ``verification_flow_entry_points``.
+    """Compute the three overlays ``build_design_graph``
+    (``forge.analysis.design_explorer.graph_model``) accepts:
+    ``latency_by_instance``, ``verification_flow_entry_points`` and
+    ``open_decisions``.
 
     Shared by both commands' topology/explorer call sites so they can
     never drift on how these overlays are derived. Both are best-effort:
@@ -163,7 +162,8 @@ def build_explorer_overlay_data(design_path: Path, project, args):
             ``contracts_from``, ``verify_design``, ``results_json``.
 
     Returns:
-        ``(latency_by_instance, verification_flow_entry_points)``.
+        ``(latency_by_instance, verification_flow_entry_points,
+        open_decisions)``.
     """
     latency_by_instance: dict = {}
     try:
@@ -194,4 +194,24 @@ def build_explorer_overlay_data(design_path: Path, project, args):
         except Exception:  # noqa: BLE001
             verification_flow_entry_points = {}
 
-    return latency_by_instance, verification_flow_entry_points
+    # The authoring overlay: the connections this project has not made, from
+    # the same discovery scan `forge check` runs. Only a FORGE project (one
+    # with a forge.yml above the design file) has these — a plugin-layout
+    # design has no such scan to draw on and gets an empty overlay, which
+    # renders exactly as it did before.
+    open_decisions: list = []
+    try:
+        from forge.analysis.design_explorer.authoring_join import (
+            open_decisions_for_project,
+        )
+        from forge.project.paths import find_project_root
+
+        root = find_project_root(design_path)
+        if root is not None:
+            open_decisions = open_decisions_for_project(
+                root, instance_ids=[i.id for i in project.design.instances],
+            )
+    except Exception:  # noqa: BLE001
+        open_decisions = []
+
+    return latency_by_instance, verification_flow_entry_points, open_decisions

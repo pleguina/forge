@@ -69,3 +69,32 @@ render_explorer_html(graph, "out/topology_explorer.html")
 `forge/core/cli/groups/inspect.py` and `forge/core/cli/groups/report.py`
 both call exactly these functions — the CLI is a thin wrapper over this
 same API, not a separate code path.
+
+## Answer an open decision from the explorer
+
+If the project has connections FORGE refused to make — a producer whose
+width and direction fit two different consumers — they appear in the
+sidebar under **Open decisions**. Selecting one shows the question, every
+candidate, and for each candidate two things: the `forge.yml` entry that
+records it, and the equivalent command.
+
+```
+connections:
+- from: classifier.candidate_out
+  to: formatter.candidate_in
+```
+
+```
+forge connect classifier.candidate_out formatter.candidate_in
+```
+
+The page never writes anything and holds no state of its own. The
+candidates it shows are the ones `forge check` reports, computed by the
+same scan; the answer goes into `forge.yml`, and the next `forge adopt` or
+`forge check` reads it from there. That is deliberate: an explorer that
+kept its own idea of the topology would be a second source of truth for the
+design, and the first thing it would do is disagree with the generator.
+
+Open decisions only appear for a project with a `forge.yml` — one adopted
+with `forge adopt`. A design in the older `plugins/<id>/forge/` layout has
+no such scan to draw on, and the explorer renders exactly as before.

@@ -11,9 +11,10 @@ plugin's flow declaration says what it actually covers.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ...ir.model import ResolvedProject
+from ...ir.verification_plan import resolve_entry_point_module
 from ...verification.design_contract import load_verify_design
 
 
@@ -55,18 +56,8 @@ def join_flow_entry_points(
     if not declared_top_module:
         return {}
 
-    module_name = _resolve_module_name(project, declared_top_module)
+    module_name = resolve_entry_point_module(project, declared_top_module)
     if module_name is None:
         return {}
 
     return {flow_name: _module_group_node_id(module_name)}
-
-
-def _resolve_module_name(project: ResolvedProject, ref_or_name: str) -> Optional[str]:
-    for mod in project.design.modules:
-        if mod.name == ref_or_name:
-            return mod.name
-    for mod in project.design.modules:
-        if mod.ip_info_key == ref_or_name:
-            return mod.name
-    return None

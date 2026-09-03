@@ -56,6 +56,13 @@ _HTML_STYLE = """
   button.small{font-size:.78em;padding:.25em .5em;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer}
   button.small:hover{background:#eef2f7}
   .legend-swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.35em}
+  #open-decisions .decision{border:1px solid #f0c987;background:#fffaf0;border-radius:4px;padding:.35em;margin:.3em 0;cursor:pointer}
+  #open-decisions .decision:hover{background:#fff3e0}
+  #open-decisions .decision .subject{font-weight:600;word-break:break-all}
+  #details pre.snippet{background:#f4f6f8;border:1px solid #dde3e9;border-radius:4px;padding:.4em;white-space:pre-wrap;word-break:break-all;font-size:.95em;margin:.3em 0}
+  #details .candidate{border-bottom:1px solid #eee;padding:.35em 0}
+  #details .candidate .name{font-weight:600;word-break:break-all}
+  #details .note{color:#5a6b7a;font-size:.95em}
 </style>
 """
 
@@ -107,6 +114,9 @@ _SIDEBAR_HTML = """
 <button class="small" id="path-successors" disabled>Highlight downstream of selection</button>
 <button class="small" id="path-clear">Clear path highlight</button>
 
+<h2>Open decisions</h2>
+<div id="open-decisions"><span class="empty-hint">none</span></div>
+
 <h2>Legend</h2>
 <div id="legend" style="font-size:.85em;line-height:1.6em;"></div>
 """
@@ -136,6 +146,11 @@ def render_explorer_html(graph: DesignGraph, out_path: "str | Path") -> None:
     edge_count = len(graph.edges)
 
     payload = dataclasses.asdict(graph)
+    # `asdict` gives each OpenDecision's fields; the page needs the
+    # per-candidate declarations too, and those are computed by
+    # `OpenDecision.to_dict` rather than stored — so the page cannot be
+    # composing a declaration of its own shape.
+    payload["open_decisions"] = [d.to_dict() for d in graph.open_decisions]
     data_json = json_script_safe(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
     html = _HTML_SHELL.format(
@@ -574,6 +589,61 @@ _APP_JS = r"""
   function showDetails(html) {
     document.getElementById("details").innerHTML = html;
   }
+
+  // ── Open decisions (authoring) ─────────────────────────────────────
+  // Every candidate shown here was computed by forge.project.discovery and
+  // handed to the graph as data; this renders it and composes the exact
+  // declaration that records a choice. It never decides anything itself,
+  // never writes anything, and holds no state the project file does not —
+  // choosing a candidate produces the forge.yml entry and the `forge
+  // connect` command that writes it.
+  const DECISIONS = GRAPH.open_decisions || [];
+
+  function renderDecisionDetails(decision) {
+    let html = "<h2>Open decision</h2>";
+    html += "<p>" + escapeHtml(decision.question) + "</p>";
+    html += '<p class="note">FORGE will not choose between these for you: '
+         + "each candidate matches on width and direction, so a guess would "
+         + "produce a design that builds and is wrong. Pick one, and it "
+         + "becomes an ordinary declaration in forge.yml.</p>";
+    decision.choices.forEach(function (choice) {
+      const d = choice.declaration;
+      html += '<div class="candidate">';
+      html += '<div class="name">' + escapeHtml(choice.candidate) + "</div>";
+      html += "<div>forge.yml:</div>";
+      html += '<pre class="snippet">connections:\n- from: ' + escapeHtml(d.from)
+           + "\n  to: " + escapeHtml(d.to) + "</pre>";
+      html += "<div>or:</div>";
+      html += '<pre class="snippet">forge connect ' + escapeHtml(d.from) + " "
+           + escapeHtml(d.to) + "</pre>";
+      html += "</div>";
+    });
+    html += '<p class="note">Then re-run <code>forge adopt</code> (or '
+         + "<code>forge check</code>) — the declaration is read from the file, "
+         + "not from this page.</p>";
+    return html;
+  }
+
+  function renderOpenDecisions() {
+    const el = document.getElementById("open-decisions");
+    if (!DECISIONS.length) { return; }
+    el.innerHTML = "";
+    DECISIONS.forEach(function (decision) {
+      const row = document.createElement("div");
+      row.className = "decision";
+      row.innerHTML = '<div class="subject">' + escapeHtml(decision.subject) + "</div>"
+        + "<div>" + decision.candidates.length + " candidate(s)</div>";
+      row.addEventListener("click", function () {
+        showDetails(renderDecisionDetails(decision));
+        if (decision.node_id) {
+          const node = cy.getElementById(decision.node_id);
+          if (node && node.length) { cy.animate({ center: { eles: node } }, { duration: 200 }); }
+        }
+      });
+      el.appendChild(row);
+    });
+  }
+  renderOpenDecisions();
 
   cy.on("tap", "node", function (evt) {
     const n = evt.target;
