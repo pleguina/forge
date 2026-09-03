@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 # Module.timing's flat fields verbatim.
 from ..contracts.config import LatencyDeclaration
 
-IR_SCHEMA_VERSION = "0.2.0"
+IR_SCHEMA_VERSION = "0.3.0"
 
 
 @dataclass
@@ -132,6 +132,16 @@ class ResolvedModuleDefinition:
     kind: str  # 'hls' | 'rtl'
     top: str
     source_files: List[str] = field(default_factory=list)
+    # The module's RTL compile set, absolute and in compile order
+    # (declared ``src`` then ``rtl_packages``), taken from the loader's own
+    # already-resolved ``Module.abs_src``/``abs_rtl_packages`` — never
+    # re-resolved here, so declared-path resolution has exactly one
+    # implementation (``forge.contracts.config.resolve_declared_path``).
+    # Empty for an HLS module: its Verilog is a build artifact discovered
+    # from the build context (an IP package or an HLS solution directory),
+    # not a design fact this IR can state. ``source_files`` above stays the
+    # *declared* list, verbatim as the YAML wrote it.
+    rtl_sources: List[str] = field(default_factory=list)
     contract_path: Optional[str] = None
     ports_resolved: bool = True
     interfaces: List[ResolvedLogicalInterface] = field(default_factory=list)
@@ -144,6 +154,15 @@ class ResolvedModuleDefinition:
     # design.yml entry uses `ref: <canonical>`; None for inline modules
     # that never declared one) — mirrors forge.contracts.config.Module.ip_info_key.
     ip_info_key: Optional[str] = None
+    # This module's position in the design file's own ``modules:`` list.
+    # The stored list is sorted by ``name`` for reproducible
+    # hashing/diffing; this travels with each object so a consumer that
+    # must reproduce declaration order (the build manifest's compile-file
+    # ordering — see ``forge.core.cli.groups.topgen.generate_build_manifest``)
+    # can, without the IR having to give up its own stable sort. Exactly
+    # the role ``ResolvedConnection.emission_order`` already plays for
+    # connections.
+    declaration_order: int = 0
 
 
 @dataclass
@@ -409,18 +428,109 @@ class ResolvedTopLevelPort:
     name: str
     direction: str
     width: int
+    # Which of the generator's lifting rules put this port on the top level
+    # — ``clock``/``reset``/``control_signal``/``global_net``/``external``/
+    # ``debug`` — and, for the two rules that lift one specific pin
+    # (``external``, ``debug``), the instance and pin it reaches. A clock,
+    # reset or global net fans out to many pins and names none of them, so
+    # its ``instance_id``/``instance_port`` stay ``None``.
+    #
+    # This is the join between a top-level port name and the design object
+    # behind it. Verification plans are built on it
+    # (``forge.ir.verification_plan``): a testbench that drives
+    # ``ctrl_level_enable_in`` is driving ``ctrl_level.enable_in``, and the
+    # generator's naming rule is the only thing that knew so.
+    origin: Optional[str] = None
+    instance_id: Optional[str] = None
+    instance_port: Optional[str] = None
+
+
+@dataclass
+class ResolvedVerificationBinding:
+    """One resolved point a testbench drives or observes: a top-level port
+    of the generated DUT, plus the instance pin behind it when the port
+    reaches exactly one (see ``ResolvedTopLevelPort``).
+
+    This is the same port identity generation used — not a second reading
+    of the generated Verilog, and not a re-derivation from
+    ``port_map.yaml``, which is itself rendered from this list.
+    """
+    top_port: str
+    direction: str  # 'in' | 'out'
+    width: int
+    origin: Optional[str] = None
+    instance_id: Optional[str] = None
+    instance_port: Optional[str] = None
+
+
+@dataclass
+class ResolvedVerificationFlow:
+    """One flow from ``design.verification.yml``, resolved against this
+    design.
+
+    A verification contract covers a whole plugin, and a plugin may hold
+    several designs — so the first question about a flow is whether it is
+    about *this* design at all. ``targets_this_design`` answers it from the
+    flow's own ``dut_rtl_source``: a flow whose DUT is this run's generated
+    top level, or whose entry point is one of this design's modules, is
+    this design's flow. Anything else gets ``targets_this_design=False``
+    and a ``note`` saying what it is about instead — recorded rather than
+    dropped, because "this contract's other flows go elsewhere" is worth
+    being able to see.
+
+    ``dut_kind`` is ``generated_top`` (the DUT is the structural top FORGE
+    just wrote), ``module`` (one module's own RTL, typically an HLS unit
+    flow), or ``other``.
+
+    ``entry_point_module``/``entry_point_instances`` resolve the declared
+    ``top_module`` to a real IR module and its instances — matched against
+    both the design's module name and its ``ip_info_key`` (a flow declares
+    the ``modules.yml`` ref, which is not always the design.yml name).
+
+    ``unresolved_reason`` is set only for a flow that *is* about this design
+    and still doesn't line up — a DUT directory that is this design's own
+    output while the flow elaborates a different top-level module, say.
+    That is a configuration error worth reporting; a flow about another
+    design is not.
+    """
+    name: str
+    kind: str
+    backend: str
+    declared_top_module: str
+    dut_rtl_source: str = ""
+    dut_kind: str = "other"
+    targets_this_design: bool = False
+    entry_point_module: Optional[str] = None
+    entry_point_instances: List[str] = field(default_factory=list)
+    dataset: Optional[str] = None
+    stimulus_mode: Optional[str] = None
+    note: Optional[str] = None
+    unresolved_reason: Optional[str] = None
 
 
 @dataclass
 class ResolvedVerificationPlan:
-    """Placeholder for verification planning/bindings.
+    """What verification drives, observes and clocks, resolved from this
+    same IR rather than re-derived from the design configuration.
 
-    Deliberately unpopulated in this slice — ``populated`` is always
-    ``False`` here so consumers can tell "not yet migrated" apart from
-    "migrated and genuinely empty."
+    ``populated`` stays ``False`` for an IR built with no verification
+    contract in reach (``forge inspect`` on a design that has none, a
+    pre-generation IR with no top-level ports yet), so a consumer can still
+    tell "nothing to plan" apart from "planned, and genuinely empty".
+
+    ``stimulus``/``observation`` describe the *generated top level* as the
+    DUT — the case a generated testbench binds against. A flow whose DUT is
+    one HLS module's own RTL is recorded in ``flows`` with its entry point
+    resolved, but its ports are that module's, not the top level's, and are
+    not listed here.
     """
     populated: bool = False
     note: str = "Verification planning is not yet migrated to the canonical IR."
+    flows: List[ResolvedVerificationFlow] = field(default_factory=list)
+    stimulus: List[ResolvedVerificationBinding] = field(default_factory=list)
+    observation: List[ResolvedVerificationBinding] = field(default_factory=list)
+    clocks: List[str] = field(default_factory=list)
+    resets: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -430,6 +540,13 @@ class ResolvedDesign:
     interface contracts without touching generator- or verify-specific
     logic."""
     name: str
+    # The generated top level's own module name (``--top-name``, default
+    # ``algo_top``). Like ``top_ports``, it is a result of running the
+    # generator, so a pre-generation IR (``forge inspect``) leaves it
+    # ``None``. Verification planning needs it: a flow declares which
+    # top-level module its testbench elaborates, and nothing else in the
+    # IR states what that module is called.
+    top_module: Optional[str] = None
     modules: List[ResolvedModuleDefinition] = field(default_factory=list)
     instances: List[ResolvedInstance] = field(default_factory=list)
     connections: List[ResolvedConnection] = field(default_factory=list)

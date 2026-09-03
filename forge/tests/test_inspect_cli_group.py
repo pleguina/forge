@@ -112,7 +112,7 @@ def test_inspect_emit_ir_writes_exactly_the_requested_file(
     assert result.returncode == 0, result.stdout + result.stderr
     assert out_path.exists()
     payload = json.loads(out_path.read_text())
-    assert payload["schema_version"] == "0.2.0"  # kind-vocabulary expansion
+    assert payload["schema_version"] == "0.3.0"  # module compile set + declaration order
     # Nothing else was written.
     assert _tree_snapshot(tmp_path) == frozenset({"nested", "nested/design.ir.json"})
 

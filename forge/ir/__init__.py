@@ -16,11 +16,14 @@ from .model import (
     ResolvedResetDomain,
     ResolvedTopLevelPort,
     ResolvedTransformation,
+    ResolvedVerificationBinding,
+    ResolvedVerificationFlow,
     ResolvedVerificationPlan,
     SourceLocation,
 )
 from .build import assemble_project_ir, build_project_ir, build_project_ir_with_match_report
 from .project import project_to_conn_map
+from .verification_plan import build_verification_plan, port_divergences
 from .serialize import content_hash, diff_projects, to_json_dict, to_json_str
 from .provenance import (
     PROVENANCE_SCHEMA_VERSION,
@@ -59,7 +62,11 @@ __all__ = [
     "ResolvedResetDomain",
     "ResolvedTopLevelPort",
     "ResolvedTransformation",
+    "ResolvedVerificationBinding",
+    "ResolvedVerificationFlow",
     "ResolvedVerificationPlan",
+    "build_verification_plan",
+    "port_divergences",
     "SourceLocation",
     "build_project_ir",
     "build_project_ir_with_match_report",

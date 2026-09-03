@@ -29,7 +29,7 @@ from forge.generation.validation import validate_design, validate_registry
 from forge.ir.build import assemble_project_ir, build_tie_off_connections
 from forge.ir.model import ResolvedTopLevelPort
 from forge.ir.project import project_to_conn_map
-from forge.ir.serialize import to_json_dict
+from forge.ir.serialize import content_hash as ir_content_hash_of, to_json_dict
 from forge.core.diagnostics import ATGDiagnosticReport
 from forge.core.stale_detection import (
     check_top_gen_staleness,
@@ -135,7 +135,9 @@ def _filter_unaccounted(port_list, patterns):
     return unaccounted
 
 
-def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) -> dict:
+def _compute_maturity_summary(
+    cfg, match_report, report: Optional[dict] = None, *, ir_content_hash: Optional[str] = None,
+) -> dict:
     """Module/connection/port maturity summary — factored out of
     ``cmd_gen_top``'s inline ``maturity`` dict
     so ``forge inspect`` can share it without running the generator.
@@ -147,6 +149,13 @@ def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) 
     than fabricated, since they cannot be known without the generator's
     own port report. Module/connection/wiring-method counts are knowable
     from *cfg*/*match_report* alone and always populate.
+
+    *ir_content_hash* is the canonical IR this summary describes — every
+    generated report records which resolved design it was built from
+    (Phase G4), so a report found on disk months later can be tied back to
+    an exact design rather than to a filename and a timestamp. Optional
+    because a caller without a ``ResolvedProject`` in hand must be able to
+    leave it honestly absent rather than invent one.
     """
     summary: dict = {
         "modules": {
@@ -163,6 +172,7 @@ def _compute_maturity_summary(cfg, match_report, report: Optional[dict] = None) 
             "compat_mode_names": sorted(match_report.compat_mode_modules),
         },
         "connections": dict(match_report.wiring_method_counts),
+        "ir_content_hash": ir_content_hash,
     }
 
     if report is None:
@@ -207,6 +217,10 @@ def render_maturity_markdown(maturity: dict) -> str:
     if connections:
         conn_str = ", ".join(f"{k}={v}" for k, v in connections.items())
         lines.append(f"- **connections**: {conn_str}")
+
+    ir_hash = maturity.get("ir_content_hash")
+    if ir_hash:
+        lines.append(f"- **resolved design (IR content hash)**: `{ir_hash}`")
 
     ports = maturity.get("ports")
     if ports is None:
@@ -308,8 +322,123 @@ def validate_generated_contracts(
     )
 
 
+# Which framework support RTL each canonical-IR transformation kind needs.
+# The transformation kinds are the IR's own vocabulary
+# (forge.ir.model.ResolvedTransformation) — a kind with no RTL of its own
+# (fanout, gather_scatter, tie_off, the reserved adapter kinds) is simply
+# absent from this map rather than mapped to nothing.
+_SUPPORT_RTL_BY_TRANSFORMATION = {
+    "pipeline_register": "RegisterStage.v",
+    "latency_delay":     "signal_delay.v",
+    "slr_crossing":      "slr_crossing_delay.v",
+    "cdc_synchronizer":  "cdc_sync2ff.v",
+    "pulse_sync":        "cdc_pulse_sync.v",
+    "mailbox_transfer":  "cdc_mailbox.v",
+    "async_fifo":        "cdc_async_fifo.v",
+    "reset_synchronizer": "cdc_reset_sync.v",
+}
+
+
+def _support_rtl_needed(project) -> "list[str]":
+    """The framework support-RTL filenames this design's *resolved*
+    transformations require, in ``_SUPPORT_RTL_BY_TRANSFORMATION``'s
+    declaration order (stable regardless of connection ordering).
+
+    Read from the canonical IR rather than re-scanned out of
+    ``cfg.connections``/``cfg.reset_domains``, which is what this function
+    replaced: the generator emits a RegisterStage/signal_delay/cdc_*
+    instance per *resolved* connection, so a declared ``register_stages:``
+    on a module pair whose ports never matched produces no instance — and
+    used to produce a manifest entry anyway. The IR states the
+    transformations that were actually generated, so the compile list now
+    matches the RTL.
+
+    Reset synchronizers are domain-keyed, not connection-keyed
+    (``ResolvedResetDomain.transformations``) — a reset crossing has no
+    connection to attach to.
+    """
+    kinds = {
+        xform.kind
+        for conn in project.design.connections
+        for xform in conn.transformations
+    }
+    kinds.update(
+        xform.kind
+        for domain in project.design.reset_domains
+        for xform in domain.transformations
+    )
+    return [
+        filename
+        for kind, filename in _SUPPORT_RTL_BY_TRANSFORMATION.items()
+        if kind in kinds
+    ]
+
+
+def _discover_verify_design(design_path: Path, args, consumer_root: Path | None) -> Path | None:
+    """The verification contract to resolve the IR's plan against.
+
+    ``--verify-design`` wins; otherwise the conventional sibling location
+    (``<plugin>/forge/verify/design.verification.yml``) is used when it
+    exists — the same discovery ``forge topgen clean`` already performs, so
+    a project doesn't have to name the file twice. ``--no-verify`` skips it.
+    """
+    if getattr(args, "no_verify", False):
+        return None
+    declared = getattr(args, "verify_design", None)
+    if declared:
+        return _resolve_path(declared, consumer_root)
+    candidate = design_path.parent.parent / "verify" / "design.verification.yml"
+    return candidate.resolve() if candidate.exists() else None
+
+
+def _attach_verification_plan(
+    project, design_path: Path, args, consumer_root: Path | None, dut_dir: Path,
+) -> None:
+    """Resolve this design's verification plan onto the IR it just
+    generated from — Phase G3.
+
+    Attached here, after generation, for the same reason ``top_ports`` and
+    the tie-off connections are: the plan's stimulus and observation points
+    *are* the generated top level's ports, which only exist once the
+    generator has run. ``forge inspect``'s pre-generation IR therefore
+    carries no plan, exactly as it carries no top-level ports.
+
+    A contract that fails to load is reported and skipped rather than
+    failing the build: verification planning is a description of what was
+    generated, and a broken verification contract must not stop the RTL
+    from being written. Whoever runs `forge verify` gets the same load
+    error from the loader that owns it.
+    """
+    from forge.ir.verification_plan import build_verification_plan
+
+    verify_design = _discover_verify_design(design_path, args, consumer_root)
+    contract = None
+    if verify_design and verify_design.exists():
+        try:
+            from forge.verification.design_contract import load_verify_design
+
+            contract = load_verify_design(verify_design)
+        except Exception as e:  # noqa: BLE001 - never fail generation for this
+            print(f"  ⚠️  verification plan not resolved: {e}")
+
+    plan = build_verification_plan(
+        project, contract, dut_dir=dut_dir, consumer_root=consumer_root,
+    )
+    project.design.verification_plan = plan
+    if plan.populated:
+        mine = [fl for fl in plan.flows if fl.targets_this_design]
+        print(
+            f"  ✓ Verification plan: {len(mine)} of {len(plan.flows)} declared "
+            f"flow(s) target this design, {len(plan.stimulus)} stimulus / "
+            f"{len(plan.observation)} observation port(s)"
+        )
+        for fl in plan.flows:
+            if fl.unresolved_reason:
+                print(f"    ⚠️  flow '{fl.name}': {fl.unresolved_reason}")
+
+
 def generate_build_manifest(
-    cfg,
+    project,
     ip_info,
     ip_root,
     algo_top,
@@ -319,7 +448,25 @@ def generate_build_manifest(
     project_root: Path | None = None,
     hls_build_root: Path | None = None,
 ):
-    """Generate the simulation build manifest with all Verilog source paths."""
+    """Generate the simulation build manifest with all Verilog source paths.
+
+    *project* is the canonical IR (``forge.ir.model.ResolvedProject``) this
+    build was generated from — the manifest's whole design-side content
+    (which modules exist, their compile files, which framework support RTL
+    the generated top level instantiates) is read from it, so the manifest
+    can never disagree with the RTL that was emitted from the same IR
+    object. Nothing here re-runs matching or re-resolves a declared path.
+
+    Everything else the manifest carries is *build context* the IR
+    deliberately does not model: where an HLS module's generated Verilog
+    landed (*ip_info*/*ip_root*/*hls_build_root* — an artifact of running
+    the tool, not a fact about the design) and where the framework's own
+    support RTL is checked out (*project_root*).
+
+    The IR's schema version and content hash are recorded in the manifest
+    so a consumer can tell which resolved design a compile list belongs to
+    — the same identity ``design.ir.json`` and ``provenance.json`` carry.
+    """
     import datetime
 
     def find_ip_verilog_dir(top_name):
@@ -335,6 +482,8 @@ def generate_build_manifest(
         "algorithm_top": str(algo_top.resolve()),
         "top_module": algo_top.stem,
         "timestamp": datetime.datetime.now().isoformat(),
+        "ir_schema_version": project.schema_version,
+        "ir_content_hash": ir_content_hash_of(project),
         "verilog_files": [],
         "include_dirs": [],
         "modules": {},
@@ -346,7 +495,11 @@ def generate_build_manifest(
     if hls_build_root is not None:
         manifest["hls_build_root"] = str(hls_build_root.resolve())
 
-    for module in cfg.modules:
+    # Declaration order, not the IR's own name-sorted storage order: the
+    # manifest is a compile list, and its file order is the order the
+    # design file lists its modules in — see
+    # ResolvedModuleDefinition.declaration_order.
+    for module in sorted(project.design.modules, key=lambda m: m.declaration_order):
         module_name = module.name
         module_info = {
             "name": module_name,
@@ -358,33 +511,16 @@ def generate_build_manifest(
 
         verilog_dir = None
 
-        # RTL modules
-        if module.kind == "rtl" and hasattr(module, "src") and module.src:
+        # RTL modules — `rtl_sources` is the IR's already-resolved compile
+        # set (declared `src` then `rtl_packages`, absolute), so no
+        # declared path is resolved a second time here.
+        if module.rtl_sources:
             rtl_files = []
-            rtl_sources = (
-                module.abs_src
-                if getattr(module, "abs_src", None)
-                else [Path(src) for src in module.src]
-            )
-            for src_path in rtl_sources:
-                src_path = Path(src_path)
+            for src_path in (Path(p) for p in module.rtl_sources):
                 if src_path.exists():
                     rtl_files.append(str(src_path.resolve()))
                     if src_path.parent not in [Path(d) for d in module_info["include_dirs"]]:
                         module_info["include_dirs"].append(str(src_path.parent.resolve()))
-
-            if hasattr(module, "rtl_packages") and module.rtl_packages:
-                rtl_packages = (
-                    module.abs_rtl_packages
-                    if getattr(module, "abs_rtl_packages", None)
-                    else [Path(pkg) for pkg in module.rtl_packages]
-                )
-                for pkg_path in rtl_packages:
-                    pkg_path = Path(pkg_path)
-                    if pkg_path.exists():
-                        rtl_files.append(str(pkg_path.resolve()))
-                        if pkg_path.parent not in [Path(d) for d in module_info["include_dirs"]]:
-                            module_info["include_dirs"].append(str(pkg_path.parent.resolve()))
 
             if rtl_files:
                 module_info["verilog_files"] = rtl_files
@@ -454,55 +590,14 @@ def generate_build_manifest(
 
         manifest["modules"][module_name] = module_info
 
-    # ── Framework support RTL: RegisterStage, signal_delay, slr_crossing_delay,
-    #    cdc_sync2ff, and the CDC primitive family
-    #    (cdc_pulse_sync, cdc_mailbox, cdc_async_fifo, cdc_reset_sync) ──
-    # When any connection uses register_stages or delay_cycles, topgen generates
-    # RegisterStage / signal_delay instances in algo_top.v.  Boundary-tagged
-    # delay connections use slr_crossing_delay instead of signal_delay.
-    # cdc: {kind: level_sync|2ff_sync} connections need cdc_sync2ff.
-    # All must be in the compile list for simulation and synthesis.
-    needs_register_stage    = any(getattr(conn, "register_stages", 0) > 0 for conn in cfg.connections)
-    needs_signal_delay      = any(
-        getattr(conn, "delay_cycles", 0) > 0 and not getattr(conn, "boundary", None)
-        for conn in cfg.connections
-    )
-    needs_slr_crossing_delay = any(
-        getattr(conn, "delay_cycles", 0) > 0 and getattr(conn, "boundary", None)
-        for conn in cfg.connections
-    )
-    needs_cdc_sync2ff = any(
-        getattr(conn, "cdc", None) and conn.cdc.get("kind") in ("2ff_sync", "level_sync")
-        for conn in cfg.connections
-    )
-    needs_cdc_pulse_sync = any(
-        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "pulse_sync"
-        for conn in cfg.connections
-    )
-    needs_cdc_mailbox = any(
-        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "mailbox_transfer"
-        for conn in cfg.connections
-    )
-    needs_cdc_async_fifo = any(
-        getattr(conn, "cdc", None) and conn.cdc.get("kind") == "async_fifo"
-        for conn in cfg.connections
-    )
-    needs_cdc_reset_sync = any(
-        rel.get("sync") == "reset_sync" for rel in cfg.reset_domains.values()
-    )
+    # ── Framework support RTL ──
+    # RegisterStage, signal_delay, slr_crossing_delay and the CDC primitive
+    # family are instantiated in the generated top level, so they have to be
+    # in the compile list for simulation and synthesis. Which of them the
+    # design needs is the IR's answer (_support_rtl_needed); *where* the
+    # checkout keeps them is a filesystem question, answered here.
     _search_roots = [r for r in [project_root, ip_root, manifest_output.parent] if r]
-    for target_name, needed in [
-        ("RegisterStage.v",      needs_register_stage),
-        ("signal_delay.v",       needs_signal_delay),
-        ("slr_crossing_delay.v", needs_slr_crossing_delay),
-        ("cdc_sync2ff.v",        needs_cdc_sync2ff),
-        ("cdc_pulse_sync.v",     needs_cdc_pulse_sync),
-        ("cdc_mailbox.v",        needs_cdc_mailbox),
-        ("cdc_async_fifo.v",     needs_cdc_async_fifo),
-        ("cdc_reset_sync.v",     needs_cdc_reset_sync),
-    ]:
-        if not needed:
-            continue
+    for target_name in _support_rtl_needed(project):
         found = None
         for sroot in _search_roots:
             matches = sorted(Path(sroot).rglob(target_name)) if Path(sroot).is_dir() else []
@@ -517,7 +612,10 @@ def generate_build_manifest(
             if parent_str not in manifest["include_dirs"]:
                 manifest["include_dirs"].append(parent_str)
         else:
-            print(f"  ⚠️  {target_name} not found — needed for register_stages/delay_cycles/boundary/cdc")
+            print(
+                f"  ⚠️  {target_name} not found — the generated top level "
+                "instantiates it"
+            )
 
     manifest["verilog_files"] = list(dict.fromkeys(manifest["verilog_files"]))
     manifest["include_dirs"] = list(dict.fromkeys(manifest["include_dirs"]))
@@ -1890,7 +1988,12 @@ def cmd_gen_top(args):
             # both pieces of information exist together; `project` is
             # serialized to design.ir.json further below.
             project.design.top_ports = [
-                ResolvedTopLevelPort(name=p["name"], direction=p["direction"], width=p["width"])
+                ResolvedTopLevelPort(
+                    name=p["name"], direction=p["direction"], width=p["width"],
+                    origin=p.get("origin"),
+                    instance_id=p.get("instance"),
+                    instance_port=p.get("port"),
+                )
                 for p in report.get("top_ports", [])
             ]
 
@@ -1903,10 +2006,17 @@ def cmd_gen_top(args):
             if getattr(args, "strict", False):
                 _strict_port_gate(report, cfg)
 
+            # Before the manifest: the manifest records the IR's content
+            # hash, and both of these are part of the IR's content.
+            project.design.top_module = args.top_name
+            _attach_verification_plan(
+                project, design_path, args, c_root, dut_dir=output.parent,
+            )
+
             manifest_output = output.parent / "build_manifest.json"
             print(f"📦 Generating build manifest: {manifest_output}")
             generate_build_manifest(
-                cfg=cfg,
+                project=project,
                 ip_info=ip_info,
                 ip_root=ip_root,
                 algo_top=output,
@@ -1977,7 +2087,9 @@ def cmd_gen_top(args):
                     )
 
             maturity_output = output.parent / "maturity_report.json"
-            maturity = _compute_maturity_summary(cfg, match_report, report)
+            maturity = _compute_maturity_summary(
+                cfg, match_report, report, ir_content_hash=ir_content_hash_of(project),
+            )
             maturity["port_signature_hash"] = port_sig_hash if port_map_data else None
             maturity_output.write_text(json.dumps(maturity, indent=2) + "\n")
             print(f"  ✓ Maturity report: {maturity_output}")
@@ -2603,6 +2715,15 @@ def register(sub) -> None:
     p_gen.add_argument(
         "--rtl-resource-root", type=Path,
         help="Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}",
+    )
+    p_gen.add_argument(
+        "--verify-design", type=Path,
+        help="design.verification.yml to resolve the IR's verification plan "
+             "against (default: ../verify/design.verification.yml, when present)",
+    )
+    p_gen.add_argument(
+        "--no-verify", action="store_true",
+        help="Skip verification-plan resolution; the emitted IR carries no plan",
     )
     p_gen.add_argument(
         "--dry-run", dest="dry_run", action="store_true", default=False,

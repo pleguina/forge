@@ -225,7 +225,7 @@ def test_gen_top_verilog_full_pipeline(capsys: pytest.CaptureFixture[str], tmp_p
         assert (tmp_path / artifact).exists(), f"missing {artifact}"
 
     ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
-    assert ir_payload["schema_version"] == "0.2.0"  # kind-vocabulary expansion
+    assert ir_payload["schema_version"] == "0.3.0"  # module compile set + declaration order
     assert len(ir_payload["design"]["modules"]) == 1
 
     # design.ir.json's top_ports must be a real, non-empty cross-check
@@ -241,6 +241,53 @@ def test_gen_top_verilog_full_pipeline(capsys: pytest.CaptureFixture[str], tmp_p
         if isinstance(entry, dict) and "name" in entry
     }
     assert top_port_names == port_map_names
+
+
+def test_build_manifest_is_reproducible_from_the_ir_it_records(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Phase G1's acceptance, on a real design: everything the manifest says
+    about the design comes from the IR it names, and it names the IR the
+    same run emitted.
+
+    The manifest's remaining content is build context the IR deliberately
+    doesn't model — where the algo top and the HLS artifacts landed.
+    """
+    output = tmp_path / "algo_top.v"
+
+    result = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "verilog",
+        "--output", str(output),
+        "--build-dir", str(tmp_path / "build"),
+        "--contracts-from", str(MODULES_YML),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    manifest = json.loads((tmp_path / "build_manifest.json").read_text())
+    ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
+
+    # The manifest records which resolved design it belongs to, and it is
+    # this run's own — not a hash of some other build lying around.
+    from forge.ir.deserialize import from_json_dict
+    from forge.ir.serialize import content_hash
+
+    project, _notes = from_json_dict(ir_payload)
+    assert manifest["ir_content_hash"] == content_hash(project)
+    assert manifest["ir_schema_version"] == ir_payload["schema_version"]
+
+    # Modules: the same set, in the design file's own declaration order.
+    ir_modules = sorted(project.design.modules, key=lambda m: m.declaration_order)
+    assert list(manifest["modules"]) == [m.name for m in ir_modules]
+    for mod in ir_modules:
+        entry = manifest["modules"][mod.name]
+        assert entry["top"] == mod.top
+        assert entry["kind"] == mod.kind
+        if mod.rtl_sources:
+            # Every RTL file in the manifest is one the IR resolved; the
+            # manifest drops any that don't exist on disk, so this is a
+            # subset check in that direction only.
+            assert set(entry["verilog_files"]) <= set(mod.rtl_sources)
 
 
 def test_gen_top_verilog_emits_tie_off_connection_for_an_open_input(
@@ -321,11 +368,12 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
     same design from scratch — proving the build_project_ir/assemble_project_ir
     split didn't silently diverge behavior between the two call paths.
 
-    One documented exception: `top_ports` is populated
-    from the generator's own report *after* generation runs, so gen-top's
-    IR has it and a fresh, generation-free build_project_ir() call never
-    can — compared separately below rather than folded into the hash
-    comparison.
+    Three documented exceptions, all of the same kind: `top_ports`,
+    `top_module` and `verification_plan` are populated *after* generation
+    runs (the first two from the generator's own report, the third from the
+    verification contract resolved against it), so gen-top's IR has them
+    and a fresh, generation-free build_project_ir() call never can — reset
+    below rather than folded into the hash comparison.
     """
     output = tmp_path / "algo_top.v"
     modules_yml_abs = str(MODULES_YML)
@@ -344,8 +392,16 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
 
     ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
     assert ir_payload["design"]["top_ports"]  # gen-top populated it
+    assert ir_payload["design"]["top_module"] == "algo_top"
+    from dataclasses import asdict
+
+    from forge.ir.model import ResolvedVerificationPlan
+
     gentop_design = dict(ir_payload["design"])
-    gentop_design["top_ports"] = []  # strip before comparing (see docstring)
+    # Reset the three post-generation fields before comparing (see docstring).
+    gentop_design["top_ports"] = []
+    gentop_design["top_module"] = None
+    gentop_design["verification_plan"] = asdict(ResolvedVerificationPlan())
     # Mirror forge.ir.serialize._canonical_design_json's portable-hash rewriting
     # here too — `source` and any absolute module contract_path/
     # source_files must be excluded/relativized the same way content_hash()
@@ -369,6 +425,8 @@ def test_gen_top_design_ir_matches_fresh_inspect(capsys: pytest.CaptureFixture[s
             mod["contract_path"] = _portable(mod["contract_path"])
         if mod.get("source_files"):
             mod["source_files"] = [_portable(s) for s in mod["source_files"]]
+        if mod.get("rtl_sources"):
+            mod["rtl_sources"] = [_portable(s) for s in mod["rtl_sources"]]
     gentop_hash = hashlib.sha256(
         json.dumps(
             {"schema_version": ir_payload["schema_version"], "design": gentop_design},
