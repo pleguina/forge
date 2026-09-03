@@ -323,6 +323,11 @@ def _gen_top_namespace_from_build_args(args):
         ("hls_metrics", None),
         ("lint", False),
         ("fix_lint", False),
+        # Verification-plan resolution: gen-top discovers the conventional
+        # design.verification.yml when neither is given, which is what
+        # `forge build` wants too.
+        ("verify_design", None),
+        ("no_verify", False),
     ):
         if not hasattr(ns, name):
             setattr(ns, name, default)
