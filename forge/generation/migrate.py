@@ -308,8 +308,9 @@ def apply_legacy_plugin_layout(issue: LayoutIssue) -> List[str]:
         text = target.read_text()
         lines = text.splitlines(keepends=True)
         kept = [
-            l for l in lines
-            if "_FW_PYTHON" not in l and not ("sys.path" in l and "framework/verify/python" in l)
+            line for line in lines
+            if "_FW_PYTHON" not in line
+            and not ("sys.path" in line and "framework/verify/python" in line)
         ]
         target.write_text("".join(kept))
         actions.append(f"removed _FW_PYTHON sys.path block from {target}")

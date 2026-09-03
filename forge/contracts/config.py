@@ -389,19 +389,20 @@ class Connection:
     # The data on this connection *enters the design at the source node* —
     # through one of that node's ``external_in_ports`` — rather than flowing
     # into it from its own predecessors. A node can be both a merge point for
-    # some inputs and an injection point for others (a concentrator that
-    # gathers already-decoded streams while a second detector's raw streams
-    # arrive straight at its top-level ports), and a single scalar node
-    # latency cannot express that: every branch leaving the node inherits the
-    # deepest arrival time among its predecessors, including branches whose
-    # data never traversed that path. Setting this stops the latency
-    # chain-fold at the source node, charging the branch only that node's own
-    # latency, so an injected stream is not billed for an upstream it never
-    # travelled. Found on a real external consumer's topology, where an
-    # RPC stream entering at the concentrator was charged the DT/CSC
-    # decode depth on top of its own alignment delay, reporting a large
-    # phantom mismatch at two downstream merge points on a design whose
-    # paths are in fact aligned.
+    # some inputs and an injection point for others (an aggregator that
+    # gathers already-decoded streams from upstream while a second family of
+    # raw streams arrives straight at its own top-level ports), and a single
+    # scalar node latency cannot express that: every branch leaving the node
+    # inherits the deepest arrival time among its predecessors, including
+    # branches whose data never traversed that path. Setting this stops the
+    # latency chain-fold at the source node, charging the branch only that
+    # node's own latency, so an injected stream is not billed for an upstream
+    # it never travelled. Found on a real external consumer's topology, where
+    # a stream arriving directly at an aggregator's own input ports was
+    # charged the full decode depth of the *other*, genuinely upstream
+    # streams that aggregator gathers, on top of its own alignment delay —
+    # reporting a large phantom mismatch at two downstream merge points on a
+    # design whose paths are in fact aligned.
     external_source: bool = False
 
 @dataclass

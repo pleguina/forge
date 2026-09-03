@@ -397,6 +397,46 @@ class TestResetSyncEmission:
         assert "cdc_reset_sync" not in out.read_text()
 
 
+def _manifest_ir(tmp_path, cfg, *, wired=True):
+    """The canonical IR for *cfg*, as gen-top would hand it to
+    ``generate_build_manifest``.
+
+    ``conn_map`` is passed in explicitly, exactly as the neighbouring
+    ``write_structural_verilog`` tests in this file do — it is the same
+    resolved pin-pair map both the generator and the IR consume, so a
+    manifest built from this IR is a manifest built from what was
+    generated. ``wired=False`` gives the IR of a design whose declared
+    connection matched no ports at all: no resolved connection, therefore
+    no generated transformation, therefore nothing for the manifest to
+    compile.
+    """
+    from forge.contracts.matcher import MatchReport
+    from forge.ir.build import assemble_project_ir
+
+    conn_map = {}
+    if wired:
+        for conn in cfg.connections:
+            conn_map[(conn.from_, conn.to)] = [("data_out", "data_in")]
+
+    design_yml = tmp_path / "design.yml"
+    design_yml.touch()
+    return assemble_project_ir(
+        cfg, design_yml,
+        contracts={}, ip_info_data={},
+        conn_map=conn_map, global_nets={}, match_report=MatchReport(),
+    )
+
+
+def _two_rtl_modules(tmp_path):
+    src = Module(name="src", top="src_top", src=["src.v"])
+    dst = Module(name="dst", top="dst_top", src=["dst.v"])
+    (tmp_path / "src.v").write_text("module src_top(); endmodule\n")
+    (tmp_path / "dst.v").write_text("module dst_top(); endmodule\n")
+    src.abs_src = [tmp_path / "src.v"]
+    dst.abs_src = [tmp_path / "dst.v"]
+    return src, dst
+
+
 def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     """generate_build_manifest's framework-support-RTL search (mirrors the
     existing RegisterStage.v/signal_delay.v/slr_crossing_delay.v pattern)
@@ -404,13 +444,8 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     cdc: {kind: 2ff_sync} — and must NOT include it when nothing does."""
     from forge.core.cli.groups.topgen import generate_build_manifest
 
-    src = Module(name="src", top="src_top", src=["src.v"])
-    dst = Module(name="dst", top="dst_top", src=["dst.v"])
-    (tmp_path / "src.v").write_text("module src_top(); endmodule\n")
-    (tmp_path / "dst.v").write_text("module dst_top(); endmodule\n")
+    src, dst = _two_rtl_modules(tmp_path)
     (tmp_path / "cdc_sync2ff.v").write_text("module cdc_sync2ff(); endmodule\n")
-    src.abs_src = [tmp_path / "src.v"]
-    dst.abs_src = [tmp_path / "dst.v"]
 
     import json
 
@@ -421,7 +456,7 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
         connections=[Connection(from_="src", to="dst", cdc={"kind": "2ff_sync"})],
     )
     generate_build_manifest(
-        cfg_with_cdc, ip_info={}, ip_root=tmp_path,
+        _manifest_ir(tmp_path, cfg_with_cdc), ip_info={}, ip_root=tmp_path,
         algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
         manifest_output=manifest_path, project_root=tmp_path,
     )
@@ -433,12 +468,65 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
         connections=[Connection(from_="src", to="dst")],
     )
     generate_build_manifest(
-        cfg_without_cdc, ip_info={}, ip_root=tmp_path,
+        _manifest_ir(tmp_path, cfg_without_cdc), ip_info={}, ip_root=tmp_path,
         algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
         manifest_output=manifest_path, project_root=tmp_path,
     )
     manifest2 = json.loads(manifest_path.read_text())
     assert not any(f.endswith("cdc_sync2ff.v") for f in manifest2["verilog_files"])
+
+
+def test_build_manifest_omits_support_rtl_for_an_unwired_declaration(tmp_path):
+    """A `cdc:` declared on a module pair whose ports never matched
+    generates no synchronizer instance — so its RTL must not be in the
+    compile list either. The manifest used to scan the raw design config
+    and add it anyway; reading the resolved IR is what closes that gap."""
+    from forge.core.cli.groups.topgen import generate_build_manifest
+
+    src, dst = _two_rtl_modules(tmp_path)
+    (tmp_path / "cdc_sync2ff.v").write_text("module cdc_sync2ff(); endmodule\n")
+
+    import json
+
+    manifest_path = tmp_path / "build_manifest.json"
+    cfg = DesignConfig(
+        part="xcvu13p", clock_period=4.0, modules=[src, dst],
+        connections=[Connection(from_="src", to="dst", cdc={"kind": "2ff_sync"})],
+    )
+    generate_build_manifest(
+        _manifest_ir(tmp_path, cfg, wired=False), ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    manifest = json.loads(manifest_path.read_text())
+    assert not any(f.endswith("cdc_sync2ff.v") for f in manifest["verilog_files"])
+
+
+def test_build_manifest_records_the_ir_it_was_built_from(tmp_path):
+    """Phase G4: a generated report records the IR hash it was built from
+    — the manifest's compile list and `design.ir.json` must be traceable to
+    the same resolved design."""
+    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.ir.serialize import content_hash
+
+    src, dst = _two_rtl_modules(tmp_path)
+
+    import json
+
+    manifest_path = tmp_path / "build_manifest.json"
+    cfg = DesignConfig(
+        part="xcvu13p", clock_period=4.0, modules=[src, dst],
+        connections=[Connection(from_="src", to="dst")],
+    )
+    project = _manifest_ir(tmp_path, cfg)
+    generate_build_manifest(
+        project, ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["ir_content_hash"] == content_hash(project)
+    assert manifest["ir_schema_version"] == project.schema_version
 
 
 @pytest.mark.parametrize("kind,cdc,filename", [
@@ -452,13 +540,8 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
     included when nothing declares that kind."""
     from forge.core.cli.groups.topgen import generate_build_manifest
 
-    src = Module(name="src", top="src_top", src=["src.v"])
-    dst = Module(name="dst", top="dst_top", src=["dst.v"])
-    (tmp_path / "src.v").write_text("module src_top(); endmodule\n")
-    (tmp_path / "dst.v").write_text("module dst_top(); endmodule\n")
+    src, dst = _two_rtl_modules(tmp_path)
     (tmp_path / filename).write_text(f"module {filename[:-2]}(); endmodule\n")
-    src.abs_src = [tmp_path / "src.v"]
-    dst.abs_src = [tmp_path / "dst.v"]
 
     import json
 
@@ -469,7 +552,7 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
         connections=[Connection(from_="src", to="dst", cdc=cdc)],
     )
     generate_build_manifest(
-        cfg_with_cdc, ip_info={}, ip_root=tmp_path,
+        _manifest_ir(tmp_path, cfg_with_cdc), ip_info={}, ip_root=tmp_path,
         algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
         manifest_output=manifest_path, project_root=tmp_path,
     )
@@ -481,7 +564,7 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
         connections=[Connection(from_="src", to="dst")],
     )
     generate_build_manifest(
-        cfg_without_cdc, ip_info={}, ip_root=tmp_path,
+        _manifest_ir(tmp_path, cfg_without_cdc), ip_info={}, ip_root=tmp_path,
         algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
         manifest_output=manifest_path, project_root=tmp_path,
     )
@@ -491,7 +574,10 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
 
 def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
     """cdc_reset_sync.v is needed based on
-    reset_domains.*.sync, not a Connection.cdc declaration."""
+    reset_domains.*.sync, not a Connection.cdc declaration — and the
+    declared domain reaches the manifest through the IR even when no
+    instance resolved into it (which is the real reference-design case:
+    the synchronizer is generated for the domain, not for an instance)."""
     from forge.core.cli.groups.topgen import generate_build_manifest
 
     mod = Module(name="mod", top="mod_top", src=["mod.v"])
@@ -508,7 +594,7 @@ def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
         "rst_slow": {"derived_from": "ap_rst", "ratio": None, "sync": "reset_sync"},
     }
     generate_build_manifest(
-        cfg_with_sync, ip_info={}, ip_root=tmp_path,
+        _manifest_ir(tmp_path, cfg_with_sync), ip_info={}, ip_root=tmp_path,
         algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
         manifest_output=manifest_path, project_root=tmp_path,
     )
@@ -517,7 +603,7 @@ def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
 
     cfg_without_sync = DesignConfig(part="xcvu13p", clock_period=4.0, modules=[mod], connections=[])
     generate_build_manifest(
-        cfg_without_sync, ip_info={}, ip_root=tmp_path,
+        _manifest_ir(tmp_path, cfg_without_sync), ip_info={}, ip_root=tmp_path,
         algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
         manifest_output=manifest_path, project_root=tmp_path,
     )

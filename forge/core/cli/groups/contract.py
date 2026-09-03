@@ -161,7 +161,8 @@ def cmd_infer(args) -> None:
                 print(f"[dry-run] would write {output}")
 
         n_roles = skeleton.count("\n    ") and len(
-            [l for l in skeleton.splitlines() if l.startswith("    ") and l.rstrip().endswith(":")]
+            [line for line in skeleton.splitlines()
+             if line.startswith("    ") and line.rstrip().endswith(":")]
         )
         envelope = CommandEnvelope(
             status="pass",

@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from forge.core.utils.signal_names import is_clock_name, is_reset_name
 import json
 import re
 from collections import defaultdict
@@ -66,7 +68,55 @@ def _base_of(name: str) -> str:
 def _inst(mod: Module, idx: int) -> str:
     return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
 
-def _domain_to_top_level_net(domain_name: str, *, is_clock: bool) -> str:
+#: The clock/reset names this generator has always collapsed onto the single
+#: ``ap_clk``/``ap_rst`` top-level net. Kept exactly as it was, because a
+#: name *outside* it that the design declared as its own domain (``clk_b``)
+#: must keep its own net — that distinction is load-bearing for CDC.
+def _is_standard_clock(name: str) -> bool:
+    return (
+        name in ("clk", "clock", "ap_clk")
+        or name.endswith("_clk") or name.endswith("_ap_clk")
+    )
+
+
+def _is_standard_reset(name: str) -> bool:
+    return (
+        name in ("rst", "reset", "ap_rst", "rst_n")
+        or name.endswith("_rst") or name.endswith("_ap_rst")
+        or name.endswith("_rst_n")
+    )
+
+
+def _collapses_to_global(name: str, *, is_clock: bool, own_nets) -> bool:
+    """Whether this clock/reset pin is driven by the single global net.
+
+    Three cases, and the third is why this exists:
+
+    1. A **standard** name (``clk``, ``ap_clk``, ``*_clk``) always collapses
+       onto ``ap_clk``/``ap_rst``, even when the design also lists it as a
+       domain — that is what ``connect_clock``/``connect_reset`` mean.
+    2. A **non-standard** name the design declared as its own domain
+       (``clk_b``) keeps its own top-level net. Collapsing it would merge
+       two domains the design went out of its way to separate, and CDC
+       synchronizer emission resolves through this same rule so the
+       synchronizer and the instance pin can never disagree.
+    3. A name that reads as a clock or reset by the shared convention but
+       is **neither** standard nor a declared domain — ``pclk``,
+       ``presetn``, ``s_axi_aclk`` — collapses onto the global net. Before
+       this case existed it matched nothing at all and fell through to the
+       unconnected-input path: an APB peripheral's clock was tied to
+       ``1'b0``, in a top level that elaborates perfectly and does nothing.
+    """
+    standard = _is_standard_clock(name) if is_clock else _is_standard_reset(name)
+    if standard:
+        return True
+    reads_as = is_clock_name(name) if is_clock else is_reset_name(name)
+    return reads_as and name not in (own_nets or ())
+
+
+def _domain_to_top_level_net(
+    domain_name: str, *, is_clock: bool, own_nets: "Set[str] | Tuple[str, ...]" = (),
+) -> str:
     """Translate a resolved clock/reset domain identity (the raw port name
     — see forge.contracts.domains.resolve_domain_nets) into the actual
     top-level net name this generator wires it to.
@@ -77,25 +127,29 @@ def _domain_to_top_level_net(domain_name: str, *, is_clock: bool) -> str:
     for clocks; ``rst``/``reset``/``ap_rst``/``rst_n``, or anything ending
     ``_rst``/``_ap_rst``/``_rst_n`` for resets) onto the single literal
     ``ap_clk``/``ap_rst`` top-level port, regardless of which specific
-    variant string a module's contract declared. A non-standard name (e.g.
-    ``clk_b``) becomes its own same-named top-level global net instead.
+    variant string a module's contract declared. A domain with its own
+    declared global net (``clk_b``, a named second clock domain) keeps that
+    net instead — pass those names as *own_nets*, and they win over the
+    collapse.
+
     Used by CDC synchronizer emission to reference the net that actually
-    exists in the generated file, not the raw domain identity string.
+    exists in the generated file, not the raw domain identity string, so it
+    must resolve exactly as the per-instance port mapping does.
+
+    What counts as a clock or reset name is
+    ``forge.core.utils.signal_names``' shared convention, which recognises
+    the fused bus spellings (``pclk``, ``aclk``, ``presetn``, ``aresetn``)
+    the hand-written rule this replaced did not — a peripheral design's
+    ``pclk`` matched nothing and was tied to ``1'b0``.
     """
-    if is_clock:
-        if domain_name in ("clk", "clock", "ap_clk") or domain_name.endswith("_clk") or domain_name.endswith("_ap_clk"):
-            return "ap_clk"
-    else:
-        if (
-            domain_name in ("rst", "reset", "ap_rst", "rst_n")
-            or domain_name.endswith("_rst") or domain_name.endswith("_ap_rst") or domain_name.endswith("_rst_n")
-        ):
-            return "ap_rst"
-    return domain_name
+    if not _collapses_to_global(domain_name, is_clock=is_clock, own_nets=own_nets):
+        return domain_name
+    return "ap_clk" if is_clock else "ap_rst"
 
 def _reset_net_for_domain(
     domain_name: "str | None",
     reset_sync_domains: Dict[str, Dict[str, Any]],
+    own_nets: "Set[str] | Tuple[str, ...]" = (),
 ) -> str:
     """Resolve a module's reset domain to the net that actually carries a
     real, synchronized reset.
@@ -115,7 +169,9 @@ def _reset_net_for_domain(
     """
     if domain_name and domain_name in reset_sync_domains:
         return _verilog_ident(f"rst_sync_{domain_name}")
-    return _domain_to_top_level_net(domain_name, is_clock=False) if domain_name else "ap_rst"
+    if not domain_name:
+        return "ap_rst"
+    return _domain_to_top_level_net(domain_name, is_clock=False, own_nets=own_nets)
 
 def _vtype(width: int) -> str:
     """Return Verilog type string: wire for 1-bit, wire [N-1:0] for multi-bit."""
@@ -612,6 +668,43 @@ def write_structural_verilog(
             return "output"
         return None
 
+    def _auto_mapped_global(mod: Module, pname: str, pdir: str) -> str | None:
+        """Whether this port is swallowed by the global clock/reset fan-out.
+
+        ``connect_clock``/``connect_reset`` collapse every clock- and
+        reset-named pin — by the shared convention in
+        ``forge.core.utils.signal_names``, which recognises the fused bus
+        spellings (``pclk``, ``aclk``, ``presetn``, ``aresetn``) this
+        generator's own hand-written test missed — onto the single top-level
+        ``ap_clk``/``ap_rst`` net.
+        That is right for the ordinary case and wrong for one real case: a
+        module with more than one functional clock domain. Tying its three
+        clocks to one net shorts them together silently.
+
+        An explicit ``external_in_ports`` entry is the user saying "this pin
+        is driven from above, not from FORGE's global net", and it wins —
+        an explicit declaration must always beat an implicit name
+        convention. That is what makes a multi-clock module integrable at
+        all: its extra domains surface at the generated top for the
+        enclosing design to drive.
+
+        Both the top-level port declaration loop and the per-instance port
+        mapping loop consult this one predicate, because a port declared by
+        one and not connected by the other is a generated top that does not
+        elaborate.
+        """
+        if _is_user_external(mod, pname, pdir):
+            return None
+        if cfg.connect_clock and _collapses_to_global(
+            pname, is_clock=True, own_nets=global_nets,
+        ):
+            return "clock"
+        if cfg.connect_reset and _collapses_to_global(
+            pname, is_clock=False, own_nets=global_nets,
+        ):
+            return "reset"
+        return None
+
     # ---------- read system.yml → alias maps ------------------------------
     alias_in, alias_out = _parse_system_aliases(system_yml)
 
@@ -687,16 +780,27 @@ def write_structural_verilog(
     # re-parsing it back out of the generated Verilog file. This list has
     # zero influence on `lines`/`emit()` — it only records what's already
     # being decided.
+    #
+    # Each entry carries `origin` (which of this function's six lifting
+    # rules put the port on the top level) and, for the two rules that lift
+    # one specific pin, the `instance`/`port` it reaches. This loop is the
+    # only place that binding is known — the generated Verilog states the
+    # top-level name and the instance connection separately, and nothing
+    # downstream could rejoin them without re-implementing the naming rule
+    # (`<instance>_<pin>`, or a system.yml alias, which follows no rule at
+    # all). Verification planning needs exactly this join: a testbench
+    # drives `ctrl_level_enable_in`, and only this says that pin is
+    # `ctrl_level.enable_in`.
     top_ports: List[Dict[str, Any]] = []
 
     if cfg.connect_clock:
         module_ports.append("input ap_clk")
         declared_names.add("ap_clk")
-        top_ports.append({"name": "ap_clk", "direction": "in", "width": 1})
+        top_ports.append({"name": "ap_clk", "direction": "in", "width": 1, "origin": "clock"})
     if cfg.connect_reset:
         module_ports.append("input ap_rst")
         declared_names.add("ap_rst")
-        top_ports.append({"name": "ap_rst", "direction": "in", "width": 1})
+        top_ports.append({"name": "ap_rst", "direction": "in", "width": 1, "origin": "reset"})
 
     # Add control signals as inputs (only if not generated internally)
     # Check if any module outputs this control signal
@@ -716,7 +820,10 @@ def write_structural_verilog(
             else:
                 module_ports.append(f"input [{sig_config.width-1}:0] {sig_name}")
             declared_names.add(sig_name)
-            top_ports.append({"name": sig_name, "direction": "in", "width": sig_config.width})
+            top_ports.append({
+                "name": sig_name, "direction": "in", "width": sig_config.width,
+                "origin": "control_signal",
+            })
 
     # Add ports for any other global nets (besides clock/reset)
     for gnet_name, binds in global_nets.items():
@@ -727,7 +834,9 @@ def write_structural_verilog(
             # All instances of this signal should be inputs (global signals drive modules)
             module_ports.append(f"input {gnet_name}")
             declared_names.add(gnet_name)
-            top_ports.append({"name": gnet_name, "direction": "in", "width": 1})
+            top_ports.append({
+                "name": gnet_name, "direction": "in", "width": 1, "origin": "global_net",
+            })
 
     # Emit top-level ports.
     # If (inst,pin) has an alias from system.yml, use the framework name; otherwise use <inst>_<pin>.
@@ -735,10 +844,10 @@ def write_structural_verilog(
         for p in ports_by_mod[mod.name]:
             pname, pdir, w = p["name"], p["dir"], int(p["width"])
 
-            # skip any clock/reset-ish externals if top provides global clk/rst
-            if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
-                continue
-            if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
+            # Skip any clock/reset-ish pin the global clk/rst fan-out will
+            # drive — unless it was explicitly declared external, in which
+            # case it needs a top-level port of its own.
+            if _auto_mapped_global(mod, pname, pdir):
                 continue
             # skip any other global nets (e.g., new_event)
             if pname in global_nets:
@@ -776,6 +885,9 @@ def write_structural_verilog(
                     "name": top_port_name,
                     "direction": "in" if ext_dir == "input" else "out",
                     "width": w,
+                    "origin": "external",
+                    "instance": ilabel,
+                    "port": pname,
                 })
 
     # Add DEBUG ports - expose ALL ports of modules marked with debug: true
@@ -787,9 +899,9 @@ def write_structural_verilog(
             pname, pdir, w = p["name"], p["dir"], int(p["width"])
             
             # Skip clock/reset
-            if cfg.connect_clock and pname in ("clk", "clock", "ap_clk"):
+            if cfg.connect_clock and is_clock_name(pname):
                 continue
-            if cfg.connect_reset and pname in ("rst", "reset", "ap_rst", "rst_n"):
+            if cfg.connect_reset and is_reset_name(pname):
                 continue
             
             # Expose each instance's port as debug port
@@ -803,7 +915,10 @@ def write_structural_verilog(
                 # Debug ports are outputs (so we can monitor them)
                 module_ports.append(_port_decl(debug_port_name, "output", w))
                 declared_names.add(debug_port_name)
-                top_ports.append({"name": debug_port_name, "direction": "out", "width": w})
+                top_ports.append({
+                    "name": debug_port_name, "direction": "out", "width": w,
+                    "origin": "debug", "instance": ilabel, "port": pname,
+                })
 
     emit(f"module {top_name} (")
     if module_ports:
@@ -987,14 +1102,15 @@ def write_structural_verilog(
                 pname, pdir, w = p["name"], p["dir"], int(p["width"])
 
                 # clock/reset auto-map (support various naming conventions)
-                if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
+                _global = _auto_mapped_global(mod, pname, pdir)
+                if _global == "clock":
                     # Skip ap_clk connection for clock-free (combinatorial) modules
                     _contract = (contracts or {}).get(mod.name)
                     if _contract and _contract.clock_free:
                         continue
                     pm.append(f"    .{pname}(ap_clk)")
                     continue
-                if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
+                if _global == "reset":
                     pm.append(f"    .{pname}(ap_rst)")
                     continue
 
@@ -1119,9 +1235,9 @@ def write_structural_verilog(
                     pname, pdir, w = p["name"], p["dir"], int(p["width"])
                     
                     # Skip clock/reset
-                    if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
+                    if cfg.connect_clock and is_clock_name(pname):
                         continue
-                    if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
+                    if cfg.connect_reset and is_reset_name(pname):
                         continue
                     
                     # Assign debug port from this instance's port
@@ -1257,10 +1373,10 @@ def write_structural_verilog(
             src_rst_domain = reset_of_module.get(src_mod)
             dst_clk_domain = clock_of_module.get(dst_mod)
             dst_rst_domain = reset_of_module.get(dst_mod)
-            src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True) if src_clk_domain else "ap_clk"
-            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains)
-            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
-            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains)
+            src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True, own_nets=global_nets) if src_clk_domain else "ap_clk"
+            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains, global_nets)
+            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True, own_nets=global_nets) if dst_clk_domain else "ap_clk"
+            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains, global_nets)
 
             for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
@@ -1381,7 +1497,7 @@ def write_structural_verilog(
         emit("  // Reset synchronizers for reset_domains.*.sync: reset_sync declarations")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
             derived_from = rel.get("derived_from")
-            async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False)
+            async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
 
             # The synchronizer's own destination clock: whichever clock
             # domain this reset domain's member instances actually use
@@ -1389,7 +1505,7 @@ def write_structural_verilog(
             # clock domain). Falls back to ap_clk if unresolvable.
             member_mods = [m for m, dom in reset_of_module.items() if dom == name]
             dst_clk_domain = clock_of_module.get(member_mods[0]) if member_mods else None
-            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
+            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True, own_nets=global_nets) if dst_clk_domain else "ap_clk"
 
             rst_sync_net = _verilog_ident(f"rst_sync_{name}")
             emit(f"  // Reset domain {name!r}: real member instances bound to sync_rst_out")
