@@ -83,6 +83,7 @@ packages = [
     "forge.contracts",
     "forge.generation", "forge.generation.generators",
     "forge.hls",
+    "forge.project",
     "forge.verification",
     "forge.analysis",
     "forge.analysis.hls_reports",

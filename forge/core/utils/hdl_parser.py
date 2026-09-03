@@ -90,12 +90,21 @@ def _scan_ports(vhdl_path: Path) -> Dict[str, Tuple[str, int]]:
         direction: 'in', 'out', 'inout'
         width: integer bit width
     """
+    return _scan_ports_text(vhdl_path.read_text())
+
+
+def _scan_ports_text(content: str) -> Dict[str, Tuple[str, int]]:
+    """:func:`_scan_ports` against already-read VHDL text.
+
+    Split out so a caller holding one entity's slice of a multi-entity file
+    (``forge.core.project.hdl_scan``) can scan that slice directly instead of
+    writing it back to a temporary file first.
+    """
     ports: Dict[str, Tuple[str, int]] = {}
     inside = False
     generics: Dict[str, int] = {}  # store generic values if we can find them
 
     # First pass: try to extract generic values
-    content = vhdl_path.read_text()
     generic_section = re.search(r'generic\s*\((.*?)\);', content, re.DOTALL | re.I)
     if generic_section:
         for line in generic_section.group(1).splitlines():
@@ -244,7 +253,17 @@ def _scan_verilog_ports(vlog_path: Path) -> Dict[str, Tuple[str, int]]:
       - Non-ANSI:   module m(a,b); ... input [7:0] a; output b;
       - Parameterized widths: module m #(parameter IN_W=54) (input [IN_W-1:0] din, ...);
     """
-    txt = _strip_sv_comments(vlog_path.read_text())
+    return _scan_verilog_ports_text(vlog_path.read_text())
+
+
+def _scan_verilog_ports_text(source: str) -> Dict[str, Tuple[str, int]]:
+    """:func:`_scan_verilog_ports` against already-read Verilog text.
+
+    Split out so a caller holding one module's slice of a multi-module file
+    (``forge.core.project.hdl_scan``) can scan that slice directly instead of
+    writing it back to a temporary file first.
+    """
+    txt = _strip_sv_comments(source)
 
     # First, extract parameter values
     params: Dict[str, int] = {}
