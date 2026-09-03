@@ -10,15 +10,23 @@ same commands into a **golden path** (the six you need in order) and
 
 ## The golden path
 
-`forge init my_plugin` runs this entire sequence for you on a new plugin —
-scaffold, validate, generate, simulate, report — and is the fastest way to
-see the whole framework work. Each stage is also a command in its own
-right.
+There are two ways in. Starting from nothing, `forge init my_plugin` runs
+the entire sequence for you on a new plugin — scaffold, validate, generate,
+simulate, report. Starting from a repository you already have,
+`forge adopt .` reads it and builds the project model out of its own
+sources. Either way, each stage is also a command in its own right.
 
 | Command | What it does |
 |---|---|
 | `forge doctor` | Checks the install: Python and FORGE versions, every simulation/synthesis tool on `PATH`, and the resolved location of each framework resource. Read-only, and honest about which tools are optional. |
 | `forge init` | Scaffolds a plugin — topology side and verification side — then chains validate → build → test → report. Skips the simulation stage with a note if no simulator is installed. |
+| `forge adopt` | Reads an existing repository — modules, ports, instantiation graph, clocks, resets, HLS kernels, testbenches, constraints — and writes the project model that follows. Nothing in your tree is moved or rewritten. See [Bring Your Own RTL](getting-started/bring-your-own-rtl.md). |
+| `forge check` | Reports whether *this project* is completely and consistently described — the project-level counterpart to `forge doctor`'s installation check. Every blocker comes with the step that clears it. |
+| `forge next` | The same assessment narrowed to one recommendation, so the workflow does not have to be memorised. |
+| `forge connect` | Records one connection decision — which producer drives which consumer — in `forge.yml`. The non-interactive form of the question `forge adopt` refuses to answer for you. |
+| `forge explain` | A deterministic account of one FORGE decision — why two ports are connected, why a port reads as the clock, what an HLS interface is predicted to be, what a diagnostic code means, or why FORGE refused to decide. |
+| `forge fix` | Applies the repairs the project's own sources prove, and only those. Previews as a diff by default. |
+| `forge migrate` | Brings a whole project up to the schemas this build understands — both project layouts, one preview, one step. Previews as a diff by default. |
 | `forge inspect` | Resolves a design into the canonical IR and prints what it found: modules, instances, connections, clock/reset domains, diagnostics, contract maturity. Never writes unless asked (`--emit-ir`). |
 | `forge build` | Generates the structural top level from a design. `--plan` computes without writing; `--apply` performs the generation. |
 | `forge test` | Prepares and runs a design's verification flows (`check-only`, `prepare`, `run`). |
@@ -48,6 +56,81 @@ single structural top level.
 - **Cross-module CDC** — structural crossing detection and synchronizer
   generation. See [Clock and Reset Domains](concepts/clock-and-reset-domains.md).
 
+## Adopting an existing project
+
+Reaching a first generated design without first writing a module registry,
+a design topology, or one interface contract per module.
+
+- **`forge adopt`** scans a repository FORGE has never seen and writes what
+  follows from it: a concise `forge.yml` you maintain, and a `.forge/`
+  directory holding the expanded module registry, design topology and
+  inferred contracts FORGE maintains. Your own tree is read, never
+  modified.
+- **Known, inferred, ambiguous, unsupported.** A fact the source proves is
+  written. A convention that resolves unambiguously is written *and*
+  recorded with the evidence behind it. Anything with two equally valid
+  readings — two consumers a producer's width and direction both fit — is
+  written nowhere and comes back as a question with every candidate listed.
+- **Limits surface during adoption, not after.** A module with several
+  functional clock domains is reported as outside FORGE's envelope, with
+  the ways forward, and left out of the generated project rather than
+  half-integrated.
+- **Opaque modules** are the way forward FORGE can act on. Declaring
+  `management: opaque` for a module in `forge.yml` integrates it
+  structurally without FORGE claiming to model its internals — the escape
+  hatch for vendor IP, encrypted blocks and anything outside the current
+  envelope. Its clock and reset pins other than the design's own are routed
+  to the generated top level for the enclosing design to drive, rather than
+  collapsed onto one net that would silently short distinct domains
+  together.
+- **Answering the questions.** A decision FORGE will not make can be
+  answered three ways, all of which write the same ordinary declaration to
+  `forge.yml`: edit the file, run `forge adopt --interactive` and answer the
+  questions as they come, or run `forge connect <producer> <consumer>`. A
+  project answered interactively is byte-identical to one hand-edited —
+  there is no interactive state anywhere, and deleting an answer brings the
+  question back.
+- **`forge check` and `forge next`** render one project-health model:
+  sources, contracts, topology, clock/reset, HLS maturity, latency,
+  generated artifacts and verification, with a completion figure and a
+  ranked list of what to do. `--json` emits the same
+  [standard envelope](development/cli_exit_codes.md) as every other
+  command.
+- **Ordinary configuration, not a dialect.** Everything adoption writes is
+  the same format a hand-authored project uses, so `forge topgen validate`,
+  `forge inspect`, `forge build` and `forge report` work on an adopted
+  project unchanged.
+
+## Explaining and repairing
+
+- **`forge explain`** gives a deterministic account of any single decision:
+  a module, a port, a resolved connection, a clock, an HLS kernel, a
+  generated artifact, or a diagnostic code. Connections are explained from
+  the canonical IR's own `MatchingEvidence` — wiring method, widths,
+  coordinates, protocols, cardinality results and every rejected candidate —
+  so the account is what the generators actually consumed, not a
+  reconstruction. Where a design does not resolve, the fallback to source
+  discovery is stated rather than hidden.
+- **A refusal is explained as carefully as a decision.** Asking about an
+  ambiguous producer returns every candidate FORGE considered, why none of
+  them won, and the command that settles it.
+- **`forge fix`** applies only what the sources prove: a contract width the
+  RTL contradicts, a contract missing for a module whose ports are right
+  there, a `.forge/.gitignore` that has gone. A semantic decision is never
+  made here at any level of confidence — not even behind a confirmation
+  prompt — and comes back as work for you instead. Every repair previews as
+  a diff with the evidence behind it.
+- **`forge migrate`** answers the question someone actually has after
+  upgrading FORGE: does my project still work, and what does it need? It
+  finds every schema-bearing file in either project layout, works out what
+  each needs, and previews the whole chain as one diff. It performs no
+  migration itself — each is delegated to the same function
+  `forge topgen migrate` uses, so the two routes cannot diverge — and a
+  migration that *moves files* is reported with the command that performs
+  it rather than performed by a preview command. Dry-run by default,
+  idempotent, and it warns before writing to a project that is not under
+  version control.
+
 ## Interface contracts
 
 The declarations that make wiring deterministic instead of name-guessed.
@@ -63,6 +146,28 @@ The declarations that make wiring deterministic instead of name-guessed.
   [Authoring Topology Contracts](how-to/author-topology-contracts.md).
 - **`forge core verify-contract`** checks a contract against the real built
   IP, so an omitted or drifted field is caught rather than assumed.
+
+## HLS interface maturity
+
+An RTL module's ports are a fact. An HLS module's are a *prediction* from
+its C++ signature until Vitis HLS has synthesised it — a good one, made by
+rules taken from real synthesis, and still a prediction.
+
+- **A maturity ladder**, reported per kernel: `inferred_from_cpp` →
+  `predicted` → `synthesized` → `reconciled` → `verified`. `forge check`
+  reports where each kernel sits; `forge explain hls:<module>` draws the
+  ladder with the module's position marked.
+- **Prediction/synthesis reconciliation.** Once an IP is built, FORGE
+  compares the predicted interface against the one the IP actually exposes
+  and classifies every difference — width, direction, unexpected and
+  missing ports — attaching a cause where it recognises one (a byte-rounded
+  struct member, a handshake pin the block protocol adds). A difference
+  with no known cause is reported unexplained rather than given a
+  plausible-sounding reason.
+- **No vendor toolchain needed to reason about it.** Maturity is read from
+  the filesystem and reconciliation compares two port lists, so all of this
+  runs in CI without Vitis HLS. The tool is required to *produce* the
+  synthesised side, never to interpret it.
 
 ## HLS orchestration
 
@@ -102,7 +207,12 @@ The declarations that make wiring deterministic instead of name-guessed.
 - **Runtime latency and throughput** comparison against simulation probes.
 - **Result plots** from a plugin-defined config, and an aggregated
   **HTML dashboard** (`forge analyze dashboard`).
-- **Visual design explorer** — an interactive topology view. See
+- **Visual design explorer** — an interactive topology view that also
+  shows the design's *open decisions*: a producer with several equally
+  valid consumers, and for each candidate the exact `forge.yml` entry and
+  `forge connect` command that settles it. The page decides nothing and
+  writes nothing — the candidates are `forge check`'s own, and the answer
+  lives in the project file. See
   [Use the Visual Design Explorer](how-to/use-visual-explorer.md).
 
 ## The canonical IR, provenance and reproducibility

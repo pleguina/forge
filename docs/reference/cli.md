@@ -16,9 +16,17 @@ usage: forge [-h] [--version] [--debug] GROUP ...
 FORGE framework CLI — topology generation, HLS build, verification orchestration, and performance analysis
 
 positional arguments:
-  GROUP       Golden path: init | inspect | build | test | report | doctor. Direct stage access:
-              topgen | contract | verify | hls | analyze | framework | core.
+  GROUP       Golden path: init | adopt | check | next | connect | explain | fix | migrate |
+              inspect | build | test | report | doctor. Direct stage access: topgen | contract |
+              verify | hls | analyze | framework | core.
     init      Scaffold a new plugin and chain validate -> build -> test -> report
+    adopt     Scan an existing repository and create a FORGE project from what is in it
+    check     Report whether this project is completely and consistently described
+    next      Say what to do next, and why
+    connect   Declare which producer drives which consumer, in forge.yml
+    explain   Explain one FORGE decision — a connection, an inference, a diagnostic
+    fix       Apply the repairs this project's own sources prove
+    migrate   Bring a whole project up to the schemas this FORGE understands
     inspect   Resolve a design into the canonical IR and inspect it (read-only)
     build     Compute (and optionally apply) a deterministic generation plan
     test      Wrap verification preparation and execution (check-only | prepare | run)
@@ -41,14 +49,24 @@ optional arguments:
 
 Start here — the golden path, in the order you need it:
   init        Scaffold a plugin and run validate -> build -> test -> report
+  adopt       Scan an existing repository and create a project from what is in it
+  check       Report whether this project is completely and consistently described
+  next        Say what to do next, and why
+  connect     Declare which producer drives which consumer
+  explain     Explain one FORGE decision — a connection, an inference, a diagnostic
+  fix         Apply the repairs this project's own sources prove
+  migrate     Bring a project up to the schemas this FORGE understands
   inspect     Resolve a design into the canonical IR and read it back (read-only)
   build       Generate the structural top level from a design
   test        Prepare and run a design's verification flows
   report      Collect topology, latency and results into one report bundle
   doctor      Check the local forge install/environment
 
-`forge init my_plugin` takes an empty directory to a generated top level, a
-passing simulation and an HTML dashboard in one command. Start there.
+Starting from nothing, `forge init my_plugin` takes an empty directory to a
+generated top level, a passing simulation and an HTML dashboard in one
+command. Starting from a repository you already have, `forge adopt .` reads
+it and builds the project model from its own sources — then `forge check`
+and `forge next` tell you what is left to decide.
 
 Direct stage access — the individual stages the commands above orchestrate.
 Reach for these when you need a flag or a stage the golden path doesn't expose:
@@ -69,6 +87,12 @@ artifacts, metrics, next_actions} envelope shape.
 
 Examples — the golden path:
   forge init my_plugin
+  forge adopt .
+  forge check
+  forge next
+  forge explain ATG037
+  forge fix --apply
+  forge migrate
   forge doctor
   forge inspect design.yml --contracts-from modules.yml
   forge build design.yml --contracts-from modules.yml --apply --output algo_top.v
@@ -92,6 +116,32 @@ Examples — direct stage access:
   forge analyze latency-check design.yml --contracts-from modules.yml
   forge analyze dashboard --input out/reports --output out/dashboard
   forge framework import --provider blobfish --abi payload_abi.json --endpoints payload_endpoints.json --out out/
+```
+
+### `forge adopt`
+
+```text
+usage: forge adopt [-h] [--name NAME] [--part PART] [--dry-run] [--force] [--interactive] [--json]
+                   [path]
+
+Read a repository FORGE has never seen — modules, ports, instantiation graph, clocks, resets, HLS
+kernels, testbenches, constraints — and write the project files that follow: forge.yml for you,
+.forge/ for FORGE. Nothing in your tree is moved or rewritten, and nothing FORGE could not
+determine is filled in with a guess.
+
+positional arguments:
+  path               Repository to adopt (default: the current directory)
+
+optional arguments:
+  -h, --help         show this help message and exit
+  --name NAME        Project name (default: the directory name)
+  --part PART        Target device (default: xcvu9p-flga2104-2L-e, a placeholder you can change
+                     later)
+  --dry-run          Show what would be written without writing it
+  --force            Overwrite an existing forge.yml (the .forge/ tree is always regenerated)
+  --interactive, -i  Ask about each decision FORGE will not make for you, and record the answers
+                     in forge.yml (where you can change them)
+  --json             Machine-readable JSON output
 ```
 
 ### `forge analyze`
@@ -272,6 +322,45 @@ optional arguments:
   --json                Machine-readable JSON output
 ```
 
+### `forge check`
+
+```text
+usage: forge check [-h] [--json] [--strict] [path]
+
+Assess one FORGE project: are its sources where it says they are, is every module contracted, does
+its topology resolve without guessing, is it generated, is it verified. Reports every blocker with
+the step that clears it. `forge doctor` checks the installation instead.
+
+positional arguments:
+  path        Project directory (default: the current one; parents are searched for forge.yml)
+
+optional arguments:
+  -h, --help  show this help message and exit
+  --json      Machine-readable JSON output
+  --strict    Exit 1 on warnings as well as blockers
+```
+
+### `forge connect`
+
+```text
+usage: forge connect [-h] [--project PROJECT] [--force] [--dry-run] [--json] producer consumer
+
+Record one connection decision in forge.yml's connections: block — the same declaration `forge
+adopt --interactive` writes when you answer its question, and the same one the visual explorer's
+connect action hands you. Both endpoints must be real ports of managed modules.
+
+positional arguments:
+  producer           Driving endpoint, as module.port
+  consumer           Driven endpoint, as module.port
+
+optional arguments:
+  -h, --help         show this help message and exit
+  --project PROJECT  Project directory (default: search upwards from the cwd)
+  --force            Replace an existing declaration for the same consumer
+  --dry-run          Show the declaration without writing it
+  --json             Machine-readable JSON output
+```
+
 ### `forge contract`
 
 ```text
@@ -371,6 +460,57 @@ optional arguments:
   --json      Machine-readable JSON output instead of the human report.
   --strict    Exit 1 if any check is missing, including optional extras (see
               docs/development/cli_exit_codes.md).
+```
+
+### `forge explain`
+
+```text
+usage: forge explain [-h] [--path PATH] [--json] target
+
+Give a deterministic account of something FORGE decided: why two ports are connected, why a port reads as the clock, what an HLS kernel's interface is predicted to be, what a diagnostic code means, or why FORGE refused to decide at all. Explained from the canonical IR where the design has been resolved, and from source discovery where it has not — the answer says which.
+
+positional arguments:
+  target       What to explain (see the examples below)
+
+optional arguments:
+  -h, --help   show this help message and exit
+  --path PATH  Project directory (default: the current one; parents are searched for forge.yml)
+  --json       Machine-readable JSON output
+
+Targets:
+  forge explain ATG037                  what a diagnostic code means, and where it fired
+  forge explain shaper                  a module: source, ports, contract, connections
+  forge explain shaper.shaped           a port: HDL facts, contract role, what it is wired to
+  forge explain connection:a.q->b.d     a resolved connection's full matching evidence
+  forge explain clock:clk               why FORGE reads a port as the clock
+  forge explain reset:rst_n             the same for a reset, including its active level
+  forge explain hls:regression          an HLS kernel's predicted RTL interface
+  forge explain artifact:.forge/generated/algo_top.v
+                                        what wrote a file, and whether it is still current
+
+An ambiguous name can be disambiguated with an explicit prefix
+(`module:clock` for a module actually called "clock").
+```
+
+### `forge fix`
+
+```text
+usage: forge fix [-h] [--apply] [--dry-run] [--only ONLY] [--json] [path]
+
+Repair what has exactly one right answer: a contract width the RTL contradicts, a missing
+generated contract, a stale top level. Only repairs proven by the project's own sources are
+applied — a semantic decision (which consumer a producer feeds, what family a port carries) is
+never made here, at any level of confidence. Previews by default.
+
+positional arguments:
+  path         Project directory (default: the current one)
+
+optional arguments:
+  -h, --help   show this help message and exit
+  --apply      Write the fixes (default: preview them as a diff)
+  --dry-run    Preview only — the default, accepted explicitly for scripts
+  --only ONLY  Comma-separated fix ids to consider (default: all of them)
+  --json       Machine-readable JSON output
 ```
 
 ### `forge framework`
@@ -570,6 +710,44 @@ optional arguments:
   --results-json RESULTS_JSON
                         Existing versioned results JSON (from a prior forge test run --results-
                         json), for --dot/--svg/--explorer's verification-flow-entry-point overlay
+```
+
+### `forge migrate`
+
+```text
+usage: forge migrate [-h] [--apply] [--dry-run] [--only ONLY] [--json] [path]
+
+Find every schema-bearing file in a project — both the forge.yml + .forge/ layout and the
+plugins/<id>/forge/ one — work out what each needs, and preview the whole chain as one diff.
+Performs no migration itself: each is delegated to the same function `forge topgen migrate` uses,
+so the two routes cannot diverge. Migrations that move files are reported with the command that
+performs them, never performed here.
+
+positional arguments:
+  path         Project directory (default: the current one)
+
+optional arguments:
+  -h, --help   show this help message and exit
+  --apply      Write the migrations (default: preview them as a diff)
+  --dry-run    Preview only — the default, accepted explicitly for scripts
+  --only ONLY  Comma-separated migration ids to consider (default: all of them)
+  --json       Machine-readable JSON output
+```
+
+### `forge next`
+
+```text
+usage: forge next [-h] [--json] [path]
+
+Render this project's health down to its single most urgent step. Same model as `forge check`,
+narrowed to one recommendation so the workflow does not have to be memorised.
+
+positional arguments:
+  path        Project directory (default: the current one)
+
+optional arguments:
+  -h, --help  show this help message and exit
+  --json      Machine-readable JSON output
 ```
 
 ### `forge report`
@@ -796,7 +974,7 @@ usage: forge topgen gen-top [-h] [--consumer-root CONSUMER_ROOT] --mode {vhdl,ve
                             [--xml-stimulus-tool XML_STIMULUS_TOOL] [--event-id EVENT_ID]
                             [--hls-metrics HLS_METRICS] [--contracts-from MODULES_YML] [--strict]
                             [--lint] [--fix-lint] [--rtl-resource-root RTL_RESOURCE_ROOT]
-                            [--dry-run]
+                            [--verify-design VERIFY_DESIGN] [--no-verify] [--dry-run]
                             design
 
 positional arguments:
@@ -838,6 +1016,10 @@ optional arguments:
   --fix-lint            Auto-fix linting issues
   --rtl-resource-root RTL_RESOURCE_ROOT
                         Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}
+  --verify-design VERIFY_DESIGN
+                        design.verification.yml to resolve the IR's verification plan against
+                        (default: ../verify/design.verification.yml, when present)
+  --no-verify           Skip verification-plan resolution; the emitted IR carries no plan
   --dry-run             Validate, resolve IP info, and match ports, then print what would be
                         written without generating any output files.
 ```

@@ -7,6 +7,444 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Added
+- **`forge adopt`, `forge check`, `forge next`** — the new-user workflow
+  from `FORGE_new_user_implementation_plan.md` Milestones 1-3, plus the
+  parts of Milestone 4 (`forge.yml` + `.forge/`) that adoption needs.
+  `forge adopt` scans a repository FORGE has never seen — files, HDL
+  modules and their ports, the instantiation graph, clock/reset
+  candidates, top-level candidates, HLS kernels, testbenches, constraints
+  — and writes the project model that follows: a concise root `forge.yml`
+  the user maintains, and `.forge/{project,contracts}/` holding the
+  expanded module registry, design topology and inferred interface
+  contracts FORGE maintains. Nothing in the user's own tree is moved,
+  renamed or rewritten. `forge check` reports whether one project is
+  completely and consistently described (the project-level counterpart to
+  `forge doctor`'s installation check), and `forge next` renders the same
+  model down to one recommendation. All three emit the standard
+  `CommandEnvelope` under `--json`.
+
+  The behavioural line throughout is the plan's: a fact the source proves
+  is written; a convention that resolves unambiguously is written *and*
+  recorded with its evidence; anything with two equally valid readings is
+  written nowhere and comes back as a question listing every candidate. A
+  producer with two width- and direction-compatible consumers is the
+  worked case — guessing there produces a design that builds, simulates
+  and is wrong. FORGE limitations (a module with several functional clock
+  domains) surface during adoption with the ways forward, and the module
+  is left out rather than half-integrated.
+
+  New `forge/project/` package holding the shared abstractions the plan
+  asks for first: `ProjectPaths` (both the new layout and today's
+  `plugins/<id>/forge/` one, so subsystems can stop hardcoding either),
+  `ProjectDiscovery`/`DiscoveryResult`, `ProjectStatus` (one model,
+  rendered by both `check` and `next` — deliberately not two rule
+  systems), `Evidence` and `Action`. `forge/core/utils/hdl_parser.py`
+  gained text-level port scanners (`_scan_ports_text`,
+  `_scan_verilog_ports_text`) so `forge/project/hdl_scan.py` can read
+  *every* module in a multi-module file, plus the instantiation graph,
+  without duplicating port parsing.
+
+  17 new `ATG030`-`ATG046` diagnostics, all registered in the generated
+  catalogue. New foreign-project fixture
+  (`forge/tests/fixtures/foreign/simple_pipeline`) — a deliberately
+  un-FORGE-shaped repository, the plan's Phase E1 "Project A" — with an
+  end-to-end test taking it from `forge adopt` to a real generated
+  structural top level with no hand-written YAML anywhere. New docs page
+  `docs/getting-started/bring-your-own-rtl.md`.
+
+- **`forge explain`** — Milestone 5 of the same plan, and its guiding
+  principle 3.4 ("explain every automated decision"). Takes a module, a
+  port, a resolved connection, a clock, a reset, an HLS kernel, a generated
+  artifact or a diagnostic code, and returns a deterministic account: the
+  HDL facts, what the contract declares, what the port was wired to, the
+  rule that decided it, and the evidence chain with a confidence no stronger
+  than its weakest link.
+
+  Connections are explained from the canonical IR's own `MatchingEvidence`
+  (wiring method, widths, coordinates, protocols, cardinality results,
+  rejected candidates) — so the account is what the generators actually
+  consumed rather than a reconstruction. Resolution is a pure function of
+  the project configuration, so this works from the moment `forge adopt` has
+  run, with no prior build; a design that does not resolve falls back to
+  source discovery and every explanation reports which of the two it came
+  from. A *refusal* is explained as carefully as a decision: an ambiguous
+  producer returns every candidate weighed, why none won, and the command
+  that settles it. Diagnostic codes are explained from the generated
+  catalogue (never a second copy), work outside any project, and inside one
+  also report where the code fired. `forge check` now prints
+  `Learn: forge explain <code>` under every blocker.
+
+- **`forge fix`** — Milestone 6, deliberately conservative. Applies only
+  repairs the project's own sources *prove*: a contract width the module's
+  RTL contradicts, a contract missing for a module whose ports are right
+  there, a deleted `.forge/.gitignore`, a stale top level (offered as the
+  `forge build` command rather than reimplemented, so no second generator
+  can disagree with the real one). The safety line is drawn at evidence, not
+  confidence — a fix whose evidence is not wholly `deterministic` is not
+  applied, is not offered behind a confirmation prompt, and `Fix.apply()`
+  refuses it outright as a second line of defence. Semantic decisions
+  (assigning a family, choosing between valid consumers) come back as work
+  for the user instead. Previews as a unified diff with its evidence;
+  `--apply` writes; `--only` narrows; `--json` emits the envelope.
+
+  Width corrections are made as line edits rather than a YAML round-trip,
+  so a contract's comments — most of its value to whoever maintains it —
+  survive the repair.
+
+- **Foreign-project corpus** — Milestone 7 / Phase E1. Two more projects
+  join `simple_pipeline`, each covering what the others do not:
+  `peripheral_subsystem` (several source directories, a Makefile and a
+  Vivado TCL script, a VHDL/Verilog mix, conventional bus naming, and a
+  three-clock vendor IP) and `daq_readout` (an existing structural top with
+  four instances of one module, fan-in with per-channel array naming,
+  fan-out to two consumers, a second clock domain). 32 tests, plus three new
+  stages in `ci/fresh_user_check.sh`.
+
+  Written to be adopted, not to be adopted *easily* — and Project B earned
+  its place on the first run by finding four real bugs (see Fixed below).
+  Project C likewise pinned the behaviours that matter at scale: a
+  per-channel array binding is never invented from names, a fan-out is
+  reported rather than resolved, and an ambiguity in one place does not stop
+  FORGE resolving what is clear elsewhere.
+
+- **Instance counts are inferred from the existing top level.** Adoption
+  wrote `instances: 1` for every module regardless of what the design
+  contained, silently dropping three quarters of a four-channel readout
+  chain. `forge.project.hdl_scan` now counts instantiations rather than
+  listing distinct module names, and adoption writes the count the existing
+  structural top proves — recorded as `deterministic` evidence, since it is
+  read from source rather than guessed.
+
+- **Opaque modules** — Phase D2. `management: opaque` under `modules:` in
+  `forge.yml` integrates a module structurally without FORGE claiming to
+  model its internals: the escape hatch for vendor IP, encrypted blocks and
+  anything outside the current envelope. Before this, the diagnostic for a
+  multi-clock module offered "import as an opaque module" as its first
+  suggested way forward and nothing could act on it — the module was simply
+  left out.
+
+  An opaque module's clock and reset pins other than the design's own are
+  routed to the generated top level for the enclosing design to drive. That
+  routing is the whole feature: collapsing three functional clocks onto one
+  `ap_clk` net produces a top level that elaborates perfectly and is
+  silently wrong, which is why such a module could not be integrated at all
+  before. Its clocks are correspondingly *not* candidates for the design's
+  own functional clock — FORGE drives none of them. The declaration is user
+  intent and survives re-adoption; `forge check` reports the module as
+  handled (`ATG047`) rather than as an open question.
+
+- **`forge migrate`** — Phase F4. `forge topgen migrate` already performed
+  the individual migrations well, and asked the user to know which files
+  needed which one; that is the wrong question to put to someone who has
+  just upgraded FORGE and wants to know whether their project still works.
+  This finds every schema-bearing file in either project layout (the
+  `forge.yml` + `.forge/` one and `plugins/<id>/forge/`), works out what
+  each needs, and previews the whole chain as one diff.
+
+  It performs no migration itself: each rule delegates to the function in
+  `forge.generation.migrate` that already owns it, so this route and the
+  file-by-file one are byte-identical and a fix to a rule fixes both. Rules
+  **compose** per file rather than each computing from disk — a contract
+  can need both its schema version declared and a legacy `partition:`
+  wrapped, and writing those independently means the second write discards
+  the first (found by running the new CI stage against the real
+  `trigger_demo`, where it showed up as a migration that was not
+  idempotent). Dry-run by default, idempotent, warns before writing to a
+  project outside version control, and a migration that *moves files* is
+  reported with the command that performs it rather than performed by a
+  preview command.
+
+- **HLS contract maturity and prediction/synthesis reconciliation** —
+  Phase I (I1 and I2). An RTL module's ports are a fact; an HLS module's are
+  a *prediction* from its C++ signature until Vitis HLS has synthesised it.
+  FORGE reported that distinction as one flat warning, which left the
+  interesting question unanswered: how far along is this module, and where
+  exactly did the prediction turn out to be wrong?
+
+  `forge.project.hls_maturity` adds the ladder the plan specifies —
+  `inferred_from_cpp` → `predicted` → `synthesized` → `reconciled` →
+  `verified` — read from what is on disk, plus a reconciliation that
+  compares the predicted interface against the built IP's real one
+  (matched ports, width and direction differences, unexpected and missing
+  ports), with a cause attached where FORGE recognises one. `forge check`
+  reports the ladder position per kernel (`ATG043`) and the differences once
+  an IP exists (`ATG048`); `forge explain hls:<module>` renders the ladder
+  with the module's position marked and the full reconciliation under it.
+
+  Neither needs Vitis HLS installed: maturity is read from the filesystem
+  and reconciliation compares two port lists, so all of it runs in CI
+  without a vendor toolchain. The tool is required to *produce* the
+  synthesised side, never to reason about it.
+
+  An unexplained difference is preferred to a wrong explanation throughout.
+  A zero-width prediction is the predictor reporting that it could not
+  resolve the argument's type at all, and is reported as exactly that
+  rather than as the byte-rounding a naive width comparison would have
+  called it.
+
+- **The build manifest, the verification plan and every generated report
+  now come off the canonical IR** — Phase G, the plan's Milestone 10.
+
+  `generate_build_manifest` re-derived the design from the raw
+  configuration: it re-scanned `cfg.connections` and `cfg.reset_domains` to
+  work out which framework support RTL (`RegisterStage.v`, `signal_delay.v`,
+  the CDC primitive family) the top level needed. The generator answers that
+  question from the *resolved* connections, so the two could disagree — a
+  `register_stages:` declared on a module pair whose ports never matched put
+  the file in the compile list for an instance that was never emitted. The
+  manifest now reads the IR's own `ResolvedTransformation` kinds, and its
+  module list, compile files and ordering come from `ResolvedModuleDefinition`
+  (`rtl_sources`, the loader's already-resolved `abs_src`/`abs_rtl_packages`,
+  and `declaration_order`, which preserves the design file's own compile
+  order the way `emission_order` already preserves connection order). What
+  remains in the manifest is genuine build context the IR deliberately does
+  not model: where an HLS module's Verilog landed, and where the checkout
+  keeps the support RTL. Byte-for-byte identical output on both tool-free
+  reference designs, apart from the two new identity fields.
+
+  Deriving it from the IR immediately found the IR incomplete: a design's
+  declared `reset_domains.<name>.sync: reset_sync` generates a real
+  `cdc_reset_sync` instance, but a domain no instance resolved *into* was
+  dropped from the IR entirely — so the IR could not account for RTL its own
+  generator had emitted. Declared clock and reset domains are now
+  materialized whether or not an instance landed in them.
+
+  **Verification planning** (G3) is real rather than a placeholder.
+  `ResolvedVerificationPlan` now carries the DUT's stimulus and observation
+  points, its clocks and resets, and each declared flow resolved against
+  this design. The load-bearing addition is the *join*: the generator is
+  the only thing that knows a top-level port named `ctrl_level_enable_in`
+  reaches `ctrl_level.enable_in` (the name is minted by its own lifting
+  rule, or by a `system.yml` alias that follows no rule at all), and it now
+  records that with each `ResolvedTopLevelPort` instead of discarding it.
+  Verification gets port identity from the same resolution generation used,
+  rather than reading the generated Verilog a second time.
+
+  Which flows belong to this design is settled by comparing the DUT
+  *directory* a flow declares against the one this run wrote to — never by
+  matching names, since one plugin's verification contract covers several
+  designs and the names routinely differ (vision_pipeline_demo: 1 of 9
+  declared flows). A flow about another design is recorded as exactly that;
+  `unresolved_reason` is reserved for a flow that *is* about this design and
+  still doesn't line up, such as one elaborating a top-level module this run
+  never wrote.
+
+  `forge verify`'s preflight consumes it: when a `design.ir.json` sits
+  beside the DUT's `port_map.yaml`, the two port lists are compared and every
+  difference reported in both directions — the failure that otherwise
+  surfaces mid-simulation as an elaboration error against a port that isn't
+  there. Silent when there is no IR to check against (an older project, a
+  single-module HLS flow), so it only ever adds information.
+
+  **IR schema evolution** (G4). Reading a `design.ir.json` back was a
+  hand-written constructor per dataclass, living in the CLI: every field
+  added to the model had to be added there too, and the one that wasn't came
+  back as a *silently different design* — the field vanished on the
+  round-trip, so the content hash moved and `forge inspect --diff` reported
+  a change to a design nobody had touched. `forge.ir.deserialize` replaces
+  it with three separate things: a compatibility check (a different major is
+  refused, a newer minor is read with its unknown fields ignored), migration
+  (one documented step per boundary that changed the meaning of existing
+  data — today the 0.1.0 `register`/`delay` transformation-kind renames;
+  additive boundaries need none, since a missing field already reads as its
+  default), and a deserializer driven by the model's own field definitions,
+  which therefore cannot drift from it. A migrated IR legitimately does not
+  hash equal to a fresh one, so `diff_projects` now reports both sides'
+  schema versions next to the hashes.
+
+  Every generated report records the IR content hash it was built from —
+  `build_manifest.json` and `maturity_report.json`/`maturity.md` join
+  `provenance.json`, the design-graph artifacts and `forge inspect`'s
+  envelope — so a report found on disk ties back to an exact resolved
+  design rather than to a filename and a timestamp.
+
+  IR schema version 0.2.0 → 0.3.0. Visualization (G2) needed no work: the
+  design explorer has been a projection of `ResolvedProject` since it was
+  written, and its own tests already hold it to that.
+
+- **`forge adopt --interactive`, `forge connect`, and the explorer as an
+  authoring tool** — Phase D4 and Phase J3, the plan's Milestone 13.
+
+  Adoption has always refused to guess and printed the questions it would
+  not answer. Now it can ask them: `--interactive` puts each decision to the
+  user one at a time and records the answers. The constraint the plan sets
+  is the whole design — *all answers must become normal declarative config,
+  no hidden interactive state* — so nothing is resolved in the prompt
+  loop. Every answer is written to `forge.yml` as a declaration the user
+  could have typed themselves, and adoption is then re-run **from that
+  file**. A project answered interactively and one hand-edited are
+  byte-identical (asserted, not asserted-in-a-docstring). Delete the entry
+  and the question comes back.
+
+  That required a home for the answers. `forge.yml` gains `connections:`
+  (which producer drives which consumer) and a per-module `top:` (which C++
+  function is an HLS kernel's top), joining `management: opaque`; discovery
+  now takes the whole set as a `ProjectDecisions` object and *stops asking a
+  settled question* — previously, answering the clock or top-level question
+  by editing `forge.yml` left `forge check` reporting it forever, because
+  discovery never read the file back.
+
+  A declared connection is wired as `deterministic` evidence — not because a
+  name convention matched, but because someone said so — and a declaration
+  naming a port that does not exist is a blocking finding rather than a
+  silently dropped line, since the likeliest cause is a typo in an answer.
+
+  `forge connect <producer> <consumer>` is the same declaration from one
+  command: it validates both endpoints against the real scan (and names the
+  module's actual ports when one is wrong), refuses a second driver for a
+  consumer that already has one unless `--force` replaces it, and is
+  idempotent. All three routes — prompt, command, editor — go through one
+  `apply_answer`, so none can record a decision differently from another.
+
+  The visual explorer becomes an authoring tool with that as its backing.
+  It shows the design's open decisions and, for each candidate, the exact
+  `forge.yml` entry and `forge connect` command that records it. The page
+  computes no candidates of its own: they are `forge.project.discovery`'s
+  questions, handed to `build_design_graph` as an overlay exactly as latency
+  and verification data already are. A page that worked out its own
+  candidates would be proposing connections the rest of FORGE does not know
+  about — and it holds no state the project file does not, which is what
+  the plan means by no private parallel state.
+
+- **The HLS port predictor now says which Vitis HLS releases it has been
+  checked against** — Phase I3.
+
+  HLS port naming moves between tool releases, so a prediction validated
+  against one is evidence about that one and nothing else. The fixture
+  corpus is now version-keyed (`golden/<version>.json`), the predictor
+  inputs live beside it as data (`cases.json`) rather than inside a test,
+  and `forge.hls.tool_matrix` replays every kernel against every recorded
+  release — classifying each difference with the *same*
+  predicted-vs-synthesised reconciliation Phase I2 built for a real built
+  IP, rather than a second comparison that could disagree with it.
+
+  A release with recorded output is `verified` — meaning every difference is
+  accounted for, not that the predictor reproduces every port. A release
+  with none is `untested`, and says so: "FORGE has no synthesis output from
+  this version, so its port predictions are unvalidated here — they may
+  still be right, but nothing has checked". `forge doctor` reports the
+  status of the release on the user's own PATH, and the generated support
+  matrix lists only releases with evidence behind them. Adding a release is
+  a data change.
+
+  Running it against the corpus immediately found three things about 2024.1
+  output the predictor does not reproduce: HLS infers a *dual-port* memory
+  for the `dim=1`-partitioned array (the second `_address1/_ce1/_q1` set —
+  it depends on the loop's access pattern, which a signature-level predictor
+  does not read), it renamed the scalar output `out` to `out_r`, and one
+  `ap_ctrl_none` kernel synthesised with no `ap_clk` pin at all. Each is
+  recorded with its reason and none is turned into a rule: one sample does
+  not establish why HLS renames a port, and an unexplained difference
+  remains preferable to a confidently wrong explanation.
+
+- **`ci/release_artifacts.sh`** — Phase F1/F2, the plan's Milestone 9.
+
+  A release is a set of files someone can download, verify and install six
+  months from now, not a branch that keeps moving. One command now produces
+  that set from a clean tree: it runs the suite (a release cannot be cut
+  from a tree that fails), builds the wheel and source archive, installs the
+  wheel into a fresh venv and smoke-tests it there, and assembles
+  `SHA256SUMS`, `MANIFEST.json`, release notes taken verbatim from this
+  version's `CHANGELOG.md` section, the migration notes, the support matrix,
+  and the environment the build was actually tested in. Nothing in the set
+  is typed by hand, so none of it can drift from the repository.
+
+  The tested-environment list records what was present while the suite ran —
+  a tool that is absent is written down as absent, and the Vitis HLS release
+  is reported with its port-prediction status. It is a record of what was
+  tested, never a claim about anything else.
+
+  Installation docs now tell users to pin a release tag and say plainly why
+  a moving branch is not an install target; the consumer CI template says
+  the same about `FORGE_FRAMEWORK_REF`. Editable installs stay documented
+  for developing FORGE itself.
+
+  Not implemented, and not implementable here: cutting an actual release.
+  That is a tag, a decision, and the external-user trial that
+  `docs/internal/release/go_no_go.md` still lists as open.
+
+### Documentation
+- **The scope table understated verification datasets.** README and
+  `docs/index.md` both said "XML-backed only". That has not been true for
+  some time: `forge.verification.dataset_format` already provides the
+  registered-loader protocol Phase H asks for, with XML *and* JSON loaders
+  registered, and `test_dataset_format.py` already asserts the two produce
+  byte-identical events for the same dataset — the architectural proof that
+  verification is not XML-specific. Corrected to say what is actually true,
+  including what is still the project's own to write (adapters for formats
+  needing domain interpretation: HDF5, ROOT, NumPy).
+
+### Fixed
+- **A peripheral design's clock was tied to ground by the structural
+  generators.** The same species of bug as the discovery one below, in
+  `forge/generation/generators/structural_verilog.py`, and worse: the
+  clock/reset fan-out recognised `clk`, `ap_clk` and anything ending `_clk`,
+  but not the fused bus spellings. An APB block's `pclk` therefore matched
+  *nothing* — not the fan-out, not the named-domain path — and fell through
+  to the unconnected-input branch, emitting `.pclk(1'b0)`. The result is a
+  top level that elaborates cleanly and does nothing. `presetn`,
+  `s_axi_aclk` and `aresetn` were tied to ground the same way.
+
+  The convention was written out by hand in four places that did not agree,
+  so it now lives once in `forge.core.utils.signal_names` (in `core`, which
+  depends on nothing) and is used by both generators and by discovery. The
+  collapse rule is stated once too, covering all three cases explicitly: a
+  standard name always collapses onto the global net; a non-standard name
+  the design declared as its own domain (`clk_b`) keeps its own net, which
+  is load-bearing for CDC; and a name that reads as a clock but is neither —
+  the case that did not exist before — collapses onto the global net rather
+  than falling through to ground.
+
+  Also fixed alongside it: an explicit `external_in_ports` entry now beats
+  the implicit name-convention auto-map. It could not before, because the
+  auto-map ran first and `continue`d, so declaring a clock external had no
+  effect — the prerequisite for opaque modules, and a precedence bug on its
+  own (an explicit declaration must always beat an implicit convention).
+  No reference plugin declares a clock- or reset-named port as external, so
+  every existing design's generated output is unchanged, as the equivalence
+  suites confirm.
+- **Bus-convention clock and reset names went unrecognised** (found by the
+  foreign corpus's Project B on its first adoption). `pclk`, `presetn`,
+  `aclk`, `s_axi_aclk`, `aresetn` and `s_axi_aresetn` have no `clk`/`rst` as
+  a separate `_`-delimited part, and the whole-part comparison in
+  `forge.project.hdl_scan` therefore found *no clock and no reset anywhere*
+  in an ordinary APB/AXI peripheral repository. Matching now also accepts a
+  name part *ending* in a clock/reset token (still not a substring search:
+  `block_count` must not read as a clock).
+
+  The cascade this caused was the more serious half: with only one of its
+  three clocks recognised, a vendor IP read as single-clock, was never
+  flagged as outside FORGE's one-functional-clock-per-module envelope, and
+  was silently integrated with a generated contract — exactly the "silently
+  convert an uncertain guess into contract truth" failure the design forbids.
+- **`is_active_low` missed every prefixed AXI/APB reset.** `aresetn` was
+  recognised but `s_axi_aresetn` and `presetn` were reported active-*high*.
+  Replaced the whole-name comparison with a pattern covering the three real
+  spellings: a trailing `_n`, a leading `n_`, and an `n` fused onto the
+  reset word.
+- **An excluded module's clocks configured the design it was excluded
+  from.** A vendor IP reported as unsupported still contributed its clocks
+  to `forge.yml` and to the "which clock drives the managed design?"
+  question. `DiscoveryResult.managed_clocks`/`managed_resets` are now the
+  single view every caller uses, so an excluded module's signals are still
+  *reported* (they are real) but never configure or raise questions about a
+  design they are not part of.
+- **Agnosticism guard**: `ci/agnosticism_check.sh` had been failing on a
+  `Connection.external_source` comment in `forge/contracts/config.py` whose
+  worked example was written in CMS/OMTF vocabulary ("an RPC stream entering
+  at the concentrator was charged the DT/CSC decode depth"). The code it
+  documents is fully generic; only the example was not. Rewritten in generic
+  terms — an aggregator gathering upstream streams while a second family
+  arrives at its own ports — which keeps the substance and restores the
+  guard, rather than extending the allowlist with detector names the check
+  correctly identified.
+- **Lint**: three pre-existing `flake8` findings in files untouched by this
+  work — an unaligned continuation line in `forge/contracts/cdc.py` and the
+  ambiguous variable name `l` in `forge/core/cli/groups/contract.py` and
+  `forge/generation/migrate.py`. `flake8` over the production packages is
+  now clean, and `CONTRIBUTING.md`'s lint command covers `forge/project`.
+
 ### Fixed
 - **`forge analyze latency-check`**: connections between two multi-instance
   modules wired via a single 1-D `port_map_ranges` entry (`count` matching

@@ -35,7 +35,7 @@ FORGE's public identity for this release is deliberately narrower than
 |---|---|
 | Toolchains | Vivado (structural Verilog/VHDL, Block Design TCL), Vitis HLS, XSim |
 | Simulation backends | `xsim`, `csim`; Verilator is available as a lint tool only, not a simulation backend |
-| Verification datasets | XML-backed only (`design.verification.yml` + XML golden data) |
+| Verification datasets | XML and JSON, behind a registered-loader protocol (`forge.verification.dataset_format.DatasetFormatLoader`) — a further format is a loader registration, not a change to verification. A project-owned adapter protocol (`ProjectDatasetAdapter`) covers interpreting arbitrary external data; adapters for specific formats (HDF5, ROOT, NumPy, binary captures) are the project's to write, not built in |
 | Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect. Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist, gated behind `gen-top --strict` (see [Clock and Reset Domains](docs/concepts/clock-and-reset-domains.md)) |
 | Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see [Contracts and Protocols](docs/concepts/contracts-and-protocols.md)) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
@@ -139,6 +139,10 @@ site under [`docs/`](docs/) (build it locally with `pip install -e "forge[docs]"
 - **[Quickstart](docs/getting-started/quickstart.md)** — five minutes from
   install to a working DUT, using the exact commands CI runs to prove a
   fresh install works.
+- **[Bring Your Own RTL](docs/getting-started/bring-your-own-rtl.md)** —
+  the other way in: point `forge adopt` at a repository that was never laid
+  out for FORGE and reach a generated structural top level without writing
+  a module registry, a design topology or an interface contract by hand.
 - **[Vision Pipeline tutorial](docs/tutorials/vision-pipeline/index.md)** —
   a progressive, 12-chapter, fully worked reference project (mixed HLS/RTL,
   parallel paths, CDC, throughput/backpressure, datasets and golden

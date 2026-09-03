@@ -38,11 +38,35 @@ There is no separately-published PyPI package for FORGE, and there won't
 be one under the name `forge` — that name is already taken on public PyPI
 by an unrelated, actively-maintained project. This is FORGE's permanent
 installation story, not a placeholder waiting for a PyPI slot: install
-directly from this git repository, either in editable mode as above (for
-local development) or as
-`pip install git+https://github.com/pleguina/forge.git@<ref>#subdirectory=forge`
-(the pattern downstream CI consumers use). See `CONTRIBUTING.md`'s
+directly from this git repository. See `CONTRIBUTING.md`'s
 "Distribution: git install, not PyPI" section for the full rationale.
+
+### Install a release, not a branch
+
+Pin a release tag:
+
+```bash
+pip install "git+https://github.com/pleguina/forge.git@v2.0.0#subdirectory=forge"
+```
+
+Every release also publishes a built wheel and source archive with
+checksums, release notes, migration notes, the support matrix, and the
+environment the release was actually tested in. If your organisation
+mirrors artifacts internally, install the wheel directly and verify it
+first:
+
+```bash
+sha256sum -c SHA256SUMS
+pip install forge-2.0.0-py3-none-any.whl
+```
+
+**Do not install from a moving branch.** `@main` is whatever was merged
+most recently: it will change under you, it is not what any release note
+describes, and two machines installing "the same way" a week apart get
+different code. Track a tag, and move deliberately when you choose to.
+Editable installs from a checkout (`pip install -e "forge[dev,parser]"`)
+are for developing FORGE itself — see
+[contributing](../development/contributing.md).
 
 ## System-level tools
 
