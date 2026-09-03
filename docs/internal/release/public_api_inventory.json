@@ -109,7 +109,7 @@
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "DesignGraph",
-      "summary": "DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]')"
+      "summary": "DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]', open_decisions: 'Tuple[OpenDecision, ...]' = ())"
     },
     {
       "kind": "class",
@@ -330,8 +330,20 @@
     {
       "kind": "class",
       "module": "forge.ir",
+      "name": "ResolvedVerificationBinding",
+      "summary": "One resolved point a testbench drives or observes: a top-level port"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
+      "name": "ResolvedVerificationFlow",
+      "summary": "One flow from ``design.verification.yml``, resolved against this"
+    },
+    {
+      "kind": "class",
+      "module": "forge.ir",
       "name": "ResolvedVerificationPlan",
-      "summary": "Placeholder for verification planning/bindings."
+      "summary": "What verification drives, observes and clocks, resolved from this"
     },
     {
       "kind": "class",
@@ -372,6 +384,12 @@
     {
       "kind": "function",
       "module": "forge.ir",
+      "name": "build_verification_plan",
+      "summary": "Resolve *contract*'s flows and this design's testbench-facing ports"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
       "name": "content_hash",
       "summary": "Deterministic sha256 hex digest of the resolved design's content."
     },
@@ -386,6 +404,12 @@
       "module": "forge.ir",
       "name": "explain_staleness",
       "summary": "Compare two provenance manifests and explain, in plain language,"
+    },
+    {
+      "kind": "function",
+      "module": "forge.ir",
+      "name": "port_divergences",
+      "summary": "Compare a DUT's own port list against the plan's, and report every"
     },
     {
       "kind": "function",
@@ -422,6 +446,96 @@
       "module": "forge.ir",
       "name": "write_provenance",
       "summary": ""
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "Action",
+      "summary": "One suggested next step, with enough structure to act on."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "Evidence",
+      "summary": "One recorded reason FORGE reached a conclusion."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "Explanation",
+      "summary": "A deterministic account of one decision."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "Fix",
+      "summary": "One repair, computed but not yet applied."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "ForgeConfig",
+      "summary": "The parsed contents of one ``forge.yml``."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "Migration",
+      "summary": "One *file's* migration, computed but not applied."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "ModuleMaturity",
+      "summary": "One HLS module's position on the ladder, and how it was determined."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "ModulePolicy",
+      "summary": "How the user wants one specific module handled."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "ProjectPaths",
+      "summary": "Every directory a FORGE subsystem is allowed to care about."
+    },
+    {
+      "kind": "class",
+      "module": "forge.project",
+      "name": "Reconciliation",
+      "summary": "The result of comparing a predicted interface with a synthesised one."
+    },
+    {
+      "kind": "function",
+      "module": "forge.project",
+      "name": "explain",
+      "summary": "Explain *target* in the project at (or above) *root*."
+    },
+    {
+      "kind": "function",
+      "module": "forge.project",
+      "name": "find_project_root",
+      "summary": "Walk up from *start* looking for a ``forge.yml``."
+    },
+    {
+      "kind": "function",
+      "module": "forge.project",
+      "name": "plan_fixes",
+      "summary": "Work out every repair available, without writing anything."
+    },
+    {
+      "kind": "function",
+      "module": "forge.project",
+      "name": "plan_migration",
+      "summary": "Work out every migration this project needs, writing nothing."
+    },
+    {
+      "kind": "function",
+      "module": "forge.project",
+      "name": "reconcile",
+      "summary": "Compare a predicted RTL interface against the built IP's real one."
     }
   ]
 }

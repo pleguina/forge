@@ -114,6 +114,32 @@ bumps `forge/pyproject.toml`'s `version`. Update `CHANGELOG.md`: move the
 YYYY-MM-DD` heading, and leave `[Unreleased]` empty at the top for the
 next round of changes.
 
+## Cutting a release
+
+```bash
+bash ci/release_artifacts.sh          # into dist/
+```
+
+It runs the test suite (a release cannot be cut from a tree that fails),
+builds the wheel and source archive, installs the wheel into a clean venv
+and smoke-tests it, then assembles the rest of the artifact set:
+
+| Artifact | Where it comes from |
+|---|---|
+| `forge-<version>-py3-none-any.whl`, `forge-<version>.tar.gz` | `python -m build` |
+| `SHA256SUMS`, `MANIFEST.json` | computed over the set — verify with `sha256sum -c SHA256SUMS` |
+| `RELEASE_NOTES.md` | this version's `CHANGELOG.md` section, verbatim |
+| `MIGRATION.md` | the repository's own migration notes |
+| `support_matrix.md` | the generated support matrix, including validated Vitis HLS releases |
+| `tested_environments.md`, `environment.json` | the tool versions actually present while the suite ran — a tool that is absent is recorded as absent |
+
+Nothing in that set is typed by hand, so none of it can drift from the
+repository. Then tag the commit and attach the directory to the release.
+
+Users install a **tag**, never a branch — see the installation guide
+(`docs/getting-started/installation.md`). `main` is whatever was merged
+most recently; it is not what any release note describes.
+
 ## Commit and PR conventions
 
 - Keep commits scoped to one logical change; the commit message should
