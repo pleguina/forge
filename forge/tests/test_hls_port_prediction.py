@@ -1,27 +1,35 @@
 """The HLS port predictor, checked against real Vitis HLS output.
 
-`forge/tests/fixtures/hls_port_matrix/` holds three C++ top functions
-covering the interface/pragma combinations, and `golden_ports.json` holds
-the exact port list each one synthesises to under Vitis HLS 2024.1. These
+`forge/tests/fixtures/hls_port_matrix/` holds the C++ top functions covering
+the interface/pragma combinations, and `golden/<version>.json` holds the
+exact port list each one synthesises to under that Vitis HLS release. These
 tests assert the predictor reproduces that real output — the rules are
 derived from synthesis, not from documentation, so this fixture is the
 specification.
 
-Regenerating the golden data (needs vitis_hls on PATH):
-    python -m forge.tests.fixtures.hls_port_matrix.regenerate
+They run against the *reference* version (the newest one with recorded
+output). `test_hls_tool_matrix.py` is the other half: it replays the whole
+corpus against **every** recorded version and classifies what differs, which
+is what makes "validated against Vitis HLS X" a statement with evidence
+behind it rather than a claim.
+
+Regenerating the golden data (needs vitis_hls on PATH): see the fixture's
+own README.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from forge.hls.port_prediction import Argument, predict_ports
 
+from forge.hls.tool_matrix import golden_ports, reference_version
+
 FIXTURE = Path(__file__).parent / "fixtures" / "hls_port_matrix"
-GOLDEN = json.loads((FIXTURE / "golden_ports.json").read_text())
+REFERENCE_VERSION = reference_version()
+GOLDEN = golden_ports(REFERENCE_VERSION)
 
 
 def _real(top: str) -> dict:

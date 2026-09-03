@@ -1,13 +1,34 @@
 # HLS port matrix
 
-Three HLS top functions covering the interface/pragma combinations, and the
-**exact port list each one synthesises to** under Vitis HLS 2024.1
-(`golden_ports.json`).
+Five HLS top functions covering the interface/pragma combinations, and the
+**exact port list each one synthesises to**, per Vitis HLS release
+(`golden/<version>.json`).
 
 `forge/hls/port_prediction.py`'s rules are derived from this real output
 rather than from documentation, and `forge/tests/test_hls_port_prediction.py`
 asserts the predictor reproduces it. When the two disagree, this fixture is
 right.
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `src/` | the C++ kernels |
+| `cases.json` | the predictor inputs for each kernel, plus the differences it is documented **not** to reproduce, each with its reason |
+| `golden/<version>.json` | the real synthesised port list per kernel, for that Vitis HLS release |
+
+HLS port naming moves between releases, so a prediction validated against
+one release is evidence about that release and nothing else
+(`forge/hls/tool_matrix.py`). Adding a release is a **data change**:
+synthesise this corpus under it with the script below, drop the port lists
+in as `golden/<version>.json`, and the support matrix, `forge doctor` and
+the generated docs page pick it up. A release with no file here is reported
+as untested — never assumed to work.
+
+The predictor inputs live in `cases.json` rather than inside a test so that
+validating a new release replays *exactly* the inputs the old one was
+replayed with; two copies of those argument lists would make the comparison
+meaningless the first time they drifted.
 
 | Case | Covers |
 |---|---|
@@ -59,7 +80,12 @@ TCL
 done
 ```
 
-Then re-extract `golden_ports.json` from each
-`prj_<top>/sol/syn/verilog/<top>.v` port declaration list. The synthesis
-products themselves are not committed — only the port lists, which are what
-the predictor is checked against.
+Then re-extract the port lists from each
+`prj_<top>/sol/syn/verilog/<top>.v` port declaration list into
+`golden/<version>.json`, keyed by top name. The synthesis products
+themselves are not committed — only the port lists, which are what the
+predictor is checked against.
+
+Run `python -m pytest forge/tests/test_hls_tool_matrix.py` afterwards: it
+replays every kernel against every recorded release and fails on any
+difference the corpus does not already document and explain.

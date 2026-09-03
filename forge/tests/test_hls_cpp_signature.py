@@ -7,15 +7,15 @@ synthesised output these tests check against.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from forge.hls.cpp_signature import parse_signature
 from forge.hls.port_prediction import predict_ports
+from forge.hls.tool_matrix import golden_ports, reference_version
 
 FIXTURE = Path(__file__).parent / "fixtures" / "hls_port_matrix"
 SRC = FIXTURE / "src"
-GOLDEN = json.loads((FIXTURE / "golden_ports.json").read_text())
+GOLDEN = golden_ports(reference_version())
 
 
 def _real(top: str) -> dict:

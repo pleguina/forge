@@ -1,0 +1,284 @@
+{
+  "_comment": [
+    "The predictor inputs for each kernel in src/, alongside the golden",
+    "synthesis output under golden/<vitis-version>.json. Held as data, not",
+    "as code in a test, because validating a new tool version means",
+    "replaying exactly these inputs against that version's output \u2014 two",
+    "copies of the argument lists would make that comparison meaningless",
+    "the first time they drifted. See forge/hls/tool_matrix.py.",
+    "",
+    "unpredicted_prefixes / unpredicted_widths record what the predictor",
+    "documented_gaps record what the predictor is known NOT to reproduce for",
+    "this kernel, each with the reason. A difference they cover is accounted",
+    "for; anything else is a real divergence for that tool version."
+  ],
+  "m_scalars": {
+    "block_protocol": "ap_ctrl_none",
+    "arguments": [
+      {
+        "name": "in_none",
+        "width": 12,
+        "mode": "ap_none"
+      },
+      {
+        "name": "in_vld",
+        "width": 12,
+        "mode": "ap_vld"
+      },
+      {
+        "name": "in_ack",
+        "width": 12,
+        "mode": "ap_ack"
+      },
+      {
+        "name": "in_hs",
+        "width": 12,
+        "mode": "ap_hs"
+      },
+      {
+        "name": "in_stable",
+        "width": 12,
+        "mode": "ap_stable"
+      },
+      {
+        "name": "in_signed",
+        "width": 8,
+        "mode": "ap_none"
+      },
+      {
+        "name": "out_none",
+        "width": 12,
+        "is_output": true,
+        "mode": "ap_none"
+      },
+      {
+        "name": "out_vld",
+        "width": 12,
+        "is_output": true,
+        "mode": "ap_vld"
+      },
+      {
+        "name": "out_ack",
+        "width": 12,
+        "is_output": true,
+        "mode": "ap_ack"
+      },
+      {
+        "name": "out_hs",
+        "width": 12,
+        "is_output": true,
+        "mode": "ap_hs"
+      }
+    ]
+  },
+  "m_arrays": {
+    "block_protocol": "ap_ctrl_hs",
+    "returns_value": true,
+    "return_width": 48,
+    "arguments": [
+      {
+        "name": "grid_full",
+        "width": 12,
+        "dims": [
+          3,
+          4
+        ],
+        "mode": "ap_none",
+        "partition_dim": 0
+      },
+      {
+        "name": "grid_dim1",
+        "width": 12,
+        "dims": [
+          3,
+          4
+        ],
+        "partition_dim": 1
+      },
+      {
+        "name": "line_mem",
+        "width": 12,
+        "dims": [
+          4
+        ]
+      },
+      {
+        "name": "line_fifo",
+        "width": 12,
+        "dims": [
+          4
+        ],
+        "mode": "ap_fifo"
+      },
+      {
+        "name": "st_in",
+        "width": 48,
+        "is_struct": true,
+        "mode": "ap_none"
+      },
+      {
+        "name": "line_out",
+        "width": 12,
+        "dims": [
+          4
+        ],
+        "is_output": true
+      }
+    ]
+  },
+  "m_axi": {
+    "block_protocol": "ap_ctrl_hs",
+    "arguments": [
+      {
+        "name": "strm_in",
+        "width": 12,
+        "dims": [
+          1
+        ],
+        "mode": "axis"
+      },
+      {
+        "name": "strm_out",
+        "width": 12,
+        "dims": [
+          1
+        ],
+        "is_output": true,
+        "mode": "axis"
+      },
+      {
+        "name": "cfg_a",
+        "width": 12,
+        "mode": "s_axilite"
+      },
+      {
+        "name": "status_b",
+        "width": 12,
+        "is_output": true,
+        "mode": "s_axilite"
+      },
+      {
+        "name": "mem",
+        "width": 12,
+        "dims": [
+          4
+        ],
+        "mode": "m_axi"
+      }
+    ],
+    "documented_gaps": [
+      {
+        "reason": "s_axilite and m_axi bundles are not predicted: their port sets depend on address and data widths chosen at synthesis (see forge/hls/port_prediction.py's module docstring)",
+        "prefixes": [
+          "s_axi_",
+          "m_axi_"
+        ],
+        "ports": [
+          "interrupt"
+        ]
+      },
+      {
+        "reason": "with `s_axilite port=return`, block control moves into the AXI-Lite register map \u2014 HLS emits no ap_start/ap_done/ap_idle/ap_ready pins at all, which follows from the same s_axilite bundle this predictor does not model",
+        "ports": [
+          "ap_start",
+          "ap_done",
+          "ap_idle",
+          "ap_ready"
+        ]
+      }
+    ]
+  },
+  "m_structs": {
+    "block_protocol": "ap_ctrl_none",
+    "returns_value": true,
+    "return_width": 48,
+    "arguments": [
+      {
+        "name": "as_scalar",
+        "width": 48,
+        "is_struct": true,
+        "mode": "ap_none"
+      },
+      {
+        "name": "as_array_elem",
+        "width": 16,
+        "dims": [
+          2,
+          2
+        ],
+        "is_struct": true,
+        "mode": "ap_none",
+        "partition_dim": 0
+      },
+      {
+        "name": "o",
+        "width": 12,
+        "is_output": true,
+        "mode": "ap_vld"
+      }
+    ],
+    "documented_gaps": [
+      {
+        "reason": "this kernel synthesised with no ap_clk pin at all, while keeping ap_rst; the predictor emits ap_clk unconditionally. What makes HLS drop the clock here is not established by one sample, so the difference is recorded rather than explained away",
+        "ports": [
+          "ap_clk"
+        ]
+      }
+    ]
+  },
+  "m_dimdefault": {
+    "block_protocol": "ap_ctrl_none",
+    "arguments": [
+      {
+        "name": "a_bare",
+        "width": 12,
+        "dims": [
+          3,
+          4
+        ],
+        "partition_dim": 1
+      },
+      {
+        "name": "b_dim0",
+        "width": 12,
+        "dims": [
+          3,
+          4
+        ],
+        "mode": "ap_none",
+        "partition_dim": 0
+      },
+      {
+        "name": "out",
+        "width": 12,
+        "is_output": true,
+        "mode": "ap_vld"
+      }
+    ],
+    "documented_gaps": [
+      {
+        "reason": "HLS inferred a dual-port memory for the dim=1-partitioned array (a second _address1/_ce1/_q1 set). How many memory ports it infers depends on the access pattern in the function body, which a signature-and-pragma predictor does not read",
+        "ports": [
+          "a_bare_0_address1",
+          "a_bare_0_ce1",
+          "a_bare_0_q1",
+          "a_bare_1_address1",
+          "a_bare_1_ce1",
+          "a_bare_1_q1",
+          "a_bare_2_address1",
+          "a_bare_2_ce1",
+          "a_bare_2_q1"
+        ]
+      },
+      {
+        "reason": "HLS renamed the scalar output `out` to `out_r`. One sample does not establish the rule (`out` is a VHDL reserved word and HLS emits VHDL as well as Verilog), so the rename is recorded here rather than turned into a naming rule the predictor applies to every port",
+        "ports": [
+          "out",
+          "out_ap_vld",
+          "out_r",
+          "out_r_ap_vld"
+        ]
+      }
+    ]
+  }
+}
