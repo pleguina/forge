@@ -199,7 +199,9 @@ def _parse_event_checks(outputs: Dict[str, Any]) -> List[Any]:
     return parse_forge_check_lines(Path(log_path).read_text(errors="replace"))
 
 
-def _regenerate_stimulus_for_event(flow_name: str, event_id: int, flow_dir: Path) -> bool:
+def _regenerate_stimulus_for_event(
+    flow_name: str, event_id: int, flow_dir: Path, dataset_xml: "Path | None"
+) -> bool:
     """Call the plugin's own `tools/gen_stimulus.py::generate_for_flow`
     for *event_id*, regenerating `stimulus_current.svh` before that
     event's simulation.
@@ -219,15 +221,28 @@ def _regenerate_stimulus_for_event(flow_name: str, event_id: int, flow_dir: Path
     `gen_stimulus` module on `sys.path` (e.g. a csim-only flow) — in
     which case the caller proceeds with whatever stimulus is already
     there, same as `forge verify run` always has.
+
+    *dataset_xml* is required (mirrors the plugin's own `generate_for_flow`
+    signature — `flow_name, event_id, xml_path, verify_root` — which this
+    call site previously did not match: it called `generate_for_flow` with
+    only 3 positional args, one of them wrong (a destination path where the
+    function expects the golden XML source), silently omitting the
+    required `verify_root`. That raised a TypeError on every `--event-id`
+    run; found and fixed here). `None` means the caller has no XML to
+    regenerate from (readmemh mode never calls this at all) — regeneration
+    is skipped rather than crashing, same fallback as the no-`gen_stimulus`
+    case above.
     """
     import importlib
 
+    if dataset_xml is None:
+        return False
     try:
         gen_stimulus_mod = importlib.import_module("gen_stimulus")
         generate_for_flow = gen_stimulus_mod.generate_for_flow
     except (ImportError, AttributeError):
         return False
-    generate_for_flow(flow_name, event_id, flow_dir / "stimulus_current.svh")
+    generate_for_flow(flow_name, event_id, dataset_xml, flow_dir.parent)
     return True
 
 
@@ -415,7 +430,9 @@ def cmd_run(args) -> None:
             work_dir = readmemh_work_dir
         else:
             with _maybe_quiet_stdout(json_mode):
-                _regenerate_stimulus_for_event(flow_name, event_id, flow_path.parent)
+                _regenerate_stimulus_for_event(
+                    flow_name, event_id, flow_path.parent, selection.dataset_xml
+                )
             work_dir = flow_path.parent / "xsim_work" / "per_event" / str(event_id)
 
         ctx = _build_runtime_context(
