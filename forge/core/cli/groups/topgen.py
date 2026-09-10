@@ -505,6 +505,7 @@ def generate_build_manifest(
             "name": module_name,
             "top": module.top,
             "kind": module.kind,
+            "ip_info_key": module.ip_info_key,
             "verilog_files": [],
             "include_dirs": [],
         }
@@ -550,11 +551,25 @@ def generate_build_manifest(
                         break
 
             if not verilog_dir and hls_build_root is not None:
+                # The on-disk HLS solution directory is named after the
+                # module's *ip_info_key* (the shared IP/registry name an
+                # HLS run is keyed on), not its design.yml instance name —
+                # e.g. instance `dt` synthesizes under `build_hls/dt_interface/`,
+                # not `build_hls/dt/`. Try ip_info_key first; module_name
+                # stays as a fallback for the (common) case where the two
+                # already coincide, and for older build trees keyed by
+                # instance name directly.
+                build_dir_names = list(dict.fromkeys(
+                    name for name in (module.ip_info_key, module_name) if name
+                ))
                 build_candidates = [
-                    hls_build_root / "build_hls" / module_name / "solution1" / "syn" / "verilog",
-                    hls_build_root / "build_hls" / module_name / "solution1" / "sim" / "verilog",
-                    hls_build_root / module_name / "solution1" / "syn" / "verilog",
-                    hls_build_root / module_name / "solution1" / "sim" / "verilog",
+                    hls_build_root / "build_hls" / name / "solution1" / stage / "verilog"
+                    for name in build_dir_names
+                    for stage in ("syn", "sim")
+                ] + [
+                    hls_build_root / name / "solution1" / stage / "verilog"
+                    for name in build_dir_names
+                    for stage in ("syn", "sim")
                 ]
                 for candidate in build_candidates:
                     if candidate.exists() and candidate.is_dir():

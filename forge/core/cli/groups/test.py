@@ -222,18 +222,31 @@ def _regenerate_stimulus_for_event(
     which case the caller proceeds with whatever stimulus is already
     there, same as `forge verify run` always has.
 
-    *dataset_xml* is required (mirrors the plugin's own `generate_for_flow`
-    signature — `flow_name, event_id, xml_path, verify_root` — which this
-    call site previously did not match: it called `generate_for_flow` with
-    only 3 positional args, one of them wrong (a destination path where the
-    function expects the golden XML source), silently omitting the
-    required `verify_root`. That raised a TypeError on every `--event-id`
-    run; found and fixed here). `None` means the caller has no XML to
-    regenerate from (readmemh mode never calls this at all) — regeneration
-    is skipped rather than crashing, same fallback as the no-`gen_stimulus`
-    case above.
+    *dataset_xml*, when not None, is forwarded as `dataset_path` to plugins
+    whose `generate_for_flow` accepts it (e.g. `plugins/passthrough_demo/
+    forge/verify/tools/gen_stimulus.py`: `flow_name, event_id, out_path, *,
+    dataset_path=<default>`) — but that keyword is plugin-specific, not
+    part of the framework's own contract: the canonical scaffold this
+    function is really written against (`forge init`'s own template,
+    `forge/verification/__main__.py`'s `generate_for_flow(flow_name,
+    event_id, out_path)`) has no dataset override at all, reading a fixed
+    inline `_EVENTS` table instead. A previous fix here assumed every
+    plugin took `dataset_path` and called it unconditionally, breaking
+    scaffolded (non-customized) plugins with an unexpected-keyword
+    TypeError — this checks the target function's own signature first, so
+    both real shapes work. `out_path` is always `flow_dir /
+    "stimulus_current.svh"` in both shapes — the same convention every
+    other reader in this package uses, e.g. `verification/layout.py`'s
+    `stimulus_svh=flow_dir / "stimulus_current.svh"` (a still-earlier
+    version of this call passed `flow_dir.parent` instead, one directory
+    too high, and put the golden XML in the positional `out_path` slot —
+    both wrong).
+    `None` means the caller has no XML to regenerate from (readmemh mode
+    never calls this at all) — regeneration is skipped rather than
+    crashing, same fallback as the no-`gen_stimulus` case above.
     """
     import importlib
+    import inspect
 
     if dataset_xml is None:
         return False
@@ -242,7 +255,11 @@ def _regenerate_stimulus_for_event(
         generate_for_flow = gen_stimulus_mod.generate_for_flow
     except (ImportError, AttributeError):
         return False
-    generate_for_flow(flow_name, event_id, dataset_xml, flow_dir.parent)
+    out_path = flow_dir / "stimulus_current.svh"
+    if "dataset_path" in inspect.signature(generate_for_flow).parameters:
+        generate_for_flow(flow_name, event_id, out_path, dataset_path=dataset_xml)
+    else:
+        generate_for_flow(flow_name, event_id, out_path)
     return True
 
 

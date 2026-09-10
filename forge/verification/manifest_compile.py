@@ -164,9 +164,15 @@ def prepare_from_manifest(
             top = mod_info.get("top", "")
             if not top:
                 continue
-            candidates = [
-                hls_root / mod_name / "solution1" / "syn" / "verilog" / f"{top}.v",
-            ]
+            candidates = []
+            ip_info_key = mod_info.get("ip_info_key")
+            if ip_info_key and ip_info_key not in (mod_name, top):
+                candidates.append(
+                    hls_root / ip_info_key / "solution1" / "syn" / "verilog" / f"{top}.v"
+                )
+            candidates.append(
+                hls_root / mod_name / "solution1" / "syn" / "verilog" / f"{top}.v"
+            )
             if mod_name != top:
                 candidates.append(
                     hls_root / top / "solution1" / "syn" / "verilog" / f"{top}.v"

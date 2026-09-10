@@ -476,6 +476,53 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     assert not any(f.endswith("cdc_sync2ff.v") for f in manifest2["verilog_files"])
 
 
+def test_build_manifest_resolves_hls_build_dir_by_ip_info_key_not_instance_name(tmp_path):
+    """generate_build_manifest's hls_build_root fallback must key its
+    solution-directory search on the module's ip_info_key (the name the
+    HLS run actually synthesized under), not the design.yml instance
+    name — the two differ whenever an instance is aliased via `ref:` in
+    design.yml (e.g. omtf-firmware's `dt` instance -> `dt_interface`
+    ip_info_key). Regression test for the 2026-09 forge topgen
+    file-attribution bug: instances with no ref alias (module_name ==
+    ip_info_key) worked fine, so the bug only showed up on aliased
+    instances in a real multi-module design — trigger_demo's `trig` ->
+    ref: trigger_logic already has exactly this shape, reused here
+    instead of fabricating a synthetic one."""
+    import json
+
+    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.ir.build import build_project_ir
+
+    project = build_project_ir(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
+    trig = next(m for m in project.design.modules if m.name == "trig")
+    assert trig.ip_info_key == "trigger_logic"
+    assert trig.ip_info_key != trig.name
+
+    hls_build_root = tmp_path / "build_hls"
+    solution_dir = hls_build_root / trig.ip_info_key / "solution1" / "syn" / "verilog"
+    solution_dir.mkdir(parents=True)
+    (solution_dir / f"{trig.top}.v").write_text(f"module {trig.top}(); endmodule\n")
+
+    # A directory named after the instance ("trig/...") must NOT exist —
+    # this is exactly the case the old module_name-only lookup missed.
+    assert not (hls_build_root / trig.name).exists()
+
+    manifest_path = tmp_path / "build_manifest.json"
+    generate_build_manifest(
+        project, ip_info={m.name: {} for m in project.design.modules},
+        ip_root=tmp_path / "ips", algo_top=tmp_path / "algo_top.v",
+        design_file=TRIGGER_DESIGN, manifest_output=manifest_path,
+        project_root=tmp_path, hls_build_root=hls_build_root,
+    )
+
+    manifest = json.loads(manifest_path.read_text())
+    trig_info = manifest["modules"]["trig"]
+    assert trig_info["verilog_files"], (
+        "trig's HLS output was not found under its ip_info_key directory"
+    )
+    assert any(f.endswith(f"{trig.top}.v") for f in trig_info["verilog_files"])
+
+
 def test_build_manifest_omits_support_rtl_for_an_unwired_declaration(tmp_path):
     """A `cdc:` declared on a module pair whose ports never matched
     generates no synchronizer instance — so its RTL must not be in the
