@@ -219,7 +219,6 @@ class SVTestbenchGenerator:
             print(f"      Checking: {candidate}")
             if candidate.exists() and candidate.is_file():
                 # Check if executable
-                import os
                 if os.access(candidate, os.X_OK):
                     print(f"      ✓ Found: {candidate}")
                     return candidate
