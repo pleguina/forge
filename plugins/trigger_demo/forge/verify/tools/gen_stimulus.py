@@ -231,10 +231,18 @@ def _gen_hit_collector(events: list[Event]) -> str:
 def _gen_trigger_logic(events: list[Event]) -> str:
     """Tests trigger_logic with n_hits and phi_sum from each golden event."""
     THRESHOLD = 2
+    # trigger_logic is HLS-pipelined with a real, non-zero latency (modules.yml
+    # declares `latency: {kind: fixed, cycles: 3}`, confirmed by the csynth
+    # report: min=max=3 cycles, Pipeline=yes, II=1) -- unlike every other
+    # module in this capsule (all latency_hint: 0 / combinational). Inputs
+    # are held steady and outputs are sampled LATENCY_CYCLES after assertion
+    # instead of on the same cycle, or every event reads X here.
+    LATENCY_CYCLES = 3
     lines: list[str] = [_HDR.replace("{module}", "trigger_logic")
                             .replace("{xml_name}", "trigger_demo_golden.xml"),
                         "task automatic run_stimulus();",
                         "  integer _fail;",
+                        "  integer _step;",
                         "  _fail = 0;",
                         ""]
 
@@ -252,6 +260,9 @@ def _gen_trigger_logic(events: list[Event]) -> str:
         lines.append(f"  n_hits   = 3'd{g.n_hits};")
         lines.append(f"  phi_sum  = 16'h{g.phi_sum:04X};")
         lines.append(f"  in_valid = 1'b{in_valid};")
+        lines.append(
+            f"  for (_step = 0; _step < {LATENCY_CYCLES}; _step = _step + 1) @(posedge ap_clk);"
+        )
         lines.append(f"  #1;  // combinational settle")
         lines.append(
             f"  if (trigger_accept !== 1'b{exp_accept}) begin "

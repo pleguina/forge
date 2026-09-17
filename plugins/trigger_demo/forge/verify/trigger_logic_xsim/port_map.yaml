@@ -1,22 +1,25 @@
 ports:
-  - name:       n_hits
-    direction:  input
-    width:      3
-  - name:       phi_sum
-    direction:  input
-    width:      16
-  - name:       in_valid
-    direction:  input
-    width:      1
-  - name:       trigger_accept
-    direction:  output
-    width:      1
-  - name:       trigger_quality
-    direction:  output
-    width:      8
-  - name:       trigger_valid
-    direction:  output
-    width:      1
-  - name:       ap_rst
-    direction:  input
-    width:      1
+  - name:      ap_clk
+    direction: input
+    width:     1
+  - name:      ap_rst
+    direction: input
+    width:     1
+  - name:      n_hits
+    direction: input
+    width:     3
+  - name:      phi_sum
+    direction: input
+    width:     16
+  - name:      in_valid
+    direction: input
+    width:     1
+  - name:      trigger_accept
+    direction: output
+    width:     1
+  - name:      trigger_quality
+    direction: output
+    width:     8
+  - name:      trigger_valid
+    direction: output
+    width:     1

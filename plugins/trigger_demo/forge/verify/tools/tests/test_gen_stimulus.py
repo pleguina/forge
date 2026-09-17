@@ -190,6 +190,25 @@ class TestGenerateForModule:
         assert "trigger_accept" in content
         assert "1'b1" in content
 
+    def test_trigger_logic_waits_its_declared_pipeline_latency(
+        self, events: list[Event], tmp_path: Path
+    ) -> None:
+        """trigger_logic is HLS-pipelined with a real 3-cycle latency
+        (modules.yml: latency: {kind: fixed, cycles: 3}, confirmed by the
+        csynth report). Checking outputs on the same cycle as the inputs
+        (as every other, latency_hint: 0 module in this capsule correctly
+        does) reads X on every event: found via a live xsim run during the
+        2026-09 publication audit, root-caused to this generator never
+        having been updated when trigger_logic gained a real latency
+        declaration. Regression test for that fix."""
+        out = tmp_path / "stimulus_current.svh"
+        generate_for_module("trigger_logic", events, out)
+        content = out.read_text()
+        assert "_step < 3" in content, (
+            "trigger_logic stimulus must wait its declared 3-cycle latency "
+            "before sampling outputs, or every event reads X"
+        )
+
     def test_trigger_output_word_check(self, events: list[Event], tmp_path: Path) -> None:
         out = tmp_path / "stimulus_current.svh"
         generate_for_module("trigger_output", events, out)
