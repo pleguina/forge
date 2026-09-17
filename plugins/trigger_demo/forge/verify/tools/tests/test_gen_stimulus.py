@@ -209,6 +209,36 @@ class TestGenerateForModule:
             "before sampling outputs, or every event reads X"
         )
 
+    def test_trigger_pipeline_polls_for_the_valid_pulse_with_a_settle_delay(
+        self, events: list[Event], tmp_path: Path
+    ) -> None:
+        """tout_out_valid is a single-cycle pulse whose exact cycle depends on
+        the topology's own register-stage and signal-delay insertions
+        (Section 2.1.3 of the article), not just each module's own declared
+        latency -- a fixed, hand-picked wait-then-sample-once (the pattern
+        every other generator in this file correctly uses for a level
+        signal) either samples before or after the pulse and reads 0 on
+        every event, for any fixed constant. Found live via a real xsim run,
+        2026-09: a poll loop is required, and the first attempt at one still
+        failed because it read tout_out_valid in the same delta cycle as the
+        posedge that updates the combinational chain driving it, one cycle
+        before the read would see the settled value -- so the loop must
+        settle (`#1`) after every posedge it waits on, not just once before
+        the whole event. Both are regression-tested here."""
+        out = tmp_path / "stimulus_current.svh"
+        generate_for_module("trigger_pipeline", events, out)
+        content = out.read_text()
+        assert "while (tout_out_valid" in content, (
+            "trigger_pipeline must poll for the valid pulse, not sample once "
+            "after a fixed wait"
+        )
+        while_block = content.split("while (tout_out_valid", 1)[1].split("end", 1)[0]
+        assert "#1" in while_block, (
+            "the poll loop must settle after each posedge before reading "
+            "tout_out_valid, or it races the same edge that updates it and "
+            "never observes the single-cycle pulse"
+        )
+
     def test_trigger_output_word_check(self, events: list[Event], tmp_path: Path) -> None:
         out = tmp_path / "stimulus_current.svh"
         generate_for_module("trigger_output", events, out)

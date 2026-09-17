@@ -333,8 +333,24 @@ def _gen_trigger_output(events: list[Event]) -> str:
 
 
 def _gen_trigger_pipeline(events: list[Event]) -> str:
-    """Tests the generated algo_top integration with one event at a time."""
-    latency_cycles = 6
+    """Tests the generated algo_top integration with one event at a time.
+
+    tout_out_valid is a single-cycle pulse (found live, 2026-09: an earlier
+    version of this generator waited a fixed, hand-picked cycle count before
+    sampling once, which -- because the real, now-fully-declared per-module
+    and per-connection pipeline latency puts that one-cycle pulse at a
+    specific cycle the fixed count did not land on -- sampled either before
+    or after the pulse and saw 0 every time, regardless of how the fixed
+    count was tuned. A single blind sample after N cycles is the wrong
+    pattern for a one-cycle pulse on a design whose accumulated latency
+    changes with the topology (register-stage and signal-delay insertions,
+    Section 2.1.3 of the article); polling for the pulse within a bounded
+    window is robust to that in a way a hand-picked constant is not.
+    """
+    max_wait_cycles = 30  # generous bound: the deepest real path measured
+                          # in this capsule accumulates well under 20 cycles
+                          # (2-stage register + 3-cycle module + 3-cycle
+                          # delay); this is margin, not a tuned exact value.
     lines: list[str] = [_HDR.replace("{module}", "trigger_pipeline")
                             .replace("{xml_name}", "trigger_demo_golden.xml"),
                         "task automatic run_stimulus();",
@@ -357,23 +373,34 @@ def _gen_trigger_pipeline(events: list[Event]) -> str:
         for idx in range(4):
             lines.append(f"  dec_{idx}_raw_hit   = '0;")
             lines.append(f"  dec_{idx}_raw_valid = 1'b0;")
-        lines.append(f"  for (_step = 0; _step < {latency_cycles}; _step = _step + 1) @(posedge ap_clk);")
-        lines.append("  #1;")
+        lines.append(f"  _step = 0;")
+        lines.append(f"  #1;  // settle before the first poll read, same reason as below")
+        lines.append(f"  while (tout_out_valid !== 1'b1 && _step < {max_wait_cycles}) begin")
+        lines.append(f"    @(posedge ap_clk);")
+        lines.append(f"    #1;  // let this edge's NBA updates settle before reading --")
+        lines.append(f"         // reading tout_out_valid right at the edge risks the pre-edge")
+        lines.append(f"         // value on a signal driven combinationally from a register this")
+        lines.append(f"         // same posedge updates, which would miss a single-cycle pulse")
+        lines.append(f"    _step = _step + 1;")
+        lines.append(f"  end")
         if expected_valid:
             lines.append(
                 f"  if (tout_out_valid !== 1'b1) begin "
-                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid=%0b expect=1\", tout_out_valid); "
+                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid never asserted within %0d cycles\", {max_wait_cycles}); "
                 f"_fail = 1; end"
             )
             lines.append(
-                f"  if (tout_trigger_word !== 32'h{g.word:08X}) begin "
+                f"  else if (tout_trigger_word !== 32'h{g.word:08X}) begin "
                 f"$display(\"FAIL [E{ev.event_id}] tout_trigger_word=0x%08X expect=0x{g.word:08X}\", tout_trigger_word); "
                 f"_fail = 1; end"
             )
+            # Drain any remaining pipeline activity from this event before the
+            # next one asserts new inputs, same margin either branch took.
+            lines.append(f"  for (_step = _step; _step < {max_wait_cycles}; _step = _step + 1) @(posedge ap_clk);")
         else:
             lines.append(
-                f"  if (tout_out_valid !== 1'b0) begin "
-                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid=%0b expect=0\", tout_out_valid); "
+                f"  if (tout_out_valid === 1'b1) begin "
+                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid unexpectedly asserted (word=0x%08X) within %0d cycles, expect no pulse\", tout_trigger_word, {max_wait_cycles}); "
                 f"_fail = 1; end"
             )
         lines.append("")

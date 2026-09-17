@@ -29,10 +29,19 @@ task automatic run_stimulus();
   dec_2_raw_valid = 1'b0;
   dec_3_raw_hit   = '0;
   dec_3_raw_valid = 1'b0;
-  for (_step = 0; _step < 6; _step = _step + 1) @(posedge ap_clk);
-  #1;
-  if (tout_out_valid !== 1'b1) begin $display("FAIL [E0] tout_out_valid=%0b expect=1", tout_out_valid); _fail = 1; end
-  if (tout_trigger_word !== 32'h80030000) begin $display("FAIL [E0] tout_trigger_word=0x%08X expect=0x80030000", tout_trigger_word); _fail = 1; end
+  _step = 0;
+  #1;  // settle before the first poll read, same reason as below
+  while (tout_out_valid !== 1'b1 && _step < 30) begin
+    @(posedge ap_clk);
+    #1;  // let this edge's NBA updates settle before reading --
+         // reading tout_out_valid right at the edge risks the pre-edge
+         // value on a signal driven combinationally from a register this
+         // same posedge updates, which would miss a single-cycle pulse
+    _step = _step + 1;
+  end
+  if (tout_out_valid !== 1'b1) begin $display("FAIL [E0] tout_out_valid never asserted within %0d cycles", 30); _fail = 1; end
+  else if (tout_trigger_word !== 32'h80030000) begin $display("FAIL [E0] tout_trigger_word=0x%08X expect=0x80030000", tout_trigger_word); _fail = 1; end
+  for (_step = _step; _step < 30; _step = _step + 1) @(posedge ap_clk);
 
   // Event 1: expected word=0x00010000 valid=1
   @(posedge ap_clk);
@@ -53,10 +62,19 @@ task automatic run_stimulus();
   dec_2_raw_valid = 1'b0;
   dec_3_raw_hit   = '0;
   dec_3_raw_valid = 1'b0;
-  for (_step = 0; _step < 6; _step = _step + 1) @(posedge ap_clk);
-  #1;
-  if (tout_out_valid !== 1'b1) begin $display("FAIL [E1] tout_out_valid=%0b expect=1", tout_out_valid); _fail = 1; end
-  if (tout_trigger_word !== 32'h00010000) begin $display("FAIL [E1] tout_trigger_word=0x%08X expect=0x00010000", tout_trigger_word); _fail = 1; end
+  _step = 0;
+  #1;  // settle before the first poll read, same reason as below
+  while (tout_out_valid !== 1'b1 && _step < 30) begin
+    @(posedge ap_clk);
+    #1;  // let this edge's NBA updates settle before reading --
+         // reading tout_out_valid right at the edge risks the pre-edge
+         // value on a signal driven combinationally from a register this
+         // same posedge updates, which would miss a single-cycle pulse
+    _step = _step + 1;
+  end
+  if (tout_out_valid !== 1'b1) begin $display("FAIL [E1] tout_out_valid never asserted within %0d cycles", 30); _fail = 1; end
+  else if (tout_trigger_word !== 32'h00010000) begin $display("FAIL [E1] tout_trigger_word=0x%08X expect=0x00010000", tout_trigger_word); _fail = 1; end
+  for (_step = _step; _step < 30; _step = _step + 1) @(posedge ap_clk);
 
   // Event 2: expected word=0x80040000 valid=1
   @(posedge ap_clk);
@@ -77,10 +95,19 @@ task automatic run_stimulus();
   dec_2_raw_valid = 1'b0;
   dec_3_raw_hit   = '0;
   dec_3_raw_valid = 1'b0;
-  for (_step = 0; _step < 6; _step = _step + 1) @(posedge ap_clk);
-  #1;
-  if (tout_out_valid !== 1'b1) begin $display("FAIL [E2] tout_out_valid=%0b expect=1", tout_out_valid); _fail = 1; end
-  if (tout_trigger_word !== 32'h80040000) begin $display("FAIL [E2] tout_trigger_word=0x%08X expect=0x80040000", tout_trigger_word); _fail = 1; end
+  _step = 0;
+  #1;  // settle before the first poll read, same reason as below
+  while (tout_out_valid !== 1'b1 && _step < 30) begin
+    @(posedge ap_clk);
+    #1;  // let this edge's NBA updates settle before reading --
+         // reading tout_out_valid right at the edge risks the pre-edge
+         // value on a signal driven combinationally from a register this
+         // same posedge updates, which would miss a single-cycle pulse
+    _step = _step + 1;
+  end
+  if (tout_out_valid !== 1'b1) begin $display("FAIL [E2] tout_out_valid never asserted within %0d cycles", 30); _fail = 1; end
+  else if (tout_trigger_word !== 32'h80040000) begin $display("FAIL [E2] tout_trigger_word=0x%08X expect=0x80040000", tout_trigger_word); _fail = 1; end
+  for (_step = _step; _step < 30; _step = _step + 1) @(posedge ap_clk);
 
   // Event 3: expected word=0x00000000 valid=0
   @(posedge ap_clk);
@@ -101,9 +128,17 @@ task automatic run_stimulus();
   dec_2_raw_valid = 1'b0;
   dec_3_raw_hit   = '0;
   dec_3_raw_valid = 1'b0;
-  for (_step = 0; _step < 6; _step = _step + 1) @(posedge ap_clk);
-  #1;
-  if (tout_out_valid !== 1'b0) begin $display("FAIL [E3] tout_out_valid=%0b expect=0", tout_out_valid); _fail = 1; end
+  _step = 0;
+  #1;  // settle before the first poll read, same reason as below
+  while (tout_out_valid !== 1'b1 && _step < 30) begin
+    @(posedge ap_clk);
+    #1;  // let this edge's NBA updates settle before reading --
+         // reading tout_out_valid right at the edge risks the pre-edge
+         // value on a signal driven combinationally from a register this
+         // same posedge updates, which would miss a single-cycle pulse
+    _step = _step + 1;
+  end
+  if (tout_out_valid === 1'b1) begin $display("FAIL [E3] tout_out_valid unexpectedly asserted (word=0x%08X) within %0d cycles, expect no pulse", tout_trigger_word, 30); _fail = 1; end
 
   if (_fail) $fatal(1, "TB FAIL: trigger_pipeline_xsim — %0d assertion(s) failed", _fail);
 endtask
