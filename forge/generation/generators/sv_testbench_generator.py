@@ -122,20 +122,6 @@ class SVTestbenchGenerator:
 
         return []
 
-    def _port_group(self, name: str) -> Dict[str, Any]:
-        if self.port_map is None:
-            return {}
-        group = self.port_map.get('port_groups', {}).get(name, {})
-        return group if isinstance(group, dict) else {}
-
-    def _channel_group(self, name: str) -> List[Dict[str, Any]]:
-        group = self._port_group(name)
-        if group.get('channels'):
-            return group['channels']
-        if group.get('ports'):
-            return group['ports']
-        return []
-
     def _config_stimulus_groups(self) -> List[Dict[str, Any]]:
         """Return stimulus groups from all config-style input groups."""
         port_groups = self.port_map.get('port_groups', {}) if self.port_map else {}
@@ -425,6 +411,14 @@ class SVTestbenchGenerator:
         algo_freq    = timing['algo_freq_mhz']
         all_channel_groups = self._all_channel_groups()  # (name, entries, width, prefix)
         config_groups = self._config_stimulus_groups()
+        # BX (bunch-crossing) timing is an OMTF/LHC-style concept, not a
+        # universal one -- only require and wire up the BX0 pulse, the
+        # cycle_in_bx alignment, and the bx0 log column for designs that
+        # actually expose the global BX0 pulse as a port. A design without
+        # it (e.g. a generic algorithm passthrough) gets a testbench with
+        # no BX machinery at all, rather than a signal reference to a net
+        # tb_bindings.svh never declares.
+        has_bx_timing = self._has_port('bx_timing_bx0_global')
         grouped_input_groups = self._grouped_input_groups()
 
         # Collect port sig hash from port_map if available
@@ -481,8 +475,10 @@ class SVTestbenchGenerator:
         f.write("// ---- DUT instantiation (name-based — all ports resolved from tb_bindings.svh) ----\n")
         f.write("algo_top dut (.*);\n\n")
 
-        # Some designs do not expose bx_timing_cycle_in_bx as a top-level port.
-        if not self._has_port('bx_timing_cycle_in_bx'):
+        # Some BX-timed designs do not expose bx_timing_cycle_in_bx as a
+        # top-level port. Non-BX designs need neither the port nor the
+        # probe alias -- there is no BX alignment to wire up.
+        if has_bx_timing and not self._has_port('bx_timing_cycle_in_bx'):
             cycle_probe = self._find_probe('cycle_in_bx')
             if cycle_probe is None:
                 raise ValueError(
@@ -540,7 +536,8 @@ class SVTestbenchGenerator:
                 f.write(f"        {'; '.join(grouped_idle)};\n")
         f.write("\n")
 
-        f.write("        bx_timing_bx0_global = 1'b0;\n")
+        if has_bx_timing:
+            f.write("        bx_timing_bx0_global = 1'b0;\n")
         f.write("    end\n")
         f.write("endtask\n\n")
 
@@ -602,8 +599,11 @@ class SVTestbenchGenerator:
         if out_ports:
             # Build format string and argument list for $fwrite
             # Column order must match algo_top_xsim_checker: cycle,bx0,unconstr...,constr...,nn...
-            fmt_parts = ["%0d", "%0b"]   # cycle_count, bx_timing_bx0_global
-            arg_parts = ["cycle_count", "bx_timing_bx0_global"]
+            fmt_parts = ["%0d"]   # cycle_count
+            arg_parts = ["cycle_count"]
+            if has_bx_timing:
+                fmt_parts.append("%0b")
+                arg_parts.append("bx_timing_bx0_global")
             for p in out_ports:
                 name  = p['name']
                 width = p.get('width', 1)
@@ -639,15 +639,17 @@ class SVTestbenchGenerator:
         f.write("initial begin\n")
         f.write("    cycle_count = 0;\n")
         f.write("    ap_rst      = 1'b1;\n")
-        f.write("    bx_timing_bx0_global = 1'b0;\n")
+        if has_bx_timing:
+            f.write("    bx_timing_bx0_global = 1'b0;\n")
         f.write("    drive_all_idle();\n\n")
 
         # Open output CSV
         f.write("    // Open Tier 1 output CSV\n")
         f.write("    out_csv_fd = $fopen(\"algo_top_outputs.csv\", \"w\");\n")
         f.write("    if (out_csv_fd == 0) $fatal(1, \"Failed to open algo_top_outputs.csv\");\n")
-        # CSV header — cycle, bx0, then output ports in group-sorted order
-        header_cols = ["cycle", "bx0"] + [p['name'] for p in out_ports]
+        # CSV header — cycle, bx0 (BX-timed designs only), then output ports
+        # in group-sorted order
+        header_cols = ["cycle"] + (["bx0"] if has_bx_timing else []) + [p['name'] for p in out_ports]
         f.write(f"    $fwrite(out_csv_fd, \"{','.join(header_cols)}\\n\");\n\n")
 
         # Probe CSV
@@ -669,16 +671,18 @@ class SVTestbenchGenerator:
         f.write("    apply_configs();\n")
         f.write("    repeat (POST_CONFIG_SETTLE_CYCLES) @(posedge ap_clk);\n\n")
 
-        # BX alignment
-        f.write("    // Align to a BX boundary (wait until cycle_in_bx == 8 -> next is 0)\n")
-        f.write("    while (bx_timing_cycle_in_bx != 4'd8) @(posedge ap_clk);\n\n")
+        # BX alignment (BX-timed designs only)
+        if has_bx_timing:
+            f.write("    // Align to a BX boundary (wait until cycle_in_bx == 8 -> next is 0)\n")
+            f.write("    while (bx_timing_cycle_in_bx != 4'd8) @(posedge ap_clk);\n\n")
 
         # Stimulus loop
         f.write("    // Drive stimulus\n")
         f.write("    for (int batch = 0; batch < NUM_BATCHES; batch++) begin\n")
         f.write("        @(negedge ap_clk);\n")
         f.write("        apply_batch(batch);\n")
-        f.write("        bx_timing_bx0_global = (batch == 0) ? 1'b1 : 1'b0;\n")
+        if has_bx_timing:
+            f.write("        bx_timing_bx0_global = (batch == 0) ? 1'b1 : 1'b0;\n")
         f.write("        @(posedge ap_clk);\n")
         f.write("    end\n\n")
 
@@ -686,7 +690,8 @@ class SVTestbenchGenerator:
         f.write("    // Return to idle and drain pipeline\n")
         f.write("    @(negedge ap_clk);\n")
         f.write("    drive_all_idle();\n")
-        f.write("    bx_timing_bx0_global = 1'b0;\n")
+        if has_bx_timing:
+            f.write("    bx_timing_bx0_global = 1'b0;\n")
         f.write("    repeat (POST_STIMULUS_DRAIN_CYCLES) @(posedge ap_clk);\n\n")
 
         # Close files

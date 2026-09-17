@@ -8,6 +8,26 @@ for the versioning policy.
 ## [Unreleased]
 
 ### Added
+- `ci/check_coverage_floors.py`, run as an extra step in
+  `forge:python-unit-tests` right after the main `pytest forge/tests` run:
+  per-subsystem coverage floors for the modules that back FORGE's
+  published correctness claims (`forge/ir/*`, `forge/contracts/*` minus
+  `unpacker.py`, `forge/generation/generators/*`,
+  `forge/verification/backend_*`), on top of the existing global
+  `--cov-fail-under`. A global floor can't catch one high-stakes
+  subsystem eroding while well-tested CLI/docs code pulls the average
+  back up. Floors are set at each group's measured baseline
+  (`forge/ir/*` 96.3%, `forge/contracts/*` 81.3%,
+  `forge/generation/generators/*` 71.3%, `forge/verification/backend_*`
+  58.1%), not the ≥90% target stated for each group — several groups
+  aren't there yet, and the script says so rather than gating on a
+  number that would fail today.
+- `forge/tests/test_sv_testbench_generator.py`: real unit and
+  integration coverage for `SVTestbenchGenerator`/`generate_sv_testbench`
+  — 50 tests, 100% coverage on `sv_testbench_generator.py` (was 5% as of
+  2026-09-17, the file the most recent shipped bugfix, `35b7c6e`,
+  touched). Raised `forge/generation/generators/*`'s coverage floor
+  50% → 70% to match.
 - **`forge adopt`, `forge check`, `forge next`** — the new-user workflow
   from `FORGE_new_user_implementation_plan.md` Milestones 1-3, plus the
   parts of Milestone 4 (`forge.yml` + `.forge/`) that adoption needs.
@@ -363,6 +383,32 @@ for the versioning policy.
   Not implemented, and not implementable here: cutting an actual release.
   That is a tag, a decision, and the external-user trial that
   `docs/internal/release/go_no_go.md` still lists as open.
+
+### Fixed
+- `sv_testbench_generator.py` required BX (bunch-crossing) timing — the
+  global BX0 pulse, the `cycle_in_bx` alignment wait, the `bx0` log
+  column — unconditionally, regardless of whether the target design had
+  any BX timing concept at all. Found via the new
+  `test_sv_testbench_generator.py` suite, run against the real
+  checked-in `gen-top/design_passthrough_demo/` reference build:
+  `forge topgen gen-top --mode verilog --gen-testbench` raised
+  `ValueError` (`probe_map.yaml/port_map.yaml is missing the
+  cycle_in_bx Tier 2 probe`) against that real fixture, because
+  passthrough_demo is a generic algorithm passthrough with no
+  `bx_timing_bx0_global` port — not because its probe_map.yaml was
+  stale (nothing in the codebase ever writes a `cycle_in_bx` probe
+  automatically, so a fresh regeneration would have reproduced the same
+  gap). `_write_testbench` now gates every `bx_timing_bx0_global`/
+  `cycle_in_bx` reference behind `has_bx_timing =
+  self._has_port('bx_timing_bx0_global')`, computed once at the top of
+  the method: a BX-timed (OMTF/LHC-style) design's generated output is
+  byte-for-byte unchanged, while a non-BX design gets a testbench with
+  no BX machinery in it instead of a crash.
+
+### Removed
+- `SVTestbenchGenerator._port_group`/`_channel_group`: dead private
+  helpers, confirmed never called from anywhere in the class or file
+  (found while investigating the fix above).
 
 ### Documentation
 - **The scope table understated verification datasets.** README and
