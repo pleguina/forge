@@ -411,13 +411,13 @@ class SVTestbenchGenerator:
         algo_freq    = timing['algo_freq_mhz']
         all_channel_groups = self._all_channel_groups()  # (name, entries, width, prefix)
         config_groups = self._config_stimulus_groups()
-        # BX (bunch-crossing) timing is an OMTF/LHC-style concept, not a
-        # universal one -- only require and wire up the BX0 pulse, the
-        # cycle_in_bx alignment, and the bx0 log column for designs that
-        # actually expose the global BX0 pulse as a port. A design without
-        # it (e.g. a generic algorithm passthrough) gets a testbench with
-        # no BX machinery at all, rather than a signal reference to a net
-        # tb_bindings.svh never declares.
+        # BX (bunch-crossing) timing is a domain-specific alignment concept
+        # some consumers use, not a universal one -- only require and wire
+        # up the BX0 pulse, the cycle_in_bx alignment, and the bx0 log
+        # column for designs that actually expose the global BX0 pulse as a
+        # port. A design without it (e.g. a generic algorithm passthrough)
+        # gets a testbench with no BX machinery at all, rather than a
+        # signal reference to a net tb_bindings.svh never declares.
         has_bx_timing = self._has_port('bx_timing_bx0_global')
         grouped_input_groups = self._grouped_input_groups()
 

@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "FORGE Framework Team"}
+    {name = "Pelayo Leguina", email = "pleguina@cern.ch"},
+    {name = "Santiago Folgueras", email = "folguerassantiago@uniovi.es"}
 ]
 keywords = ["hdl", "vhdl", "fpga", "ip", "vivado", "top-level", "generator"]
 classifiers = [

@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "FORGE: Framework for Orchestrated RTL Generation and Evaluation"
+type: software
+authors:
+  - family-names: Leguina
+    given-names: Pelayo
+    email: pleguina@cern.ch
+  - family-names: Folgueras
+    given-names: Santiago
+    email: folguerassantiago@uniovi.es
+repository-code: "https://github.com/pleguina/forge"
+url: "https://github.com/pleguina/forge"
+license: MIT
+version: 2.0.0
+date-released: "2026-07-27"
+keywords:
+  - fpga
+  - hdl
+  - hls
+  - contract-driven design
+  - verification
+  - eda

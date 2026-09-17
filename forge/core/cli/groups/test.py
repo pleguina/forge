@@ -258,11 +258,11 @@ def _regenerate_stimulus_for_event(
     out_path = flow_dir / "stimulus_current.svh"
     params = inspect.signature(generate_for_flow).parameters
     if "xml_path" in params and "verify_root" in params:
-        # OMTF plugin shape (arc/verify/tools/gen_stimulus.py): takes the
-        # dataset path and verify/ root explicitly rather than a
-        # pre-computed out_path -- it derives out_path itself as
-        # verify_root/flow_name/"stimulus_current.svh", matching flow_dir
-        # here exactly (flow_dir IS verify_root/flow_name).
+        # This plugin shape (as used by one production consumer's
+        # verify/tools/gen_stimulus.py) takes the dataset path and verify/
+        # root explicitly rather than a pre-computed out_path -- it derives
+        # out_path itself as verify_root/flow_name/"stimulus_current.svh",
+        # matching flow_dir here exactly (flow_dir IS verify_root/flow_name).
         generate_for_flow(flow_name, event_id, xml_path=dataset_xml, verify_root=flow_dir.parent)
     elif "dataset_path" in params:
         generate_for_flow(flow_name, event_id, out_path, dataset_path=dataset_xml)
