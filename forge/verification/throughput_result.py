@@ -73,6 +73,15 @@ class RuntimeThroughputResult:
     measured_rate_records_per_sec:   float
     dropped_transactions:            int
     duplicated_transactions:         int
+    # Real physical duration of the sampled probe window, in seconds, at
+    # the clock actually used to sample the CSV (0.0 when no
+    # clock_frequency_hz was supplied to the builder, i.e. genuinely not
+    # measured, not a fabricated zero-length window). Lets a caller that
+    # later substitutes a more accurate transaction count (e.g. an
+    # exact scoreboard-derived count) recompute measured_rate_records_per_sec
+    # against the same real window instead of silently keeping the stale
+    # probe-derived rate.
+    elapsed_seconds:                 float = 0.0
 
     def to_dict(self) -> "dict[str, Any]":
         return {
@@ -86,6 +95,7 @@ class RuntimeThroughputResult:
             "measured_rate_records_per_sec": self.measured_rate_records_per_sec,
             "dropped_transactions": self.dropped_transactions,
             "duplicated_transactions": self.duplicated_transactions,
+            "elapsed_seconds": self.elapsed_seconds,
         }
 
 

@@ -337,15 +337,19 @@ def _gen_trigger_pipeline(events: list[Event]) -> str:
 
     tout_out_valid is a single-cycle pulse (found live, 2026-09: an earlier
     version of this generator waited a fixed, hand-picked cycle count before
-    sampling once, which -- because the real, now-fully-declared per-module
-    and per-connection pipeline latency puts that one-cycle pulse at a
-    specific cycle the fixed count did not land on -- sampled either before
-    or after the pulse and saw 0 every time, regardless of how the fixed
-    count was tuned. A single blind sample after N cycles is the wrong
-    pattern for a one-cycle pulse on a design whose accumulated latency
-    changes with the topology (register-stage and signal-delay insertions,
-    Section 2.1.3 of the article); polling for the pulse within a bounded
-    window is robust to that in a way a hand-picked constant is not.
+    sampling once, and that specific constant did not match the real,
+    now-fully-declared per-module and per-connection pipeline latency, so
+    it sampled either before or after the pulse and saw 0 every time). A
+    correctly chosen fixed delay can sample a known-latency, known-phase
+    single-cycle pulse -- the bug was the chosen constant and/or sampling
+    phase, not that no constant could ever work. The real problem this
+    fix addresses is that this design's accumulated latency changes with
+    its topology (register-stage and signal-delay insertions, Section
+    2.1.3 of the article), so any hand-picked constant needs re-tuning
+    whenever the topology changes; polling for the pulse within a bounded
+    window (see max_wait_cycles below) avoids that re-tuning, at the cost
+    of only checking that a response arrives within the window, not its
+    exact cycle latency.
     """
     max_wait_cycles = 30  # generous bound: the deepest real path measured
                           # in this capsule accumulates well under 20 cycles
