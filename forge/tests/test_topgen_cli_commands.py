@@ -864,3 +864,312 @@ def test_missing_design_arg_is_argparse_error(capsys: pytest.CaptureFixture[str]
 
     assert exc_info.value.code == 2
     assert "usage:" in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------------------
+# --mode bd (Block Design Tcl) — parity with --mode verilog
+# ---------------------------------------------------------------------------
+
+def test_gen_top_bd_full_pipeline(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    """--mode bd must now produce the same manifest/contract artifact set
+    --mode verilog does (build_manifest.json, port_map.yaml,
+    design_parameters.json, probe_map.yaml, tb_bindings.svh,
+    maturity_report.json, design.ir.json), not just the raw Tcl + IR
+    snapshot it used to."""
+    output = tmp_path / "block_design.tcl"
+
+    result = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "bd",
+        "--bd-name", "algo_top_bd",
+        "--output", str(output),
+        "--build-dir", str(tmp_path / "build"),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output.exists()
+    assert "set _bd_name algo_top_bd" in output.read_text()
+    for artifact in (
+        "build_manifest.json",
+        "port_map.yaml",
+        "port_signature.json",
+        "design_parameters.json",
+        "probe_map.yaml",
+        "tb_bindings.svh",
+        "maturity_report.json",
+        "design.ir.json",
+    ):
+        assert (tmp_path / artifact).exists(), f"missing {artifact}"
+
+    ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
+    assert len(ir_payload["design"]["modules"]) == 1
+    top_port_names = {p["name"] for p in ir_payload["design"]["top_ports"]}
+    assert top_port_names
+    port_map = yaml.safe_load((tmp_path / "port_map.yaml").read_text())
+    port_map_names = {
+        entry["name"]
+        for group in port_map["port_groups"].values()
+        for entry in (group if isinstance(group, list) else group.get("ports", group.get("channels", [])))
+        if isinstance(entry, dict) and "name" in entry
+    }
+    assert top_port_names == port_map_names
+
+
+def test_gen_top_bd_matches_verilog_port_map_for_same_design(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """The strongest available correctness guarantee without running
+    Vivado: --mode bd and --mode verilog must resolve the exact same
+    top-level port set/names/widths for the same design, since both now
+    call the same shared resolver
+    (forge.generation.generators._port_resolution.resolve_top_ports)."""
+    verilog_dir = tmp_path / "verilog"
+    bd_dir = tmp_path / "bd"
+    verilog_dir.mkdir()
+    bd_dir.mkdir()
+
+    result_v = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "verilog",
+        "--output", str(verilog_dir / "algo_top.v"),
+        "--build-dir", str(tmp_path / "build_v"),
+    )
+    assert result_v.returncode == 0, result_v.stdout + result_v.stderr
+
+    result_b = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "bd",
+        "--output", str(bd_dir / "block_design.tcl"),
+        "--build-dir", str(tmp_path / "build_b"),
+    )
+    assert result_b.returncode == 0, result_b.stdout + result_b.stderr
+
+    verilog_port_map = yaml.safe_load((verilog_dir / "port_map.yaml").read_text())
+    bd_port_map = yaml.safe_load((bd_dir / "port_map.yaml").read_text())
+    del verilog_port_map["source_file"]
+    del bd_port_map["source_file"]
+    assert verilog_port_map == bd_port_map
+
+    verilog_sig = json.loads((verilog_dir / "port_signature.json").read_text())
+    bd_sig = json.loads((bd_dir / "port_signature.json").read_text())
+    assert verilog_sig["hash"] == bd_sig["hash"]
+
+
+def _write_bd_tie_off_design(tmp_path: Path) -> tuple[Path, Path]:
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n"
+        "  ip_info_key: src\n"
+        "  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    unconnected_in: {raw_port: unconnected_in, direction: input, width: 8}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    modules_yml = tmp_path / "modules.yml"
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n"
+        "    kind: rtl\n"
+        "    top: src_top\n"
+        "    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+    )
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu13p\n"
+        "clock_period: 4.0\n"
+        "modules:\n"
+        "  - name: src\n"
+        "    top: src_top\n"
+        "    src: [src.v]\n"
+        "connections: []\n"
+    )
+    return design_yml, modules_yml
+
+
+def test_gen_top_bd_emits_tie_off_connection_for_an_open_input(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """Same fixture/assertion as
+    test_gen_top_verilog_emits_tie_off_connection_for_an_open_input, for
+    --mode bd: a tied-to-zero mandatory input must appear in design.ir.json
+    as a real `tie_off` connection, and the generated Tcl must actually
+    tie it off (an xlconstant IP), not just report it and leave it
+    disconnected in the Block Design."""
+    design_yml, modules_yml = _write_bd_tie_off_design(tmp_path)
+
+    result = _run_topgen(
+        capsys, "gen-top", str(design_yml),
+        "--mode", "bd",
+        "--output", str(tmp_path / "block_design.tcl"),
+        "--contracts-from", str(modules_yml),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
+    tie_offs = [
+        c for c in ir_payload["design"]["connections"]
+        if c["producer"]["instance_id"] == "$tie_off"
+    ]
+    assert tie_offs == [{
+        "id": "tie_off:src.unconnected_in",
+        "producer": {"instance_id": "$tie_off", "interface_name": None, "port": None},
+        "consumer": {"instance_id": "src", "interface_name": None, "port": "unconnected_in"},
+        "wiring_method": None,
+        "transformations": [{
+            "id": "xform:tie_off:src.unconnected_in", "kind": "tie_off",
+            "cycles": None, "tag": None,
+        }],
+        "emission_order": 0,
+        "crosses_clock_domain": False,
+        "crosses_reset_domain": False,
+        "matching_evidence": None,
+    }]
+
+    tcl = (tmp_path / "block_design.tcl").read_text()
+    assert "xilinx.com:ip:xlconstant:1.1" in tcl
+    assert "CONFIG.CONST_WIDTH {8}" in tcl
+    assert "connect_bd_net [get_bd_pins tie_const_8/dout] [get_bd_pins src/unconnected_in]" in tcl
+
+
+def test_gen_top_bd_strict_fails_on_unaccounted_tied_input(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    design_yml, modules_yml = _write_bd_tie_off_design(tmp_path)
+
+    result = _run_topgen(
+        capsys, "gen-top", str(design_yml),
+        "--mode", "bd",
+        "--output", str(tmp_path / "block_design.tcl"),
+        "--contracts-from", str(modules_yml),
+        "--strict",
+    )
+
+    assert result.returncode == 1
+    assert "unaccounted tied input" in result.stdout
+    assert "unconnected_in" in result.stdout
+
+
+def test_gen_top_bd_instantiates_register_stage_cell(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """A plain register_stages connection gets a real RegisterStage cell in
+    the generated Block Design — --project-root (fed by --consumer-root)
+    is what lets write_bd_tcl find RegisterStage.v outside design.yml's own
+    directory, the same way generate_build_manifest's verilog-mode search
+    already does."""
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n  ip_info_key: src\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    (tmp_path / "interfaces" / "dst.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: dst\n  ip_info_key: dst\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    din: {raw_port: din, direction: input, width: 8}\n"
+    )
+    modules_yml = tmp_path / "modules.yml"
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n    kind: rtl\n    top: src_top\n    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        "  - name: dst\n    kind: rtl\n    top: dst_top\n    src: [dst.v]\n"
+        "    interface_contract: interfaces/dst.interface.yaml\n"
+    )
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu13p\nclock_period: 4.0\n"
+        "modules:\n"
+        "  - name: src\n    top: src_top\n    src: [src.v]\n"
+        "  - name: dst\n    top: dst_top\n    src: [dst.v]\n"
+        "connections:\n"
+        "  - from: src\n    to: dst\n    port_map: [[dout, din]]\n"
+        "    register_stages: 2\n"
+    )
+    # Framework support RTL — a "vendored" copy under this fixture's own
+    # tree, found via --project-root the same way a real plugin's
+    # algo/rtl/RegisterStage.v is.
+    (tmp_path / "support_rtl").mkdir()
+    (tmp_path / "support_rtl" / "RegisterStage.v").write_text(
+        (REPO_ROOT / "plugins/trigger_demo/algo/rtl/RegisterStage.v").read_text()
+    )
+
+    result = _run_topgen(
+        capsys, "gen-top", str(design_yml),
+        "--mode", "bd",
+        "--output", str(tmp_path / "block_design.tcl"),
+        "--contracts-from", str(modules_yml),
+        "--consumer-root", str(tmp_path),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    tcl = (tmp_path / "block_design.tcl").read_text()
+    assert "create_bd_cell -type module -reference RegisterStage reg_stage_0" in tcl
+    assert "set_property CONFIG.DATAWIDTH {8} [get_bd_cells reg_stage_0]" in tcl
+    assert "set_property CONFIG.STAGES {2} [get_bd_cells reg_stage_0]" in tcl
+    assert "connect_bd_net [get_bd_pins src/dout] [get_bd_pins reg_stage_0/data_in]" in tcl
+    assert "connect_bd_net [get_bd_pins reg_stage_0/data_out] [get_bd_pins dst/din]" in tcl
+
+
+def test_gen_top_bd_rejects_gen_testbench(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    result = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "bd",
+        "--output", str(tmp_path / "block_design.tcl"),
+        "--build-dir", str(tmp_path / "build"),
+        "--gen-testbench",
+    )
+
+    assert result.returncode == 1
+    assert "--gen-testbench is not supported with --mode bd" in result.stderr
+    assert not (tmp_path / "block_design.tcl").exists()
+
+
+def test_gen_top_bd_rejects_lint(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    result = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "bd",
+        "--output", str(tmp_path / "block_design.tcl"),
+        "--build-dir", str(tmp_path / "build"),
+        "--lint",
+    )
+
+    assert result.returncode == 1
+    assert "--lint is not supported with --mode bd" in result.stderr
+    assert not (tmp_path / "block_design.tcl").exists()
+
+
+def test_gen_top_bd_dry_run_lists_full_artifact_set(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    output = tmp_path / "block_design.tcl"
+    before = _tree_snapshot(tmp_path)
+
+    result = _run_topgen(
+        capsys, "gen-top", str(DESIGN_YML),
+        "--mode", "bd",
+        "--output", str(output),
+        "--build-dir", str(tmp_path / "build"),
+        "--dry-run",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _tree_snapshot(tmp_path) == before, "dry-run must not write any files"
+    for artifact in (
+        "build_manifest.json", "port_map.yaml", "port_signature.json",
+        "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
+        "maturity_report.json", "design.ir.json", "provenance.json",
+    ):
+        assert artifact in result.stdout, f"dry-run preview missing {artifact}"

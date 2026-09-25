@@ -21,7 +21,7 @@ path.
 | `forge` | `load_ip_info` | function | Thin YAML wrapper used by several sub-packages. |
 | `forge` | `parse_component` | function | Parse a single HLS-exported component.xml into a dict: |
 | `forge` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
-| `forge` | `write_bd_tcl` | function |  |
+| `forge` | `write_bd_tcl` | function | Generate a Vivado Block Design Tcl script wiring algorithm modules |
 | `forge` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
 | `forge` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
 | `forge.analysis.design_explorer` | `DESIGN_GRAPH_SCHEMA` | value | A ``{"name", "version"}`` tag carried by every structured artifact |
@@ -42,7 +42,7 @@ path.
 | `forge.contracts` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
 | `forge.contracts` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
 | `forge.core.cli` | `main` | value | forge CLI entry point. |
-| `forge.generation.generators` | `write_bd_tcl` | function |  |
+| `forge.generation.generators` | `write_bd_tcl` | function | Generate a Vivado Block Design Tcl script wiring algorithm modules |
 | `forge.generation.generators` | `write_structural_verilog` | function | Generate a structural Verilog top that wires algorithm modules together. |
 | `forge.generation.generators` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
 | `forge.ir` | `DiagnosticReference` | class | A diagnostic attached to a specific IR object, so tooling (CLI, |

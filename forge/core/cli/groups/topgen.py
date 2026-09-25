@@ -1859,6 +1859,29 @@ def cmd_gen_top(args):
                     print(str(_i))
                 sys.exit(1)
 
+        if args.mode == "bd":
+            # --gen-testbench and --lint are Verilog/VHDL-specific (a real
+            # RTL file to simulate/lint) — --mode bd's output is a Tcl
+            # script, not RTL, so there's no equivalent. Reject explicitly
+            # rather than silently accepting the flag and doing nothing —
+            # a user expecting a testbench/lint result and getting none
+            # silently is worse than an upfront error.
+            if args.gen_testbench or (cfg.testbench and cfg.testbench.generate):
+                print_cli_error(
+                    "--gen-testbench is not supported with --mode bd",
+                    ValueError("bd mode's output is a Tcl script, not RTL — there is nothing to testbench"),
+                    hint="Generate a Verilog/VHDL top for testbench flows, or drive BD-mode "
+                         "verification through Vivado directly.",
+                )
+                sys.exit(1)
+            if getattr(args, "lint", False):
+                print_cli_error(
+                    "--lint is not supported with --mode bd",
+                    ValueError("no Verilog/VHDL linter applies to a generated Tcl script"),
+                    hint="Drop --lint, or use --mode verilog/vhdl if RTL linting is needed.",
+                )
+                sys.exit(1)
+
         if getattr(args, "dry_run", False):
             if args.mode == "vhdl":
                 _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
@@ -1887,8 +1910,17 @@ def cmd_gen_top(args):
                 if _should_gen_tb:
                     print(f"  {_preview_output.parent}/  (SystemVerilog testbench — exact name set by generate_sv_testbench)")
             elif args.mode == "bd":
-                # design.ir.json (canonical IR snapshot) is also emitted for
-                # --mode bd; provenance.json is written as its sibling.
+                # --mode bd now produces the same manifest/contract
+                # artifact set --mode verilog does (see the bd branch
+                # below) — design_parameters.json is the one exception,
+                # generated with algo_top_v_path=None since there's no
+                # flat Verilog file to associate debug ports from.
+                for _artifact in (
+                    "build_manifest.json", "port_map.yaml", "port_signature.json",
+                    "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
+                    "maturity_report.json",
+                ):
+                    print(f"  {_preview_output.parent / _artifact}")
                 print(f"  {_preview_output.parent / 'design.ir.json'}")
                 print(f"  {_preview_output.parent / 'provenance.json'}")
 
@@ -2174,7 +2206,7 @@ def cmd_gen_top(args):
             )
             conn_map_ir, global_nets_ir = project_to_conn_map(project)
 
-            write_bd_tcl(
+            report = write_bd_tcl(
                 cfg=cfg,
                 ip_info=ip_info,
                 conn_map=conn_map_ir,
@@ -2182,10 +2214,131 @@ def cmd_gen_top(args):
                 out_path=output,
                 bd_name=args.bd_name,
                 src_root=design_path.parent,
+                ip_root=ip_root,
+                system_yml=args.system,
+                project_root=c_root,
             )
 
             print(f"✓ Block Design TCL generated: {output}")
+            _print_gen_report(report)
 
+            # Attach the generator's resolved top-level port list to the
+            # IR — same join verilog mode performs, from the same shared
+            # resolver (forge.generation.generators._port_resolution), so
+            # the two modes can never independently disagree on it.
+            project.design.top_ports = [
+                ResolvedTopLevelPort(
+                    name=p["name"], direction=p["direction"], width=p["width"],
+                    origin=p.get("origin"),
+                    instance_id=p.get("instance"),
+                    instance_port=p.get("port"),
+                )
+                for p in report.get("top_ports", [])
+            ]
+
+            # Attach tie_off connections — same as verilog mode.
+            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
+            project.design.connections.sort(key=lambda c: c.id)
+
+            if getattr(args, "strict", False):
+                _strict_port_gate(report, cfg)
+
+            # BD mode has no Verilog/VHDL top module name — the BD's own
+            # name is the closest equivalent for provenance/manifest
+            # bookkeeping (deliberate divergence from verilog's
+            # args.top_name).
+            project.design.top_module = args.bd_name
+
+            manifest_output = output.parent / "build_manifest.json"
+            print(f"📦 Generating build manifest: {manifest_output}")
+            generate_build_manifest(
+                project=project,
+                ip_info=ip_info,
+                ip_root=ip_root,
+                algo_top=output,
+                design_file=design_path,
+                manifest_output=manifest_output,
+                project_root=c_root,
+                hls_build_root=hls_build_root,
+            )
+
+            port_map_output = output.parent / "port_map.yaml"
+            print(f"\n🗺  Generating port map: {port_map_output}")
+            # generate_port_map never re-parses `output` (a Tcl file, not
+            # Verilog) since `ports=` is supplied here — same mechanism
+            # the verilog branch uses to avoid re-parsing algo_top.v.
+            _top_ports_for_map = {
+                p["name"]: (p["direction"], p["width"]) for p in report.get("top_ports", [])
+            }
+            port_map_data, port_sig_hash = generate_port_map(
+                output, port_map_output, cfg.interface_metadata, ports=_top_ports_for_map or None
+            )
+
+            if port_map_data is not None:
+                from forge.core.utils import port_signature as _sig
+                sig_output = output.parent / "port_signature.json"
+                _sig.write_artifact(
+                    port_sig_hash,
+                    sig_output,
+                    source_file=str(output.resolve()),
+                    top_module=port_map_data.get("top_module", "algo_top"),
+                    port_count=sum(
+                        len(v) if isinstance(v, list)
+                        else v.get("count", 0) if isinstance(v, dict)
+                        else 0
+                        for v in port_map_data.get("port_groups", {}).values()
+                    ),
+                )
+                print(f"  ✓ Port signature artifact: {sig_output}")
+
+            params_output = output.parent / "design_parameters.json"
+            print(f"\n📋 Generating design parameters: {params_output}")
+            # algo_top_v_path=None: block_design.tcl isn't Verilog, so the
+            # module-level debug-port-association section
+            # (design_parameters.py's parse_algo_top_ports) can't read it
+            # — a known, accepted gap for --mode bd (no debug-port
+            # metadata in design_parameters.json yet). The interface-counts
+            # section still populates fully from port_map_data.
+            write_design_parameters(
+                cfg,
+                params_output,
+                algo_top_v_path=None,
+                hls_metrics_file=args.hls_metrics,
+                port_map_data=port_map_data,
+            )
+
+            probe_map_output = None
+            if port_map_data is not None:
+                probe_map_output = output.parent / "probe_map.yaml"
+                print(f"\n🔎 Generating probe map: {probe_map_output}")
+                generate_probe_map(port_map_data, probe_map_output)
+
+            if port_map_data is not None:
+                tb_bindings_output = output.parent / "tb_bindings.svh"
+                print(f"\n🔌 Generating TB bindings: {tb_bindings_output}")
+                generate_tb_bindings(port_map_data, tb_bindings_output)
+
+                if probe_map_output and probe_map_output.exists():
+                    import yaml as _yaml
+                    probe_map_data = _yaml.safe_load(probe_map_output.read_text()) or {}
+                    validate_generated_contracts(
+                        port_map_data,
+                        probe_map_data,
+                        tb_bindings_output,
+                        params_output,
+                    )
+
+            maturity_output = output.parent / "maturity_report.json"
+            maturity = _compute_maturity_summary(
+                cfg, match_report, report, ir_content_hash=ir_content_hash_of(project),
+            )
+            maturity["port_signature_hash"] = port_sig_hash if port_map_data else None
+            maturity_output.write_text(json.dumps(maturity, indent=2) + "\n")
+            print(f"  ✓ Maturity report: {maturity_output}")
+
+            # Canonical IR snapshot — `project` was already built above,
+            # now carrying top_ports/tie-offs attached above, to drive
+            # this generation run; reuse it rather than building it twice.
             ir_output = output.parent / "design.ir.json"
             ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
             print(f"  ✓ Canonical IR snapshot: {ir_output}")

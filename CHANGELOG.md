@@ -8,6 +8,61 @@ for the versioning policy.
 ## [Unreleased]
 
 ### Added
+- **`forge topgen gen-top --mode bd` now reaches parity with `--mode
+  verilog`.** Previously `write_bd_tcl` returned no report at all, had no
+  tie-off logic for unconnected mandatory inputs (a real Block Design
+  correctness gap — `validate_bd_design` can reject those), and named
+  external top-level ports via a single blind `make_bd_pins_external` call,
+  leaving Vivado to choose the actual port names/widths rather than forge.
+  `--mode bd` now:
+  - Resolves top-level ports through the exact same function `--mode
+    verilog` uses (`forge.generation.generators._port_resolution.
+    resolve_top_ports`, extracted from `write_structural_verilog` — one
+    implementation of "which pins are top-level, and what are they named"
+    shared by both generators, not two that can independently drift; proven
+    with a new cross-mode test asserting bd/verilog produce byte-identical
+    `port_map.yaml`/`port_signature.json` for the same design).
+  - Emits deterministic `create_bd_port`/`connect_bd_net` pairs for every
+    external/debug/control-signal/global-net top-level port instead of
+    `make_bd_pins_external`.
+  - Ties off any unconnected mandatory input to a shared
+    `xilinx.com:ip:xlconstant` IP per distinct bit-width (verified against
+    a real Vivado 2024.1 `validate_bd_design` round-trip — see the new
+    opt-in `forge/tests/test_bd_vivado_smoke.py`).
+  - Now produces the same manifest/contract artifact set `--mode verilog`
+    does — `build_manifest.json`, `port_map.yaml`, `port_signature.json`,
+    `design_parameters.json` (module-level debug-port-association metadata
+    stays empty for bd mode, since there's no flat Verilog file to derive
+    it from — a documented, accepted gap, not silently wrong), `probe_map.yaml`,
+    `tb_bindings.svh`, `maturity_report.json` — instead of only
+    `design.ir.json`/`provenance.json`.
+  - Instantiates real `RegisterStage`/`signal_delay` cells for plain
+    `register_stages`/`delay_cycles` connections — the same support-RTL
+    modules verilog mode uses (`CONFIG.DATAWIDTH`/`CONFIG.STAGES` and
+    `CONFIG.WIDTH`/`CONFIG.DEPTH` set via `set_property`, found on disk the
+    same way `generate_build_manifest`'s verilog-mode compile list already
+    does — a new `project_root` parameter on `write_bd_tcl` so it can
+    search a real plugin's whole tree, not just the design/IP directories).
+    Verified against real Vivado 2024.1 (`validate_bd_design` clean, both
+    for a minimal RTL-only fixture and for `trigger_demo`'s own
+    `register_stages`/`delay_cycles` connections, whose bd-mode
+    `port_signature.json` hash now matches verilog mode's exactly).
+  - Still explicitly rejects (rather than silently generating an
+    incomplete Block Design for) a `boundary:`-tagged delay (needs the
+    *protected* `slr_crossing_delay` module, not plain `signal_delay`), a
+    `cdc:` adapter, or a `reset_domains.*.sync: reset_sync` domain —
+    `write_bd_tcl` has no destination-domain clock/reset resolution or
+    synchronizer/FIFO cell instantiation for any of those yet.
+  - `--gen-testbench`/`--lint` now fail loudly under `--mode bd` (both are
+    Verilog/VHDL-specific) instead of silently no-op'ing.
+
+  New `forge/tests/test_block_design.py` (report shape, tie-off Tcl
+  content, register-stage/signal-delay cell instantiation, cross-mode
+  port-naming parity), new `forge/tests/test_port_resolution.py`, new
+  `--mode bd` coverage in `forge/tests/test_topgen_cli_commands.py`, and a
+  real `docs/tutorials/golden-path.md` walkthrough (previously one
+  sentence) showing the full `--mode bd` round-trip including sourcing the
+  generated Tcl into Vivado.
 - `ci/check_coverage_floors.py`, run as an extra step in
   `forge:python-unit-tests` right after the main `pytest forge/tests` run:
   per-subsystem coverage floors for the modules that back FORGE's

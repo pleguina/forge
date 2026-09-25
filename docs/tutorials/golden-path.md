@@ -68,6 +68,91 @@ or `port_map_ranges`, a declared cardinality is violated, or a connection
 crosses clock/reset domains without a declared `cdc:` adapter (see
 [clock and reset domains](../concepts/clock-and-reset-domains.md)).
 
+## 4b. Alternative: generate as a Block Design instead of Verilog
+
+`--mode bd` generates the same design as a Vivado Block Design Tcl script
+instead of flat structural Verilog — each module becomes a `create_bd_cell`
+instance inside a real Block Design (with a proper IP-Integrator boundary
+per instance) rather than a raw `add_files`-and-flatten Verilog top. It's
+otherwise the same generator pipeline: the same validation, and the same
+`build_manifest.json`/`port_map.yaml`/`port_signature.json`/
+`design_parameters.json`/`probe_map.yaml`/`tb_bindings.svh`/
+`maturity_report.json`/`design.ir.json` artifacts get written alongside it.
+
+```bash
+forge topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
+  --mode bd \
+  --bd-name passthrough_bd \
+  --consumer-root . \
+  --contracts-from plugins/passthrough_demo/forge/modules.yml \
+  --build-dir build_passthrough_demo_bd \
+  --hls-build-root build_hls_passthrough_demo_bd \
+  --output gen-top/design_passthrough_demo_bd/block_design.tcl
+```
+
+The generated Tcl creates the BD, instantiates `passthrough_demo`'s one RTL
+module, wires `ap_clk`/`ap_rst`, and creates the same four top-level ports
+`--mode verilog` would (`pt_data_in`, `pt_data_in_valid`, `pt_data_out`,
+`pt_data_out_valid`) — deterministically, by name, rather than leaving
+Vivado to choose the names itself:
+
+```tcl
+create_bd_port -dir I -from 7 -to 0 pt_data_in
+connect_bd_net [get_bd_ports pt_data_in] [get_bd_pins pt/data_in]
+create_bd_port -dir I pt_data_in_valid
+connect_bd_net [get_bd_ports pt_data_in_valid] [get_bd_pins pt/data_in_valid]
+create_bd_port -dir O -from 7 -to 0 pt_data_out
+connect_bd_net [get_bd_pins pt/data_out] [get_bd_ports pt_data_out]
+create_bd_port -dir O pt_data_out_valid
+connect_bd_net [get_bd_pins pt/data_out_valid] [get_bd_ports pt_data_out_valid]
+```
+
+`port_map.yaml` and `port_signature.json`'s hash from this run are
+identical to `--mode verilog`'s for the same design — both modes resolve
+the top-level port set through the same shared function
+(`forge.generation.generators._port_resolution.resolve_top_ports`), so
+there's exactly one implementation of "which pins are top-level, and what
+are they named" to keep correct, not two that can silently drift apart.
+
+Any instance input left with no driver (no connection, no external/global
+declaration) is tied to a shared `xilinx.com:ip:xlconstant` IP rather than
+left disconnected — a Block Design can't leave a mandatory input pin
+genuinely unconnected the way a flat `.v` file's bare `.pin()` can;
+`validate_bd_design` flags it.
+
+### Sourcing the Tcl into Vivado
+
+```tcl
+create_project demo ./vivado_proj -part <your part> -force
+source gen-top/design_passthrough_demo_bd/block_design.tcl
+open_bd_design [get_files *.bd]
+validate_bd_design
+```
+
+`block_design.tcl` itself already ends with
+`make_wrapper -files [get_files *.bd] -top -inst_template -import`, so this
+also produces a synthesizable HDL wrapper for the Block Design
+(`passthrough_bd_wrapper.v`), the same file `generate_target`/`launch_runs`
+would need downstream in a real board build.
+
+Plain `register_stages`/`delay_cycles` connections work too: `--mode bd`
+instantiates real `RegisterStage`/`signal_delay` cells (the same modules
+`--mode verilog` uses) between the source and destination pins, found on
+disk and added to the project the same way its own RTL modules are —
+`--project-root` (or `--consumer-root`, which feeds it) needs to point at
+the plugin's whole tree so support RTL like `algo/rtl/RegisterStage.v` can
+actually be found, not just `design.yml`'s own directory.
+
+Not every design can use `--mode bd` yet: one that declares a
+`boundary:`-tagged delay (needs the *protected* `slr_crossing_delay`
+module, not plain `signal_delay`), a `cdc:` adapter, or a
+`reset_domains.*.sync: reset_sync` domain is rejected outright —
+`write_bd_tcl` has no destination-domain clock/reset resolution or real
+synchronizer/FIFO cell instantiation for any of those yet, and generating a
+Block Design silently missing that logic would be worse than an error
+naming exactly which connection or domain declared the unsupported
+feature. Use `--mode verilog` for those designs for now.
+
 ## 5. Generate the verification flow
 
 ```bash

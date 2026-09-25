@@ -85,7 +85,7 @@
       "kind": "function",
       "module": "forge",
       "name": "write_bd_tcl",
-      "summary": ""
+      "summary": "Generate a Vivado Block Design Tcl script wiring algorithm modules"
     },
     {
       "kind": "function",
@@ -211,7 +211,7 @@
       "kind": "function",
       "module": "forge.generation.generators",
       "name": "write_bd_tcl",
-      "summary": ""
+      "summary": "Generate a Vivado Block Design Tcl script wiring algorithm modules"
     },
     {
       "kind": "function",

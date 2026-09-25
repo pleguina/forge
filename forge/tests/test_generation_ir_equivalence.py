@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from forge.contracts.config import DesignConfig
 from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
 from forge.contracts.matcher import auto_match_ports
@@ -123,10 +125,13 @@ def test_trigger_demo_vhdl_generation_is_byte_identical(tmp_path):
     _assert_byte_identical_vhdl(TRIGGER_DESIGN, TRIGGER_MODULES, tmp_path)
 
 
-def _assert_byte_identical_bd(design_path: Path, modules_path: Path, tmp_path: Path) -> None:
+def _assert_byte_identical_bd(
+    design_path: Path, modules_path: Path, tmp_path: Path, *, project_root: Path | None = None,
+) -> None:
     cfg, contracts, ip_info, conn_map, global_nets, projected_conn_map, projected_global_nets = _resolve(
         design_path, modules_path,
     )
+    ip_root = tmp_path / "ips"
     direct_out = tmp_path / "direct" / "block_design.tcl"
     ir_out = tmp_path / "ir_projected" / "block_design.tcl"
     direct_out.parent.mkdir(parents=True)
@@ -135,10 +140,12 @@ def _assert_byte_identical_bd(design_path: Path, modules_path: Path, tmp_path: P
     write_bd_tcl(
         cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
         out_path=direct_out, bd_name="top_bd", src_root=design_path.parent,
+        ip_root=ip_root, project_root=project_root,
     )
     write_bd_tcl(
         cfg=cfg, ip_info=ip_info, conn_map=projected_conn_map, global_nets=projected_global_nets,
         out_path=ir_out, bd_name="top_bd", src_root=design_path.parent,
+        ip_root=ip_root, project_root=project_root,
     )
 
     direct_bytes = direct_out.read_bytes()
@@ -155,4 +162,63 @@ def test_passthrough_demo_bd_generation_is_byte_identical(tmp_path):
 
 
 def test_trigger_demo_bd_generation_is_byte_identical(tmp_path):
-    _assert_byte_identical_bd(TRIGGER_DESIGN, TRIGGER_MODULES, tmp_path)
+    """trigger_demo's design.yml declares register_stages (col->trig) and
+    delay_cycles (tfan fanout) — write_bd_tcl instantiates real
+    RegisterStage/signal_delay cells for these (project_root is required so
+    it can find RegisterStage.v/signal_delay.v under
+    plugins/trigger_demo/algo/rtl/, the same way
+    generate_build_manifest's verilog-mode search already does)."""
+    _assert_byte_identical_bd(
+        TRIGGER_DESIGN, TRIGGER_MODULES, tmp_path, project_root=TRIGGER_DESIGN.parents[2],
+    )
+
+
+def test_write_bd_tcl_rejects_boundary_tagged_delay(tmp_path):
+    """A boundary-tagged delay needs the protected slr_crossing_delay
+    module (KEEP_HIERARCHY/DONT_TOUCH), not plain signal_delay —
+    write_bd_tcl doesn't implement that yet and must reject the design
+    outright rather than silently using the wrong module."""
+    design_yml = tmp_path / "design.yml"
+    modules_yml = tmp_path / "modules.yml"
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n  ip_info_key: src\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    (tmp_path / "interfaces" / "dst.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: dst\n  ip_info_key: dst\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    din: {raw_port: din, direction: input, width: 8}\n"
+    )
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n    kind: rtl\n    top: src_top\n    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        "  - name: dst\n    kind: rtl\n    top: dst_top\n    src: [dst.v]\n"
+        "    interface_contract: interfaces/dst.interface.yaml\n"
+    )
+    design_yml.write_text(
+        "part: xcvu13p\nclock_period: 4.0\n"
+        "modules:\n"
+        "  - name: src\n    top: src_top\n    src: [src.v]\n"
+        "  - name: dst\n    top: dst_top\n    src: [dst.v]\n"
+        "connections:\n"
+        "  - from: src\n    to: dst\n    port_map: [[dout, din]]\n"
+        "    delay_cycles: 3\n    boundary: slr0_to_slr1\n"
+    )
+
+    cfg, contracts, ip_info, conn_map, global_nets, _p, _g = _resolve(design_yml, modules_yml)
+    with pytest.raises(ValueError, match="boundary"):
+        write_bd_tcl(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            out_path=tmp_path / "block_design.tcl", bd_name="top_bd",
+            src_root=design_yml.parent, ip_root=tmp_path / "ips",
+        )
