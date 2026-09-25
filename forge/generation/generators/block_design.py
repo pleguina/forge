@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
-from ._port_resolution import classify_connections, resolve_top_ports
+from ...contracts.domains import resolve_domain_nets
+from ._port_resolution import (
+    _domain_to_top_level_net,
+    classify_connections,
+    resolve_top_ports,
+)
 from ..support_rtl import resolve_support_rtl
 
 NL = "\n"
@@ -162,21 +167,17 @@ def _create_port_cmd(direction: str, name: str, width: int) -> str:
 def _unsupported_bd_features(cfg: DesignConfig) -> List[str]:
     """Design features write_bd_tcl still doesn't implement.
 
-    ``register_stages``/``delay_cycles`` are handled (see
-    ``reg_stages_map``/``delay_cycles_map`` and the intermediate-stage
-    insertion in ``write_bd_tcl``'s point-to-point loop) — real
-    ``RegisterStage``/``signal_delay`` cell instantiation, the same modules
-    verilog mode uses. Still rejected outright, rather than silently
-    generating a BD missing real logic:
+    ``register_stages``/``delay_cycles`` and ``reset_domains.*.sync:
+    reset_sync`` are handled (see ``reg_stages_map``/``delay_cycles_map``
+    and ``write_bd_tcl``'s reset-synchronizer section) with real cell
+    instantiation, the same modules verilog mode uses. Still rejected
+    outright, rather than silently generating a BD missing real logic:
 
     - A ``boundary:`` tag needs the *protected* ``slr_crossing_delay``
       module (``KEEP_HIERARCHY``/``DONT_TOUCH`` on every stage register) —
       a different module from plain ``signal_delay``, not implemented here.
-    - CDC synchronizers (``cdc:``) and ``reset_domains.*.sync: reset_sync``
-      both need destination-domain clock/reset resolution
-      (``forge.contracts.domains.resolve_domain_nets``) this generator
-      doesn't perform, and real synchronizer/FIFO cell instantiation this
-      generator has no code for at all.
+    - CDC synchronizers (``cdc:``) need real synchronizer/FIFO cell
+      instantiation this generator has no code for yet.
     """
     problems: List[str] = []
     for conn in cfg.connections:
@@ -184,9 +185,6 @@ def _unsupported_bd_features(cfg: DesignConfig) -> List[str]:
             problems.append(f"connection {conn.from_}->{conn.to} declares boundary={conn.boundary!r}")
         if conn.cdc:
             problems.append(f"connection {conn.from_}->{conn.to} declares cdc: {conn.cdc}")
-    for name, rel in (cfg.reset_domains or {}).items():
-        if rel.get("sync") == "reset_sync":
-            problems.append(f"reset_domains.{name} declares sync: reset_sync")
     return problems
 
 
@@ -204,6 +202,8 @@ def write_bd_tcl(
     src_root: Optional[Path] = None,
     ip_root: Optional[Path] = None,
     system_yml: Optional[Path] = None,
+    contracts: Optional[Dict[str, Any]] = None,
+    match_report: Any = None,
 ) -> Dict[str, Any]:
     """Generate a Vivado Block Design Tcl script wiring algorithm modules
     together — the ``--mode bd`` counterpart to
@@ -215,21 +215,43 @@ def write_bd_tcl(
     ``top_ports``), so ``forge topgen gen-top``'s reporting/manifest
     pipeline works unmodified against either mode.
 
-    Raises ``ValueError`` if the design declares a boundary-tagged delay,
-    a CDC synchronizer, or a reset_sync domain — see
-    ``_unsupported_bd_features``. Plain ``register_stages``/
-    ``delay_cycles`` (no ``boundary:`` tag) are supported: a real
-    ``RegisterStage``/``signal_delay`` cell is instantiated between the
-    source and destination pins, the same modules verilog mode uses.
+    Raises ``ValueError`` if the design declares a boundary-tagged delay or
+    a CDC synchronizer — see ``_unsupported_bd_features``. Plain
+    ``register_stages``/``delay_cycles`` (no ``boundary:`` tag) are
+    supported: a real ``RegisterStage``/``signal_delay`` cell is
+    instantiated between the source and destination pins, the same modules
+    verilog mode uses.
+
+    A ``reset_domains.*.sync: reset_sync`` domain is supported too: a real
+    ``cdc_reset_sync`` cell is instantiated per domain and its
+    ``sync_rst_out`` fans out to each member instance's reset pin directly
+    (no intermediate net declaration needed, unlike verilog mode — a BD
+    connects pins straight to pins). *contracts* and *match_report* are
+    required in that case, so each domain's member instances and their
+    clock can be resolved (``forge.contracts.domains.resolve_domain_nets``,
+    the same resolver verilog mode uses for this).
     """
     unsupported = _unsupported_bd_features(cfg)
     if unsupported:
         raise ValueError(
             "write_bd_tcl (--mode bd) does not yet support a boundary-tagged "
-            "delay, CDC synchronizers, or reset_domains.*.sync: reset_sync "
-            "— generating a Block Design for this design would silently drop "
-            "real logic verilog mode includes:\n  - " + "\n  - ".join(unsupported) +
+            "delay or CDC synchronizers — generating a Block Design for this "
+            "design would silently drop real logic verilog mode includes:\n"
+            "  - " + "\n  - ".join(unsupported) +
             "\nUse --mode verilog for this design instead."
+        )
+
+    reset_sync_domains = {
+        name: rel for name, rel in (cfg.reset_domains or {}).items()
+        if rel.get("sync") == "reset_sync"
+    }
+    if reset_sync_domains and match_report is None:
+        raise ValueError(
+            "a reset_domains.*.sync: reset_sync entry is present but "
+            "write_bd_tcl was not given a match_report — pass the "
+            "MatchReport auto_match_ports returned so each domain's member "
+            "instances and their clock can be resolved "
+            "(forge.contracts.domains.resolve_domain_nets)."
         )
 
     # register_stages/delay_cycles, expanded per-instance — same
@@ -259,6 +281,16 @@ def write_bd_tcl(
         cfg, ip_info, conn_map, global_nets, resolution,
     )
 
+    # Resolve each module's real clock/reset domain so a reset_sync
+    # domain's cdc_reset_sync cell can be clocked by the domain's own
+    # destination clock, not always assumed to be ap_clk.
+    clock_of_module: Dict[str, Optional[str]] = {}
+    reset_of_module: Dict[str, Optional[str]] = {}
+    if reset_sync_domains:
+        clock_of_module, reset_of_module, _unresolved = resolve_domain_nets(
+            cfg, contracts or {}, match_report, global_nets, resolution.inst_to_mod,
+        )
+
      # Collect HDL sources for -type module references (pairs: file, lang)
     hdl_sources_flat: List[str] = []
     for mod in cfg.modules:
@@ -273,7 +305,7 @@ def write_bd_tcl(
     # brings its own file of that name.
     _needed = (["RegisterStage.v"] if reg_stages_map else []) + (
         ["signal_delay.v"] if delay_cycles_map else []
-    )
+    ) + (["cdc_reset_sync.v"] if reset_sync_domains else [])
     for found in resolve_support_rtl(_needed, hdl_sources_flat[0::2]):
         hdl_sources_flat += [found.as_posix(), "verilog"]
 
@@ -387,6 +419,14 @@ def write_bd_tcl(
             return net_name
 
         for net, binds in global_nets.items():
+            if net in reset_sync_domains:
+                # This domain's member instances are reset from a real
+                # cdc_reset_sync cell's sync_rst_out below instead of the
+                # raw domain net — the top-level port for `net` still gets
+                # created (origin "global_net", above), intentionally
+                # left unconnected: nothing drives it any more once a real
+                # synchronizer exists for the domain.
+                continue
             top_port = _map_to_top_port(net)
             groups: Dict[str, List[str]] = {}
             for inst, _ in binds:
@@ -408,6 +448,38 @@ def write_bd_tcl(
                             f"connect_bd_net [get_bd_ports {top_port}] [get_bd_pins {inst}/{net}]"
                         )
         tcl.append("")
+
+    # ── reset synchronizers for reset_domains.*.sync: reset_sync ─
+    if reset_sync_domains:
+        tcl.append("# -- reset synchronizers for reset_domains.*.sync: reset_sync --")
+        for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
+            derived_from = rel.get("derived_from")
+            async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
+
+            # The synchronizer's own destination clock: whichever clock
+            # domain this reset domain's member instances actually use (a
+            # reset domain and its instances are assumed to share one
+            # clock domain). Falls back to ap_clk if unresolvable.
+            member_mod_names = [mod for mod, dom in reset_of_module.items() if dom == name]
+            dst_clk_domain = clock_of_module.get(member_mod_names[0]) if member_mod_names else None
+            dst_clk_net = (
+                _domain_to_top_level_net(dst_clk_domain, is_clock=True, own_nets=global_nets)
+                if dst_clk_domain else "ap_clk"
+            )
+
+            cell_name = f"rst_sync_{rst_sync_counter}"
+            tcl += [
+                f"# Reset domain {name!r}: real member instances bound to sync_rst_out",
+                f"create_bd_cell -type module -reference cdc_reset_sync {cell_name}",
+                f"connect_bd_net [get_bd_ports {dst_clk_net}] [get_bd_pins {cell_name}/dst_clk]",
+                f"connect_bd_net [get_bd_ports {async_rst_net}] [get_bd_pins {cell_name}/async_rst_in]",
+            ]
+            for inst, port in global_nets.get(name, []):
+                tcl.append(
+                    f"connect_bd_net [get_bd_pins {cell_name}/sync_rst_out] "
+                    f"[get_bd_pins {inst}/{port}]"
+                )
+            tcl.append("")
 
     def _pin_width(inst: str, pin: str) -> int:
         mod_name = resolution.inst_to_mod[inst]

@@ -102,6 +102,64 @@ def _collapses_to_global(name: str, *, is_clock: bool, own_nets) -> bool:
     return reads_as and name not in (own_nets or ())
 
 
+def _domain_to_top_level_net(
+    domain_name: str, *, is_clock: bool, own_nets: "Set[str] | Tuple[str, ...]" = (),
+) -> str:
+    """Translate a resolved clock/reset domain identity (the raw port name
+    — see ``forge.contracts.domains.resolve_domain_nets``) into the actual
+    top-level net a generator wires it to.
+
+    Both generators' own clock/reset auto-map (``_auto_mapped_global``
+    above) collapses every *standard*-name variant onto the single literal
+    ``ap_clk``/``ap_rst`` top-level port, regardless of which specific
+    variant string a module's contract declared. A domain with its own
+    declared global net (``clk_b``, a named second clock domain) keeps that
+    net instead — pass those names as *own_nets*, and they win over the
+    collapse.
+
+    Used by CDC synchronizer / reset-synchronizer emission to reference the
+    net that actually exists in the generated output, not the raw domain
+    identity string, so it must resolve exactly as the per-instance port
+    mapping does.
+    """
+    if not _collapses_to_global(domain_name, is_clock=is_clock, own_nets=own_nets):
+        return domain_name
+    return "ap_clk" if is_clock else "ap_rst"
+
+
+def _reset_net_for_domain(
+    domain_name: "str | None",
+    reset_sync_domains: Dict[str, Dict[str, Any]],
+    own_nets: "Set[str] | Tuple[str, ...]" = (),
+    *,
+    ident_fn=lambda s: s,
+) -> str:
+    """Resolve a module's reset domain to the net that actually carries a
+    real, synchronized reset.
+
+    A ``reset_domains.<name>.sync: reset_sync`` domain's real reset signal
+    is the ``cdc_reset_sync`` instance's own ``sync_rst_out`` — not the raw
+    top-level ``<name>`` net, which is never driven by anything once a real
+    synchronizer exists for it (see ``design_cdc.yml``'s own header for why
+    that top-level port is intentionally left unconnected/dangling). Every
+    consumer of a resolved reset domain — a CDC synchronizer's own
+    src_rst/dst_rst, and a member instance's own reset pin — must resolve
+    through this same rule, not ``_domain_to_top_level_net`` alone: using
+    the raw domain net instead is a real, silent miscompile (a module reads
+    a permanently-unasserted reset and its registers stay X forever).
+
+    *ident_fn* legalizes the synchronized net's name for the calling
+    generator's output language (e.g. a Verilog-safe identifier); it is
+    only applied to the synthesized ``rst_sync_<name>`` name, never to a
+    domain name returned unchanged.
+    """
+    if domain_name and domain_name in reset_sync_domains:
+        return ident_fn(f"rst_sync_{domain_name}")
+    if not domain_name:
+        return "ap_rst"
+    return _domain_to_top_level_net(domain_name, is_clock=False, own_nets=own_nets)
+
+
 def _normalize_ports(raw_ports: List[Dict]) -> List[Dict]:
     """Return [{name, dir, width}] with dir∈{in,out}, width:int."""
     out = []

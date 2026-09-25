@@ -16,7 +16,9 @@ from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
 from ._port_resolution import (
     _auto_mapped_global,
     _collapses_to_global,
+    _domain_to_top_level_net,
     _is_user_external,
+    _reset_net_for_domain,
     resolve_top_ports,
 )
 
@@ -72,69 +74,8 @@ def _base_of(name: str) -> str:
 def _inst(mod: Module, idx: int) -> str:
     return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
 
-#: Clock/reset collapse rules moved to _port_resolution.py (shared with
-#: write_bd_tcl) — _collapses_to_global is imported from there. Kept in use
-#: here only by _domain_to_top_level_net's CDC net resolution below.
-
-
-def _domain_to_top_level_net(
-    domain_name: str, *, is_clock: bool, own_nets: "Set[str] | Tuple[str, ...]" = (),
-) -> str:
-    """Translate a resolved clock/reset domain identity (the raw port name
-    — see forge.contracts.domains.resolve_domain_nets) into the actual
-    top-level net name this generator wires it to.
-
-    This generator's own clock/reset auto-map (the per-instance port-
-    mapping loop below) collapses every *standard*-name variant
-    (``clk``/``clock``/``ap_clk``, or anything ending ``_clk``/``_ap_clk``
-    for clocks; ``rst``/``reset``/``ap_rst``/``rst_n``, or anything ending
-    ``_rst``/``_ap_rst``/``_rst_n`` for resets) onto the single literal
-    ``ap_clk``/``ap_rst`` top-level port, regardless of which specific
-    variant string a module's contract declared. A domain with its own
-    declared global net (``clk_b``, a named second clock domain) keeps that
-    net instead — pass those names as *own_nets*, and they win over the
-    collapse.
-
-    Used by CDC synchronizer emission to reference the net that actually
-    exists in the generated file, not the raw domain identity string, so it
-    must resolve exactly as the per-instance port mapping does.
-
-    What counts as a clock or reset name is
-    ``forge.core.utils.signal_names``' shared convention, which recognises
-    the fused bus spellings (``pclk``, ``aclk``, ``presetn``, ``aresetn``)
-    the hand-written rule this replaced did not — a peripheral design's
-    ``pclk`` matched nothing and was tied to ``1'b0``.
-    """
-    if not _collapses_to_global(domain_name, is_clock=is_clock, own_nets=own_nets):
-        return domain_name
-    return "ap_clk" if is_clock else "ap_rst"
-
-def _reset_net_for_domain(
-    domain_name: "str | None",
-    reset_sync_domains: Dict[str, Dict[str, Any]],
-    own_nets: "Set[str] | Tuple[str, ...]" = (),
-) -> str:
-    """Resolve a module's reset domain to the net that actually carries a
-    real, synchronized reset.
-
-    A `reset_domains.<name>.sync: reset_sync` domain's real reset signal
-    is `rst_sync_<name>` — the cdc_reset_sync instance's own output — not
-    the raw top-level `<name>` port (which is never driven by anything
-    once a real synchronizer exists for it; see design_cdc.yml's own
-    header for why that top-level port is intentionally left
-    unconnected/dangling). Every OTHER consumer of a resolved reset
-    domain (a CDC synchronizer's own src_rst/dst_rst, and a member
-    instance's own reset pin) must resolve through this same rule, not
-    just `_domain_to_top_level_net` alone — using the raw domain net
-    instead is a real, silent miscompile (a module/synchronizer reads a
-    permanently-unasserted reset and its registers stay X forever),
-    found empirically wiring vision_pipeline_demo's design_cdc.yml.
-    """
-    if domain_name and domain_name in reset_sync_domains:
-        return _verilog_ident(f"rst_sync_{domain_name}")
-    if not domain_name:
-        return "ap_rst"
-    return _domain_to_top_level_net(domain_name, is_clock=False, own_nets=own_nets)
+#: _domain_to_top_level_net/_reset_net_for_domain moved to
+#: _port_resolution.py, shared with write_bd_tcl — imported above.
 
 def _vtype(width: int) -> str:
     """Return Verilog type string: wire for 1-bit, wire [N-1:0] for multi-bit."""
@@ -1047,9 +988,9 @@ def write_structural_verilog(
             dst_clk_domain = clock_of_module.get(dst_mod)
             dst_rst_domain = reset_of_module.get(dst_mod)
             src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True, own_nets=global_nets) if src_clk_domain else "ap_clk"
-            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains, global_nets)
+            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains, global_nets, ident_fn=_verilog_ident)
             dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True, own_nets=global_nets) if dst_clk_domain else "ap_clk"
-            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains, global_nets)
+            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains, global_nets, ident_fn=_verilog_ident)
 
             for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)

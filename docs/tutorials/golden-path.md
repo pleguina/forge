@@ -142,15 +142,24 @@ modules ship with forge itself (`forge/rtl/support/`), so a plugin
 doesn't need its own copy; the generated Tcl adds them to the project
 alongside the design's own RTL.
 
+A `reset_domains.*.sync: reset_sync` domain works too: `--mode bd`
+instantiates a real `cdc_reset_sync` cell per domain, clocked by that
+domain's own destination clock, and connects its `sync_rst_out` straight
+to each member instance's reset pin — no intermediate net to declare,
+since a Block Design connects pins directly to pins. The domain's own raw
+top-level port is still created but left unconnected, the same convention
+`--mode verilog` uses (nothing drives it once a real synchronizer exists
+for the domain). This needs `write_bd_tcl`'s `contracts`/`match_report`
+parameters (forge's own `gen-top` CLI always passes them) so each
+domain's member instances and their clock can be resolved.
+
 Not every design can use `--mode bd` yet: one that declares a
 `boundary:`-tagged delay (needs the *protected* `slr_crossing_delay`
-module, not plain `signal_delay`), a `cdc:` adapter, or a
-`reset_domains.*.sync: reset_sync` domain is rejected outright —
-`write_bd_tcl` has no destination-domain clock/reset resolution or real
-synchronizer/FIFO cell instantiation for any of those yet, and generating a
-Block Design silently missing that logic would be worse than an error
-naming exactly which connection or domain declared the unsupported
-feature. Use `--mode verilog` for those designs for now.
+module, not plain `signal_delay`) or a `cdc:` adapter is rejected outright
+— `write_bd_tcl` has no real synchronizer/FIFO cell instantiation for
+either yet, and generating a Block Design silently missing that logic
+would be worse than an error naming exactly which connection declared the
+unsupported feature. Use `--mode verilog` for those designs for now.
 
 ## 5. Generate the verification flow
 

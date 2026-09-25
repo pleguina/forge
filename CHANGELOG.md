@@ -69,22 +69,39 @@ for the versioning policy.
     for a minimal RTL-only fixture and for `trigger_demo`'s own
     `register_stages`/`delay_cycles` connections, whose bd-mode
     `port_signature.json` hash now matches verilog mode's exactly).
+  - A `reset_domains.*.sync: reset_sync` domain is supported: a real
+    `cdc_reset_sync` cell is instantiated per domain, clocked by the
+    domain's own destination clock (resolved via
+    `forge.contracts.domains.resolve_domain_nets`, the same resolver
+    verilog mode uses), with `sync_rst_out` fanned out directly to each
+    member instance's reset pin — no intermediate net declaration needed,
+    unlike verilog mode, since a BD connects pins straight to pins. The
+    domain's own raw top-level port is still created but left
+    unconnected, matching verilog mode's convention. `write_bd_tcl` takes
+    new `contracts`/`match_report` parameters for this (required only
+    when a reset_sync domain is present). Verified against real Vivado
+    2024.1 (`validate_bd_design` clean) on a two-clock-domain fixture.
   - Still explicitly rejects (rather than silently generating an
     incomplete Block Design for) a `boundary:`-tagged delay (needs the
-    *protected* `slr_crossing_delay` module, not plain `signal_delay`), a
-    `cdc:` adapter, or a `reset_domains.*.sync: reset_sync` domain —
-    `write_bd_tcl` has no destination-domain clock/reset resolution or
-    synchronizer/FIFO cell instantiation for any of those yet.
+    *protected* `slr_crossing_delay` module, not plain `signal_delay`) or
+    a `cdc:` adapter — `write_bd_tcl` has no synchronizer/FIFO cell
+    instantiation for either yet.
   - `--gen-testbench`/`--lint` now fail loudly under `--mode bd` (both are
     Verilog/VHDL-specific) instead of silently no-op'ing.
 
   New `forge/tests/test_block_design.py` (report shape, tie-off Tcl
-  content, register-stage/signal-delay cell instantiation, cross-mode
-  port-naming parity), new `forge/tests/test_port_resolution.py`, new
-  `--mode bd` coverage in `forge/tests/test_topgen_cli_commands.py`, and a
-  real `docs/tutorials/golden-path.md` walkthrough (previously one
-  sentence) showing the full `--mode bd` round-trip including sourcing the
-  generated Tcl into Vivado.
+  content, register-stage/signal-delay/reset-sync cell instantiation,
+  cross-mode port-naming parity), new `forge/tests/test_port_resolution.py`,
+  a second `forge/tests/test_bd_vivado_smoke.py` case for the
+  reset-synchronizer path, new `--mode bd` coverage in
+  `forge/tests/test_topgen_cli_commands.py`, and a real
+  `docs/tutorials/golden-path.md` walkthrough (previously one sentence)
+  showing the full `--mode bd` round-trip including sourcing the generated
+  Tcl into Vivado.
+  `_domain_to_top_level_net`/`_reset_net_for_domain` moved from
+  `structural_verilog.py` into `_port_resolution.py`, shared with
+  `write_bd_tcl` — the same "one implementation" pattern
+  `resolve_top_ports` already established for top-level port naming.
 - `ci/check_coverage_floors.py`, run as an extra step in
   `forge:python-unit-tests` right after the main `pytest forge/tests` run:
   per-subsystem coverage floors for the modules that back FORGE's

@@ -2187,6 +2187,8 @@ def cmd_gen_top(args):
                 src_root=design_path.parent,
                 ip_root=ip_root,
                 system_yml=args.system,
+                contracts=_contracts or {},
+                match_report=match_report,
             )
 
             print(f"✓ Block Design TCL generated: {output}")

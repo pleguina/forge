@@ -200,13 +200,15 @@ def test_unsupported_bd_features_flags_cdc() -> None:
     assert "cdc" in problems[0]
 
 
-def test_unsupported_bd_features_flags_reset_sync_domain() -> None:
+def test_unsupported_bd_features_empty_for_a_reset_sync_domain() -> None:
+    """reset_domains.*.sync: reset_sync is supported (see
+    test_write_bd_tcl_instantiates_reset_sync_cell below) — only
+    boundary/cdc are still rejected."""
     cfg = SimpleNamespace(
         connections=[],
         reset_domains={"rst_b": {"sync": "reset_sync"}},
     )
-    problems = _unsupported_bd_features(cfg)
-    assert problems == ["reset_domains.rst_b declares sync: reset_sync"]
+    assert _unsupported_bd_features(cfg) == []
 
 
 def test_unsupported_bd_features_empty_for_a_plain_design() -> None:
@@ -215,6 +217,100 @@ def test_unsupported_bd_features_empty_for_a_plain_design() -> None:
         reset_domains={"rst_b": {}},
     )
     assert _unsupported_bd_features(cfg) == []
+
+
+def _write_reset_sync_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """A two-module RTL design where dst lives in its own clk_dst/rst_dst
+    domain, with rst_dst declared as a reset_domains.*.sync: reset_sync
+    destination — the smallest fixture that exercises write_bd_tcl's
+    reset-synchronizer path without any cdc: connection (still rejected)."""
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n  ip_info_key: src\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    (tmp_path / "interfaces" / "dst.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: dst\n  ip_info_key: dst\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: clk_dst, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: rst_dst, direction: input, width: 1}\n"
+        "    din: {raw_port: din, direction: input, width: 8}\n"
+    )
+    modules_yml = tmp_path / "modules.yml"
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n    kind: rtl\n    top: src_top\n    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        "  - name: dst\n    kind: rtl\n    top: dst_top\n    src: [dst.v]\n"
+        "    interface_contract: interfaces/dst.interface.yaml\n"
+    )
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu13p\nclock_period: 4.0\nblock_protocol: none\n"
+        "reset_domains:\n"
+        "  rst_dst:\n    derived_from: ap_rst\n    sync: reset_sync\n"
+        "modules:\n"
+        "  - name: src\n    top: src_top\n    src: [src.v]\n"
+        "  - name: dst\n    top: dst_top\n    src: [dst.v]\n"
+        "connections:\n"
+        "  - from: src\n    to: dst\n    port_map: [[dout, din]]\n"
+    )
+    return design_yml, modules_yml
+
+
+def test_write_bd_tcl_instantiates_reset_sync_cell(tmp_path: Path) -> None:
+    """dst's own rst_dst domain (reset_domains.rst_dst.sync: reset_sync)
+    gets a real cdc_reset_sync cell, clocked by dst's own clk_dst domain,
+    with sync_rst_out fanned to dst's reset pin directly — no intermediate
+    net name needed, unlike verilog mode. The raw rst_dst top-level port
+    still gets created but is left unconnected (nothing drives it once a
+    real synchronizer exists for the domain)."""
+    design_yml, modules_yml = _write_reset_sync_fixture(tmp_path)
+    cfg = DesignConfig.load_relaxed(design_yml)
+    contracts = load_contracts_for_design(modules_yml, design_yml.parent)
+    mapped = {m.name: contracts[m.name] for m in cfg.modules if m.name in contracts}
+    ip_info = synthesize_ip_info(mapped)
+    conn_map, global_nets, match_report = auto_match_ports(cfg, ip_info, contracts=contracts or None)
+
+    out_path = tmp_path / "block_design.tcl"
+    write_bd_tcl(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        out_path=out_path, bd_name="top_bd", ip_root=tmp_path / "ips",
+        contracts=contracts, match_report=match_report,
+    )
+    tcl = out_path.read_text()
+
+    assert "create_bd_cell -type module -reference cdc_reset_sync rst_sync_0" in tcl
+    assert "connect_bd_net [get_bd_ports clk_dst] [get_bd_pins rst_sync_0/dst_clk]" in tcl
+    assert "connect_bd_net [get_bd_ports ap_rst] [get_bd_pins rst_sync_0/async_rst_in]" in tcl
+    assert "connect_bd_net [get_bd_pins rst_sync_0/sync_rst_out] [get_bd_pins dst/rst_dst]" in tcl
+    assert "create_bd_port -dir I rst_dst" in tcl
+    # rst_dst's own top-level port is never wired anywhere: dst's real
+    # reset pin comes from rst_sync_0, not the raw domain port.
+    assert "[get_bd_ports rst_dst]" not in tcl
+
+
+def test_write_bd_tcl_requires_match_report_for_reset_sync(tmp_path: Path) -> None:
+    design_yml, modules_yml = _write_reset_sync_fixture(tmp_path)
+    cfg = DesignConfig.load_relaxed(design_yml)
+    contracts = load_contracts_for_design(modules_yml, design_yml.parent)
+    mapped = {m.name: contracts[m.name] for m in cfg.modules if m.name in contracts}
+    ip_info = synthesize_ip_info(mapped)
+    conn_map, global_nets, _match_report = auto_match_ports(cfg, ip_info, contracts=contracts or None)
+
+    with pytest.raises(ValueError, match="reset_domains.*reset_sync"):
+        write_bd_tcl(
+            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+            out_path=tmp_path / "block_design.tcl", bd_name="top_bd",
+            ip_root=tmp_path / "ips", contracts=contracts,
+            # no match_report
+        )
 
 
 def test_pins_are_numeric_true_for_a_shared_base() -> None:
