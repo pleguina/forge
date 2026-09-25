@@ -777,14 +777,11 @@ def auto_match_ports(
                     # was False), so every src instance 0..N-1 matched in
                     # iteration order and the first one (i_s == 0) always won
                     # via used_sinks -- src_instance_offset was silently
-                    # ignored. Confirmed via a real topology_group
-                    # (cfg_to_gmt_interface/cfg_to_gmt_linker,
-                    # src_instance_offset: 131, dst instances: 1): the
-                    # intended cfg instance 131 (the shared GMT board-id
-                    # word) was left dangling, and both gmt_interface and
-                    # gmt_linker were wired to cfg instance 0 (an unrelated
-                    # DT link's own config word) instead. See
-                    # reference_manifest.yaml's 2026-09-23 entry.
+                    # ignored. Seen in a real topology_group
+                    # (src_instance_offset: 131, dst instances: 1): the
+                    # intended source instance 131 was left dangling and
+                    # both single-instance destinations were wired to
+                    # source instance 0 instead.
                     if slot is None and meta is None:
                         if src_mod.instances > 1 and dst_mod.instances > 1:
                             if (i_s - src_offset) != i_d:
