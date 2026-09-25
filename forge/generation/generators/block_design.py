@@ -94,6 +94,11 @@ def _guess_lang(path: Path) -> str:
     ext = path.suffix.lower()
     return "vhdl" if ext == ".vhd" else "verilog"
 
+def _config_dict(params: Dict) -> str:
+    """Tcl -dict literal mapping design.yml parameters to CONFIG.* properties."""
+    items = " ".join(f"CONFIG.{k} {{{v}}}" for k, v in params.items())
+    return f"[list {items}]"
+
 def _gather_hdl_sources_for_mod(mod: Module, meta: Dict, src_root: Path) -> List[tuple[str,str]]:
     """
     Returns [(file, lang)].
@@ -421,9 +426,19 @@ def write_bd_tcl(
             ref = meta.get("entity", mod.top)
             if mod.instances == 1:
                 tcl.append(f"create_bd_cell -type module -reference {ref} {mod.name}")
+                if mod.parameters:
+                    tcl.append(
+                        f"set_property -dict {_config_dict(mod.parameters)} "
+                        f"[get_bd_cells {mod.name}]"
+                    )
             else:
-                cmd_tpl = f"create_bd_cell -type module -reference {ref} {mod.name}_${{idx}}"
-                tcl.append(_for_loop("idx", mod.instances, [cmd_tpl]))
+                body = [f"create_bd_cell -type module -reference {ref} {mod.name}_${{idx}}"]
+                if mod.parameters:
+                    body.append(
+                        f"set_property -dict {_config_dict(mod.parameters)} "
+                        f"[get_bd_cells {mod.name}_${{idx}}]"
+                    )
+                tcl.append(_for_loop("idx", mod.instances, body))
         else:
             # Packaged IP (VLNV)
             vlnv = "{vendor}:{lib}:{name}:{ver}".format(
@@ -434,9 +449,19 @@ def write_bd_tcl(
             )
             if mod.instances == 1:
                 tcl.append(f"create_bd_cell -type ip -vlnv {vlnv} {mod.name}")
+                if mod.parameters:
+                    tcl.append(
+                        f"set_property -dict {_config_dict(mod.parameters)} "
+                        f"[get_bd_cells {mod.name}]"
+                    )
             else:
-                cmd_tpl = f"create_bd_cell -type ip -vlnv {vlnv} {mod.name}_${{idx}}"
-                tcl.append(_for_loop("idx", mod.instances, [cmd_tpl]))
+                body = [f"create_bd_cell -type ip -vlnv {vlnv} {mod.name}_${{idx}}"]
+                if mod.parameters:
+                    body.append(
+                        f"set_property -dict {_config_dict(mod.parameters)} "
+                        f"[get_bd_cells {mod.name}_${{idx}}]"
+                    )
+                tcl.append(_for_loop("idx", mod.instances, body))
     tcl.append("")
 
     # ── global clock / reset nets (star) ─────────────────────
