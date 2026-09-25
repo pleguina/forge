@@ -153,13 +153,23 @@ for the domain). This needs `write_bd_tcl`'s `contracts`/`match_report`
 parameters (forge's own `gen-top` CLI always passes them) so each
 domain's member instances and their clock can be resolved.
 
+A `cdc:` connection works too: `--mode bd` instantiates the matching real
+`cdc_sync2ff`/`cdc_pulse_sync`/`cdc_mailbox`/`cdc_async_fifo` cell, wired to
+each side's own resolved clock/reset — including fanning a synchronizer's
+`dst_rst` from another `reset_sync` domain's own `cdc_reset_sync` cell when
+the destination lives in one, not the raw domain net. `async_fifo`'s
+`write_enable_pin` is honored when declared; otherwise `wr_en` ties to a
+shared constant-1 cell. This needs `contracts`/`match_report` too, the
+same as `reset_sync` above.
+
 Not every design can use `--mode bd` yet: one that declares a
-`boundary:`-tagged delay (needs the *protected* `slr_crossing_delay`
-module, not plain `signal_delay`) or a `cdc:` adapter is rejected outright
-— `write_bd_tcl` has no real synchronizer/FIFO cell instantiation for
-either yet, and generating a Block Design silently missing that logic
-would be worse than an error naming exactly which connection declared the
-unsupported feature. Use `--mode verilog` for those designs for now.
+`boundary:`-tagged delay is rejected outright — it needs the *protected*
+`slr_crossing_delay` module (not plain `signal_delay`) and a real Vivado
+synthesis run to learn the Block Design's actual synthesized hierarchy
+paths before `algo_top.crossings.json` could name real cells, and
+generating a Block Design silently missing that logic would be worse than
+an error naming exactly which connection declared it. Use `--mode verilog`
+for those designs for now.
 
 ## 5. Generate the verification flow
 

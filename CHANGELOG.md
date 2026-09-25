@@ -81,11 +81,28 @@ for the versioning policy.
     new `contracts`/`match_report` parameters for this (required only
     when a reset_sync domain is present). Verified against real Vivado
     2024.1 (`validate_bd_design` clean) on a two-clock-domain fixture.
+  - A `cdc:` connection (`level_sync`/`2ff_sync`, `pulse_sync`,
+    `mailbox_transfer`, `async_fifo`) is supported too: the matching real
+    `cdc_sync2ff`/`cdc_pulse_sync`/`cdc_mailbox`/`cdc_async_fifo` cell is
+    instantiated, wired to each side's own resolved clock/reset (which may
+    differ from `ap_clk`/`ap_rst` in a multi-domain design) — including
+    correctly fanning a synchronizer's `dst_rst` from another connection's
+    own `cdc_reset_sync` cell when the destination side is itself a
+    `reset_sync` domain, not the raw (unsynchronized) domain net, the same
+    rule verilog mode's `_reset_net_for_domain` enforces.
+    `async_fifo`'s `write_enable_pin` is honored when declared; otherwise
+    `wr_en` ties to a shared `xlconstant` `CONST_VAL 1` cell (verilog
+    mode's "continuously driven" default). A connection declaring both
+    `cdc:` and `register_stages`/`delay_cycles` gets only the CDC cell —
+    no real design combines them today. Verified against real Vivado 2024.1
+    (`validate_bd_design` clean) on a fixture exercising all four kinds
+    together with a `reset_sync` destination domain, the same combination
+    `design_cdc.yml`'s real reference design uses.
   - Still explicitly rejects (rather than silently generating an
-    incomplete Block Design for) a `boundary:`-tagged delay (needs the
-    *protected* `slr_crossing_delay` module, not plain `signal_delay`) or
-    a `cdc:` adapter — `write_bd_tcl` has no synchronizer/FIFO cell
-    instantiation for either yet.
+    incomplete Block Design for) a `boundary:`-tagged delay — needs the
+    *protected* `slr_crossing_delay` module, not plain `signal_delay`, and
+    a real Vivado synthesis run to learn the BD's synthesized hierarchy
+    paths before `algo_top.crossings.json` could name real cells.
   - `--gen-testbench`/`--lint` now fail loudly under `--mode bd` (both are
     Verilog/VHDL-specific) instead of silently no-op'ing.
 

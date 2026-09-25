@@ -190,14 +190,14 @@ def test_write_bd_tcl_instantiates_register_stage_and_signal_delay_cells(tmp_pat
 # Pure helper-function unit tests
 # ---------------------------------------------------------------------------
 
-def test_unsupported_bd_features_flags_cdc() -> None:
+def test_unsupported_bd_features_empty_for_cdc() -> None:
+    """cdc: is supported (see test_write_bd_tcl_instantiates_cdc_* below) —
+    only boundary is still rejected."""
     cfg = SimpleNamespace(
         connections=[Connection(from_="a", to="b", cdc={"kind": "level_sync"})],
         reset_domains={},
     )
-    problems = _unsupported_bd_features(cfg)
-    assert len(problems) == 1
-    assert "cdc" in problems[0]
+    assert _unsupported_bd_features(cfg) == []
 
 
 def test_unsupported_bd_features_empty_for_a_reset_sync_domain() -> None:
@@ -311,6 +311,174 @@ def test_write_bd_tcl_requires_match_report_for_reset_sync(tmp_path: Path) -> No
             ip_root=tmp_path / "ips", contracts=contracts,
             # no match_report
         )
+
+
+def _write_cdc_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """A five-module design exercising all four cdc: kinds from one
+    ap_clk-domain source into four clk_dst-domain destinations (plus one
+    async_fifo write_enable_pin) — the smallest fixture that exercises
+    every write_bd_tcl CDC branch at once."""
+    ifdir = tmp_path / "interfaces"
+    ifdir.mkdir()
+    (ifdir / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n  ip_info_key: src\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    level_out: {raw_port: level_out, direction: output, width: 1}\n"
+        "    pulse_out: {raw_port: pulse_out, direction: output, width: 1}\n"
+        "    mbox_out: {raw_port: mbox_out, direction: output, width: 8}\n"
+        "    fifo_out: {raw_port: fifo_out, direction: output, width: 8}\n"
+        "    fifo_wen: {raw_port: fifo_wen, direction: output, width: 1}\n"
+    )
+    for name, width in (("dst_level", 1), ("dst_pulse", 1), ("dst_mbox", 8), ("dst_fifo", 8)):
+        (ifdir / f"{name}.interface.yaml").write_text(
+            "ip_interface:\n"
+            f"  module_name: {name}\n  ip_info_key: {name}\n  source_type: rtl\n"
+            "  roles:\n"
+            "    clock_primary: {raw_port: clk_dst, direction: input, width: 1}\n"
+            "    reset_primary: {raw_port: rst_dst, direction: input, width: 1}\n"
+            f"    din: {{raw_port: din, direction: input, width: {width}}}\n"
+        )
+    modules_yml = tmp_path / "modules.yml"
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n    kind: rtl\n    top: src\n    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        + "".join(
+            f"  - name: {name}\n    kind: rtl\n    top: {name}\n    src: [{name}.v]\n"
+            f"    interface_contract: interfaces/{name}.interface.yaml\n"
+            for name in ("dst_level", "dst_pulse", "dst_mbox", "dst_fifo")
+        )
+    )
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu13p\nclock_period: 4.0\nblock_protocol: none\n"
+        "modules:\n"
+        "  - name: src\n    top: src\n    src: [src.v]\n"
+        "  - name: dst_level\n    top: dst_level\n    src: [dst_level.v]\n"
+        "  - name: dst_pulse\n    top: dst_pulse\n    src: [dst_pulse.v]\n"
+        "  - name: dst_mbox\n    top: dst_mbox\n    src: [dst_mbox.v]\n"
+        "  - name: dst_fifo\n    top: dst_fifo\n    src: [dst_fifo.v]\n"
+        "connections:\n"
+        "  - from: src\n    to: dst_level\n    cdc: {kind: level_sync}\n"
+        "    port_map: [[level_out, din]]\n"
+        "  - from: src\n    to: dst_pulse\n    cdc: {kind: pulse_sync, min_spacing_cycles: 4}\n"
+        "    port_map: [[pulse_out, din]]\n"
+        "  - from: src\n    to: dst_mbox\n    cdc: {kind: mailbox_transfer}\n"
+        "    port_map: [[mbox_out, din]]\n"
+        "  - from: src\n    to: dst_fifo\n"
+        "    cdc: {kind: async_fifo, depth: 8, write_enable_pin: fifo_wen}\n"
+        "    port_map: [[fifo_out, din]]\n"
+    )
+    return design_yml, modules_yml
+
+
+def _resolve_bd(design_yml: Path, modules_yml: Path):
+    cfg = DesignConfig.load_relaxed(design_yml)
+    contracts = load_contracts_for_design(modules_yml, design_yml.parent)
+    mapped = {m.name: contracts[m.name] for m in cfg.modules if m.name in contracts}
+    ip_info = synthesize_ip_info(mapped)
+    conn_map, global_nets, match_report = auto_match_ports(cfg, ip_info, contracts=contracts or None)
+    return cfg, contracts, ip_info, conn_map, global_nets, match_report
+
+
+def test_write_bd_tcl_instantiates_cdc_synchronizers(tmp_path: Path) -> None:
+    design_yml, modules_yml = _write_cdc_fixture(tmp_path)
+    cfg, contracts, ip_info, conn_map, global_nets, match_report = _resolve_bd(design_yml, modules_yml)
+
+    out_path = tmp_path / "block_design.tcl"
+    write_bd_tcl(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        out_path=out_path, bd_name="top_bd", ip_root=tmp_path / "ips",
+        contracts=contracts, match_report=match_report,
+    )
+    tcl = out_path.read_text()
+
+    # level_sync -> cdc_sync2ff
+    assert "create_bd_cell -type module -reference cdc_sync2ff cdc_sync_0" in tcl
+    assert "set_property CONFIG.WIDTH {1} [get_bd_cells cdc_sync_0]" in tcl
+    assert "connect_bd_net [get_bd_ports clk_dst] [get_bd_pins cdc_sync_0/dst_clk]" in tcl
+    assert "connect_bd_net [get_bd_ports rst_dst] [get_bd_pins cdc_sync_0/dst_rst]" in tcl
+    assert "connect_bd_net [get_bd_pins src/level_out] [get_bd_pins cdc_sync_0/din]" in tcl
+    assert "connect_bd_net [get_bd_pins cdc_sync_0/dout] [get_bd_pins dst_level/din]" in tcl
+
+    # pulse_sync -> cdc_pulse_sync (no CONFIG.WIDTH: scalar-only primitive)
+    assert "create_bd_cell -type module -reference cdc_pulse_sync cdc_sync_1" in tcl
+    assert "connect_bd_net [get_bd_ports ap_clk] [get_bd_pins cdc_sync_1/src_clk]" in tcl
+    assert "connect_bd_net [get_bd_ports ap_rst] [get_bd_pins cdc_sync_1/src_rst]" in tcl
+    assert "connect_bd_net [get_bd_pins src/pulse_out] [get_bd_pins cdc_sync_1/pulse_in]" in tcl
+    assert "connect_bd_net [get_bd_pins cdc_sync_1/pulse_out] [get_bd_pins dst_pulse/din]" in tcl
+
+    # mailbox_transfer -> cdc_mailbox (dout_valid left unconnected)
+    assert "create_bd_cell -type module -reference cdc_mailbox cdc_sync_2" in tcl
+    assert "set_property CONFIG.WIDTH {8} [get_bd_cells cdc_sync_2]" in tcl
+    assert "connect_bd_net [get_bd_pins cdc_sync_2/dout] [get_bd_pins dst_mbox/din]" in tcl
+    assert "cdc_sync_2/dout_valid" not in tcl
+
+    # async_fifo -> cdc_async_fifo, real write_enable_pin (no tie-to-1 cell)
+    assert "create_bd_cell -type module -reference cdc_async_fifo cdc_sync_3" in tcl
+    assert "set_property CONFIG.DEPTH {8} [get_bd_cells cdc_sync_3]" in tcl
+    assert "connect_bd_net [get_bd_pins src/fifo_wen] [get_bd_pins cdc_sync_3/wr_en]" in tcl
+    assert "tie_wr_en_one" not in tcl
+    assert "connect_bd_net [get_bd_pins cdc_sync_3/dout] [get_bd_pins dst_fifo/din]" in tcl
+    # instrumentation outputs left unconnected
+    for pin in ("full", "overflow_attempt", "occupancy", "high_water", "empty", "underflow_attempt"):
+        assert f"cdc_sync_3/{pin}]" not in tcl
+
+
+def test_write_bd_tcl_async_fifo_defaults_write_enable_to_one(tmp_path: Path) -> None:
+    """No write_enable_pin declared -> wr_en ties to a shared xlconstant
+    CONST_VAL 1 cell (verilog mode's "continuously driven" default)."""
+    design_yml, modules_yml = _write_cdc_fixture(tmp_path)
+    text = design_yml.read_text().replace(", write_enable_pin: fifo_wen", "")
+    design_yml.write_text(text)
+    cfg, contracts, ip_info, conn_map, global_nets, match_report = _resolve_bd(design_yml, modules_yml)
+
+    out_path = tmp_path / "block_design.tcl"
+    write_bd_tcl(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        out_path=out_path, bd_name="top_bd", ip_root=tmp_path / "ips",
+        contracts=contracts, match_report=match_report,
+    )
+    tcl = out_path.read_text()
+    assert "create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 tie_wr_en_one" in tcl
+    assert "set_property CONFIG.CONST_VAL {1} [get_bd_cells tie_wr_en_one]" in tcl
+    assert "connect_bd_net [get_bd_pins tie_wr_en_one/dout] [get_bd_pins cdc_sync_3/wr_en]" in tcl
+    # one shared cell, not one per async_fifo instance
+    assert tcl.count("create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 tie_wr_en_one") == 1
+
+
+def test_write_bd_tcl_cdc_routes_through_reset_sync_domain(tmp_path: Path) -> None:
+    """A cdc: connection whose destination lives in a reset_domains.*.sync:
+    reset_sync domain must fan its synchronizer's dst_rst from that
+    domain's own cdc_reset_sync cell, not the raw (unsynchronized) domain
+    net -- the same rule verilog mode's _reset_net_for_domain enforces."""
+    design_yml, modules_yml = _write_cdc_fixture(tmp_path)
+    text = design_yml.read_text().replace(
+        "modules:\n",
+        "reset_domains:\n  rst_dst:\n    derived_from: ap_rst\n    sync: reset_sync\nmodules:\n",
+        1,
+    )
+    design_yml.write_text(text)
+    cfg, contracts, ip_info, conn_map, global_nets, match_report = _resolve_bd(design_yml, modules_yml)
+
+    out_path = tmp_path / "block_design.tcl"
+    write_bd_tcl(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        out_path=out_path, bd_name="top_bd", ip_root=tmp_path / "ips",
+        contracts=contracts, match_report=match_report,
+    )
+    tcl = out_path.read_text()
+
+    assert "create_bd_cell -type module -reference cdc_reset_sync rst_sync_0" in tcl
+    # level_sync's dst_rst now comes from rst_sync_0's own output pin...
+    assert "connect_bd_net [get_bd_pins rst_sync_0/sync_rst_out] [get_bd_pins cdc_sync_0/dst_rst]" in tcl
+    # ...never the raw, unsynchronized rst_dst top-level port.
+    assert "[get_bd_ports rst_dst] [get_bd_pins cdc_sync_0/dst_rst]" not in tcl
+    assert "[get_bd_ports rst_dst]" not in tcl
 
 
 def test_pins_are_numeric_true_for_a_shared_base() -> None:
