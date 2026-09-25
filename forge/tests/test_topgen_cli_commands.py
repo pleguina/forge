@@ -1058,10 +1058,8 @@ def test_gen_top_bd_instantiates_register_stage_cell(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
     """A plain register_stages connection gets a real RegisterStage cell in
-    the generated Block Design — --project-root (fed by --consumer-root)
-    is what lets write_bd_tcl find RegisterStage.v outside design.yml's own
-    directory, the same way generate_build_manifest's verilog-mode search
-    already does."""
+    the generated Block Design, backed by the framework's packaged
+    RegisterStage.v — the fixture tree carries no copy of its own."""
     (tmp_path / "interfaces").mkdir()
     (tmp_path / "interfaces" / "src.interface.yaml").write_text(
         "ip_interface:\n"
@@ -1098,14 +1096,6 @@ def test_gen_top_bd_instantiates_register_stage_cell(
         "  - from: src\n    to: dst\n    port_map: [[dout, din]]\n"
         "    register_stages: 2\n"
     )
-    # Framework support RTL — a "vendored" copy under this fixture's own
-    # tree, found via --project-root the same way a real plugin's
-    # algo/rtl/RegisterStage.v is.
-    (tmp_path / "support_rtl").mkdir()
-    (tmp_path / "support_rtl" / "RegisterStage.v").write_text(
-        (REPO_ROOT / "plugins/trigger_demo/algo/rtl/RegisterStage.v").read_text()
-    )
-
     result = _run_topgen(
         capsys, "gen-top", str(design_yml),
         "--mode", "bd",

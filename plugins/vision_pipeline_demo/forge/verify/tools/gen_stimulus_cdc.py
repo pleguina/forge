@@ -14,7 +14,7 @@ not an oversight.
 
 Every driven config value (enable/threshold/kernel_mode/frame_limit/
 error/result_data) is held CONSTANT for the whole run: cdc_mailbox and
-cdc_async_fifo (algo/rtl, copied from plugins/trigger_demo -- see their
+cdc_async_fifo (framework support RTL, forge/rtl/support/ -- see their
 own header comments) have no producer-side backpressure/valid concept,
 so their real completion timing is data-dependent and not statically
 bounded. Holding values constant sidesteps needing to model that

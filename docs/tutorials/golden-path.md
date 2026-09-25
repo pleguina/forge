@@ -137,11 +137,10 @@ would need downstream in a real board build.
 
 Plain `register_stages`/`delay_cycles` connections work too: `--mode bd`
 instantiates real `RegisterStage`/`signal_delay` cells (the same modules
-`--mode verilog` uses) between the source and destination pins, found on
-disk and added to the project the same way its own RTL modules are —
-`--project-root` (or `--consumer-root`, which feeds it) needs to point at
-the plugin's whole tree so support RTL like `algo/rtl/RegisterStage.v` can
-actually be found, not just `design.yml`'s own directory.
+`--mode verilog` uses) between the source and destination pins. Those
+modules ship with forge itself (`forge/rtl/support/`), so a plugin
+doesn't need its own copy; the generated Tcl adds them to the project
+alongside the design's own RTL.
 
 Not every design can use `--mode bd` yet: one that declares a
 `boundary:`-tagged delay (needs the *protected* `slr_crossing_delay`

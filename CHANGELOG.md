@@ -8,6 +8,29 @@ for the versioning policy.
 ## [Unreleased]
 
 ### Added
+- **Framework support RTL now ships with forge** (`forge/rtl/support/`):
+  `RegisterStage`, `signal_delay`, `slr_crossing_delay` and the CDC
+  primitives `cdc_sync2ff`, `cdc_pulse_sync`, `cdc_mailbox`,
+  `cdc_async_fifo`, `cdc_reset_sync` — the modules the generators
+  instantiate for `register_stages`, `delay_cycles`, `boundary:`, `cdc:`
+  and `reset_domains.*.sync`. Previously `generate_build_manifest`
+  searched the consumer's whole tree for a file of the right name and
+  took the first match, so a plugin only worked if it (or a sibling
+  plugin in the same checkout) happened to carry a copy: the CDC
+  primitives lived only in `plugins/trigger_demo`, and
+  `slr_crossing_delay` only in an external firmware repository. The
+  generators hardcode these modules' parameter/port names, and
+  `algo_top.crossings.json` hardcodes `slr_crossing_delay`'s internal
+  register names, so the RTL is now versioned with the generator that
+  depends on it. New `forge.generation.support_rtl` is the single lookup
+  used by both `generate_build_manifest` and `write_bd_tcl` (the
+  `project_root` search parameter `write_bd_tcl` briefly had is gone).
+  A design that already compiles its own file of the same name (e.g. a
+  `signal_delay` module declared in `modules.yml`) keeps it; the framework
+  copy is not added alongside, so the module is never defined twice. New
+  `forge/tests/test_support_rtl_xsim.py` checks every module's
+  cycle-level behaviour in xsim (skipped without Vivado on PATH).
+  `plugins/trigger_demo` no longer carries its own copies.
 - **`forge topgen gen-top --mode bd` now reaches parity with `--mode
   verilog`.** Previously `write_bd_tcl` returned no report at all, had no
   tie-off logic for unconnected mandatory inputs (a real Block Design
@@ -39,10 +62,9 @@ for the versioning policy.
   - Instantiates real `RegisterStage`/`signal_delay` cells for plain
     `register_stages`/`delay_cycles` connections — the same support-RTL
     modules verilog mode uses (`CONFIG.DATAWIDTH`/`CONFIG.STAGES` and
-    `CONFIG.WIDTH`/`CONFIG.DEPTH` set via `set_property`, found on disk the
-    same way `generate_build_manifest`'s verilog-mode compile list already
-    does — a new `project_root` parameter on `write_bd_tcl` so it can
-    search a real plugin's whole tree, not just the design/IP directories).
+    `CONFIG.WIDTH`/`CONFIG.DEPTH` set via `set_property`, and the
+    framework's packaged RTL added to the project — see the support-RTL
+    entry below).
     Verified against real Vivado 2024.1 (`validate_bd_design` clean, both
     for a minimal RTL-only fixture and for `trigger_demo`'s own
     `register_stages`/`delay_cycles` connections, whose bd-mode

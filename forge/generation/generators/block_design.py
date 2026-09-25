@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple, Optional
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
 from ._port_resolution import classify_connections, resolve_top_ports
+from ..support_rtl import resolve_support_rtl
 
 NL = "\n"
 
@@ -162,7 +163,7 @@ def _unsupported_bd_features(cfg: DesignConfig) -> List[str]:
     """Design features write_bd_tcl still doesn't implement.
 
     ``register_stages``/``delay_cycles`` are handled (see
-    ``_register_stage_map``/``_delay_cycles_map`` and the intermediate-stage
+    ``reg_stages_map``/``delay_cycles_map`` and the intermediate-stage
     insertion in ``write_bd_tcl``'s point-to-point loop) — real
     ``RegisterStage``/``signal_delay`` cell instantiation, the same modules
     verilog mode uses. Still rejected outright, rather than silently
@@ -189,33 +190,6 @@ def _unsupported_bd_features(cfg: DesignConfig) -> List[str]:
     return problems
 
 
-def _resolve_support_rtl_path(target_name: str, search_roots: List[Path]) -> Optional[Path]:
-    """Locate a framework support-RTL file (``RegisterStage.v``,
-    ``signal_delay.v``) by filename under any of *search_roots*.
-
-    Same rglob-search strategy ``forge.core.cli.groups.topgen.
-    generate_build_manifest`` already uses to find these files for the
-    verilog-mode compile list (*where* the checkout keeps them is a
-    filesystem question, answered the same way regardless of output mode)
-    — a second, small, self-contained copy here rather than importing from
-    the CLI layer (``topgen.py`` already imports `from` this module).
-    """
-    for root in search_roots:
-        if root is None or not Path(root).is_dir():
-            continue
-        matches = sorted(Path(root).rglob(target_name))
-        if matches:
-            return matches[0].resolve()
-    return None
-
-
-#: Which framework support RTL a register_stages/delay_cycles connection
-#: needs — same filenames forge.core.cli.groups.topgen's
-#: _SUPPORT_RTL_BY_TRANSFORMATION maps for verilog mode.
-_REGISTER_STAGE_RTL = "RegisterStage.v"
-_SIGNAL_DELAY_RTL = "signal_delay.v"
-
-
 # ───────────────────────── main writer ──────────────────────
 
 def write_bd_tcl(
@@ -230,7 +204,6 @@ def write_bd_tcl(
     src_root: Optional[Path] = None,
     ip_root: Optional[Path] = None,
     system_yml: Optional[Path] = None,
-    project_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Generate a Vivado Block Design Tcl script wiring algorithm modules
     together — the ``--mode bd`` counterpart to
@@ -294,29 +267,14 @@ def write_bd_tcl(
             for f, lang in _gather_hdl_sources_for_mod(mod, meta, src_root or Path(".")):
                 hdl_sources_flat += [f, lang]
 
-    # Framework support RTL for register_stages/delay_cycles — same
-    # filenames verilog mode's build_manifest.json resolves, found the same
-    # way (rglob under src_root/ip_root).
-    # project_root first: for a real plugin layout (e.g. trigger_demo),
-    # RegisterStage.v/signal_delay.v live under <plugin>/algo/rtl/, outside
-    # both src_root (the design.yml's own directory) and ip_root — the
-    # same reason generate_build_manifest searches project_root first too.
-    _support_search_roots = [r for r in (project_root, src_root, ip_root) if r]
-    if reg_stages_map:
-        found = _resolve_support_rtl_path(_REGISTER_STAGE_RTL, _support_search_roots)
-        if found is None:
-            raise ValueError(
-                f"{_REGISTER_STAGE_RTL} not found under {_support_search_roots} — "
-                "this design's register_stages connections need it"
-            )
-        hdl_sources_flat += [found.as_posix(), "verilog"]
-    if delay_cycles_map:
-        found = _resolve_support_rtl_path(_SIGNAL_DELAY_RTL, _support_search_roots)
-        if found is None:
-            raise ValueError(
-                f"{_SIGNAL_DELAY_RTL} not found under {_support_search_roots} — "
-                "this design's delay_cycles connections need it"
-            )
+    # Framework support RTL for register_stages/delay_cycles — the copies
+    # shipped in forge/rtl/support/ (same files verilog mode's
+    # build_manifest.json compiles), unless a module of this design already
+    # brings its own file of that name.
+    _needed = (["RegisterStage.v"] if reg_stages_map else []) + (
+        ["signal_delay.v"] if delay_cycles_map else []
+    )
+    for found in resolve_support_rtl(_needed, hdl_sources_flat[0::2]):
         hdl_sources_flat += [found.as_posix(), "verilog"]
 
     tcl: List[str] = [

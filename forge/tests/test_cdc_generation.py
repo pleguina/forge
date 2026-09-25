@@ -17,6 +17,7 @@ from forge.contracts.config import Connection, DesignConfig, Module
 from forge.contracts.contract_loader import LoadedContract
 from forge.contracts.matcher import auto_match_ports
 from forge.generation.generators.structural_verilog import write_structural_verilog
+from forge.generation.support_rtl import SUPPORT_RTL_DIR
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRIGGER_DESIGN = REPO_ROOT / "plugins/trigger_demo/forge/designs/design.yml"
@@ -438,14 +439,12 @@ def _two_rtl_modules(tmp_path):
 
 
 def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
-    """generate_build_manifest's framework-support-RTL search (mirrors the
-    existing RegisterStage.v/signal_delay.v/slr_crossing_delay.v pattern)
-    must find and include cdc_sync2ff.v when a connection declares
+    """generate_build_manifest must include the framework's packaged
+    cdc_sync2ff.v (forge/rtl/support/) when a connection declares
     cdc: {kind: 2ff_sync} — and must NOT include it when nothing does."""
     from forge.core.cli.groups.topgen import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
-    (tmp_path / "cdc_sync2ff.v").write_text("module cdc_sync2ff(); endmodule\n")
 
     import json
 
@@ -461,7 +460,7 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
         manifest_output=manifest_path, project_root=tmp_path,
     )
     manifest = json.loads(manifest_path.read_text())
-    assert any(f.endswith("cdc_sync2ff.v") for f in manifest["verilog_files"])
+    assert str(SUPPORT_RTL_DIR / "cdc_sync2ff.v") in manifest["verilog_files"]
 
     cfg_without_cdc = DesignConfig(
         part="xcvu13p", clock_period=4.0, modules=[src, dst],
@@ -474,6 +473,40 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     )
     manifest2 = json.loads(manifest_path.read_text())
     assert not any(f.endswith("cdc_sync2ff.v") for f in manifest2["verilog_files"])
+
+
+def test_build_manifest_prefers_a_plugin_provided_support_module(tmp_path):
+    """A design that already compiles its own cdc_sync2ff.v (a module whose
+    src is a file of that name) keeps it — the framework copy is not added
+    as well, which would define the same module twice."""
+    from forge.core.cli.groups.topgen import generate_build_manifest
+
+    src, dst = _two_rtl_modules(tmp_path)
+    own = Module(name="own_sync", top="cdc_sync2ff", src=["cdc_sync2ff.v"])
+    (tmp_path / "cdc_sync2ff.v").write_text("module cdc_sync2ff(); endmodule\n")
+    own.abs_src = [tmp_path / "cdc_sync2ff.v"]
+
+    import json
+
+    manifest_path = tmp_path / "build_manifest.json"
+    cfg = DesignConfig(
+        part="xcvu13p", clock_period=4.0, modules=[src, dst, own],
+        connections=[Connection(from_="src", to="dst", cdc={"kind": "2ff_sync"})],
+    )
+    project = _manifest_ir(tmp_path, cfg)
+    # This file's contract-free IR leaves every module without a compile
+    # set; give own_sync the one a real RTL contract would resolve to.
+    own_ir = next(m for m in project.design.modules if m.name == "own_sync")
+    own_ir.rtl_sources = [str(tmp_path / "cdc_sync2ff.v")]
+    generate_build_manifest(
+        project, ip_info={}, ip_root=tmp_path,
+        algo_top=tmp_path / "algo_top.v", design_file=tmp_path / "design.yml",
+        manifest_output=manifest_path, project_root=tmp_path,
+    )
+    files = json.loads(manifest_path.read_text())["verilog_files"]
+    assert str((tmp_path / "cdc_sync2ff.v").resolve()) in files
+    assert str(SUPPORT_RTL_DIR / "cdc_sync2ff.v") not in files
+    assert sum(Path(f).name == "cdc_sync2ff.v" for f in files) == 1
 
 
 def test_build_manifest_resolves_hls_build_dir_by_ip_info_key_not_instance_name(tmp_path):
@@ -531,7 +564,6 @@ def test_build_manifest_omits_support_rtl_for_an_unwired_declaration(tmp_path):
     from forge.core.cli.groups.topgen import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
-    (tmp_path / "cdc_sync2ff.v").write_text("module cdc_sync2ff(); endmodule\n")
 
     import json
 
@@ -582,13 +614,12 @@ def test_build_manifest_records_the_ir_it_was_built_from(tmp_path):
     ("async_fifo", {"kind": "async_fifo", "depth": 8}, "cdc_async_fifo.v"),
 ])
 def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind, cdc, filename):
-    """The 3 new CDC kinds' RTL files must be found
-    and included the same way cdc_sync2ff.v already is, and must NOT be
+    """The 3 new CDC kinds' packaged RTL files must be
+    included the same way cdc_sync2ff.v already is, and must NOT be
     included when nothing declares that kind."""
     from forge.core.cli.groups.topgen import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
-    (tmp_path / filename).write_text(f"module {filename[:-2]}(); endmodule\n")
 
     import json
 
@@ -604,7 +635,7 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
         manifest_output=manifest_path, project_root=tmp_path,
     )
     manifest = json.loads(manifest_path.read_text())
-    assert any(f.endswith(filename) for f in manifest["verilog_files"])
+    assert str(SUPPORT_RTL_DIR / filename) in manifest["verilog_files"]
 
     cfg_without_cdc = DesignConfig(
         part="xcvu13p", clock_period=4.0, modules=[src, dst],
@@ -629,7 +660,6 @@ def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
 
     mod = Module(name="mod", top="mod_top", src=["mod.v"])
     (tmp_path / "mod.v").write_text("module mod_top(); endmodule\n")
-    (tmp_path / "cdc_reset_sync.v").write_text("module cdc_reset_sync(); endmodule\n")
     mod.abs_src = [tmp_path / "mod.v"]
 
     import json
@@ -646,7 +676,7 @@ def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
         manifest_output=manifest_path, project_root=tmp_path,
     )
     manifest = json.loads(manifest_path.read_text())
-    assert any(f.endswith("cdc_reset_sync.v") for f in manifest["verilog_files"])
+    assert str(SUPPORT_RTL_DIR / "cdc_reset_sync.v") in manifest["verilog_files"]
 
     cfg_without_sync = DesignConfig(part="xcvu13p", clock_period=4.0, modules=[mod], connections=[])
     generate_build_manifest(

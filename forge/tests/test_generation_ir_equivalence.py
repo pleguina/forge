@@ -126,7 +126,7 @@ def test_trigger_demo_vhdl_generation_is_byte_identical(tmp_path):
 
 
 def _assert_byte_identical_bd(
-    design_path: Path, modules_path: Path, tmp_path: Path, *, project_root: Path | None = None,
+    design_path: Path, modules_path: Path, tmp_path: Path,
 ) -> None:
     cfg, contracts, ip_info, conn_map, global_nets, projected_conn_map, projected_global_nets = _resolve(
         design_path, modules_path,
@@ -140,12 +140,12 @@ def _assert_byte_identical_bd(
     write_bd_tcl(
         cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
         out_path=direct_out, bd_name="top_bd", src_root=design_path.parent,
-        ip_root=ip_root, project_root=project_root,
+        ip_root=ip_root,
     )
     write_bd_tcl(
         cfg=cfg, ip_info=ip_info, conn_map=projected_conn_map, global_nets=projected_global_nets,
         out_path=ir_out, bd_name="top_bd", src_root=design_path.parent,
-        ip_root=ip_root, project_root=project_root,
+        ip_root=ip_root,
     )
 
     direct_bytes = direct_out.read_bytes()
@@ -164,13 +164,8 @@ def test_passthrough_demo_bd_generation_is_byte_identical(tmp_path):
 def test_trigger_demo_bd_generation_is_byte_identical(tmp_path):
     """trigger_demo's design.yml declares register_stages (col->trig) and
     delay_cycles (tfan fanout) — write_bd_tcl instantiates real
-    RegisterStage/signal_delay cells for these (project_root is required so
-    it can find RegisterStage.v/signal_delay.v under
-    plugins/trigger_demo/algo/rtl/, the same way
-    generate_build_manifest's verilog-mode search already does)."""
-    _assert_byte_identical_bd(
-        TRIGGER_DESIGN, TRIGGER_MODULES, tmp_path, project_root=TRIGGER_DESIGN.parents[2],
-    )
+    RegisterStage/signal_delay cells for these."""
+    _assert_byte_identical_bd(TRIGGER_DESIGN, TRIGGER_MODULES, tmp_path)
 
 
 def test_write_bd_tcl_rejects_boundary_tagged_delay(tmp_path):

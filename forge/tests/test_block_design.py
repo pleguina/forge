@@ -26,6 +26,7 @@ from forge.generation.generators.block_design import (
     write_bd_tcl,
 )
 from forge.generation.generators.structural_verilog import write_structural_verilog
+from forge.generation.support_rtl import SUPPORT_RTL_DIR
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PASSTHROUGH_DESIGN = REPO_ROOT / "plugins/passthrough_demo/forge/designs/design.yml"
@@ -161,16 +162,15 @@ def test_write_bd_tcl_external_ports_use_create_bd_port_not_make_bd_pins_externa
 def test_write_bd_tcl_instantiates_register_stage_and_signal_delay_cells(tmp_path: Path) -> None:
     """trigger_demo declares register_stages (col->trig, 2 stages) and
     delay_cycles (trig->tfan, 3 cycles) — write_bd_tcl must instantiate real
-    RegisterStage/signal_delay cells for these (project_root is required to
-    find RegisterStage.v/signal_delay.v under
-    plugins/trigger_demo/algo/rtl/)."""
+    RegisterStage/signal_delay cells for these, from the framework's own
+    packaged support RTL — no plugin-tree search involved."""
     cfg, ip_info, conn_map, global_nets = _resolve(TRIGGER_DESIGN, TRIGGER_MODULES)
 
     out_path = tmp_path / "block_design.tcl"
     write_bd_tcl(
         cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
         out_path=out_path, bd_name="top_bd", src_root=TRIGGER_DESIGN.parent,
-        ip_root=tmp_path / "ips", project_root=TRIGGER_DESIGN.parents[2],
+        ip_root=tmp_path / "ips",
     )
 
     tcl = out_path.read_text()
@@ -180,23 +180,10 @@ def test_write_bd_tcl_instantiates_register_stage_and_signal_delay_cells(tmp_pat
     assert "create_bd_cell -type module -reference signal_delay delay_0" in tcl
     assert "set_property CONFIG.DEPTH {3} [get_bd_cells delay_0]" in tcl
     assert "connect_bd_net [get_bd_ports ap_rst] [get_bd_pins delay_0/rst]" in tcl
-    # The support RTL files got added to the project alongside the design's
-    # own modules.
-    assert "RegisterStage.v" in tcl
-    assert "signal_delay.v" in tcl
-
-
-def test_write_bd_tcl_raises_a_clear_error_when_support_rtl_is_unfindable(tmp_path: Path) -> None:
-    cfg, ip_info, conn_map, global_nets = _resolve(TRIGGER_DESIGN, TRIGGER_MODULES)
-
-    with pytest.raises(ValueError, match="RegisterStage.v not found"):
-        write_bd_tcl(
-            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
-            out_path=tmp_path / "block_design.tcl", bd_name="top_bd",
-            src_root=TRIGGER_DESIGN.parent, ip_root=tmp_path / "ips",
-            # no project_root — RegisterStage.v lives under algo/rtl/,
-            # outside src_root/ip_root alone.
-        )
+    # The packaged support RTL got added to the project alongside the
+    # design's own modules.
+    assert (SUPPORT_RTL_DIR / "RegisterStage.v").as_posix() in tcl
+    assert (SUPPORT_RTL_DIR / "signal_delay.v").as_posix() in tcl
 
 
 # ---------------------------------------------------------------------------

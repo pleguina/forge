@@ -101,6 +101,7 @@ packages = [
 forge = [
     "py.typed", "contracts/*.yaml", "hls/templates/*.tcl.j2",
     "analysis/design_explorer/vendor/*",
+    "rtl/support/*.v",
 ]
 
 [tool.black]

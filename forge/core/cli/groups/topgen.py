@@ -26,6 +26,7 @@ from forge.generation.generators.block_design import write_bd_tcl
 from forge.generation.generators.sv_testbench_generator import generate_sv_testbench
 from forge.generation.generators.design_parameters import write_design_parameters
 from forge.generation.validation import validate_design, validate_registry
+from forge.generation.support_rtl import SUPPORT_RTL_BY_TRANSFORMATION, resolve_support_rtl
 from forge.ir.build import assemble_project_ir, build_tie_off_connections
 from forge.ir.model import ResolvedTopLevelPort
 from forge.ir.project import project_to_conn_map
@@ -322,26 +323,9 @@ def validate_generated_contracts(
     )
 
 
-# Which framework support RTL each canonical-IR transformation kind needs.
-# The transformation kinds are the IR's own vocabulary
-# (forge.ir.model.ResolvedTransformation) — a kind with no RTL of its own
-# (fanout, gather_scatter, tie_off, the reserved adapter kinds) is simply
-# absent from this map rather than mapped to nothing.
-_SUPPORT_RTL_BY_TRANSFORMATION = {
-    "pipeline_register": "RegisterStage.v",
-    "latency_delay":     "signal_delay.v",
-    "slr_crossing":      "slr_crossing_delay.v",
-    "cdc_synchronizer":  "cdc_sync2ff.v",
-    "pulse_sync":        "cdc_pulse_sync.v",
-    "mailbox_transfer":  "cdc_mailbox.v",
-    "async_fifo":        "cdc_async_fifo.v",
-    "reset_synchronizer": "cdc_reset_sync.v",
-}
-
-
 def _support_rtl_needed(project) -> "list[str]":
     """The framework support-RTL filenames this design's *resolved*
-    transformations require, in ``_SUPPORT_RTL_BY_TRANSFORMATION``'s
+    transformations require, in ``SUPPORT_RTL_BY_TRANSFORMATION``'s
     declaration order (stable regardless of connection ordering).
 
     Read from the canonical IR rather than re-scanned out of
@@ -369,7 +353,7 @@ def _support_rtl_needed(project) -> "list[str]":
     )
     return [
         filename
-        for kind, filename in _SUPPORT_RTL_BY_TRANSFORMATION.items()
+        for kind, filename in SUPPORT_RTL_BY_TRANSFORMATION.items()
         if kind in kinds
     ]
 
@@ -460,8 +444,9 @@ def generate_build_manifest(
     Everything else the manifest carries is *build context* the IR
     deliberately does not model: where an HLS module's generated Verilog
     landed (*ip_info*/*ip_root*/*hls_build_root* — an artifact of running
-    the tool, not a fact about the design) and where the framework's own
-    support RTL is checked out (*project_root*).
+    the tool, not a fact about the design). The framework support RTL is
+    the copy shipped with forge (``forge.generation.support_rtl``);
+    *project_root* is only recorded in the manifest.
 
     The IR's schema version and content hash are recorded in the manifest
     so a consumer can tell which resolved design a compile list belongs to
@@ -609,28 +594,14 @@ def generate_build_manifest(
     # RegisterStage, signal_delay, slr_crossing_delay and the CDC primitive
     # family are instantiated in the generated top level, so they have to be
     # in the compile list for simulation and synthesis. Which of them the
-    # design needs is the IR's answer (_support_rtl_needed); *where* the
-    # checkout keeps them is a filesystem question, answered here.
-    _search_roots = [r for r in [project_root, ip_root, manifest_output.parent] if r]
-    for target_name in _support_rtl_needed(project):
-        found = None
-        for sroot in _search_roots:
-            matches = sorted(Path(sroot).rglob(target_name)) if Path(sroot).is_dir() else []
-            if matches:
-                found = matches[0]
-                break
-        if found:
-            resolved = str(found.resolve())
-            if resolved not in manifest["verilog_files"]:
-                manifest["verilog_files"].append(resolved)
-            parent_str = str(found.parent.resolve())
-            if parent_str not in manifest["include_dirs"]:
-                manifest["include_dirs"].append(parent_str)
-        else:
-            print(
-                f"  ⚠️  {target_name} not found — the generated top level "
-                "instantiates it"
-            )
+    # design needs is the IR's answer (_support_rtl_needed); the files are
+    # the ones shipped with forge (forge/rtl/support/), unless the design
+    # already compiles its own file of the same name — see
+    # forge.generation.support_rtl.
+    for found in resolve_support_rtl(_support_rtl_needed(project), manifest["verilog_files"]):
+        manifest["verilog_files"].append(str(found))
+        if str(found.parent) not in manifest["include_dirs"]:
+            manifest["include_dirs"].append(str(found.parent))
 
     manifest["verilog_files"] = list(dict.fromkeys(manifest["verilog_files"]))
     manifest["include_dirs"] = list(dict.fromkeys(manifest["include_dirs"]))
@@ -2216,7 +2187,6 @@ def cmd_gen_top(args):
                 src_root=design_path.parent,
                 ip_root=ip_root,
                 system_yml=args.system,
-                project_root=c_root,
             )
 
             print(f"✓ Block Design TCL generated: {output}")
