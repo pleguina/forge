@@ -162,14 +162,23 @@ the destination lives in one, not the raw domain net. `async_fifo`'s
 shared constant-1 cell. This needs `contracts`/`match_report` too, the
 same as `reset_sync` above.
 
-Not every design can use `--mode bd` yet: one that declares a
-`boundary:`-tagged delay is rejected outright — it needs the *protected*
-`slr_crossing_delay` module (not plain `signal_delay`) and a real Vivado
-synthesis run to learn the Block Design's actual synthesized hierarchy
-paths before `algo_top.crossings.json` could name real cells, and
-generating a Block Design silently missing that logic would be worse than
-an error naming exactly which connection declared it. Use `--mode verilog`
-for those designs for now.
+A `boundary:`-tagged delay works too: `--mode bd` instantiates a real,
+protected `slr_crossing_delay` cell instead of plain `signal_delay`/
+`RegisterStage` (whichever of `register_stages`/`delay_cycles` is declared
+becomes its `DEPTH`), and writes a `block_design.crossings.json` manifest
+alongside the Tcl — the same file `blobfish_build.slr_crossings.generate_xdc`
+reads to emit real board XDC constraints for a flat-Verilog build. Its
+hierarchy prefix is `f"{bd_name}_i/{instance_name}/inst"` — the extra
+`/inst` level is Vivado's own convention for a `-type module -reference`
+cell, confirmed against real Vivado 2024.1 synthesis (`DEPTH` 1, 2 and >2
+all checked directly against a real `synth_design` run's own `get_cells`
+results, not just assumed). A board building from a BD payload points its
+own `payload_hier_prefix` at wherever `<bd_name>_i` ends up in its parent
+hierarchy, the same way it already points at `u_algo_top` for a
+flat-Verilog build — no changes needed downstream.
+
+`--mode bd` now reaches full feature parity with `--mode verilog`: every
+design.yml feature generates real logic in both modes.
 
 ## 5. Generate the verification flow
 

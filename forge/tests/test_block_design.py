@@ -9,11 +9,10 @@ helper test_generation_ir_equivalence.py already relies on.
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from forge.contracts.config import Connection, DesignConfig, Module
+from forge.contracts.config import DesignConfig, Module
 from forge.contracts.contract_loader import load_contracts_for_design, synthesize_ip_info
 from forge.contracts.matcher import auto_match_ports
 from forge.generation.generators.block_design import (
@@ -22,7 +21,6 @@ from forge.generation.generators.block_design import (
     _gather_hdl_sources_for_mod,
     _is_hdl,
     _pins_are_numeric,
-    _unsupported_bd_features,
     write_bd_tcl,
 )
 from forge.generation.generators.structural_verilog import write_structural_verilog
@@ -189,34 +187,6 @@ def test_write_bd_tcl_instantiates_register_stage_and_signal_delay_cells(tmp_pat
 # ---------------------------------------------------------------------------
 # Pure helper-function unit tests
 # ---------------------------------------------------------------------------
-
-def test_unsupported_bd_features_empty_for_cdc() -> None:
-    """cdc: is supported (see test_write_bd_tcl_instantiates_cdc_* below) —
-    only boundary is still rejected."""
-    cfg = SimpleNamespace(
-        connections=[Connection(from_="a", to="b", cdc={"kind": "level_sync"})],
-        reset_domains={},
-    )
-    assert _unsupported_bd_features(cfg) == []
-
-
-def test_unsupported_bd_features_empty_for_a_reset_sync_domain() -> None:
-    """reset_domains.*.sync: reset_sync is supported (see
-    test_write_bd_tcl_instantiates_reset_sync_cell below) — only
-    boundary/cdc are still rejected."""
-    cfg = SimpleNamespace(
-        connections=[],
-        reset_domains={"rst_b": {"sync": "reset_sync"}},
-    )
-    assert _unsupported_bd_features(cfg) == []
-
-
-def test_unsupported_bd_features_empty_for_a_plain_design() -> None:
-    cfg = SimpleNamespace(
-        connections=[Connection(from_="a", to="b")],
-        reset_domains={"rst_b": {}},
-    )
-    assert _unsupported_bd_features(cfg) == []
 
 
 def _write_reset_sync_fixture(tmp_path: Path) -> tuple[Path, Path]:

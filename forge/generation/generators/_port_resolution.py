@@ -23,10 +23,12 @@ those features; callers must guard for that themselves.
 
 from __future__ import annotations
 
+import json
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -502,3 +504,142 @@ def classify_connections(
                         tied_to_zero.append((ilabel, pname, w))
 
     return open_outputs, tied_to_zero
+
+
+# ---------------------------------------------------------------------------
+# SLR boundary crossing helpers — shared by write_structural_verilog and
+# write_bd_tcl (a ``boundary:``-tagged connection means the same protected
+# ``slr_crossing_delay`` instance and the same crossing manifest either way;
+# only the hierarchy-prefix formula differs per mode — see ``hier_of``
+# below).
+# ---------------------------------------------------------------------------
+
+def _ident_frag(text: str) -> str:
+    """Return a deterministic, safe identifier fragment from *text* — legal
+    as both a Verilog identifier and a Vivado BD cell name (alnum plus
+    underscore, not starting with a digit)."""
+    out = []
+    for ch in text:
+        if ch.isalnum() or ch == "_":
+            out.append(ch)
+        else:
+            out.append("_")
+    clean = "".join(out).strip("_")
+    if not clean:
+        clean = "unnamed"
+    if clean[0].isdigit():
+        clean = "n_" + clean
+    return clean
+
+
+def _boundary_inst_name(tag: str, src_pin: str, dst_pin: str) -> str:
+    """Stable, deterministic instance name for a boundary crossing FF."""
+    return f"bdry_{_ident_frag(tag)}_{_ident_frag(src_pin)}_to_{_ident_frag(dst_pin)}"
+
+
+def _stage_patterns_for_instance(hier: str, depth: int) -> List[Dict[str, Any]]:
+    """Return the stage-level cell-pattern entries for a given hierarchy and depth.
+
+    Vivado synthesis flattens a named Verilog generate block (``begin :
+    gen_depth2``): it does not create a ``/gen_depth2/`` sub-hierarchy.
+    Instead the generate-block name becomes a dot-prefix on the signal name,
+    and the tool appends ``_reg`` to every synthesised register — a register
+    declared as ``stage0_reg`` inside ``begin : gen_depth2`` becomes the cell
+    ``<hier>/gen_depth2.stage0_reg_reg[*]`` (same hierarchy level as the
+    parent, not a child level). Verified against real Vivado 2024.1
+    synthesis, both for a flat top-level instantiation and for a
+    ``create_bd_cell -type module -reference`` cell.
+
+    DEPTH > 2's ``stage_reg`` is one 2D array (``reg [WIDTH-1:0] stage_reg
+    [0:DEPTH-1]``, not one register per stage), so Vivado names each
+    stage's bits ``stage_reg_reg[<stage>][<bit>]`` — a *stage*-indexed
+    bracket, not a ``stage_reg_<i>_reg`` suffix (confirmed empirically; an
+    earlier version of this pattern used the wrong suffix form and would
+    have matched zero cells against real hardware — never hit in practice
+    since no shipped design declares a boundary depth > 2 yet).
+    """
+    if depth == 1:
+        return [{
+            "index": 0,
+            "role": "boundary",
+            "cell_pattern": f"{hier}/gen_depth1.stage0_reg_reg*",
+        }]
+    if depth == 2:
+        return [
+            {
+                "index": 0,
+                "role": "source_side",
+                "cell_pattern": f"{hier}/gen_depth2.stage0_reg_reg*",
+            },
+            {
+                "index": 1,
+                "role": "destination_boundary",
+                "cell_pattern": f"{hier}/gen_depth2.stage1_reg_reg*",
+            },
+        ]
+    # DEPTH > 2: same dot-prefix rule applies; each stage is one index of
+    # the shared stage_reg array.
+    return [{
+        "index": i,
+        "role": f"stage{i}",
+        "cell_pattern": f"{hier}/gen_depth_general.stage_reg_reg[{i}]*",
+    } for i in range(depth)]
+
+
+def write_crossing_manifest(
+    out_path: Path,
+    top_name: str,
+    boundary_infos: List[Dict[str, Any]],
+    *,
+    hier_of: Callable[[str], str],
+) -> None:
+    """Write ``<out_path stem>.crossings.json`` alongside the generated
+    output — the file ``blobfish_build.slr_crossings.generate_xdc`` reads to
+    emit real board XDC constraints for every protected SLR-crossing
+    register.
+
+    *hier_of* maps a boundary instance's name to its own generator's real
+    hierarchy prefix: ``f"u_{top_name}/{instance_name}"`` for verilog mode,
+    ``f"{bd_name}_i/{instance_name}/inst"`` for bd mode (the extra
+    ``/inst`` level is Vivado's own convention for a ``-type module
+    -reference`` cell, confirmed empirically — see ``write_bd_tcl``). The
+    consumer matches these with a wildcard-prefixed glob
+    (``NAME =~ *<pattern>``), so only this *relative* suffix needs to be
+    right — where the payload lands in a real board build is the board's
+    own ``payload_hier_prefix`` concern, not this manifest's.
+    """
+    grouped: Dict[Tuple, List[Dict]] = defaultdict(list)
+    for b in boundary_infos:
+        key = (b["tag"], b["src_inst"], b["dst_inst"], b["depth"])
+        grouped[key].append(b)
+
+    crossings = []
+    for (tag, src_inst, dst_inst, depth), infos in grouped.items():
+        instances = []
+        for b in infos:
+            hier = hier_of(b["instance_name"])
+            instances.append({
+                "name": b["instance_name"],
+                "width": b["width"],
+                "hier": hier,
+                "src_pin": b["src_pin"],
+                "dst_pin": b["dst_pin"],
+                "stages": _stage_patterns_for_instance(hier, depth),
+            })
+        crossings.append({
+            "tag": tag,
+            "src_module": src_inst,
+            "dst_module": dst_inst,
+            "depth": depth,
+            "kind": "slr_crossing_delay",
+            "instances": instances,
+        })
+
+    manifest = {
+        "schema": 2,
+        "top": top_name,
+        "crossings": crossings,
+    }
+
+    manifest_path = out_path.with_suffix(".crossings.json")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")

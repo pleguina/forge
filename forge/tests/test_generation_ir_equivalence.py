@@ -168,11 +168,12 @@ def test_trigger_demo_bd_generation_is_byte_identical(tmp_path):
     _assert_byte_identical_bd(TRIGGER_DESIGN, TRIGGER_MODULES, tmp_path)
 
 
-def test_write_bd_tcl_rejects_boundary_tagged_delay(tmp_path):
-    """A boundary-tagged delay needs the protected slr_crossing_delay
-    module (KEEP_HIERARCHY/DONT_TOUCH), not plain signal_delay —
-    write_bd_tcl doesn't implement that yet and must reject the design
-    outright rather than silently using the wrong module."""
+def test_write_bd_tcl_instantiates_boundary_crossing_and_writes_manifest(tmp_path):
+    """A boundary-tagged delay (depth 3, exercising the DEPTH > 2
+    stage_reg array branch) gets a real, protected slr_crossing_delay
+    cell, and write_bd_tcl writes a block_design.crossings.json manifest
+    alongside the Tcl — the file blobfish_build.slr_crossings.generate_xdc
+    reads for a real board build."""
     design_yml = tmp_path / "design.yml"
     modules_yml = tmp_path / "modules.yml"
     (tmp_path / "interfaces").mkdir()
@@ -211,9 +212,45 @@ def test_write_bd_tcl_rejects_boundary_tagged_delay(tmp_path):
     )
 
     cfg, contracts, ip_info, conn_map, global_nets, _p, _g = _resolve(design_yml, modules_yml)
-    with pytest.raises(ValueError, match="boundary"):
-        write_bd_tcl(
-            cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
-            out_path=tmp_path / "block_design.tcl", bd_name="top_bd",
-            src_root=design_yml.parent, ip_root=tmp_path / "ips",
-        )
+    out_path = tmp_path / "block_design.tcl"
+    write_bd_tcl(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        out_path=out_path, bd_name="top_bd",
+        src_root=design_yml.parent, ip_root=tmp_path / "ips",
+    )
+
+    tcl = out_path.read_text()
+    assert "create_bd_cell -type module -reference slr_crossing_delay bdry_slr0_to_slr1_dout_to_din" in tcl
+    assert "set_property CONFIG.WIDTH {8} [get_bd_cells bdry_slr0_to_slr1_dout_to_din]" in tcl
+    assert "set_property CONFIG.DEPTH {3} [get_bd_cells bdry_slr0_to_slr1_dout_to_din]" in tcl
+    assert "connect_bd_net [get_bd_pins src/dout] [get_bd_pins bdry_slr0_to_slr1_dout_to_din/din]" in tcl
+    assert "connect_bd_net [get_bd_pins bdry_slr0_to_slr1_dout_to_din/dout] [get_bd_pins dst/din]" in tcl
+    assert "slr_crossing_delay.v" in tcl
+    # boundary uses slr_crossing_delay, never plain signal_delay, for this pair
+    assert "-reference signal_delay" not in tcl
+
+    import json
+    manifest = json.loads(out_path.with_suffix(".crossings.json").read_text())
+    assert manifest["schema"] == 2
+    assert manifest["top"] == "top_bd"
+    assert len(manifest["crossings"]) == 1
+    crossing = manifest["crossings"][0]
+    assert crossing["tag"] == "slr0_to_slr1"
+    assert crossing["depth"] == 3
+    assert crossing["kind"] == "slr_crossing_delay"
+    instance = crossing["instances"][0]
+    assert instance["name"] == "bdry_slr0_to_slr1_dout_to_din"
+    # The extra "/inst" level is Vivado's own convention for a -type
+    # module -reference cell (confirmed against real Vivado 2024.1
+    # synthesis, see test_bd_vivado_smoke.py's boundary case).
+    assert instance["hier"] == "top_bd_i/bdry_slr0_to_slr1_dout_to_din/inst"
+    stages = instance["stages"]
+    assert len(stages) == 3
+    # DEPTH > 2's stage_reg is one array indexed [stage][bit], not a
+    # per-stage suffix — Vivado names it stage_reg_reg[<i>][<bit>].
+    assert stages[0]["cell_pattern"] == (
+        "top_bd_i/bdry_slr0_to_slr1_dout_to_din/inst/gen_depth_general.stage_reg_reg[0]*"
+    )
+    assert stages[2]["cell_pattern"] == (
+        "top_bd_i/bdry_slr0_to_slr1_dout_to_din/inst/gen_depth_general.stage_reg_reg[2]*"
+    )

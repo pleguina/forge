@@ -6,9 +6,11 @@ from typing import Any, Dict, List, Tuple, Optional
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
 from ...contracts.domains import resolve_domain_nets
 from ._port_resolution import (
+    _boundary_inst_name,
     _domain_to_top_level_net,
     classify_connections,
     resolve_top_ports,
+    write_crossing_manifest,
 )
 from ..support_rtl import resolve_support_rtl
 
@@ -164,26 +166,6 @@ def _create_port_cmd(direction: str, name: str, width: int) -> str:
     return f"create_bd_port -dir {dir_flag} -from {width - 1} -to 0 {name}"
 
 
-def _unsupported_bd_features(cfg: DesignConfig) -> List[str]:
-    """Design features write_bd_tcl still doesn't implement.
-
-    ``register_stages``/``delay_cycles``, ``cdc:``, and
-    ``reset_domains.*.sync: reset_sync`` are all handled (see
-    ``reg_stages_map``/``delay_cycles_map``/``cdc_map`` and
-    ``write_bd_tcl``'s CDC-synchronizer/reset-synchronizer sections) with
-    real cell instantiation, the same modules verilog mode uses. Still
-    rejected outright, rather than silently generating a BD missing real
-    logic: a ``boundary:`` tag needs the *protected* ``slr_crossing_delay``
-    module (``KEEP_HIERARCHY``/``DONT_TOUCH`` on every stage register) — a
-    different module from plain ``signal_delay``, not implemented here.
-    """
-    problems: List[str] = []
-    for conn in cfg.connections:
-        if conn.boundary:
-            problems.append(f"connection {conn.from_}->{conn.to} declares boundary={conn.boundary!r}")
-    return problems
-
-
 # ───────────────────────── main writer ──────────────────────
 
 def write_bd_tcl(
@@ -211,11 +193,25 @@ def write_bd_tcl(
     ``top_ports``), so ``forge topgen gen-top``'s reporting/manifest
     pipeline works unmodified against either mode.
 
-    Raises ``ValueError`` if the design declares a boundary-tagged delay —
-    see ``_unsupported_bd_features``. Plain ``register_stages``/
-    ``delay_cycles`` (no ``boundary:`` tag) are supported: a real
-    ``RegisterStage``/``signal_delay`` cell is instantiated between the
-    source and destination pins, the same modules verilog mode uses.
+    Plain ``register_stages``/``delay_cycles`` (no ``boundary:`` tag) are
+    supported: a real ``RegisterStage``/``signal_delay`` cell is
+    instantiated between the source and destination pins, the same modules
+    verilog mode uses.
+
+    A ``boundary:`` tag is supported too: a real, protected
+    ``slr_crossing_delay`` cell is instantiated instead (whichever of
+    ``register_stages``/``delay_cycles`` is set becomes its ``DEPTH``,
+    config.py's own load-time validation already guarantees one of them is
+    positive), and a ``block_design.crossings.json`` manifest is written
+    alongside the Tcl — the same file
+    ``blobfish_build.slr_crossings.generate_xdc`` reads for a flat-Verilog
+    build, with a bd-mode hierarchy prefix
+    (``f"{bd_name}_i/{instance_name}/inst"`` — the extra ``/inst`` level is
+    Vivado's own convention for a ``-type module -reference`` cell,
+    confirmed against real Vivado 2024.1 synthesis). The consumer matches
+    patterns with a wildcard-prefixed glob, so only this relative suffix
+    needs to be right; where the payload lands in a real board build stays
+    the board's own concern.
 
     A ``reset_domains.*.sync: reset_sync`` domain is supported too: a real
     ``cdc_reset_sync`` cell is instantiated per domain and its
@@ -238,26 +234,16 @@ def write_bd_tcl(
     (``forge.contracts.domains.resolve_domain_nets``, the same resolver
     verilog mode uses for this).
     """
-    unsupported = _unsupported_bd_features(cfg)
-    if unsupported:
-        raise ValueError(
-            "write_bd_tcl (--mode bd) does not yet support a boundary-tagged "
-            "delay — generating a Block Design for this design would "
-            "silently drop real logic verilog mode includes:\n"
-            "  - " + "\n  - ".join(unsupported) +
-            "\nUse --mode verilog for this design instead."
-        )
-
     reset_sync_domains = {
         name: rel for name, rel in (cfg.reset_domains or {}).items()
         if rel.get("sync") == "reset_sync"
     }
 
-    # register_stages/delay_cycles/cdc, expanded per-instance — same
-    # construction write_structural_verilog uses (minus boundary, already
-    # rejected above).
+    # register_stages/delay_cycles/boundary/cdc, expanded per-instance —
+    # same construction write_structural_verilog uses.
     reg_stages_map: Dict[Tuple[str, str], int] = {}
     delay_cycles_map: Dict[Tuple[str, str], int] = {}
+    boundary_map: Dict[Tuple[str, str], str] = {}
     cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for conn in cfg.connections:
         src_mod_obj = next(m for m in cfg.modules if m.name == conn.from_)
@@ -270,6 +256,8 @@ def write_bd_tcl(
                     reg_stages_map[(src_inst, dst_inst)] = conn.register_stages
                 if conn.delay_cycles > 0:
                     delay_cycles_map[(src_inst, dst_inst)] = conn.delay_cycles
+                if conn.boundary:
+                    boundary_map[(src_inst, dst_inst)] = conn.boundary
                 if conn.cdc:
                     # '2ff_sync' is a backwards-compatible alias for
                     # 'level_sync' — normalized here, once, same as verilog
@@ -340,9 +328,15 @@ def write_bd_tcl(
         "mailbox_transfer": "cdc_mailbox.v",
         "async_fifo": "cdc_async_fifo.v",
     }
+    # A boundary-tagged pair uses slr_crossing_delay instead of plain
+    # RegisterStage/signal_delay — only a *non*-boundary reg_stages_map/
+    # delay_cycles_map entry needs the plain module.
+    _plain_reg_stages = any(k not in boundary_map for k in reg_stages_map)
+    _plain_delays = any(k not in boundary_map for k in delay_cycles_map)
     _needed = (
-        (["RegisterStage.v"] if reg_stages_map else [])
-        + (["signal_delay.v"] if delay_cycles_map else [])
+        (["RegisterStage.v"] if _plain_reg_stages else [])
+        + (["signal_delay.v"] if _plain_delays else [])
+        + (["slr_crossing_delay.v"] if boundary_map else [])
         + (["cdc_reset_sync.v"] if reset_sync_domains else [])
         + [f for k, f in _CDC_RTL_BY_KIND.items() if k in _cdc_kinds_used]
     )
@@ -543,6 +537,7 @@ def write_bd_tcl(
     delay_counter = 0
     cdc_sync_counter = 0
     _tie_wr_en_one_created = False
+    boundary_infos: List[Dict[str, Any]] = []  # collected for the crossing manifest
 
     for (src_mod, dst_mod), pairs in conn_map.items():
         cdc = cdc_map.get((src_mod, dst_mod))
@@ -679,12 +674,44 @@ def write_bd_tcl(
         # cell-name template across iterations, which a real per-pin cell
         # instance can't).
         if num_stages > 0 or num_delays > 0:
+            tag = boundary_map.get((src_mod, dst_mod))
             for s_pin, d_pin in pairs:
                 s_pin_c = _canon_pin(ip_info, src_mod, s_pin)
                 d_pin_c = _canon_pin(ip_info, dst_mod, d_pin)
                 w = _pin_width(src_mod, s_pin_c)
 
-                if num_stages > 0:
+                if tag:
+                    # Boundary crossing: a protected slr_crossing_delay
+                    # with a stable, deterministic instance name, whatever
+                    # count was declared (register_stages or delay_cycles
+                    # — config.py's own load-time validation already
+                    # guarantees exactly one is positive for a boundary
+                    # tag). Its interface matches signal_delay's
+                    # (clk/rst/din/dout), not RegisterStage's.
+                    depth = num_stages or num_delays
+                    inst_name = _boundary_inst_name(tag, s_pin_c, d_pin_c)
+                    tcl += [
+                        f"# Boundary crossing {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} "
+                        f"[boundary={tag}]",
+                        f"create_bd_cell -type module -reference slr_crossing_delay {inst_name}",
+                        f"set_property CONFIG.WIDTH {{{w}}} [get_bd_cells {inst_name}]",
+                        f"set_property CONFIG.DEPTH {{{depth}}} [get_bd_cells {inst_name}]",
+                        f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
+                        f"connect_bd_net [get_bd_ports ap_rst] [get_bd_pins {inst_name}/rst]",
+                        f"connect_bd_net [get_bd_pins {src_mod}/{s_pin_c}] [get_bd_pins {inst_name}/din]",
+                        f"connect_bd_net [get_bd_pins {inst_name}/dout] [get_bd_pins {dst_mod}/{d_pin_c}]",
+                    ]
+                    boundary_infos.append({
+                        "tag": tag,
+                        "src_inst": src_mod,
+                        "dst_inst": dst_mod,
+                        "src_pin": s_pin_c,
+                        "dst_pin": d_pin_c,
+                        "depth": depth,
+                        "width": w,
+                        "instance_name": inst_name,
+                    })
+                elif num_stages > 0:
                     inst_name = f"reg_stage_{reg_stage_counter}"
                     reg_stage_counter += 1
                     tcl += [
@@ -812,6 +839,15 @@ def write_bd_tcl(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(NL.join(tcl))
     print(f"✅ Block-design Tcl written to {out_path}")
+
+    if boundary_infos:
+        # The extra "/inst" level is Vivado's own convention for a
+        # -type module -reference cell (confirmed against real Vivado
+        # 2024.1 synthesis) — see write_crossing_manifest's docstring.
+        write_crossing_manifest(
+            out_path, bd_name, boundary_infos,
+            hier_of=lambda inst_name: f"{bd_name}_i/{inst_name}/inst",
+        )
 
     return {
         "open_outputs": open_outputs,

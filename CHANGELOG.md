@@ -98,24 +98,45 @@ for the versioning policy.
     (`validate_bd_design` clean) on a fixture exercising all four kinds
     together with a `reset_sync` destination domain, the same combination
     `design_cdc.yml`'s real reference design uses.
-  - Still explicitly rejects (rather than silently generating an
-    incomplete Block Design for) a `boundary:`-tagged delay — needs the
-    *protected* `slr_crossing_delay` module, not plain `signal_delay`, and
-    a real Vivado synthesis run to learn the BD's synthesized hierarchy
-    paths before `algo_top.crossings.json` could name real cells.
+  - A `boundary:`-tagged delay is supported too: a real, protected
+    `slr_crossing_delay` cell is instantiated instead of plain
+    `signal_delay`/`RegisterStage` (whichever of `register_stages`/
+    `delay_cycles` is declared becomes its `DEPTH`), and `write_bd_tcl`
+    writes a `block_design.crossings.json` manifest alongside the Tcl —
+    the same file `blobfish_build.slr_crossings.generate_xdc` reads to
+    emit real board XDC constraints for a flat-Verilog build, no changes
+    needed on that side since its `payload_hier_prefix` is already a
+    board-owned setting for exactly this reason. The manifest's hierarchy
+    prefix is `f"{bd_name}_i/{instance_name}/inst"` — the extra `/inst`
+    level is Vivado's own convention for a `-type module -reference` cell.
+    This was believed to need a real per-design Vivado synthesis run to
+    discover (see this file's own history); it doesn't — `make_wrapper`'s
+    `<bd_name>_i` naming and the `-type module -reference` `/inst` level
+    are both stable, predictable Vivado conventions, confirmed against
+    real Vivado 2024.1 synthesis for `DEPTH` 1, 2 and >2. Also fixes a
+    latent bug found via that same real-Vivado check: `DEPTH > 2`'s
+    generated cell pattern (shared with verilog mode, which had the same
+    bug) named the wrong cells — `stage_reg_reg[<i>]*`, not
+    `stage_reg_<i>_reg*` — never hit in practice since no shipped design
+    declares a boundary depth > 2 yet.
   - `--gen-testbench`/`--lint` now fail loudly under `--mode bd` (both are
     Verilog/VHDL-specific) instead of silently no-op'ing.
 
   New `forge/tests/test_block_design.py` (report shape, tie-off Tcl
-  content, register-stage/signal-delay/reset-sync cell instantiation,
-  cross-mode port-naming parity), new `forge/tests/test_port_resolution.py`,
-  a second `forge/tests/test_bd_vivado_smoke.py` case for the
-  reset-synchronizer path, new `--mode bd` coverage in
-  `forge/tests/test_topgen_cli_commands.py`, and a real
-  `docs/tutorials/golden-path.md` walkthrough (previously one sentence)
-  showing the full `--mode bd` round-trip including sourcing the generated
-  Tcl into Vivado.
-  `_domain_to_top_level_net`/`_reset_net_for_domain` moved from
+  content, register-stage/signal-delay/reset-sync/cdc/boundary cell
+  instantiation, cross-mode port-naming parity), new
+  `forge/tests/test_port_resolution.py`, three more
+  `forge/tests/test_bd_vivado_smoke.py` cases (reset-synchronizer, all
+  four cdc: kinds combined with a reset_sync domain, and — the strongest
+  of the four — a boundary crossing whose generated
+  `block_design.crossings.json` is checked against a real `synth_design`
+  run's own `get_cells` results, not just plausible-looking Tcl), new
+  `--mode bd` coverage in `forge/tests/test_topgen_cli_commands.py`, and a
+  real `docs/tutorials/golden-path.md` walkthrough (previously one
+  sentence) showing the full `--mode bd` round-trip including sourcing the
+  generated Tcl into Vivado.
+  `_domain_to_top_level_net`/`_reset_net_for_domain`/`_boundary_inst_name`/
+  `_stage_patterns_for_instance`/`write_crossing_manifest` moved from
   `structural_verilog.py` into `_port_resolution.py`, shared with
   `write_bd_tcl` — the same "one implementation" pattern
   `resolve_top_ports` already established for top-level port naming.

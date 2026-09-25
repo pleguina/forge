@@ -15,6 +15,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -299,3 +300,144 @@ def test_bd_cdc_round_trips_through_real_vivado(tmp_path: Path) -> None:
     assert result.returncode == 0, combined
     assert "ERROR" not in combined, combined
     assert "CRITICAL WARNING: [BD" not in combined, combined
+
+
+@pytest.mark.skipif(_VIVADO is None, reason="Vivado not on PATH")
+def test_bd_boundary_crossing_manifest_matches_real_synthesized_cells(tmp_path: Path) -> None:
+    """A boundary: crossing's generated block_design.crossings.json must
+    name cells that actually exist after a real synth_design run — not
+    just plausible-looking Tcl. This is the regression guard for
+    write_bd_tcl's hier_of formula (f"{bd_name}_i/{instance_name}/inst"):
+    a future Vivado version changing the -type module -reference
+    hierarchy convention breaks this test, not a real board build.
+
+    Runs full project-mode synthesis (launch_runs synth_1), unlike every
+    other case in this file, which only needs validate_bd_design — that's
+    what it costs to actually observe post-synthesis cell names."""
+    import json
+
+    from forge.contracts.config import DesignConfig as _DesignConfig
+
+    ifdir = tmp_path / "interfaces"
+    ifdir.mkdir()
+    ifdir.joinpath("src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n  ip_info_key: src\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    ifdir.joinpath("dst.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: dst\n  ip_info_key: dst\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    din: {raw_port: din, direction: input, width: 8}\n"
+        "    captured_out: {raw_port: captured_out, direction: output, width: 8}\n"
+    )
+    (tmp_path / "src.v").write_text(
+        "module src(input wire ap_clk, input wire ap_rst, output reg [7:0] dout);\n"
+        "  always @(posedge ap_clk) if (ap_rst) dout <= 8'h0; else dout <= dout + 1'b1;\n"
+        "endmodule\n"
+    )
+    # captured_out is a real output — an unread register gets optimized
+    # away entirely during the cell's own out-of-context synthesis, which
+    # broke open_run's netlist stitching in this environment (found while
+    # writing this test); not a write_bd_tcl issue, a synthesizable-RTL
+    # requirement any real destination module already meets.
+    (tmp_path / "dst.v").write_text(
+        "module dst(input wire ap_clk, input wire ap_rst, input wire [7:0] din,\n"
+        "           output reg [7:0] captured_out);\n"
+        "  always @(posedge ap_clk) if (ap_rst) captured_out <= 8'h0; else captured_out <= din;\n"
+        "endmodule\n"
+    )
+    modules_yml = tmp_path / "modules.yml"
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n    kind: rtl\n    top: src\n    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        "  - name: dst\n    kind: rtl\n    top: dst\n    src: [dst.v]\n"
+        "    interface_contract: interfaces/dst.interface.yaml\n"
+    )
+    design_yml = tmp_path / "design.yml"
+    design_yml.write_text(
+        "part: xcvu9p-flga2104-2L-e\nclock_period: 4.0\nblock_protocol: none\n"
+        "modules:\n"
+        "  - name: src\n    top: src\n    src: [src.v]\n"
+        "  - name: dst\n    top: dst\n    src: [dst.v]\n"
+        "connections:\n"
+        "  - from: src\n    to: dst\n    port_map: [[dout, din]]\n"
+        "    delay_cycles: 2\n    boundary: slr0_to_slr1\n"
+    )
+    design_yml.write_text(design_yml.read_text().replace(
+        "  - name: dst\n    top: dst\n    src: [dst.v]\n",
+        "  - name: dst\n    top: dst\n    src: [dst.v]\n"
+        "    external_out_ports: [captured_out]\n",
+    ))
+
+    cfg = _DesignConfig.load_relaxed(design_yml)
+    contracts = load_contracts_for_design(modules_yml, design_yml.parent)
+    mapped = {m.name: contracts[m.name] for m in cfg.modules if m.name in contracts}
+    ip_info = synthesize_ip_info(mapped)
+    conn_map, global_nets, _match_report = auto_match_ports(cfg, ip_info, contracts=contracts or None)
+
+    bd_tcl = tmp_path / "block_design.tcl"
+    write_bd_tcl(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        out_path=bd_tcl, bd_name="smoke_bd", src_root=design_yml.parent,
+        ip_root=tmp_path / "ips",
+    )
+    manifest = json.loads(bd_tcl.with_suffix(".crossings.json").read_text())
+    assert manifest["crossings"], "expected one boundary crossing in the manifest"
+
+    check_lines: List[str] = []
+    for crossing in manifest["crossings"]:
+        for instance in crossing["instances"]:
+            for stage in instance["stages"]:
+                pattern = stage["cell_pattern"]
+                var = f"cells_{crossing['tag']}_{stage['index']}"
+                check_lines += [
+                    f'set {var} [get_cells -hier -quiet -filter {{NAME =~ *{pattern}}}]',
+                    f'if {{[llength ${var}] == 0}} {{',
+                    f'    error {{crossings.json pattern matched zero real cells: {pattern}}}',
+                    f'}}',
+                    f'puts "OK: {pattern} -> [llength ${var}] cell(s)"',
+                ]
+
+    driver_tcl = tmp_path / "driver.tcl"
+    driver_tcl.write_text(
+        "create_project smoke ./proj -part xcvu9p-flga2104-2L-e -force\n"
+        f"source {bd_tcl}\n"
+        "set_property top smoke_bd_wrapper [current_fileset]\n"
+        "update_compile_order -fileset sources_1\n"
+        "launch_runs synth_1 -jobs 4\n"
+        "wait_on_run synth_1\n"
+        "if {[get_property PROGRESS [get_runs synth_1]] != \"100%\"} {\n"
+        "    error \"synth_1 did not complete\"\n"
+        "}\n"
+        # open_run stitches every BD cell's own out-of-context synthesis
+        # result onto the wrapper-level netlist — needed to see real
+        # register names; a bare open_checkpoint of the wrapper-level
+        # synth_1 result alone leaves every BD cell an unresolved black
+        # box.
+        "open_run synth_1\n"
+        + "\n".join(check_lines) + "\n"
+    )
+    log_path = tmp_path / "vivado.log"
+    result = subprocess.run(
+        [_VIVADO, "-mode", "batch", "-source", str(driver_tcl), "-nolog", "-log", str(log_path), "-nojournal"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=580,
+    )
+
+    log_text = log_path.read_text() if log_path.exists() else ""
+    combined = result.stdout + result.stderr + log_text
+
+    assert result.returncode == 0, combined
+    assert "ERROR" not in combined, combined
+    for crossing in manifest["crossings"]:
+        for instance in crossing["instances"]:
+            for stage in instance["stages"]:
+                assert f"OK: {stage['cell_pattern']}" in combined, combined

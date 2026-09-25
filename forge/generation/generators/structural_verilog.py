@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from forge.core.utils.signal_names import is_clock_name, is_reset_name
-import json
 import re
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Set
 
@@ -15,11 +13,13 @@ from ...contracts.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
 from ._port_resolution import (
     _auto_mapped_global,
+    _boundary_inst_name,
     _collapses_to_global,
     _domain_to_top_level_net,
     _is_user_external,
     _reset_net_for_domain,
     resolve_top_ports,
+    write_crossing_manifest,
 )
 
 # ----------------------------- Verilog helpers ------------------------------
@@ -167,110 +167,10 @@ def _guess_lang(path: Path) -> str:
     return "vhdl" if path.suffix.lower() == ".vhd" else "verilog"
 
 
-# ---------------------------------------------------------------------------
-# SLR boundary crossing helpers
-# ---------------------------------------------------------------------------
+# SLR boundary crossing helpers (_boundary_inst_name, _stage_patterns_for_instance,
+# write_crossing_manifest) moved to _port_resolution.py, shared with write_bd_tcl —
+# imported above.
 
-def _verilog_id_frag(text: str) -> str:
-    """Return a deterministic Verilog-safe identifier fragment from *text*."""
-    out = []
-    for ch in text:
-        if ch.isalnum() or ch == "_":
-            out.append(ch)
-        else:
-            out.append("_")
-    clean = "".join(out).strip("_")
-    if not clean:
-        clean = "unnamed"
-    if clean[0].isdigit():
-        clean = "n_" + clean
-    return clean
-
-
-def _boundary_inst_name(tag: str, src_pin: str, dst_pin: str) -> str:
-    """Stable, deterministic Verilog instance name for a boundary crossing FF."""
-    return f"bdry_{_verilog_id_frag(tag)}_{_verilog_id_frag(src_pin)}_to_{_verilog_id_frag(dst_pin)}"
-
-
-def _stage_patterns_for_instance(hier: str, depth: int) -> List[Dict[str, Any]]:
-    """Return the stage-level cell-pattern entries for a given hierarchy and depth.
-
-    Vivado synthesis flattens Verilog generate blocks: a named generate block
-    ``begin : gen_depth2`` does NOT create a ``/gen_depth2/`` sub-hierarchy.
-    Instead the generate-block name becomes a dot-prefix on the signal name, and
-    the tool appends ``_reg`` to every synthesised register.  So a register
-    declared as ``stage0_reg`` inside ``begin : gen_depth2`` becomes the cell
-    ``<inst>/gen_depth2.stage0_reg_reg[*]`` (same hierarchy level as the
-    parent module, not a child level).
-    """
-    if depth == 1:
-        return [{
-            "index": 0,
-            "role": "boundary",
-            "cell_pattern": f"{hier}/gen_depth1.stage0_reg_reg*",
-        }]
-    if depth == 2:
-        return [
-            {
-                "index": 0,
-                "role": "source_side",
-                "cell_pattern": f"{hier}/gen_depth2.stage0_reg_reg*",
-            },
-            {
-                "index": 1,
-                "role": "destination_boundary",
-                "cell_pattern": f"{hier}/gen_depth2.stage1_reg_reg*",
-            },
-        ]
-    # DEPTH > 2: same dot-prefix rule applies.
-    return [{
-        "index": i,
-        "role": f"stage{i}",
-        "cell_pattern": f"{hier}/gen_depth_general.stage_reg_{i}_reg*",
-    } for i in range(depth)]
-
-
-def _write_crossing_manifest(
-    out_verilog_path: Path,
-    top_name: str,
-    boundary_infos: List[Dict[str, Any]],
-) -> None:
-    """Write algo_top.crossings.json alongside the generated Verilog."""
-    grouped: Dict[Tuple, List[Dict]] = defaultdict(list)
-    for b in boundary_infos:
-        key = (b["tag"], b["src_inst"], b["dst_inst"], b["depth"])
-        grouped[key].append(b)
-
-    crossings = []
-    for (tag, src_inst, dst_inst, depth), infos in grouped.items():
-        instances = []
-        for b in infos:
-            hier = f"u_{top_name}/{b['instance_name']}"
-            instances.append({
-                "name": b["instance_name"],
-                "width": b["width"],
-                "hier": hier,
-                "src_pin": b["src_pin"],
-                "dst_pin": b["dst_pin"],
-                "stages": _stage_patterns_for_instance(hier, depth),
-            })
-        crossings.append({
-            "tag": tag,
-            "src_module": src_inst,
-            "dst_module": dst_inst,
-            "depth": depth,
-            "kind": "slr_crossing_delay",
-            "instances": instances,
-        })
-
-    manifest = {
-        "schema": 2,
-        "top": top_name,
-        "crossings": crossings,
-    }
-
-    manifest_path = out_verilog_path.with_suffix(".crossings.json")
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 def _gather_hdl_sources_for_mod(mod: Module, meta: Dict, src_root: Path) -> list[tuple[str,str]]:
     """
@@ -1191,7 +1091,10 @@ def write_structural_verilog(
 
     # Write SLR crossing manifest if any boundary connections were emitted.
     if boundary_infos:
-        _write_crossing_manifest(out_path, top_name, boundary_infos)
+        write_crossing_manifest(
+            out_path, top_name, boundary_infos,
+            hier_of=lambda inst_name: f"u_{top_name}/{inst_name}",
+        )
 
     # ========== Generate Report ==========
     report = {
