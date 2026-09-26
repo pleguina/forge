@@ -1635,6 +1635,25 @@ def compute_gen_top_plan(
             if c:
                 _mapped[m.name] = c
         ip_info = synthesize_ip_info(_mapped)
+        if args.mode == "bd" and emit_progress:
+            # synthesize_ip_info's projected metadata is a placeholder
+            # (vendor/version literally "contract") -- fine for --mode
+            # verilog (VLNV is never used there), but --mode bd's
+            # create_bd_cell needs a real, catalog-resolvable VLNV or Vivado
+            # fails deep inside a batch build with no indication why.
+            _placeholder_mods = [
+                name for name, meta in ip_info.items()
+                if meta.get("kind") != "hdl" and meta.get("vendor") == "contract"
+            ]
+            if _placeholder_mods:
+                print(
+                    f"⚠️  --mode bd: {len(_placeholder_mods)} packaged-IP module(s) "
+                    f"have placeholder vendor/version from --contracts-from "
+                    f"(e.g. {_placeholder_mods[0]!r}) -- Vivado's create_bd_cell will "
+                    f"fail to resolve them. Generate real IP metadata with "
+                    f"`forge topgen ip-summary --ip-root <built-IP dir>` and pass it "
+                    f"via --ip-info alongside --contracts-from."
+                )
     else:
         if emit_progress:
             print("📋 Generating IP summary from build artefacts …")
