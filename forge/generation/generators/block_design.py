@@ -108,15 +108,20 @@ def _gather_hdl_sources_for_mod(mod: Module, meta: Dict, src_root: Path) -> List
     """
     out: List[tuple[str,str]] = []
 
-    # 1) ip_info-provided lists
+    # 1) ip_info-provided lists. Gated on ip_sources specifically, not just
+    # "did this produce any output" -- an HDL module's projected ip_info can
+    # carry a real "packages" entry (from mod.rtl_packages) with no
+    # "sources" at all (contracts describe ports, not build sources), and
+    # early-returning on that alone would silently drop the primary source
+    # file the caller actually needs (confirmed 2026-09-26: csp_pack_bx_sync
+    # vanished from a real design's _hdl_sources this way).
     ip_sources  = meta.get("sources")  or []
     ip_packages = meta.get("packages") or []
-    for p in ip_sources + ip_packages:
-        f = Path(p)
-        # ip_info entries may already be absolute; keep as-is
-        out.append((f.as_posix(), _guess_lang(f)))
-
-    if out:
+    if ip_sources:
+        for p in ip_sources + ip_packages:
+            f = Path(p)
+            # ip_info entries may already be absolute; keep as-is
+            out.append((f.as_posix(), _guess_lang(f)))
         return out
 
     # 2) YAML module: primary source(s)
