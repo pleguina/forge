@@ -109,6 +109,20 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
                 str(resolve_declared_path(p, registry_root))
                 for p in mod_entry["includes"]
             ]
+        # rtl_packages/rtl_include_dirs are also path lists declared relative
+        # to the registry file, same as src/includes above -- without this,
+        # a design.yml elsewhere resolves them relative to ITS OWN directory
+        # instead (config.py's later abs_rtl_packages/abs_rtl_include_dirs
+        # resolution has no registry-root context to use), silently dropping
+        # any entry that doesn't happen to also exist at that wrong path
+        # (DesignConfig.load's existence check catches it -- but only as a
+        # generic "missing file" error with no hint that the root was wrong).
+        for _path_field in ("rtl_packages", "rtl_include_dirs"):
+            if _path_field in mod_entry:
+                mod_entry[_path_field] = [
+                    str(resolve_declared_path(p, registry_root))
+                    for p in mod_entry[_path_field]
+                ]
         result[name] = mod_entry
     return result
 
