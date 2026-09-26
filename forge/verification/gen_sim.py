@@ -405,10 +405,19 @@ def _render_probe_fwrite(tier2_probes: list[dict[str, Any]]) -> str:
 
     fmt = ",".join(fmt_parts)
     args = ", ".join(var_parts)
+    # `ifdef-guarded, not just the runtime `if (PROBE_LOG)`: this $fwrite
+    # references DUT-internal hierarchy nets (probe["net"]), and Verilog
+    # elaborates every referenced signal regardless of which branch of a
+    # runtime conditional is taken. Under --mode bd those nets live under a
+    # different (IP-Integrator-managed) hierarchy than --mode verilog's flat
+    # one, so elaboration fails even with PROBE_LOG=0 unless this text is
+    # compiled out entirely when the macro isn't defined.
     return "\n".join([
+        "`ifdef PROBE_LOG",
         "      if (PROBE_LOG) begin",
         f"        $fwrite(probe_fd, \"{fmt}\\n\", {args});",
         "      end",
+        "`endif",
     ])
 
 
