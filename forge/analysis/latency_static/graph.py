@@ -1,45 +1,36 @@
 """forge.analysis.latency_static.graph
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Build a directed latency graph from the canonical resolved design IR,
-falling back to an independent design.yml/modules.yml re-parse only for
-the narrow,
-undocumented case of a `modules_yml_path` override that genuinely differs
-from design.yml's own `registry:` field (never observed in real/documented
-usage, but the parameter's public contract allows it).
+falling back to an independent design.yml/modules.yml re-parse only when a
+caller passes a ``modules_yml_path`` that differs from design.yml's own
+``registry:`` field.
 
-Each node represents one physical module instance (single-instance modules
-keep their bare module name, e.g.
-``"col"``; a multi-instance module's instances are named ``"dec[0]"``,
-``"dec[1]"``, ... — previously, all instances of a module
-collapsed into one node, which meant a real multi-producer fan-in (e.g.
-trigger_demo's ``dec`` x4 -> ``col`` gather) could never register as a
-"merge point" at all). Each node's latency is the number of clock cycles
-from valid-in to valid-out for a single pipeline pass, wrapped in a
-provenance-tagged :class:`~forge.analysis.latency_model.LatencyValue` —
-identical across every instance
-of the same module, since latency is a module-level (HLS-synthesis-level)
-fact, not something that varies per physical instance.
+Each node is one physical module instance: a single-instance module keeps
+its bare name (``"col"``); a multi-instance module's instances are named
+``"dec[0]"``, ``"dec[1]"``, ... so a real multi-producer fan-in (e.g.
+trigger_demo's ``dec`` x4 -> ``col`` gather) registers as a merge point.
+Each node's latency is the number of clock cycles from valid-in to
+valid-out for one pipeline pass, wrapped in a provenance-tagged
+:class:`~forge.analysis.latency_model.LatencyValue` — identical across
+every instance of the same module, since latency is a module-level
+(HLS-synthesis-level) fact.
 
-Edges between a producer module with N instances and a consumer module
-with exactly one instance (or vice versa) are expanded into N real
-per-instance edges — structurally certain regardless of which physical
-port each instance drives, since there is only one possible destination
-(or source) instance to connect to. When *both* sides have more than one
-instance, the exact per-instance pairing is generally ambiguous without
-consuming contract/port-matching data this module deliberately doesn't
-depend on (see the "usable before synthesis" note below), so the default
-is the full producer x consumer Cartesian product rather than guessing a
-single pairing — it never *under*-reports a possible merge point. One
-narrow, unambiguous exception (see ``_single_range_instance_pairs``): a
-connection wired via a single 1-D ``port_map_ranges`` entry whose
-``count`` matches the smaller side's instance count already fully
-determines the intended pairing from ``src_start``/``dst_start``/
-``count`` alone, with no port-level data needed — used for real
-array-role connections (e.g. a real external consumer's 52-instance
-``producer -> delay-line`` connection), where the Cartesian-product
-default previously broke ``_upstream_chain_latency``'s
-single-real-predecessor chain-folding for every downstream merge point
-reachable through the connection.
+An edge between a producer with N instances and a consumer with exactly
+one instance (or vice versa) expands into N per-instance edges: there is
+only one possible instance on the single side, so the pairing is certain.
+When both sides have more than one instance, the pairing is generally
+ambiguous without port-matching data this module deliberately doesn't
+depend on, so the default is the full producer x consumer Cartesian
+product — it never under-reports a possible merge point. The one
+exception (see ``_single_range_instance_pairs``): a connection wired via
+a single 1-D ``port_map_ranges`` entry whose ``count`` matches the
+smaller side's instance count fully determines the pairing from
+``src_start``/``dst_start``/``count`` alone, with no port-level data
+needed — used for array-role connections such as a 52-instance
+``producer -> delay-line`` connection, where the Cartesian-product
+default would otherwise break ``_upstream_chain_latency``'s
+single-predecessor chain-folding for every downstream merge point
+reachable through it.
 
 Latency resolution order
 ------------------------
@@ -48,13 +39,11 @@ Latency resolution order
 3. ``latency_hint`` field in modules.yml entry (rough manual estimate)
 4. ``None`` — unknown; reported as a warning in the checker
 
-Edges are inferred from ``connections`` and ``topology_groups`` in design.yml
-(via the IR's resolved connections in the primary path; via a raw re-parse
-in the fallback path). An edge also carries the
-originating ``Connection``'s ``register_stages``/``delay_cycles``/``cdc``
-latency (``generated_transformation`` provenance) — previously discarded
-entirely, meaning the checker was blind to any latency FORGE itself
-inserts on a connection.
+Edges come from ``connections`` and ``topology_groups`` in design.yml (via
+the IR's resolved connections in the primary path; via a raw re-parse in
+the fallback path). An edge also carries the originating ``Connection``'s
+``register_stages``/``delay_cycles``/``cdc`` latency, so the checker sees
+any latency FORGE itself inserts on a connection.
 """
 from __future__ import annotations
 
@@ -100,11 +89,9 @@ class LatencyNode:
             self.display_name = self.name
 
     # --- Back-compat accessors -------------------------------------------
-    # LatencyNode was previously a bare (latency_cycles, latency_source)
-    # pair. Never serialized (latency-check has no --json/
-    # --format flag), so this internal reshape is safe; these properties
-    # let checker.py/reporter.py keep reading .latency_cycles/.latency_source
-    # unchanged.
+    # checker.py/reporter.py read .latency_cycles/.latency_source directly;
+    # these properties keep that working without exposing LatencyValue to
+    # every caller.
     @property
     def latency_cycles(self) -> Optional[int]:
         return self.latency.cycles if self.latency else None
@@ -121,29 +108,19 @@ class LatencyEdge:
     src: str
     dst: str
     latency: Optional[LatencyValue] = None
-    # ``latency is None`` is
-    # ambiguous on its own — it means both "this edge adds no known extra
-    # cycles" (a plain same-domain connection) AND "this edge is a
-    # mailbox_transfer/async_fifo CDC crossing whose latency is
-    # deliberately, honestly unknown" (_edge_latency_from_connection's own
-    # docstring). Every merge-point/upstream-chain walk before this slice
-    # collapsed the second case into "0 extra cycles" instead of "this
-    # whole path is now unknown" — invisible until a design first wired a
-    # real fixed-latency-declared module with a real fixed-latency-declared
-    # sibling predecessor on the OTHER side of a mailbox_transfer/async_fifo
-    # edge (every prior CDC-fed merge point happened to have its own
-    # unrelated "unknown" node latency masking the gap, or no real sibling
-    # predecessor requiring alignment at all). This flag lets both
-    # ``_upstream_chain_latency`` and ``check_merge_points`` propagate the
-    # real "unknown" instead of silently treating the crossing as free.
+    # ``latency is None`` alone is ambiguous: it means either "this edge
+    # adds no known extra cycles" (a plain same-domain connection) or "this
+    # edge is a mailbox_transfer/async_fifo CDC crossing whose latency is
+    # unknown" (see _edge_latency_from_connection). This flag disambiguates
+    # the two, so _upstream_chain_latency and check_merge_points propagate
+    # "unknown" instead of treating the crossing as free.
     unknown_cdc: bool = False
-    # This edge is a control/reset strobe (Connection.control_strobe),
-    # not a data path — excluded from exact-cycle merge-point comparison
-    # the same way an unknown_cdc edge is, but for the opposite reason:
-    # its timing is deliberately, knowably scheduled by the receiving
-    # design (e.g. derived from a maintained per-module latency table),
-    # not genuinely unknowable. See Connection.control_strobe's own
-    # docstring for the real external-consumer example this was found on.
+    # This edge is a control/reset strobe (Connection.control_strobe), not
+    # a data path — excluded from exact-cycle merge-point comparison like
+    # an unknown_cdc edge, but for the opposite reason: its timing is
+    # scheduled by the receiving design (e.g. a maintained per-module
+    # latency table), not unknowable. See Connection.control_strobe for
+    # the external-consumer example this covers.
     control_strobe: bool = False
     # The data on this edge enters the design at ``src`` — through one of
     # that node's ``external_in_ports`` — rather than flowing into it from
@@ -233,21 +210,18 @@ def _resolve_latency(
 
 
 def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
-    """Fold ``register_stages``/``delay_cycles``/a
-    known-depth CDC synchronizer into the edge's latency
-    (``generated_transformation`` provenance) — this FORGE-inserted RTL
-    has a real, known cycle depth that was previously discarded before
-    reaching the checker (``LatencyEdge`` carried no latency at all).
+    """Fold ``register_stages``/``delay_cycles``/a known-depth CDC
+    synchronizer into the edge's latency (``generated_transformation``
+    provenance) — this FORGE-inserted RTL has a known cycle depth.
 
-    This covers the full 5-kind CDC primitive
-    family: ``level_sync``/``2ff_sync`` (alias) is a fixed +2 destination-
-    domain cycles, ``pulse_sync`` is a fixed +3 (2 toggle-sync
-    stages + 1 edge-detect stage, ``cdc_pulse_sync.v``). ``mailbox_transfer``
-    and ``async_fifo`` are deliberately NOT folded in — a request/acknowledge handshake's
-    round-trip timing depends on relative clock phase, and a FIFO's
-    fill/drain timing depends on relative write/read rates; neither is
-    statically knowable, so such an edge stays ``latency=None``, not a
-    fabricated cycle count.
+    Covers the 5-kind CDC primitive family: ``level_sync``/``2ff_sync``
+    (alias) is a fixed +2 destination-domain cycles; ``pulse_sync`` is a
+    fixed +3 (2 toggle-sync stages + 1 edge-detect stage,
+    ``cdc_pulse_sync.v``). ``mailbox_transfer`` and ``async_fifo`` are not
+    folded in: a request/acknowledge handshake's round-trip timing depends
+    on relative clock phase, and a FIFO's fill/drain timing depends on
+    relative write/read rates; neither is statically knowable, so such an
+    edge stays ``latency=None`` rather than a fabricated cycle count.
     """
     cycles = 0
     details: List[str] = []
@@ -277,32 +251,28 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
 def _single_range_instance_pairs(conn, src_mod, dst_mod) -> Optional[List[tuple]]:
     """Return an unambiguous list of ``(src_instance_idx, dst_instance_idx)``
     pairs for *conn* when its ``port_map_ranges`` data is enough to derive
-    one, or ``None`` to fall back to this module's existing conservative
-    Cartesian-product expansion (see the module docstring's "genuinely
-    ambiguous without... contract/port-matching data" note — that reasoning
-    stands for the general case; this only narrows it where the ambiguity
-    doesn't actually exist).
+    one, or ``None`` to fall back to the module's conservative
+    Cartesian-product expansion (see the module docstring).
 
-    Real gap this closes: when both ``src_mod``/``dst_mod`` declare more
-    than one instance and the connection wires them via a single 1-D
-    ``port_map_ranges`` entry whose ``count`` matches the smaller instance
-    count (the common "array-role" pattern — e.g. 52 ``csc`` instances each
-    driving their own ``signal_delay`` instance one-to-one), the intended
-    pairing is already fully determined by ``src_start``/``dst_start``/
-    ``count`` alone — no port-level scalar/indexed distinction (which *does*
-    require ip_info this module deliberately avoids) is needed to know
-    *which instances* pair up, only *which physical pins* would, and this
-    function never touches pins. Found on a real external consumer's
-    topology: a 52-instance ``csc -> csc_data_dly`` connection was silently expanding
-    to 2704 Cartesian-product edges, which broke
-    ``_upstream_chain_latency``'s single-real-predecessor chain-folding for
-    every downstream merge point reachable through it.
+    When both ``src_mod``/``dst_mod`` declare more than one instance and
+    the connection wires them via a single 1-D ``port_map_ranges`` entry
+    whose ``count`` matches the smaller instance count (the common
+    "array-role" pattern — e.g. 52 ``csc`` instances each driving their own
+    ``signal_delay`` instance one-to-one), the pairing is already fully
+    determined by ``src_start``/``dst_start``/``count`` alone: no
+    port-level scalar/indexed distinction is needed to know which
+    *instances* pair up, only which physical *pins* would, and this
+    function never touches pins. On a real external consumer's topology, a
+    52-instance ``csc -> csc_data_dly`` connection expanded to 2704
+    Cartesian-product edges, breaking ``_upstream_chain_latency``'s
+    single-predecessor chain-folding for every downstream merge point
+    reachable through it — this narrows that case to its real pairing.
 
-    Deliberately narrow: multiple ``port_map_ranges`` entries on one
-    connection, any entry using the N-D ``dims`` form, or a ``count`` that
-    doesn't match either side's instance count, all return ``None`` — those
-    genuinely need the port-level data this module doesn't have, so they
-    keep the existing, already-correct-by-design conservative behaviour.
+    Multiple ``port_map_ranges`` entries on one connection, any entry
+    using the N-D ``dims`` form, or a ``count`` that doesn't match either
+    side's instance count, all return ``None``: those need port-level
+    data this module doesn't have, so they keep the conservative
+    behaviour.
     """
     if src_mod is None or dst_mod is None:
         return None
@@ -358,11 +328,9 @@ def _instance_names_raw(name: str, instances: int) -> List[str]:
 
 
 def _instance_node_names(mod) -> List[str]:
-    """One node name per physical instance of *mod*.
-    A single-instance module keeps its bare module name
-    (``"col"``) — identical to every prior slice's naming, zero graph
-    change for the common case. A multi-instance module gets
-    ``"name[0]"``, ``"name[1]"``, ... so latency analysis can see real
+    """One node name per physical instance of *mod*. A single-instance
+    module keeps its bare module name (``"col"``); a multi-instance module
+    gets ``"name[0]"``, ``"name[1]"``, ... so latency analysis sees real
     per-instance fan-in/fan-out instead of one collapsed bucket node."""
     return _instance_names_raw(mod.name, mod.instances)
 
@@ -370,7 +338,7 @@ def _instance_node_names(mod) -> List[str]:
 def _resolved_registry_path(design_path: Path) -> Optional[Path]:
     """The registry path design.yml's own `registry:` field resolves to,
     or None if it doesn't declare one — used to decide whether a caller's
-    `modules_yml_path` override is genuinely different (see build_graph)."""
+    `modules_yml_path` override actually differs (see build_graph)."""
     design = _load_yaml(design_path)
     reg_field = design.get("registry")
     if not reg_field:
@@ -386,26 +354,24 @@ def resolve_conn_map(
     design_path: Path,
     modules_yml_path: Optional[Path] = None,
 ) -> "Optional[Dict[tuple, list]]":
-    """Best-effort real per-instance connection map for *design_path*, via
-    the same contract resolution :func:`forge.ir.build.build_project_ir`
-    uses — ``load_contracts_for_design`` + ``synthesize_ip_info`` (a
-    projected ip_info built from contract-declared ports, no built IP
-    required) + :func:`forge.contracts.matcher.auto_match_ports`.
+    """Best-effort per-instance connection map for *design_path*, via the
+    same contract resolution :func:`forge.ir.build.build_project_ir` uses —
+    ``load_contracts_for_design`` + ``synthesize_ip_info`` (a projected
+    ip_info built from contract-declared ports, no built IP required) +
+    :func:`forge.contracts.matcher.auto_match_ports`.
 
-    This is the authoritative source of truth for "which specific
-    producer instance really drives which specific consumer instance" —
-    the same ``conn_map`` the real structural generators wire from. Used
-    by :func:`build_graph` (when it resolves successfully) to replace
-    both the plain Cartesian-product fallback *and*
-    ``_single_range_instance_pairs``'s narrower heuristic for
-    ``port_map_ranges``, for every connection *and* every
-    ``topology_group`` uniformly — including partition/``instance_assign``-
-    based wiring (e.g. "auto-match by partition"), which neither of those
+    This is the authoritative source for "which producer instance drives
+    which consumer instance" — the same ``conn_map`` the structural
+    generators wire from. :func:`build_graph` uses it, when it resolves,
+    in place of both the Cartesian-product fallback and
+    ``_single_range_instance_pairs``'s narrower ``port_map_ranges``
+    heuristic, for every connection and topology group uniformly —
+    including partition/``instance_assign`` wiring, which neither of those
     can resolve without contract data.
 
-    Returns ``None`` (not raises) when contracts can't be loaded/resolved
-    at all — callers fall back to :func:`build_graph`'s existing
-    contract-free heuristics, exactly as if this had never been called.
+    Returns ``None`` (not raises) when contracts can't be loaded or
+    resolved; callers fall back to :func:`build_graph`'s contract-free
+    heuristics.
     """
     try:
         from forge.contracts.config import DesignConfig
@@ -444,26 +410,24 @@ def build_graph(
     design_path:
         Path to the plugin's ``design.yml``.
     modules_yml_path:
-        Optional explicit override for the modules registry.  If not given,
-        the ``registry:`` field inside ``design.yml`` is used. When given
-        and it resolves to the *same* file design.yml's own ``registry:``
-        field already points to (the documented, real-world usage), the IR-
-        driven path is used. When it resolves to a genuinely different
-        file, this falls back to an independent raw-YAML re-parse — a
-        narrow compatibility path for an override never observed in real
-        usage, not the primary implementation.
+        Optional explicit override for the modules registry. If not given,
+        the ``registry:`` field inside ``design.yml`` is used. When it
+        resolves to the same file design.yml's own ``registry:`` field
+        already points to, the IR-driven path is used. When it resolves to
+        a different file, this falls back to an independent raw-YAML
+        re-parse — a narrow compatibility path, not the primary
+        implementation.
     hls_reports:
         Optional mapping ``{module_name: worst_case_latency_cycles}`` produced
         by :func:`forge.analysis.hls_reports.extractor.latency_map_from_reports`.
     conn_map:
-        Optional real per-instance connection map, typically from
+        Optional per-instance connection map, typically from
         :func:`resolve_conn_map`. When given, it is the authoritative
         source for which instance pairs are real edges — see
-        :func:`resolve_conn_map`'s docstring. Ignored on the legacy
-        raw-YAML fallback path (a ``modules_yml_path`` override that
-        genuinely differs from design.yml's own ``registry:`` is already
-        a narrow, undocumented case; layering contract resolution onto it
-        too isn't warranted).
+        :func:`resolve_conn_map`. Ignored on the raw-YAML fallback path
+        (a ``modules_yml_path`` override that differs from design.yml's
+        own ``registry:`` is already a narrow case; layering contract
+        resolution onto it too isn't warranted).
     """
     design_path = Path(design_path).resolve()
     modules_yml_path = Path(modules_yml_path).resolve() if modules_yml_path is not None else None
@@ -538,9 +502,8 @@ def _build_graph_from_ir(
                 kind=mod.kind,
                 latency=lat,
                 is_variable=is_var,
-                # The real, canonical IR instance id
-                # (matches forge.ir.build.py's ResolvedInstance.id exactly)
-                # — the fix for the bracket-vs-underscore join mismatch.
+                # Must match forge.ir.build.py's ResolvedInstance.id
+                # exactly, including its bracket-vs-underscore join.
                 instance_id=resolved_instance_id(mod.name, idx, mod.instances),
                 display_name=inst_name,
             )

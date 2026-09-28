@@ -113,8 +113,8 @@ def _gather_hdl_sources_for_mod(mod: Module, meta: Dict, src_root: Path) -> List
     # carry a real "packages" entry (from mod.rtl_packages) with no
     # "sources" at all (contracts describe ports, not build sources), and
     # early-returning on that alone would silently drop the primary source
-    # file the caller actually needs (confirmed 2026-09-26: csp_pack_bx_sync
-    # vanished from a real design's _hdl_sources this way).
+    # file the caller actually needs — a module with a "packages" entry but
+    # no "sources" would otherwise vanish from _hdl_sources entirely.
     ip_sources  = meta.get("sources")  or []
     ip_packages = meta.get("packages") or []
     if ip_sources:

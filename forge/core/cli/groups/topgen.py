@@ -163,12 +163,10 @@ def _compute_maturity_summary(
             "total": len(cfg.modules),
             "contract_driven": len(match_report.contract_driven_modules),
             "compat_mode": len(match_report.compat_mode_modules),
-            # The real per-module name
-            # lists were already sitting on match_report, previously
-            # discarded down to a bare len() here — additive so `forge
-            # report`'s existing Markdown section and the visual design
-            # explorer's per-module maturity overlay both source from the
-            # same real lists instead of recomputing them differently.
+            # The per-module name lists, not just their counts, so `forge
+            # report`'s Markdown section and the design explorer's
+            # per-module maturity overlay both source from the same lists
+            # instead of recomputing them differently.
             "contract_driven_names": sorted(match_report.contract_driven_modules),
             "compat_mode_names": sorted(match_report.compat_mode_modules),
         },
@@ -1301,10 +1299,10 @@ def cmd_validate(args):
         metrics: Dict[str, Any] = {}
 
         # ── CDC crossing check ────────────────────────────────────────
-        # verify_cdc used to be gen-top --strict-only (see cmd_gen_top);
-        # authors got no CDC feedback until the final generation step.
-        # Run it here too, as a best-effort, whenever contracts can be
-        # loaded without needing already-built HDL (the same
+        # Run verify_cdc here too (it also gates gen-top --strict, see
+        # cmd_gen_top), so authors get CDC feedback before the final
+        # generation step, as a best-effort check whenever contracts can
+        # be loaded without needing already-built HDL (the same
         # --contracts-from-style projection cmd_gen_top itself supports) —
         # skip gracefully (no diagnostic at all) if the registry/contracts
         # aren't available yet, matching every other optional check in

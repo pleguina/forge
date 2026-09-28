@@ -11,13 +11,10 @@ Any step failing halts immediately with a clear diagnostic naming which
 step failed — never silently continuing past a failure and claiming
 success (governing rule 11).
 
-This command depends on the verify-side scaffolder templates being fixed
-(this same slice, in `forge/verification/__main__.py`) — before that fix, the
-scaffolded RTL (an exact copy of `plugins/passthrough_demo`'s real,
-working RTL) had no matching working verify-side counterpart, so "run at
-least one test" was unmeetable without manual edits. After the fix, both
-halves are real and matched, so the whole chain runs with zero manual
-edits — confirmed by this slice's own end-to-end test.
+This command depends on the verify-side scaffolder templates in
+`forge/verification/__main__.py` matching the scaffolded RTL (an exact
+copy of `plugins/passthrough_demo`'s working RTL): both halves are real
+and matched, so the whole chain runs with zero manual edits.
 """
 
 from __future__ import annotations

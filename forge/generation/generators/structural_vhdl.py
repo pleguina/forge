@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Set
 
-import yaml  # NEW: to read system.yml
+import yaml  # to read system.yml
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
 from ...contracts.matcher import load_ip_info, auto_match_ports
@@ -276,7 +276,7 @@ def write_structural_vhdl(
     out_path: Path,
     *,
     top_name: str = "algo_top",
-    system_yml: Path | None = None,          # NEW: framework awareness
+    system_yml: Path | None = None,          # framework awareness
 ) -> Dict[str, Any]:
     """
     Generate a structural RTL top that wires algorithm modules together.

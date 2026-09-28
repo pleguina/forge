@@ -120,7 +120,7 @@ class VerilatorBackend(BackendAdapter):
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             supports_waveform=False,   # empirically unproven — see module docstring
-            supports_probe_log=False,  # untested under Verilator in this slice
+            supports_probe_log=False,  # untested under Verilator so far
             requires_vendor_env=False,
             supports_checker_post_pass=True,
         )

@@ -492,9 +492,8 @@ def write_structural_verilog(
                     delay_nets.add(delay_net)
 
             # cdc: {kind: ...} — intermediate wire for the synchronizer/
-            # FIFO output (every kind now emits real
-            # RTL and therefore a real intermediate net, including
-            # async_fifo, which used to be wired straight through).
+            # FIFO output; every kind, including async_fifo, emits real
+            # RTL and therefore a real intermediate net.
             if cdc_kind in ("level_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
                 sync_net = _verilog_ident(f"sync_net_{src_i}_{dst_i}_{s_pin}")
                 if sync_net not in sync_nets:
@@ -1031,7 +1030,7 @@ def write_structural_verilog(
             emit(f"  );")
             emit("")
 
-    # ====== Control Signal Distribution (NEW) =============================
+    # ====== Control Signal Distribution =====================================
     emit("  // Control signal distribution with delays")
     for sig_name, sig_config in cfg.control_signals.items():
         for target in sig_config.distribution:
@@ -1052,7 +1051,7 @@ def write_structural_verilog(
 
             delay_counter += 1
 
-    # ====== Output Alignment Delays (NEW) =================================
+    # ====== Output Alignment Delays ========================================
     emit("  // Output alignment delays")
     for mod in cfg.modules:
         if mod.output_delays:

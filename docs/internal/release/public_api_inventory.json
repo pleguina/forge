@@ -349,7 +349,7 @@
       "kind": "class",
       "module": "forge.ir",
       "name": "SourceLocation",
-      "summary": "A source reference, file-level only in this slice (no line/column"
+      "summary": "A source reference, file-level only: no line/column tracking exists"
     },
     {
       "kind": "class",

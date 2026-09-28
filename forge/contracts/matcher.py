@@ -8,7 +8,7 @@ Highlights
 * Detects the pattern “scalar port fanning-out across several module instances”.
 * Refuses to create two drivers for the same sink pin (first match wins).
 * Robust: never fabricates non-existent port names.
-* NEW: Optionally parses system.yml (framework/links) and treats those
+* Optionally parses system.yml (framework/links) and treats those
   algorithm ports as external to avoid accidental auto-wiring.
 """
 
@@ -783,18 +783,13 @@ def auto_match_ports(
                     # wiring when both sides are replicated, applying
                     # src_instance_offset for shifted instance mappings.
                     #
-                    # 2026-09-23: added the single-instance-destination branch.
-                    # src_instance_offset used to only apply when BOTH sides
-                    # were multi-instance; with dst_mod.instances == 1 the
-                    # offset check was skipped entirely (the outer condition
-                    # was False), so every src instance 0..N-1 matched in
-                    # iteration order and the first one (i_s == 0) always won
-                    # via used_sinks -- src_instance_offset was silently
-                    # ignored. Seen in a real topology_group
-                    # (src_instance_offset: 131, dst instances: 1): the
-                    # intended source instance 131 was left dangling and
-                    # both single-instance destinations were wired to
-                    # source instance 0 instead.
+                    # src_instance_offset must also apply when dst_mod has a
+                    # single instance: without this branch, every src
+                    # instance 0..N-1 would match in iteration order and the
+                    # first one (i_s == 0) would always win via used_sinks,
+                    # silently ignoring the offset — e.g. src_instance_offset:
+                    # 131 with dst instances: 1 would leave source instance
+                    # 131 dangling and wire the destination to instance 0.
                     if slot is None and meta is None:
                         if src_mod.instances > 1 and dst_mod.instances > 1:
                             if (i_s - src_offset) != i_d:
