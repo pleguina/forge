@@ -246,13 +246,13 @@ class FlowDeclaration:
     reset_cycles:               int | None = None
     idle_cycles_after_reset:    int | None = None
     post_stimulus_drain_cycles: int | None = None
-    # The primary ap_clk period had no per-flow override at all before
-    # this (every flow silently shared
-    # SimulationDefaults.clk_period_ns) -- found wiring a design whose own
-    # primary domain is genuinely 50MHz (20ns) while every other flow in
-    # this plugin is 4.0ns. Simulated clock period is independent of any
-    # design's own HLS/RTL-synthesis clock_period (design.yml) -- this
-    # only paces the xsim testbench.
+    # Per-flow override for the primary ap_clk period; falls back to
+    # SimulationDefaults.clk_period_ns when unset. A plugin's flows can
+    # need different periods — e.g. one flow's primary domain at 50MHz
+    # (20ns) while every other flow in the same plugin runs at 4.0ns.
+    # Simulated clock period is independent of any design's own
+    # HLS/RTL-synthesis clock_period (design.yml); this only paces the
+    # xsim testbench.
     clk_period_ns:               float | None = None
 
     checker: CheckerDeclaration | None = None

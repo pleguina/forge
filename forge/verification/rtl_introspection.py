@@ -16,8 +16,7 @@ This module replaces ad-hoc regex port parsing with a layered approach:
 Both modes produce the same output: a list of ``PortInfo`` objects.
 
 The public API is intentionally backward-compatible with the original
-``port_parser`` module.  Callers previously using ``port_parser`` should
-switch to this module; the old module now delegates here.
+``port_parser`` module, which now delegates here.
 
 Public API
 ----------

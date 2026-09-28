@@ -48,11 +48,10 @@ def _first_nonblank_line(text: str) -> str:
 def tool_present(name: str) -> bool:
     """Whether *name* resolves on ``PATH`` — the single shared presence
     check both ``forge doctor`` (``core/cli/groups/doctor.py``) and
-    ``forge verify doctor`` (``verify/__main__.py``) now call, instead of
-    each independently invoking ``shutil.which`` for the same 5 tools
-    (closes a duplication that could
-    previously make the two doctor commands disagree if one's check list
-    or invocation ever drifted from the other's)."""
+    ``forge verify doctor`` (``verify/__main__.py``) call, instead of each
+    independently invoking ``shutil.which`` for the same 5 tools and
+    risking the two commands disagreeing if one's check list or
+    invocation drifts from the other's."""
     return shutil.which(name) is not None
 
 

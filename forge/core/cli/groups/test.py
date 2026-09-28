@@ -211,11 +211,10 @@ def _regenerate_stimulus_for_event(
     disk regardless of *event_id* — `forge verify prepare`'s own step 2
     only *checks* that a stimulus file exists, it never generates one
     (generation is a separate, plugin-owned step per the framework's
-    documented contract; confirmed by reading `_cmd_prepare`'s own
-    comment). `forge test run`'s whole value proposition is *real*
-    per-event results, so this regeneration is not optional here — found
-    and fixed during this slice's own real-xsim testing (an event-1 run
-    was silently re-checking event-0's golden data before this fix).
+    documented contract; see `_cmd_prepare`'s own comment). `forge test
+    run`'s whole value proposition is per-event results, so this
+    regeneration is not optional: without it, an event-N run can silently
+    re-check event-(N-1)'s golden data instead.
 
     Returns True if regeneration happened, False if the plugin has no
     `gen_stimulus` module on `sys.path` (e.g. a csim-only flow) — in

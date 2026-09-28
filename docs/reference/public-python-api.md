@@ -65,7 +65,7 @@ path.
 | `forge.ir` | `ResolvedVerificationBinding` | class | One resolved point a testbench drives or observes: a top-level port |
 | `forge.ir` | `ResolvedVerificationFlow` | class | One flow from ``design.verification.yml``, resolved against this |
 | `forge.ir` | `ResolvedVerificationPlan` | class | What verification drives, observes and clocks, resolved from this |
-| `forge.ir` | `SourceLocation` | class | A source reference, file-level only in this slice (no line/column |
+| `forge.ir` | `SourceLocation` | class | A source reference, file-level only: no line/column tracking exists |
 | `forge.ir` | `StalenessExplanation` | class | StalenessExplanation(stale: 'bool', reasons: 'List[str]' = <factory>) |
 | `forge.ir` | `assemble_project_ir` | function | Assemble a ``ResolvedProject`` from already-resolved facts. |
 | `forge.ir` | `build_project_ir` | function | Build a ``ResolvedProject`` for the design at *design_path*, loading |

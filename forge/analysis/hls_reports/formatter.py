@@ -42,7 +42,7 @@ _CSV_FIELDS = [
     "timing_met", "slack_ns",
     "latency_best", "latency_avg", "latency_worst",
     "pipeline_ii", "pipeline_depth", "pipeline_type",
-    # Recovered, previously-dropped throughput range data.
+    # Throughput range.
     "interval_min", "interval_max",
     "lut", "ff", "dsp", "bram_18k", "uram",
     "lut_pct", "ff_pct", "dsp_pct", "bram_pct", "uram_pct",

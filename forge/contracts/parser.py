@@ -266,7 +266,7 @@ def collect_all(
     modules: List[Module],
     ip_root: Optional[Path] = None,
     *,
-    src_root: Optional[Path] = None,          # NEW: where to resolve HDL sources from
+    src_root: Optional[Path] = None,          # where to resolve HDL sources from
 ) -> Dict[str, Any]:
     """
     Return {module.name: component-dict | None}, prioritising component.xml;
@@ -318,7 +318,7 @@ def collect_all(
                 else:
                     print("      ✗ no match")
 
-        # 3) NEW: no component.xml → scan HDL from mod.src
+        # 3) no component.xml → scan HDL from mod.src
         if accepted is None and src_root is not None:
             if getattr(mod, "kind", "hls") == "rtl":
                 print("  • no component.xml — trying HDL scan from src list …")

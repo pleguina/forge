@@ -777,15 +777,12 @@ class DesignConfig:
         # forge.generation.generators.
         # structural_verilog's cdc_map (and conn_map's own per-instance-pair
         # grouping) is keyed by (src_module, dst_module) alone, not per-pin —
-        # a real limitation discovered wiring a genuine multi-crossing design
-        # for the first time (design_cdc.yml, vision_pipeline_demo), not
-        # something any existing design/test ever exercised. Declaring two
-        # `cdc:` connections between the same module pair with *different*
-        # kinds previously merged silently (last-declared kind wins for
-        # every pin between that pair — a real risk of generating the wrong
-        # synchronizer for a real signal with zero diagnostic). Turned into
-        # a real, actionable load-time error instead: route each distinct
-        # cdc kind between the same two modules through its own dedicated
+        # Two `cdc:` connections between the same module pair with
+        # different kinds must not merge silently (the last-declared kind
+        # would otherwise win for every pin between that pair, generating
+        # the wrong synchronizer for some signals with no diagnostic).
+        # This is a load-time error instead: route each distinct cdc kind
+        # between the same two modules through its own dedicated
         # module pair (see design_cdc.yml's per-crossing-kind module split
         # for the pattern). A genuinely per-pin cdc_map is a larger,
         # separate refactor not attempted here.

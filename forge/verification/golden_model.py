@@ -138,10 +138,10 @@ def run_golden_model(
     """Resolve *provider_id*, invoke it exactly once against *dataset*,
     and return its output re-stamped with FORGE-computed identity hashes.
 
-    No retry, no caching in this slice — a provider is expected to be a
-    pure function of ``(dataset, config)``; if that stops being true for
-    some future provider, caching would need to become an explicit,
-    visible decision, not a silent default.
+    No retry, no caching — a provider is expected to be a pure function
+    of ``(dataset, config)``; if that stops being true for some future
+    provider, caching would need to become an explicit, visible decision,
+    not a silent default.
     """
     provider = get_golden_model_provider(provider_id)
     expected = provider.evaluate(dataset, config)

@@ -14,18 +14,14 @@ the consuming interface's protocol — see :func:`check_merge_points`'s
 For an ``exact_cycle`` mismatch the checker emits a suggested
 ``signal_delay`` insertion with the required depth.
 
-Each path's accumulated latency
-includes the connecting edge's own latency (``register_stages``/
-``delay_cycles``/a known-depth CDC synchronizer) in addition to the
-predecessor node's latency — previously the edge contributed nothing at
-all, so the checker was blind to any latency FORGE itself inserts on a
-connection.
+Each path's accumulated latency includes the connecting edge's own
+latency (``register_stages``/``delay_cycles``/a known-depth CDC
+synchronizer) in addition to the predecessor node's latency, so the
+checker sees any latency FORGE itself inserts on a connection.
 
-``LatencyGraph`` nodes are per-instance (not
-per-module-group) — a real multi-instance fan-in (e.g. trigger_demo's
-``dec`` x4 -> ``col``) now produces a genuine multi-predecessor merge
-point here, where before it collapsed to a single edge and could never
-be checked at all.
+``LatencyGraph`` nodes are per-instance, not per-module-group, so a
+multi-instance fan-in (e.g. trigger_demo's ``dec`` x4 -> ``col``)
+produces a real multi-predecessor merge point here.
 """
 from __future__ import annotations
 
@@ -114,50 +110,37 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     """Cumulative (cycles, is_unknown) from *name* back through any
     straight (single-predecessor) chain of fixed-ish nodes above it.
 
-    Before this, a path's latency was just its *immediate* predecessor's
-    own node latency + connecting edge — correct for a direct producer,
-    silently wrong for a multi-hop branch (e.g. vision_pipeline_demo's
-    ``window_builder_rtl -> sobel_hls -> merge``: the merge point only
-    ever saw ``sobel_hls``'s own 4 cycles, never ``window_builder_rtl``'s
-    10, understating that branch's real total by exactly the missing
-    hop). Found by wiring a genuine 2-hop branch into a real merge point
-    for the first time — every existing test/reference-design merge
-    point is single-hop, so this gap had no test surface before.
+    A path's latency is not just its immediate predecessor's node latency
+    plus connecting edge: for a multi-hop branch (e.g.
+    vision_pipeline_demo's ``window_builder_rtl -> sobel_hls -> merge``),
+    that would understate the branch by every hop before the immediate
+    predecessor — here, ``window_builder_rtl``'s 10 cycles ahead of
+    ``sobel_hls``'s own 4.
 
-    Walks backward through nodes with a single *real* predecessor
-    (a predecessor reached via an
-    ``unknown_cdc`` edge — mailbox_transfer/async_fifo — doesn't count
-    toward this "single predecessor" test at all, since it's a legitimate
-    async side-channel exempt from exact-cycle alignment, e.g. a
-    frame-boundary-gated configuration register, not a second data path
-    requiring reconciliation; a node with one real data predecessor plus
-    one such async predecessor still has a fully well-defined, foldable
-    upstream chain through its real side) whose own ``kind`` is fixed-ish
-    (``None``/``fixed``/``hint``/``hls_report`` — never ``bounded``/
-    ``elastic``, whose latency isn't a fixed scalar to begin with, and
-    stopping there is conservative, not a regression: neither reference
-    design uses those kinds mid-chain today). Stops (returns just
-    *name*'s own contribution) at a true source (no real predecessors).
+    Walks backward through nodes with a single real predecessor. A
+    predecessor reached via an ``unknown_cdc`` edge (mailbox_transfer/
+    async_fifo) doesn't count toward "single predecessor": it is a
+    legitimate async side-channel exempt from exact-cycle alignment (e.g.
+    a frame-boundary-gated configuration register), not a second data path
+    requiring reconciliation, so a node with one real data predecessor
+    plus one such async predecessor still has a well-defined, foldable
+    chain through its real side. The chain stops at a node whose own
+    ``kind`` is not fixed-ish (``bounded``/``elastic``, whose latency
+    isn't a fixed scalar), and at a true source (no real predecessors),
+    returning just that node's own contribution.
 
-    A real fan-in node (>=2 real predecessors) is itself a merge point,
-    independently checked by the caller's own (``check_merge_points``)
-    loop — but is only treated as an opaque, non-folded-through stop
-    when it *isn't* confirmed balanced. When every one of its real
-    predecessors resolves to the exact same known total, the merge is
-    confirmed aligned, and that agreed total (plus this node's own
-    latency) is exactly the branch's real accumulated value from here
-    downward — using just this node's own scalar latency instead would
-    silently discard the confirmed-real upstream total, understating the
-    branch same way the pre-fix single-hop case did. Found on a real
-    external consumer's topology: a genuinely balanced concentrator
-    merge point (two real predecessors both totalling 11) was reporting
-    "0" to every node downstream of it, turning a real ~2-cycle
-    discrepancy further downstream into an inflated, misleading ~13.
-    Any unknown or genuinely mismatched real predecessor keeps the
-    conservative, own-latency-only behavior unchanged, so
-    ``check_merge_points`` still independently flags the real issue at
-    the merge point itself rather than this function silently picking a
-    branch to trust.
+    A fan-in node (2+ real predecessors) is itself a merge point,
+    independently checked by the caller's ``check_merge_points`` loop —
+    but it is only an opaque, non-folded-through stop when it isn't
+    confirmed balanced. When every one of its real predecessors resolves
+    to the same known total, the merge is confirmed aligned, and that
+    agreed total plus this node's own latency is the branch's accumulated
+    value from here downward; using just this node's own scalar latency
+    would discard the confirmed upstream total and understate the branch.
+    Any unknown or mismatched real predecessor keeps the conservative,
+    own-latency-only behaviour, so ``check_merge_points`` still
+    independently flags the issue at the merge point itself rather than
+    this function picking a branch to trust.
     """
     node = graph.nodes[name]
     own_cycles = node.latency_cycles
@@ -196,29 +179,24 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     pred = real_preds[0]
     pred_node = graph.nodes.get(pred)
     if pred_node is not None and pred_node.is_variable:
-        # An *explicitly* variable/elastic predecessor (e.g. an async
-        # config tap feeding this node as a side input alongside its real
-        # data path — cfg64_from_framework-style modules declared
-        # ``variable_latency: true``) must not poison this node's own,
-        # separately-known, fixed latency: this node's own declared/HLS-
-        # report value already fully describes its own valid-in-to-
-        # valid-out behaviour regardless of when that async signal
-        # arrives. Found on a real external consumer's topology: dt_interface/
-        # csc_interface instances each have exactly one graph
-        # predecessor — their config tap, not their true (unmodelled,
-        # top-level-external) data input — which was silently turning
-        # every merge point downstream of them ``unknown`` despite dt/csc
-        # both having real, known HLS-synthesised latencies.
+        # An explicitly variable/elastic predecessor (e.g. an async config
+        # tap feeding this node as a side input alongside its real data
+        # path — modules declared ``variable_latency: true``) must not
+        # poison this node's own, separately known, fixed latency: this
+        # node's own declared/HLS-report value already fully describes its
+        # valid-in-to-valid-out behaviour regardless of when that async
+        # signal arrives. A dt_interface/csc_interface instance, for
+        # example, has exactly one graph predecessor — its config tap, not
+        # its unmodelled top-level-external data input — despite having a
+        # real, known HLS-synthesised latency of its own.
         #
-        # Deliberately narrower than "any predecessor without a usable
-        # cycle count": a predecessor with no declared latency at all
-        # (own_cycles is None, is_variable False — data genuinely missing,
-        # not an architectural fact) still falls through to the unknown-
-        # propagating path below unchanged. Only a *declared* variable/
-        # elastic predecessor earns this treatment — the same "explicit
-        # is a real, deliberate architectural fact worth trusting"
-        # precedent this function already applies to unknown_cdc edges
-        # and to this node's own bounded/elastic kind, above.
+        # This is narrower than "any predecessor without a usable cycle
+        # count": a predecessor with no declared latency at all
+        # (own_cycles is None, is_variable False — data missing, not an
+        # architectural fact) still falls through to the unknown-
+        # propagating path below. Only a declared variable/elastic
+        # predecessor earns this treatment, on the same footing as
+        # unknown_cdc edges and this node's own bounded/elastic kind above.
         return (own_cycles, False)
 
     edge = edges_by_pred.get(pred)

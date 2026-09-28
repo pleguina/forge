@@ -44,7 +44,7 @@ _BUILTIN_WIDTHS: Dict[str, int] = {
 _COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.S | re.M)
 _DEFINE_RE = re.compile(r"^\s*#define\s+(\w+)\s+(.+?)\s*$", re.M)
 #: `static const int W = 32;` / `constexpr unsigned W = 32;` — just as common
-#: as #define in HLS headers, and previously invisible to the resolver.
+#: as #define in HLS headers.
 _CONST_RE = re.compile(
     r"^\s*(?:static\s+)?(?:const|constexpr)\s+(?:unsigned\s+|signed\s+)?"
     r"(?:int|short|long|char|size_t|unsigned)\s+(\w+)\s*=\s*([^;]+);", re.M)

@@ -27,9 +27,8 @@ CSV instead — one row per cycle, one column per probe::
     18,1,1
 
 :func:`load_wide_probe_csv` melts this into the same ``ProbeEvent`` list
-:func:`load_probe_csv` produces, closing the gap that previously left
-``gen_sim.py``'s real probe output and this module's consumer using two
-incompatible CSV shapes with no converter between them.
+:func:`load_probe_csv` produces, so ``gen_sim.py``'s probe output and this
+module's consumer read one shape instead of two incompatible ones.
 
 The ``input_valid_signal`` and ``output_valid_signal`` names passed to
 :func:`measure_latency` are fully plugin-defined — the framework provides

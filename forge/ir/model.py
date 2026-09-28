@@ -38,9 +38,9 @@ IR_SCHEMA_VERSION = "0.3.0"
 
 @dataclass
 class SourceLocation:
-    """A source reference, file-level only in this slice (no line/column
-    tracking exists upstream yet — the YAML loaders this IR is built from
-    don't retain parse positions)."""
+    """A source reference, file-level only: no line/column tracking exists
+    upstream yet, since the YAML loaders this IR is built from don't
+    retain parse positions."""
     file: str
     line: Optional[int] = None
     column: Optional[int] = None
@@ -225,9 +225,8 @@ class ResolvedTransformation:
       one outstanding transaction at a time).
     - ``async_fifo`` — from ``Connection.cdc: {kind: async_fifo, depth:
       N}``. Real dual-clock FIFO RTL (``cdc_async_fifo``, Gray-code
-      pointer synchronization); this kind now always has a corresponding
-      generated instance (previously a documented limitation, no longer
-      the case).
+      pointer synchronization); this kind always has a corresponding
+      generated instance.
     - ``reset_synchronizer`` — from ``reset_domains.<name>.sync:
       reset_sync`` (real RTL — ``cdc_reset_sync``,
       async-assert/sync-deassert). Domain-keyed, not connection-keyed —
@@ -240,10 +239,9 @@ class ResolvedTransformation:
       ``design.ir.json`` — same asymmetry as ``ResolvedTopLevelPort``.
     - ``gather_scatter`` — matching-evidence expansion:
       ``forge.contracts.topology_deriver``'s scatter/gather classification
-      (previously discarded before reaching ``MatchReport``) is now
-      surfaced via ``MatchReport.gather_scatter_evidence`` and synthesized
-      here as a real transformation, ``tag`` carrying ``"scatter"`` or
-      ``"gather"``. Real, non-synthetic instances exist in
+      is surfaced via ``MatchReport.gather_scatter_evidence`` and
+      synthesized here as a real transformation, ``tag`` carrying
+      ``"scatter"`` or ``"gather"``. Real, non-synthetic instances exist in
       ``plugins/trigger_demo`` (the ``decoder_to_collector`` gather group).
 
     Kinds defined in the vocabulary with **zero live instances today**

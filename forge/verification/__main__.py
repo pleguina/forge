@@ -379,9 +379,9 @@ def _run_one_loaded_flow(
     """Run one resolved XML selection through preflight, backend, and checker.
 
     ``capture``, when given a dict, is populated with the richer data this
-    function already computes but historically threw away (bare ``int``
-    return) — ``capture["result"]`` (a real ``ExecutionResult``, including
-    for pre-execution failures via a synthetic one so callers always get a
+    function already computes internally but otherwise only returns as a
+    bare ``int`` — ``capture["result"]`` (an ``ExecutionResult``, including
+    a synthetic one for pre-execution failures so callers always get a
     real object), ``capture["checker_ok"]``, ``capture["outputs"]``.
     Existing callers that don't pass ``capture`` see no behavior change.
     """
@@ -462,18 +462,15 @@ def _run_one_loaded_flow(
         print(f"FAIL  (backend exited {result.exit_code})", file=sys.stderr)
 
     # ── 10. Checker lifecycle ────────────────────────────────────────────────
-    # Real bug found while building this flow's end-to-end test (not part of
-    # the original plan): this used to gate on `cfg.has_checker` (a
-    # `checker:` YAML block), so any flow on the *default* `checker_mode:
-    # log_scan` without a declared `checker:` section — every real reference
-    # flow in this repo, confirmed by inspection — never actually had its
-    # log scanned for `$fatal`/`FAIL:` markers, since `run_checker()`'s own
-    # log_scan mode needs no `checker:` block at all. A simulator process
-    # commonly exits 0 even after `$fatal` fires inside the simulated
-    # design (that is the whole reason a log-scan checker mode exists), so
-    # this silently reported PASS for genuinely failed checks. The checker
-    # must run whenever the adapter defines one and the backend itself
-    # succeeded — `has_checker` was never the right gate.
+    # Must not gate on `cfg.has_checker` (a declared `checker:` YAML
+    # block): the default `checker_mode: log_scan` needs no `checker:`
+    # section at all, so gating on it would skip log scanning for
+    # `$fatal`/`FAIL:` markers on every flow that relies on the default —
+    # every reference flow in this repo. A simulator process commonly
+    # exits 0 even after `$fatal` fires inside the simulated design (the
+    # whole reason a log-scan checker mode exists), so skipping the scan
+    # would report PASS for a failed check. The checker must run whenever
+    # the adapter defines one and the backend itself succeeded.
     checker_ok: bool | None = None
     if result.success:
         run_checker = getattr(adapter, "run_checker", None)
