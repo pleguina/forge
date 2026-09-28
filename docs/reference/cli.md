@@ -686,7 +686,8 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --contracts-from CONTRACTS_FROM
-                        Path to modules.yml (interface_contract: entries)
+                        Path to modules.yml (interface_contract: entries); default: registry:
+                        field in design.yml
   --ip-info IP_INFO     Path to a pre-built ip_info.yaml (optional)
   --build-dir BUILD_DIR
                         HLS/RTL build root to scan for component.xml (optional)

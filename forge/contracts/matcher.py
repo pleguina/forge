@@ -414,6 +414,19 @@ def _derive_from_contracts(
 
     return pairs, rejections
 
+def _missing_ip_info_message(mod_name: str, key: str, ip_info: Dict[str, Any]) -> str:
+    # A key present with a None value means the scan ran but found nothing
+    # usable; listing it among "available" keys hides that.
+    if key in ip_info:
+        return (
+            f"Module '{mod_name}' (ip_info key '{key}') has no port information: no "
+            f"component.xml was found for it and its source could not be scanned. "
+            f"Pass --contracts-from <modules.yml> to use its interface contract, or "
+            f"build the IP first."
+        )
+    return f"Module '{mod_name}' (ip_info key '{key}') not found in ip_info. Available: {list(ip_info.keys())}"
+
+
 def auto_match_ports(
     cfg: DesignConfig,
     ip_info: _IpInfo,
@@ -478,9 +491,9 @@ def auto_match_ports(
         S, D = conn.from_, conn.to
         SK, DK = _ip_key(S), _ip_key(D)
         if ip_info.get(SK) is None:
-            raise ValueError(f"Module '{S}' (ip_info key '{SK}') not found in ip_info. Available: {list(ip_info.keys())}")
+            raise ValueError(_missing_ip_info_message(S, SK, ip_info))
         if ip_info.get(DK) is None:
-            raise ValueError(f"Module '{D}' (ip_info key '{DK}') not found in ip_info. Available: {list(ip_info.keys())}")
+            raise ValueError(_missing_ip_info_message(D, DK, ip_info))
         src_ports = {p["name"] for p in ip_info[SK]["ports"]}
         dst_ports = {p["name"] for p in ip_info[DK]["ports"]}
         src_mod   = next(m for m in cfg.modules if m.name == S)

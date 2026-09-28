@@ -54,10 +54,12 @@ def cmd_inspect(args):
     if not design_path.exists():
         sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
 
+    contracts_from = getattr(args, "contracts_from", None) or _design_registry(design_path)
+
     try:
         project, cfg, match_report = build_project_ir_with_match_report(
             design_path,
-            contracts_from=getattr(args, "contracts_from", None),
+            contracts_from=contracts_from,
             ip_info=getattr(args, "ip_info", None),
             build_dir=getattr(args, "build_dir", None),
             ip_root=getattr(args, "ip_root", None),
@@ -226,6 +228,23 @@ def cmd_inspect(args):
     sys.exit(envelope.exit_code())
 
 
+def _design_registry(design_path: Path) -> Optional[str]:
+    """The modules.yml named by design.yml's own ``registry:`` field, so a
+    plain ``forge inspect design.yml`` sees the same contracts that
+    ``forge analyze latency-check`` and generation do."""
+    import yaml
+
+    try:
+        design = yaml.safe_load(design_path.read_text()) or {}
+    except Exception:  # noqa: BLE001 — resolution reports a broken design itself
+        return None
+    registry = design.get("registry") if isinstance(design, dict) else None
+    if not registry:
+        return None
+    path = (design_path.parent / str(registry)).resolve()
+    return str(path) if path.is_file() else None
+
+
 def _command_options(args) -> dict:
     """The subset of CLI args that affect IR resolution — recorded in the
     provenance manifest so `--explain-staleness` can tell "you changed an
@@ -346,7 +365,10 @@ def register(sub) -> None:
         help="Resolve a design into the canonical IR and inspect it (read-only)",
     )
     p.add_argument("design", help="Path to design.yml")
-    p.add_argument("--contracts-from", help="Path to modules.yml (interface_contract: entries)")
+    p.add_argument(
+        "--contracts-from",
+        help="Path to modules.yml (interface_contract: entries); default: registry: field in design.yml",
+    )
     p.add_argument("--ip-info", help="Path to a pre-built ip_info.yaml (optional)")
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
     p.add_argument("--ip-root", help="Additional IP repo root to scan (optional)")

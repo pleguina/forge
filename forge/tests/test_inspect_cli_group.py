@@ -55,6 +55,18 @@ def test_inspect_human_output(capsys: pytest.CaptureFixture[str]) -> None:
     assert "modules           : 1" in result.stdout
 
 
+def test_inspect_defaults_contracts_to_the_design_registry(capsys: pytest.CaptureFixture[str]) -> None:
+    """Without --contracts-from, the design's own `registry:` supplies the
+    contracts, as it does for latency-check. The vision pipeline has HLS
+    modules with no built IP, so it only resolves through those contracts."""
+    design = REPO_ROOT / "plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml"
+
+    result = _run_inspect(capsys, str(design))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "contract maturity : 5/5 contract-driven" in result.stdout
+
+
 def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
     """Plain `--json` now emits one
     CommandEnvelope summary (status/diagnostics/metrics/next_actions), not
