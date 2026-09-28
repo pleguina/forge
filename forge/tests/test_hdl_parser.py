@@ -221,3 +221,55 @@ class TestVerilogScanning:
         """))
         ports = _scan_verilog_ports(v)
         assert ports["clk"] == ("in", 1)
+
+def test_ansi_multiname_declaration_applies_to_every_name(tmp_path):
+    """`output wire [W-1:0] a, b, c` declares three identical ports.
+
+    The header blob is split on commas before being matched, so only the
+    first name arrives carrying the direction and width; the rest are bare
+    names. They used to fall through to a hardcoded ('in', 1) default,
+    silently turning 8-bit outputs into 1-bit inputs. Found in
+    vision_pipeline_demo's window_builder_rtl, where the corruption was
+    invisible because the hand-written interface contract restated the
+    correct direction and width for every tap.
+    """
+    f = tmp_path / "m.v"
+    f.write_text(
+        "module m #(parameter W = 8) (\n"
+        "    input  wire              clk,\n"
+        "    output wire [W-1:0]      a, b, c,\n"
+        "    input  wire [3:0]        d, e,\n"
+        "    output wire              f\n"
+        ");\n"
+        "endmodule\n"
+    )
+
+    ports = _scan_verilog_ports(f)
+
+    assert ports["a"] == ("out", 8)
+    assert ports["b"] == ("out", 8)
+    assert ports["c"] == ("out", 8)
+    assert ports["d"] == ("in", 4)
+    assert ports["e"] == ("in", 4)
+    assert ports["f"] == ("out", 1)
+    assert ports["clk"] == ("in", 1)
+
+
+def test_non_ansi_header_names_still_resolve_from_body_declarations(tmp_path):
+    """The multi-name fix must not shadow the non-ANSI path, where a bare
+    header name takes its direction/width from a body declaration rather
+    than from the preceding header entry."""
+    f = tmp_path / "n.v"
+    f.write_text(
+        "module n(a, b, c);\n"
+        "  input  [7:0] a;\n"
+        "  output       b;\n"
+        "  inout  [1:0] c;\n"
+        "endmodule\n"
+    )
+
+    ports = _scan_verilog_ports(f)
+
+    assert ports["a"] == ("in", 8)
+    assert ports["b"] == ("out", 1)
+    assert ports["c"] == ("inout", 2)

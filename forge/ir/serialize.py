@@ -66,7 +66,7 @@ def _canonical_design_json(project: ResolvedProject) -> str:
     The IR carries no timestamp at all, so no time-based redaction is
     needed either.
 
-    Four fields inside ``design`` itself carry the *caller's* absolute
+    Five fields inside ``design`` itself carry the *caller's* absolute
     filesystem paths, not portable design content, and are rewritten
     relative to the design file's own directory before hashing (empirically
     confirmed to change ``content_hash()``'s output when left as-is, by
@@ -85,11 +85,15 @@ def _canonical_design_json(project: ResolvedProject) -> str:
       for any module that inherits identity fields from a ``modules.yml``
       registry via ``ref:``, which is the common case for both reference
       plugins.
+    - Each module's ``rtl_sources`` — the loader's own resolved
+      ``abs_src``/``abs_rtl_packages``, absolute by construction (unlike
+      ``source_files``, which is only *sometimes* absolute), so this one is
+      rewritten for every module rather than opportunistically.
     - Each ``design.diagnostics[]`` entry's ``location.file`` — every
       validation diagnostic attached to the design is stamped with the
       resolved absolute ``design.yml`` path
       (``forge/ir/build.py``, ``DiagnosticReference(location=SourceLocation(file=str(design_path)))``).
-      Found the same way as the three fields above: a YAML-key-ordering
+      Found the same way as the fields above: a YAML-key-ordering
       determinism test building the identical design
       from two different tmp directories caught this as a second,
       independent leak of the same class, not called out by the original
@@ -104,6 +108,10 @@ def _canonical_design_json(project: ResolvedProject) -> str:
         if mod.get("source_files"):
             mod["source_files"] = [
                 _portable_path(s, base_dir) for s in mod["source_files"]
+            ]
+        if mod.get("rtl_sources"):
+            mod["rtl_sources"] = [
+                _portable_path(s, base_dir) for s in mod["rtl_sources"]
             ]
     for diag in design_dict.get("diagnostics", []):
         location = diag.get("location")
@@ -124,9 +132,10 @@ def content_hash(project: ResolvedProject) -> str:
 def diff_projects(a: ResolvedProject, b: ResolvedProject) -> Dict[str, Any]:
     """A coarse but real diff between two IR snapshots.
 
-    Reports content-hash equality plus added/removed/changed instance and
-    connection IDs by stable-ID comparison. Deep semantic diffing (e.g.
-    "this instance's clock domain changed") is out of scope.
+    Reports content-hash equality, both sides' IR schema versions, and
+    added/removed/changed instance and connection IDs by stable-ID
+    comparison. Deep semantic diffing (e.g. "this instance's clock domain
+    changed") is out of scope.
     """
     hash_a, hash_b = content_hash(a), content_hash(b)
 
@@ -145,6 +154,11 @@ def diff_projects(a: ResolvedProject, b: ResolvedProject) -> Dict[str, Any]:
         "hash_equal": hash_a == hash_b,
         "hash_a": hash_a,
         "hash_b": hash_b,
+        # Reported alongside the hash because a schema difference moves the
+        # hash on its own: a snapshot read back from an older schema is not
+        # a design that changed, and the two must not read the same.
+        "schema_a": a.schema_version,
+        "schema_b": b.schema_version,
         "instances": _diff_ids(inst_a, inst_b),
         "connections": _diff_ids(conn_a, conn_b),
     }

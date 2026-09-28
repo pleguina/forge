@@ -28,6 +28,11 @@
 #      contract/matching/CDC semantics contracts/ resolves) — only the
 #      verification cross-import is forbidden.
 #   3. forge/analysis/ must not import forge.core.cli.
+#   3b. forge/project/ (discovery, adoption and project health — the layer
+#      the new-user commands rest on) must not import forge.core.cli
+#      either: `forge adopt`/`check`/`next` are renderers over it, so the
+#      dependency runs CLI -> project, never back.
+#
 #   4. forge/ir/ (the canonical IR — see forge/ir/model.py) must not import
 #      forge.core.cli, forge.generation.generators, or forge.verification —
 #      the IR is a read-only consumer of topology/contract/IP-metadata
@@ -86,7 +91,8 @@ _check() {
 echo "--- Rule 1: nothing outside forge/core/cli/ imports forge.core.cli ---"
 _check "no cross-import of forge.core.cli outside forge/core/cli/" \
     '(from|import)[[:space:]]+[.[:alnum:]]*core\.cli\b' \
-    forge/contracts forge/generation forge/hls forge/analysis forge/integration forge/ir
+    forge/contracts forge/generation forge/hls forge/analysis forge/integration forge/ir \
+    forge/project
 
 # forge/verification is checked separately: forge.core.cli.envelope is a
 # deliberate, documented exception (see comment above) — every other

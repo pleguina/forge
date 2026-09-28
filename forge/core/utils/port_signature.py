@@ -86,6 +86,20 @@ def from_port_map(port_map: dict[str, Any]) -> str:
     then runs the same canonical hash.  Use this to verify that a stored
     port_map.yaml hash has not drifted.
     """
+    return compute(ports_from_port_map(port_map))
+
+
+def ports_from_port_map(port_map: dict[str, Any]) -> dict[str, tuple[str, int]]:
+    """Every port a loaded ``port_map.yaml`` declares, as
+    ``{name: (direction, width)}`` in the ``hdl_parser`` convention
+    (``in``/``out``) — the shape ``forge.ir.verification_plan.port_divergences``
+    and the hash below both take.
+
+    Public because it is the one traversal of ``port_groups``' four shapes
+    (flat list, ``channels:``, ``ports:``, nested ``groups:``); a second
+    caller wanting the ports rather than the hash should not write a fifth
+    partial version of it.
+    """
     ports_flat: dict[str, tuple[str, int]] = {}
 
     def _ingest(entry: dict[str, Any]) -> None:
@@ -115,7 +129,7 @@ def from_port_map(port_map: dict[str, Any]) -> str:
                 for p in sub.get("ports", []):
                     _ingest(p)
 
-    return compute(ports_flat)
+    return ports_flat
 
 
 # ── Artifact ───────────────────────────────────────────────────────────────

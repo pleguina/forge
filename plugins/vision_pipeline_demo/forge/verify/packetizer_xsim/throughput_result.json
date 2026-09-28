@@ -3,9 +3,9 @@
     "name": "forge.throughput_result",
     "version": "1.0"
   },
-  "design_hash": "696499952d32c55dde675579c290ebf1ec7b697c4b85036612aa2c1aead948f3",
-  "dataset_hash": null,
-  "scenario_hash": null,
+  "design_hash": "d7d9c9712e720b42080f862c88cd8eb6aca46b63192285bf4eac404b438ef56f",
+  "dataset_hash": "aff2655e64f4e948522d9cababed91356d7a8f530a92a2c0f961498a3c4de550",
+  "scenario_hash": "86b3062c4187e932d8b10c65bb78197aa3ed4816f02e51474836b0afb3185ff4",
   "static": [
     {
       "module_name": "pixel_normalizer",
@@ -41,9 +41,10 @@
       "high_water_mark": 28,
       "full_events": 0,
       "empty_events": 2,
-      "measured_rate_records_per_sec": 132467532.46753246,
+      "measured_rate_records_per_sec": 103896103.89610389,
       "dropped_transactions": 0,
-      "duplicated_transactions": 0
+      "duplicated_transactions": 0,
+      "elapsed_seconds": 6.16e-07
     },
     {
       "fifo_object_id": "xform:ts_record_out:async_fifo",
@@ -53,12 +54,13 @@
       "high_water_mark": 1,
       "full_events": 0,
       "empty_events": 2,
-      "measured_rate_records_per_sec": 2597402.5974025973,
+      "measured_rate_records_per_sec": 1623376.6233766233,
       "dropped_transactions": 0,
-      "duplicated_transactions": 0
+      "duplicated_transactions": 0,
+      "elapsed_seconds": 6.16e-07
     }
   ],
   "predicted_rate": 200000000.0,
-  "observed_rate": 135064935.06493506,
+  "observed_rate": 105519480.51948051,
   "bottleneck": "pixel_normalizer"
 }

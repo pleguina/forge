@@ -52,7 +52,19 @@ def test_inspect_human_output(capsys: pytest.CaptureFixture[str]) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "forge inspect" in result.stdout
     assert "content hash" in result.stdout
-    assert "modules            : 1" in result.stdout
+    assert "modules           : 1" in result.stdout
+
+
+def test_inspect_defaults_contracts_to_the_design_registry(capsys: pytest.CaptureFixture[str]) -> None:
+    """Without --contracts-from, the design's own `registry:` supplies the
+    contracts, as it does for latency-check. The vision pipeline has HLS
+    modules with no built IP, so it only resolves through those contracts."""
+    design = REPO_ROOT / "plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml"
+
+    result = _run_inspect(capsys, str(design))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "contract maturity : 5/5 contract-driven" in result.stdout
 
 
 def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) -> None:
@@ -65,11 +77,13 @@ def test_inspect_json_output_is_well_formed(capsys: pytest.CaptureFixture[str]) 
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    # passthrough_demo's real design genuinely has 2 IR warning diagnostics
-    # (a non-evenly-dividing clock period, no connections: section) and no
-    # errors — exit code stays 0 (warn only fails a build under --strict,
-    # which forge inspect does not have), but the status is genuinely warn.
-    assert payload["status"] == "warn"
+    # passthrough_demo is single-module and declares no reference period, so
+    # neither the unwired-design nor the clock-divisibility check applies —
+    # a reference plugin inspects clean. (Both used to fire here as false
+    # positives; see test_topgen_cli_commands.py's
+    # test_reference_design_validates_without_warnings.)
+    assert payload["status"] == "pass"
+    assert payload["diagnostics"] == []
     assert payload["schema_version"]
     assert payload["metrics"]["content_hash"]
     assert payload["metrics"]["counts"]["modules"] == 1
@@ -110,7 +124,7 @@ def test_inspect_emit_ir_writes_exactly_the_requested_file(
     assert result.returncode == 0, result.stdout + result.stderr
     assert out_path.exists()
     payload = json.loads(out_path.read_text())
-    assert payload["schema_version"] == "0.2.0"  # kind-vocabulary expansion
+    assert payload["schema_version"] == "0.3.0"  # module compile set + declaration order
     # Nothing else was written.
     assert _tree_snapshot(tmp_path) == frozenset({"nested", "nested/design.ir.json"})
 

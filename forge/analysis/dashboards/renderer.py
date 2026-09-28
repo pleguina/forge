@@ -10,6 +10,7 @@ is portable without a separate assets directory.
 from __future__ import annotations
 
 import base64
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -229,13 +230,30 @@ def render_html(report: AggregatedReport, out_path: Path) -> None:
 
 
 def render_markdown_summary(report: AggregatedReport, out_path: Path) -> None:
-    """Write a short Markdown summary (index of available analysis artifacts)."""
+    """Write a short Markdown summary (index of available analysis artifacts).
+
+    Every link is written *relative to the summary itself* so the report
+    directory stays a self-contained, movable bundle — absolute paths baked
+    into the Markdown break the moment it's copied, published, or opened on
+    another machine. Paths that genuinely live outside the bundle (project
+    attachments pointing elsewhere) keep their absolute form rather than a
+    long `../../..` chain.
+    """
     lines = ["# FORGE Analysis Dashboard — Summary", ""]
+    base = out_path.parent
+
+    def _link(path: Path) -> str:
+        """Bundle-relative link target, or the absolute path if it escapes."""
+        try:
+            rel = os.path.relpath(path, base)
+        except ValueError:  # different drive on Windows
+            return str(path)
+        return str(path) if rel.startswith("..") else rel.replace(os.sep, "/")
 
     def _section(title: str, path: Optional[Path]) -> None:
         lines.append(f"## {title}")
         if path and path.exists():
-            lines.extend([f"→ [{path.name}]({path})", ""])
+            lines.extend([f"→ [{path.name}]({_link(path)})", ""])
         else:
             lines.extend(["*not available*", ""])
 
@@ -256,7 +274,7 @@ def render_markdown_summary(report: AggregatedReport, out_path: Path) -> None:
     lines.append("## Result Plots")
     if report.plot_pngs:
         for p in report.plot_pngs:
-            lines.append(f"- [{p.stem}]({p})")
+            lines.append(f"- [{p.stem}]({_link(p)})")
     else:
         lines.append("*no plots*")
     lines.append("")

@@ -54,7 +54,7 @@
 # threshcfg's branch is norm(3)+threshcfg(2)+delay_cycles(12)=17), where
 # before the fix it falsely reported a 3-cycle mismatch and a wrong
 # signal_delay suggestion that would have DE-aligned real, already-correct
-# hardware. See forge/analyze/latency_static/{graph.py,checker.py} and
+# hardware. See forge/analysis/latency_static/{graph.py,checker.py} and
 # forge/tests/test_latency_checker.py's two new regression tests.
 #
 # Status interface: `merge.tag_mismatch`/`tjoin.join_mismatch`/

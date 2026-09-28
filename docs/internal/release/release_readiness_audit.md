@@ -201,7 +201,7 @@ generation code, not just the docstring) and is exercised by
 async_fifo, which used to be wired straight through`) confirms this was
 accurate once, then went stale when async_fifo generation was added
 without updating this docstring. Also corrected the same false claim in
-`plugins/trigger_demo/algo/rtl/cdc_sync2ff.v`'s comment. This is exactly
+`forge/rtl/support/cdc_sync2ff.v`'s comment. This is exactly
 the class of issue plan §10.5 asks to resolve before stable (an
 unexplained/incorrect claim in a core, user-facing docstring) — fixed by
 correcting the docstring to describe the real behavior, not by changing

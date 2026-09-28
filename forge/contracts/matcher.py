@@ -414,6 +414,19 @@ def _derive_from_contracts(
 
     return pairs, rejections
 
+def _missing_ip_info_message(mod_name: str, key: str, ip_info: Dict[str, Any]) -> str:
+    # A key present with a None value means the scan ran but found nothing
+    # usable; listing it among "available" keys hides that.
+    if key in ip_info:
+        return (
+            f"Module '{mod_name}' (ip_info key '{key}') has no port information: no "
+            f"component.xml was found for it and its source could not be scanned. "
+            f"Pass --contracts-from <modules.yml> to use its interface contract, or "
+            f"build the IP first."
+        )
+    return f"Module '{mod_name}' (ip_info key '{key}') not found in ip_info. Available: {list(ip_info.keys())}"
+
+
 def auto_match_ports(
     cfg: DesignConfig,
     ip_info: _IpInfo,
@@ -478,9 +491,9 @@ def auto_match_ports(
         S, D = conn.from_, conn.to
         SK, DK = _ip_key(S), _ip_key(D)
         if ip_info.get(SK) is None:
-            raise ValueError(f"Module '{S}' (ip_info key '{SK}') not found in ip_info. Available: {list(ip_info.keys())}")
+            raise ValueError(_missing_ip_info_message(S, SK, ip_info))
         if ip_info.get(DK) is None:
-            raise ValueError(f"Module '{D}' (ip_info key '{DK}') not found in ip_info. Available: {list(ip_info.keys())}")
+            raise ValueError(_missing_ip_info_message(D, DK, ip_info))
         src_ports = {p["name"] for p in ip_info[SK]["ports"]}
         dst_ports = {p["name"] for p in ip_info[DK]["ports"]}
         src_mod   = next(m for m in cfg.modules if m.name == S)
@@ -769,9 +782,25 @@ def auto_match_ports(
                     # For non-slotted pairs with no meta, only do 1:1 diagonal
                     # wiring when both sides are replicated, applying
                     # src_instance_offset for shifted instance mappings.
+                    #
+                    # 2026-09-23: added the single-instance-destination branch.
+                    # src_instance_offset used to only apply when BOTH sides
+                    # were multi-instance; with dst_mod.instances == 1 the
+                    # offset check was skipped entirely (the outer condition
+                    # was False), so every src instance 0..N-1 matched in
+                    # iteration order and the first one (i_s == 0) always won
+                    # via used_sinks -- src_instance_offset was silently
+                    # ignored. Seen in a real topology_group
+                    # (src_instance_offset: 131, dst instances: 1): the
+                    # intended source instance 131 was left dangling and
+                    # both single-instance destinations were wired to
+                    # source instance 0 instead.
                     if slot is None and meta is None:
                         if src_mod.instances > 1 and dst_mod.instances > 1:
                             if (i_s - src_offset) != i_d:
+                                continue
+                        elif src_mod.instances > 1 and dst_mod.instances == 1:
+                            if i_s != src_offset:
                                 continue
 
                     sink_key = (dst_i, d_pin)

@@ -24,56 +24,27 @@ ip_interface:
 
     clock_primary:
       raw_port: clk_pixel
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: rst_pixel
-      direction: input
-      width: 1
-      active_level: high
 
     level_in:
-      raw_port: level_in
-      direction: input
-      width: 1
       notes: "Already synchronized -- destination of the control -> pixel cdc: {kind: level_sync} connection"
 
     pulse_in:
-      raw_port: pulse_in
-      direction: input
-      width: 1
       notes: "Already synchronized pulse -- destination of the control -> pixel cdc: {kind: pulse_sync} connection"
 
     mailbox_in:
-      raw_port: mailbox_in
-      direction: input
-      width: 26
       notes: "Already synchronized -- destination of the control -> pixel cdc: {kind: mailbox_transfer} connection"
 
     result_data_in:
-      raw_port: result_data_in
-      direction: input
-      width: 26
       notes: "Testbench-driven value pushed into the pixel -> output async_fifo"
 
     enable_status:
-      raw_port: enable_status
-      direction: output
-      width: 1
 
     apply_count:
-      raw_port: apply_count
-      direction: output
-      width: 8
 
     mailbox_status:
-      raw_port: mailbox_status
-      direction: output
-      width: 26
 
     result_out:
-      raw_port: result_out
-      direction: output
-      width: 26
       notes: "cdc: {kind: async_fifo} source -> output"

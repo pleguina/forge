@@ -12,14 +12,9 @@ ip_interface:
 
     clock_primary:
       raw_port: ap_clk
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: ap_rst
-      direction: input
-      width: 1
-      active_level: high
 
     lower_hit_array:
       array: true

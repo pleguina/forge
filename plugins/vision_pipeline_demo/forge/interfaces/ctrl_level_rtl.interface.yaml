@@ -18,33 +18,16 @@ ip_interface:
 
     clock_primary:
       raw_port: ap_clk
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: ap_rst
-      direction: input
-      width: 1
-      active_level: high
 
     enable_in:
-      raw_port: enable_in
-      direction: input
-      width: 1
 
     error_level_in:
-      raw_port: error_level_in
-      direction: input
-      width: 1
       notes: "Already synchronized -- destination of the output -> control cdc: {kind: level_sync} connection"
 
     level_out:
-      raw_port: level_out
-      direction: output
-      width: 1
       notes: "cdc: {kind: level_sync} source -> pixel"
 
     error_level_status:
-      raw_port: error_level_status
-      direction: output
-      width: 1

@@ -294,13 +294,14 @@ def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
         ip_info=getattr(args, "ip_info", None),
         build_dir=getattr(args, "build_dir", None),
     )
-    latency_by_instance, verification_flow_entry_points = build_explorer_overlay_data(
-        design_path, project, args,
+    latency_by_instance, verification_flow_entry_points, open_decisions = (
+        build_explorer_overlay_data(design_path, project, args)
     )
     graph = build_design_graph(
         project,
         latency_by_instance=latency_by_instance,
         verification_flow_entry_points=verification_flow_entry_points,
+        open_decisions=open_decisions,
         source_roots=[design_path.parent],
     )
     dot_text = render_dot(graph)
@@ -315,13 +316,17 @@ def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[st
     from forge.core.cli.groups.topgen import _compute_maturity_summary, render_maturity_markdown
     from forge.ir import build_project_ir_with_match_report
 
-    _project, cfg, match_report = build_project_ir_with_match_report(
+    from forge.ir import content_hash
+
+    project, cfg, match_report = build_project_ir_with_match_report(
         design_path,
         contracts_from=getattr(args, "contracts_from", None),
         ip_info=getattr(args, "ip_info", None),
         build_dir=getattr(args, "build_dir", None),
     )
-    maturity = _compute_maturity_summary(cfg, match_report)
+    maturity = _compute_maturity_summary(
+        cfg, match_report, ir_content_hash=content_hash(project),
+    )
     (output_dir / "maturity.md").write_text(render_maturity_markdown(maturity))
     return maturity
 

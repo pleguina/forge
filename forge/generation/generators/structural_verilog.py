@@ -1,7 +1,7 @@
 from __future__ import annotations
-import json
+
+from forge.core.utils.signal_names import is_clock_name, is_reset_name
 import re
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Set
 
@@ -10,9 +10,17 @@ import yaml  # To read system.yml
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
 from ...contracts.domains import resolve_domain_nets
 from ...contracts.matcher import load_ip_info, auto_match_ports
-from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
-from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
 from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
+from ._port_resolution import (
+    _auto_mapped_global,
+    _boundary_inst_name,
+    _collapses_to_global,
+    _domain_to_top_level_net,
+    _is_user_external,
+    _reset_net_for_domain,
+    resolve_top_ports,
+    write_crossing_manifest,
+)
 
 # ----------------------------- Verilog helpers ------------------------------
 
@@ -66,56 +74,8 @@ def _base_of(name: str) -> str:
 def _inst(mod: Module, idx: int) -> str:
     return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
 
-def _domain_to_top_level_net(domain_name: str, *, is_clock: bool) -> str:
-    """Translate a resolved clock/reset domain identity (the raw port name
-    — see forge.contracts.domains.resolve_domain_nets) into the actual
-    top-level net name this generator wires it to.
-
-    This generator's own clock/reset auto-map (the per-instance port-
-    mapping loop below) collapses every *standard*-name variant
-    (``clk``/``clock``/``ap_clk``, or anything ending ``_clk``/``_ap_clk``
-    for clocks; ``rst``/``reset``/``ap_rst``/``rst_n``, or anything ending
-    ``_rst``/``_ap_rst``/``_rst_n`` for resets) onto the single literal
-    ``ap_clk``/``ap_rst`` top-level port, regardless of which specific
-    variant string a module's contract declared. A non-standard name (e.g.
-    ``clk_b``) becomes its own same-named top-level global net instead.
-    Used by CDC synchronizer emission to reference the net that actually
-    exists in the generated file, not the raw domain identity string.
-    """
-    if is_clock:
-        if domain_name in ("clk", "clock", "ap_clk") or domain_name.endswith("_clk") or domain_name.endswith("_ap_clk"):
-            return "ap_clk"
-    else:
-        if (
-            domain_name in ("rst", "reset", "ap_rst", "rst_n")
-            or domain_name.endswith("_rst") or domain_name.endswith("_ap_rst") or domain_name.endswith("_rst_n")
-        ):
-            return "ap_rst"
-    return domain_name
-
-def _reset_net_for_domain(
-    domain_name: "str | None",
-    reset_sync_domains: Dict[str, Dict[str, Any]],
-) -> str:
-    """Resolve a module's reset domain to the net that actually carries a
-    real, synchronized reset.
-
-    A `reset_domains.<name>.sync: reset_sync` domain's real reset signal
-    is `rst_sync_<name>` — the cdc_reset_sync instance's own output — not
-    the raw top-level `<name>` port (which is never driven by anything
-    once a real synchronizer exists for it; see design_cdc.yml's own
-    header for why that top-level port is intentionally left
-    unconnected/dangling). Every OTHER consumer of a resolved reset
-    domain (a CDC synchronizer's own src_rst/dst_rst, and a member
-    instance's own reset pin) must resolve through this same rule, not
-    just `_domain_to_top_level_net` alone — using the raw domain net
-    instead is a real, silent miscompile (a module/synchronizer reads a
-    permanently-unasserted reset and its registers stay X forever),
-    found empirically wiring vision_pipeline_demo's design_cdc.yml.
-    """
-    if domain_name and domain_name in reset_sync_domains:
-        return _verilog_ident(f"rst_sync_{domain_name}")
-    return _domain_to_top_level_net(domain_name, is_clock=False) if domain_name else "ap_rst"
+#: _domain_to_top_level_net/_reset_net_for_domain moved to
+#: _port_resolution.py, shared with write_bd_tcl — imported above.
 
 def _vtype(width: int) -> str:
     """Return Verilog type string: wire for 1-bit, wire [N-1:0] for multi-bit."""
@@ -184,60 +144,9 @@ def _name_is_reserved(name: str, bases: Set[str]) -> bool:
     return any(name == x or name.startswith(x + "_") for x in bases)
 
 # ------------------------- port inventory helpers ------------------------
-
-def _normalize_ports(raw_ports: List[Dict]) -> List[Dict]:
-    """Return [{name, dir, width}] with dir∈{in,out}, width:int."""
-    out = []
-    for p in raw_ports or []:
-        name = p["name"]
-        width = int(p.get("width", 1))
-        dirn = p.get("dir")
-        if not dirn and "direction" in p:
-            dirn = p["direction"].lower()  # IN/OUT → in/out
-        dirn = dirn or "in"
-        # Verilog uses 'input'/'output' instead of 'in'/'out'
-        if dirn == "in":
-            dirn = "input"
-        elif dirn == "out":
-            dirn = "output"
-        out.append({"name": name, "dir": dirn, "width": width})
-    return out
-
-def _fetch_module_ports(mod: Module, meta: Dict, ip_root: Path) -> List[Dict]:
-    """
-    Return [{name,dir,width}], prefer ip_info. If missing, scan RTL under ip_root/<mod>/…
-    """
-    ports = meta.get("ports", [])
-    ports = _normalize_ports(ports)
-    if ports and all(("name" in p and "dir" in p and "width" in p) for p in ports):
-        return ports
-
-    # Try to scan RTL around ip_root/<mod>
-    mod_root = ip_root / mod.name
-    scanned: Dict[str, Tuple[str, int]] = {}
-    for ext in (".vhd", ".v", ".sv"):
-        for p in sorted(mod_root.rglob(f"*{ext}")):
-            try:
-                scanned = scan_vhdl_ports(p) if ext == ".vhd" else scan_vlog_ports(p)
-                if scanned:
-                    break
-            except Exception:
-                continue
-        if scanned:
-            break
-
-    if scanned:
-        # Convert direction format
-        result = []
-        for n, (d, w) in scanned.items():
-            if d == "in":
-                d = "input"
-            elif d == "out":
-                d = "output"
-            result.append({"name": n, "dir": d, "width": int(w)})
-        return result
-
-    return ports  # whatever we had, normalized
+#
+# _normalize_ports/_fetch_module_ports moved to _port_resolution.py (shared
+# with write_bd_tcl) — see resolve_top_ports's use of them there.
 
 def _is_hdl(meta: Dict) -> bool:
     if str(meta.get("kind", "")).lower() == "hdl": return True
@@ -258,110 +167,10 @@ def _guess_lang(path: Path) -> str:
     return "vhdl" if path.suffix.lower() == ".vhd" else "verilog"
 
 
-# ---------------------------------------------------------------------------
-# SLR boundary crossing helpers
-# ---------------------------------------------------------------------------
+# SLR boundary crossing helpers (_boundary_inst_name, _stage_patterns_for_instance,
+# write_crossing_manifest) moved to _port_resolution.py, shared with write_bd_tcl —
+# imported above.
 
-def _verilog_id_frag(text: str) -> str:
-    """Return a deterministic Verilog-safe identifier fragment from *text*."""
-    out = []
-    for ch in text:
-        if ch.isalnum() or ch == "_":
-            out.append(ch)
-        else:
-            out.append("_")
-    clean = "".join(out).strip("_")
-    if not clean:
-        clean = "unnamed"
-    if clean[0].isdigit():
-        clean = "n_" + clean
-    return clean
-
-
-def _boundary_inst_name(tag: str, src_pin: str, dst_pin: str) -> str:
-    """Stable, deterministic Verilog instance name for a boundary crossing FF."""
-    return f"bdry_{_verilog_id_frag(tag)}_{_verilog_id_frag(src_pin)}_to_{_verilog_id_frag(dst_pin)}"
-
-
-def _stage_patterns_for_instance(hier: str, depth: int) -> List[Dict[str, Any]]:
-    """Return the stage-level cell-pattern entries for a given hierarchy and depth.
-
-    Vivado synthesis flattens Verilog generate blocks: a named generate block
-    ``begin : gen_depth2`` does NOT create a ``/gen_depth2/`` sub-hierarchy.
-    Instead the generate-block name becomes a dot-prefix on the signal name, and
-    the tool appends ``_reg`` to every synthesised register.  So a register
-    declared as ``stage0_reg`` inside ``begin : gen_depth2`` becomes the cell
-    ``<inst>/gen_depth2.stage0_reg_reg[*]`` (same hierarchy level as the
-    parent module, not a child level).
-    """
-    if depth == 1:
-        return [{
-            "index": 0,
-            "role": "boundary",
-            "cell_pattern": f"{hier}/gen_depth1.stage0_reg_reg*",
-        }]
-    if depth == 2:
-        return [
-            {
-                "index": 0,
-                "role": "source_side",
-                "cell_pattern": f"{hier}/gen_depth2.stage0_reg_reg*",
-            },
-            {
-                "index": 1,
-                "role": "destination_boundary",
-                "cell_pattern": f"{hier}/gen_depth2.stage1_reg_reg*",
-            },
-        ]
-    # DEPTH > 2: same dot-prefix rule applies.
-    return [{
-        "index": i,
-        "role": f"stage{i}",
-        "cell_pattern": f"{hier}/gen_depth_general.stage_reg_{i}_reg*",
-    } for i in range(depth)]
-
-
-def _write_crossing_manifest(
-    out_verilog_path: Path,
-    top_name: str,
-    boundary_infos: List[Dict[str, Any]],
-) -> None:
-    """Write algo_top.crossings.json alongside the generated Verilog."""
-    grouped: Dict[Tuple, List[Dict]] = defaultdict(list)
-    for b in boundary_infos:
-        key = (b["tag"], b["src_inst"], b["dst_inst"], b["depth"])
-        grouped[key].append(b)
-
-    crossings = []
-    for (tag, src_inst, dst_inst, depth), infos in grouped.items():
-        instances = []
-        for b in infos:
-            hier = f"u_{top_name}/{b['instance_name']}"
-            instances.append({
-                "name": b["instance_name"],
-                "width": b["width"],
-                "hier": hier,
-                "src_pin": b["src_pin"],
-                "dst_pin": b["dst_pin"],
-                "stages": _stage_patterns_for_instance(hier, depth),
-            })
-        crossings.append({
-            "tag": tag,
-            "src_module": src_inst,
-            "dst_module": dst_inst,
-            "depth": depth,
-            "kind": "slr_crossing_delay",
-            "instances": instances,
-        })
-
-    manifest = {
-        "schema": 2,
-        "top": top_name,
-        "crossings": crossings,
-    }
-
-    manifest_path = out_verilog_path.with_suffix(".crossings.json")
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 def _gather_hdl_sources_for_mod(mod: Module, meta: Dict, src_root: Path) -> list[tuple[str,str]]:
     """
@@ -496,7 +305,6 @@ def write_structural_verilog(
     NL = "\n"
     lines: List[str] = []
     emit = lines.append
-    external_output_bindings: Dict[Tuple[str, str], str] = {}
 
     # Build maps for register_stages, delay_cycles, boundary tags, and CDC
     # adapter declarations.
@@ -543,81 +351,23 @@ def write_structural_verilog(
             "resolved (forge.contracts.domains.resolve_domain_nets)."
         )
 
-    # ---------- helpers (local to this function) --------------------------
-    def _parse_system_aliases(system_yml: Path | None) -> tuple[Dict[Tuple[str, str], str], Dict[Tuple[str, str], str]]:
-        """
-        Returns:
-          alias_in [(inst_label, algo_input_pin)]  -> top_port_name (framework RX/CFG)
-          alias_out[(inst_label, algo_output_pin)] -> top_port_name (framework TX)
-        """
-        alias_in: Dict[Tuple[str, str], str] = {}
-        alias_out: Dict[Tuple[str, str], str] = {}
-        if not system_yml:
-            return alias_in, alias_out
-
-        import yaml
-        sys_cfg = yaml.safe_load(system_yml.read_text()) or {}
-        name_to_mod = {m.name: m for m in cfg.modules}
-
-        def _inst_label(mod_name: str, idx: int | None) -> str:
-            m = name_to_mod.get(mod_name)
-            n = int(idx or 0)
-            return mod_name if (m and m.instances == 1) else f"{mod_name}_{n}"
-
-        def _is_fw(x: str | None) -> bool:
-            return str(x).lower() in ("framework", "links")
-
-        for conn in sys_cfg.get("connections", []):
-            src  = conn.get("from")
-            dst  = conn.get("to")
-            sidx = conn.get("from_instance")
-            didx = conn.get("to_instance")
-            for a, b in conn.get("port_map", []):
-                # framework → algorithm
-                if _is_fw(src):
-                    ilab = _inst_label(dst, didx)
-                    # a = framework signal, b = algorithm input pin
-                    alias_in[(ilab, b)] = a
-                # algorithm → framework
-                elif _is_fw(dst):
-                    ilab = _inst_label(src, sidx)
-                    # a = algorithm output pin, b = framework signal
-                    alias_out[(ilab, a)] = b
-        return alias_in, alias_out
-
-    def _is_user_external(mod: Module, pname: str, pdir: str) -> str | None:
-        """
-        Check user-declared external_in_ports / external_out_ports on a
-        *name or prefix* basis — cross-checked against *pname*'s own real
-        direction, so an unrelated, oppositely-directioned port whose
-        name happens to share a prefix with a declared external can never
-        match (e.g. a real output port ``x_out`` must never match a
-        declared external *input* ``x``, even though
-        ``"x_out".startswith("x_")`` is true). Found via real testing —
-        vision_pipeline_demo's quickstart declared
-        ``external_in_ports: [x, y, ...]`` for its
-        real scalar pixel-stream inputs, and the prefix match (with no
-        direction check) silently misrouted the module's real, unrelated
-        ``x_out``/``y_out``/etc. *output* pins to a bogus, wrong-direction
-        top-level port instead of the internal net wire the consuming
-        instance actually reads from — no existing test exercised this
-        interaction.
-        Returns 'input' / 'output' / None.
-        """
-        user_in  = tuple(mod.external_in_ports or [])
-        user_out = tuple(mod.external_out_ports or [])
-        if pdir == "input" and any(pname == x or pname.startswith(x + "_") for x in user_in):
-            return "input"
-        if pdir == "output" and any(pname == x or pname.startswith(x + "_") for x in user_out):
-            return "output"
-        return None
-
-    # ---------- read system.yml → alias maps ------------------------------
-    alias_in, alias_out = _parse_system_aliases(system_yml)
+    # ---------- resolve top-level ports (shared with bd mode) -------------
+    # The single implementation of "which pins become top-level ports and
+    # what they're named" (system.yml alias / user-declared external /
+    # clock/reset/control-signal/global-net collapse / debug) —
+    # forge.ir.model.ResolvedTopLevelPort's docstring states that invariant
+    # directly. write_bd_tcl calls this exact same resolver so its
+    # top-level port set/names can never independently drift from this
+    # generator's.
+    resolution = resolve_top_ports(cfg, ip_info, ip_root, global_nets, system_yml=system_yml)
+    alias_in = resolution.alias_in
+    alias_out = resolution.alias_out
+    ports_by_mod = resolution.ports_by_mod
+    inst_to_mod = resolution.inst_to_mod
+    external_output_bindings = resolution.external_output_bindings
+    top_ports = resolution.top_ports
 
     # ---------- tracking for report ---------------------------------------
-    unconnected_inputs: List[Tuple[str, str, int]] = []   # [(instance, port, width)]
-    unconnected_outputs: List[Tuple[str, str, int]] = []  # [(instance, port, width)]
     open_outputs: List[Tuple[str, str, int]] = []         # [(instance, port, width)]
     tied_to_zero: List[Tuple[str, str, int]] = []         # [(instance, port, width)]
 
@@ -627,18 +377,10 @@ def write_structural_verilog(
     emit("// ------------------------------------------------------------")
     emit("")
 
-    # ====== Precompute instance ↔ module maps, and per-module ports =======
-    ports_by_mod: Dict[str, List[Dict]] = {}
-    for mod in cfg.modules:
-        ports_by_mod[mod.name] = _fetch_module_ports(mod, ip_info[mod.name], ip_root)
-
-    inst_to_mod: Dict[str, str] = {}
     inst_to_params: Dict[str, Dict[str, Any]] = {}  # Track parameters per instance
     for mod in cfg.modules:
         for i in range(mod.instances):
-            ilabel = _inst(mod, i)
-            inst_to_mod[ilabel] = mod.name
-            inst_to_params[ilabel] = mod.parameters  # Store parameters for this instance
+            inst_to_params[_inst(mod, i)] = mod.parameters  # Store parameters for this instance
 
     # Resolve each module's real
     # clock/reset net so a CDC synchronizer instance can be clocked/reset
@@ -679,131 +421,18 @@ def write_structural_verilog(
         return 1
 
     # ====== Module declaration =============================================
-    module_ports: List[str] = []
-    declared_names: Set[str] = set()
-    # Structured mirror of module_ports: recorded alongside the
-    # text declarations below so callers (generate_port_map, the canonical
-    # IR) can consume the resolved top-level port list directly instead of
-    # re-parsing it back out of the generated Verilog file. This list has
-    # zero influence on `lines`/`emit()` — it only records what's already
-    # being decided.
-    top_ports: List[Dict[str, Any]] = []
-
-    if cfg.connect_clock:
-        module_ports.append("input ap_clk")
-        declared_names.add("ap_clk")
-        top_ports.append({"name": "ap_clk", "direction": "in", "width": 1})
-    if cfg.connect_reset:
-        module_ports.append("input ap_rst")
-        declared_names.add("ap_rst")
-        top_ports.append({"name": "ap_rst", "direction": "in", "width": 1})
-
-    # Add control signals as inputs (only if not generated internally)
-    # Check if any module outputs this control signal
-    control_signal_sources = {}  # sig_name -> module that outputs it
-    for mod in cfg.modules:
-        for p in ports_by_mod[mod.name]:
-            if p["dir"] == "output" and p["name"] in cfg.control_signals:
-                control_signal_sources[p["name"]] = mod.name
-
-    for sig_name, sig_config in cfg.control_signals.items():
-        # Skip if this signal is generated by a module (not a top-level input)
-        if sig_name in control_signal_sources:
-            continue
-        if sig_name not in declared_names:
-            if sig_config.width == 1:
-                module_ports.append(f"input {sig_name}")
-            else:
-                module_ports.append(f"input [{sig_config.width-1}:0] {sig_name}")
-            declared_names.add(sig_name)
-            top_ports.append({"name": sig_name, "direction": "in", "width": sig_config.width})
-
-    # Add ports for any other global nets (besides clock/reset)
-    for gnet_name, binds in global_nets.items():
-        # Skip clock and reset as they're handled above
-        if gnet_name in ("ap_clk", "clk", "clock", "ap_rst", "rst", "reset", "rst_n"):
-            continue
-        if gnet_name not in declared_names and binds:
-            # All instances of this signal should be inputs (global signals drive modules)
-            module_ports.append(f"input {gnet_name}")
-            declared_names.add(gnet_name)
-            top_ports.append({"name": gnet_name, "direction": "in", "width": 1})
-
-    # Emit top-level ports.
-    # If (inst,pin) has an alias from system.yml, use the framework name; otherwise use <inst>_<pin>.
-    for mod in cfg.modules:
-        for p in ports_by_mod[mod.name]:
-            pname, pdir, w = p["name"], p["dir"], int(p["width"])
-
-            # skip any clock/reset-ish externals if top provides global clk/rst
-            if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
-                continue
-            if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
-                continue
-            # skip any other global nets (e.g., new_event)
-            if pname in global_nets:
-                continue
-
-            for i in range(mod.instances):
-                ilabel = _inst(mod, i)
-
-                # system.yml alias takes precedence for externalization
-                ext_dir = None
-                if (ilabel, pname) in alias_in:
-                    ext_dir = "input"
-                    top_port_name = alias_in[(ilabel, pname)]
-                elif (ilabel, pname) in alias_out:
-                    ext_dir = "output"
-                    top_port_name = alias_out[(ilabel, pname)]
-                else:
-                    # fall back to user-declared externals
-                    ext_dir = _is_user_external(mod, pname, pdir)
-                    if ext_dir:
-                        top_port_name = f"{ilabel}_{pname}"
-
-                if not ext_dir:
-                    continue
-
-                if ext_dir == "output":
-                    external_output_bindings[(ilabel, pname)] = top_port_name
-
-                # avoid duplicates if a name somehow repeats
-                if top_port_name in declared_names:
-                    continue
-                module_ports.append(_port_decl(top_port_name, ext_dir, w))
-                declared_names.add(top_port_name)
-                top_ports.append({
-                    "name": top_port_name,
-                    "direction": "in" if ext_dir == "input" else "out",
-                    "width": w,
-                })
-
-    # Add DEBUG ports - expose ALL ports of modules marked with debug: true
-    for mod in cfg.modules:
-        if not mod.debug:
-            continue
-        
-        for p in ports_by_mod[mod.name]:
-            pname, pdir, w = p["name"], p["dir"], int(p["width"])
-            
-            # Skip clock/reset
-            if cfg.connect_clock and pname in ("clk", "clock", "ap_clk"):
-                continue
-            if cfg.connect_reset and pname in ("rst", "reset", "ap_rst", "rst_n"):
-                continue
-            
-            # Expose each instance's port as debug port
-            for i in range(mod.instances):
-                ilabel = _inst(mod, i)
-                debug_port_name = f"debug_{ilabel}_{pname}"
-                
-                if debug_port_name in declared_names:
-                    continue
-
-                # Debug ports are outputs (so we can monitor them)
-                module_ports.append(_port_decl(debug_port_name, "output", w))
-                declared_names.add(debug_port_name)
-                top_ports.append({"name": debug_port_name, "direction": "out", "width": w})
+    # module_ports (the Verilog port-declaration text) is reconstructed
+    # from resolution.top_ports rather than built alongside it — the
+    # resolver's job is naming/ordering the top-level ports, not formatting
+    # Verilog syntax. For every origin this produces byte-identical text to
+    # the previous inline construction: clock/reset/control-signal/
+    # global-net entries are always width matched to what _port_decl(name,
+    # "input", width) already emits for "input ap_clk" etc., and
+    # external/debug entries already used _port_decl directly.
+    module_ports: List[str] = [
+        _port_decl(p["name"], "input" if p["direction"] == "in" else "output", p["width"])
+        for p in top_ports
+    ]
 
     emit(f"module {top_name} (")
     if module_ports:
@@ -987,14 +616,15 @@ def write_structural_verilog(
                 pname, pdir, w = p["name"], p["dir"], int(p["width"])
 
                 # clock/reset auto-map (support various naming conventions)
-                if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
+                _global = _auto_mapped_global(mod, pname, pdir, cfg=cfg, global_nets=global_nets)
+                if _global == "clock":
                     # Skip ap_clk connection for clock-free (combinatorial) modules
                     _contract = (contracts or {}).get(mod.name)
                     if _contract and _contract.clock_free:
                         continue
                     pm.append(f"    .{pname}(ap_clk)")
                     continue
-                if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
+                if _global == "reset":
                     pm.append(f"    .{pname}(ap_rst)")
                     continue
 
@@ -1119,9 +749,9 @@ def write_structural_verilog(
                     pname, pdir, w = p["name"], p["dir"], int(p["width"])
                     
                     # Skip clock/reset
-                    if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
+                    if cfg.connect_clock and is_clock_name(pname):
                         continue
-                    if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
+                    if cfg.connect_reset and is_reset_name(pname):
                         continue
                     
                     # Assign debug port from this instance's port
@@ -1257,10 +887,10 @@ def write_structural_verilog(
             src_rst_domain = reset_of_module.get(src_mod)
             dst_clk_domain = clock_of_module.get(dst_mod)
             dst_rst_domain = reset_of_module.get(dst_mod)
-            src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True) if src_clk_domain else "ap_clk"
-            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains)
-            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
-            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains)
+            src_clk_net = _domain_to_top_level_net(src_clk_domain, is_clock=True, own_nets=global_nets) if src_clk_domain else "ap_clk"
+            src_rst_net = _reset_net_for_domain(src_rst_domain, reset_sync_domains, global_nets, ident_fn=_verilog_ident)
+            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True, own_nets=global_nets) if dst_clk_domain else "ap_clk"
+            dst_rst_net = _reset_net_for_domain(dst_rst_domain, reset_sync_domains, global_nets, ident_fn=_verilog_ident)
 
             for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
@@ -1381,7 +1011,7 @@ def write_structural_verilog(
         emit("  // Reset synchronizers for reset_domains.*.sync: reset_sync declarations")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
             derived_from = rel.get("derived_from")
-            async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False)
+            async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
 
             # The synchronizer's own destination clock: whichever clock
             # domain this reset domain's member instances actually use
@@ -1389,7 +1019,7 @@ def write_structural_verilog(
             # clock domain). Falls back to ap_clk if unresolvable.
             member_mods = [m for m, dom in reset_of_module.items() if dom == name]
             dst_clk_domain = clock_of_module.get(member_mods[0]) if member_mods else None
-            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True) if dst_clk_domain else "ap_clk"
+            dst_clk_net = _domain_to_top_level_net(dst_clk_domain, is_clock=True, own_nets=global_nets) if dst_clk_domain else "ap_clk"
 
             rst_sync_net = _verilog_ident(f"rst_sync_{name}")
             emit(f"  // Reset domain {name!r}: real member instances bound to sync_rst_out")
@@ -1461,7 +1091,10 @@ def write_structural_verilog(
 
     # Write SLR crossing manifest if any boundary connections were emitted.
     if boundary_infos:
-        _write_crossing_manifest(out_path, top_name, boundary_infos)
+        write_crossing_manifest(
+            out_path, top_name, boundary_infos,
+            hier_of=lambda inst_name: f"u_{top_name}/{inst_name}",
+        )
 
     # ========== Generate Report ==========
     report = {

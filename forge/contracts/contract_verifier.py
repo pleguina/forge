@@ -138,8 +138,12 @@ class ContractVerifier:
     def verify(self) -> VerifyResult:
         """Run all checks and return a VerifyResult."""
         spec = self._contract.get("ip_interface", {})
-        ip_key = spec.get("ip_info_key", "")
         module_name = spec.get("module_name", "<unknown>")
+        # `ip_info_key` and `module_name` are the same value in every
+        # straightforward case, so an omitted key defaults to the module
+        # name rather than being an error. Declaring it stays necessary only
+        # when a design instance is named differently from its module.
+        ip_key = spec.get("ip_info_key") or spec.get("module_name", "")
 
         result = VerifyResult(
             contract_path=self.contract_path,
@@ -161,14 +165,30 @@ class ContractVerifier:
             (err if issue.severity == "error" else warn)("(meta)", issue.message)
 
         if not ip_key:
-            err("(meta)", "Missing 'ip_info_key' in contract")
+            err("(meta)", "Contract declares neither 'ip_info_key' nor 'module_name'")
             return result
 
         if ip_key not in self._ip_info:
-            err("(meta)", f"ip_info_key '{ip_key}' not found in {self.ip_info_path.name}")
+            # Name what *is* there. This mismatch is almost always
+            # ip_info_key holding the module's `ref:` where the design
+            # instance is named something else, and the fix is obvious the
+            # moment the real keys are on screen.
+            available = ", ".join(sorted(k for k in self._ip_info if not k.startswith("_"))) or "(none)"
+            err(
+                "(meta)",
+                f"ip_info_key '{ip_key}' not found in {self.ip_info_path.name}. "
+                f"Available keys: {available}. This key must match the design "
+                f"instance name (design.yml modules[].name), not the module ref.",
+            )
             return result
 
-        roles_in_spec: Dict[str, Any] = spec.get("roles", {})
+        # A role that declares nothing is written `role_name:` and parses to
+        # None. Normalise so every check below can treat a spec as a dict —
+        # the same normalisation LoadedContract applies.
+        roles_in_spec: Dict[str, Any] = {
+            name: (body if isinstance(body, dict) else {})
+            for name, body in (spec.get("roles") or {}).items()
+        }
         if not roles_in_spec:
             warn("(meta)", "No roles defined in contract; nothing to verify")
             return result
@@ -290,9 +310,13 @@ class ContractVerifier:
         err,
         warn,
     ) -> None:
-        raw_port = role_spec.get("raw_port")
-        if raw_port is None:
-            err(role_name, "Scalar role is missing 'raw_port' field")
+        # An omitted raw_port defaults to the role name — the same rule
+        # contract_loader applies when deriving port facts from the module's
+        # source. Verifying against the *real* built ports here is the check
+        # that makes omitting them safe.
+        raw_port = role_spec.get("raw_port") or role_name
+        if not raw_port:
+            err(role_name, "Scalar role has no 'raw_port' and no usable name")
             return
 
         if raw_port not in raw_ports:

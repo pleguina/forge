@@ -18,23 +18,12 @@ ip_interface:
 
     clock_primary:
       raw_port: clk_output
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: rst_output
-      direction: input
-      width: 1
-      active_level: high
 
     frame_done_pulse_in:
-      raw_port: frame_done_pulse_in
-      direction: input
-      width: 1
       notes: "Testbench-driven pulse"
 
     frame_done_out:
-      raw_port: frame_done_out
-      direction: output
-      width: 1
       notes: "cdc: {kind: pulse_sync} source -> control"

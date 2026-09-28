@@ -234,7 +234,7 @@ def report_all_crossings(
             "source_clock_domain": pair.clock_a, "destination_clock_domain": pair.clock_b,
             "source_reset_domain": pair.reset_a, "destination_reset_domain": pair.reset_b,
             "property_checked": "clock/reset-domain crossing declared with an approved "
-                                 "cdc:/reset_domains.*.sync adapter",
+                                "cdc:/reset_domains.*.sync adapter",
             "passed": passed,
             "message": message,
         })

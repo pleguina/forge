@@ -7,6 +7,7 @@
 
 task automatic run_stimulus();
   integer _fail;
+  integer _step;
   _fail = 0;
 
   // Event 0: n_hits=3 → accept=1 quality=3
@@ -14,6 +15,7 @@ task automatic run_stimulus();
   n_hits   = 3'd3;
   phi_sum  = 16'h0213;
   in_valid = 1'b1;
+  for (_step = 0; _step < 3; _step = _step + 1) @(posedge ap_clk);
   #1;  // combinational settle
   if (trigger_accept !== 1'b1) begin $display("FAIL [E0] trigger_accept=%0b expect=1", trigger_accept); _fail = 1; end
   if (trigger_quality !== 8'd3) begin $display("FAIL [E0] trigger_quality=%0d expect=3", trigger_quality); _fail = 1; end
@@ -24,6 +26,7 @@ task automatic run_stimulus();
   n_hits   = 3'd1;
   phi_sum  = 16'h00D1;
   in_valid = 1'b1;
+  for (_step = 0; _step < 3; _step = _step + 1) @(posedge ap_clk);
   #1;  // combinational settle
   if (trigger_accept !== 1'b0) begin $display("FAIL [E1] trigger_accept=%0b expect=0", trigger_accept); _fail = 1; end
   if (trigger_quality !== 8'd1) begin $display("FAIL [E1] trigger_quality=%0d expect=1", trigger_quality); _fail = 1; end
@@ -34,6 +37,7 @@ task automatic run_stimulus();
   n_hits   = 3'd4;
   phi_sum  = 16'h0A04;
   in_valid = 1'b1;
+  for (_step = 0; _step < 3; _step = _step + 1) @(posedge ap_clk);
   #1;  // combinational settle
   if (trigger_accept !== 1'b1) begin $display("FAIL [E2] trigger_accept=%0b expect=1", trigger_accept); _fail = 1; end
   if (trigger_quality !== 8'd4) begin $display("FAIL [E2] trigger_quality=%0d expect=4", trigger_quality); _fail = 1; end
@@ -44,6 +48,7 @@ task automatic run_stimulus();
   n_hits   = 3'd0;
   phi_sum  = 16'h0000;
   in_valid = 1'b0;
+  for (_step = 0; _step < 3; _step = _step + 1) @(posedge ap_clk);
   #1;  // combinational settle
   if (trigger_accept !== 1'b0) begin $display("FAIL [E3] trigger_accept=%0b expect=0", trigger_accept); _fail = 1; end
   if (trigger_quality !== 8'd0) begin $display("FAIL [E3] trigger_quality=%0d expect=0", trigger_quality); _fail = 1; end

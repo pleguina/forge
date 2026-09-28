@@ -18,34 +18,17 @@ ip_interface:
 
     clock_primary:
       raw_port: clk_output
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: rst_output
-      direction: input
-      width: 1
-      active_level: high
 
     result_in:
-      raw_port: result_in
-      direction: input
-      width: 26
       notes: "Already synchronized -- destination of the pixel -> output cdc: {kind: async_fifo} connection"
 
     error_in:
-      raw_port: error_in
-      direction: input
-      width: 1
       notes: "Testbench-driven"
 
     result_status:
-      raw_port: result_status
-      direction: output
-      width: 26
 
     error_out:
-      raw_port: error_out
-      direction: output
-      width: 1
       notes: "cdc: {kind: level_sync} source -> control"

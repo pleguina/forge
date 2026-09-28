@@ -13,7 +13,7 @@ policy for FORGE's schemas.
 | Module registry | `modules.yml` | `registry_version` (top level, optional — pre-existing field name, kept as-is) | `1.0`-equivalent (`'1'` accepted as legacy shorthand) | `forge.contracts.config.MODULE_REGISTRY_SCHEMA_VERSION` |
 | Interface contract | `*.interface.yaml` | `schema_version` (under `ip_interface:`, optional) | `1.0` | `forge.contracts.contract_loader.INTERFACE_CONTRACT_SCHEMA_VERSION` |
 | Verification contract | `design.verification.yml` | `schema_version` (top level, optional) | `1.0` | `forge.verification.design_contract.VERIFY_CONTRACT_SCHEMA_VERSION` |
-| Canonical IR | generated `design.ir.json` | `schema_version` (always present — system-generated) | `0.1.0` | `forge.ir.model.IR_SCHEMA_VERSION` |
+| Canonical IR | generated `design.ir.json` | `schema_version` (always present — system-generated) | `0.3.0` | `forge.ir.model.IR_SCHEMA_VERSION` |
 | Provenance manifest | generated provenance JSON | `schema_version` (always present — system-generated) | `0.1.0` | `forge.ir.provenance.PROVENANCE_SCHEMA_VERSION` |
 
 **Two different string shapes are intentional, not an inconsistency to
@@ -82,6 +82,38 @@ is a deliberate, documented asymmetry, not an oversight.
   above (not a silent misinterpretation) until migrated.
 * **Migration tooling** for moving a file between major versions is
   tracked separately as release-plan §2.8 (not yet implemented).
+
+## The canonical IR's own compatibility and migration
+
+`design.ir.json` is generated, not hand-edited, so its policy lives with
+the reader rather than with a loader that has to be forgiving of what
+people type: `forge.ir.deserialize`.
+
+* **Compatibility** (`check_ir_schema_version`) applies the same three
+  rules as above to the IR's three-part version: a **different major** is
+  refused outright (`IrSchemaError`), a **newer minor** is read with a
+  warning and its unknown fields ignored, an **older minor** is migrated.
+* **Migration** (`migrate_ir_payload`) upgrades an older payload as data,
+  one documented step per version boundary that changed the *meaning* of
+  existing data. Purely additive boundaries carry no step: a field absent
+  from an older payload already reads as its dataclass default, which is
+  what the addition defined it to mean. The one step that exists today is
+  `0.1.0 → 0.2.0`, renaming the transformation kinds `register` and
+  `delay` to `pipeline_register` and `latency_delay`.
+* **Deserialization** (`from_json_dict`) is driven by the model's own
+  field definitions, so a field added to `forge.ir.model` needs no second
+  implementation to survive a round-trip — the class of bug that made a
+  new field vanish on read and a design look changed when it wasn't.
+* **A migrated IR does not hash equal to a freshly built one**, and
+  shouldn't: its schema really did change. `diff_projects` reports both
+  sides' `schema_version` next to the hashes, and `forge inspect --diff`
+  prints the migration notes, so the two are never confused.
+
+Every FORGE-generated report records the IR content hash it was built
+from — `build_manifest.json`, `maturity_report.json`/`maturity.md`,
+`provenance.json`, the design-graph artifacts, and `forge inspect`'s JSON
+envelope — so a report found on disk can be tied back to an exact resolved
+design rather than to a filename and a timestamp.
 
 ## Old-schema / new-FORGE and new-schema / old-FORGE, summarized
 

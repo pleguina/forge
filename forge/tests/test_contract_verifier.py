@@ -76,7 +76,26 @@ class TestScalarRole:
         assert result.passed
         assert len(result.errors) == 0
 
-    def test_missing_raw_port_field(self, tmp_path):
+    def test_omitted_raw_port_falls_back_to_the_role_name(self, tmp_path):
+        """An omitted raw_port defaults to the role name — the same rule
+        contract_loader uses when deriving port facts from the module's
+        source. A role whose name *is* a real port verifies clean."""
+        ip = _ip_info_with_ports([
+            {"name": "ap_clk", "direction": "IN", "width": 1, "type": "wire"},
+            {"name": "ap_rst", "direction": "IN", "width": 1, "type": "wire"},
+            {"name": "data_in", "direction": "IN", "width": 32, "type": "wire"},
+        ])
+        ct = _contract({
+            "clock_primary": {"raw_port": "ap_clk", "direction": "input", "width": 1},
+            "reset_primary": {"raw_port": "ap_rst", "direction": "input", "width": 1},
+            "data_in": {},  # declares nothing; resolves to the port of the same name
+        })
+        result = _verify(tmp_path, ip, ct)
+        assert result.passed, [str(e) for e in result.errors]
+
+    def test_role_naming_no_real_port_is_still_an_error(self, tmp_path):
+        """Defaulting must not mask a typo: the role name has to resolve to
+        a port that actually exists."""
         ip = _ip_info_with_ports([
             {"name": "ap_clk", "direction": "IN", "width": 1, "type": "wire"},
             {"name": "ap_rst", "direction": "IN", "width": 1, "type": "wire"},
@@ -84,11 +103,11 @@ class TestScalarRole:
         ct = _contract({
             "clock_primary": {"raw_port": "ap_clk", "direction": "input", "width": 1},
             "reset_primary": {"raw_port": "ap_rst", "direction": "input", "width": 1},
-            "bad_role": {"direction": "input", "width": 32},  # missing raw_port
+            "bad_role": {"direction": "input", "width": 32},
         })
         result = _verify(tmp_path, ip, ct)
         assert not result.passed
-        assert any("missing 'raw_port'" in str(e) for e in result.errors)
+        assert any("bad_role" in str(e) for e in result.errors)
 
     def test_wrong_direction(self, tmp_path):
         ip = _ip_info_with_ports([

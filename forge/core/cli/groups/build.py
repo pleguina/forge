@@ -263,7 +263,10 @@ def cmd_build(args) -> None:
 
     if getattr(args, "apply", False):
         if not json_mode:
-            print("\n▶ Applying — delegating to `topgen gen-top` for real generation …\n")
+            # How `build` is implemented internally (it reuses gen-top's
+            # compute+emit path) is not something to teach the user at the
+            # moment they're succeeding with `build`.
+            print("\n▶ Applying — generating …\n")
         ns = _gen_top_namespace_from_build_args(args)
         topgen.cmd_gen_top(ns)  # SystemExit propagates: forge build's own exit code IS this one
         return
@@ -320,6 +323,11 @@ def _gen_top_namespace_from_build_args(args):
         ("hls_metrics", None),
         ("lint", False),
         ("fix_lint", False),
+        # Verification-plan resolution: gen-top discovers the conventional
+        # design.verification.yml when neither is given, which is what
+        # `forge build` wants too.
+        ("verify_design", None),
+        ("no_verify", False),
     ):
         if not hasattr(ns, name):
             setattr(ns, name, default)

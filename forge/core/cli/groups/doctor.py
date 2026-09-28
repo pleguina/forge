@@ -47,6 +47,24 @@ def _run_checks() -> dict:
             "detail": "on PATH" if found else "not on PATH",
         }
 
+    # Vitis HLS is not required for anything FORGE does without it, but
+    # *which* release is on PATH decides whether its HLS port predictions
+    # have ever been validated — so report the version's status rather than
+    # only its presence. An untested release is stated as untested; nothing
+    # here implies stability for a version nobody has checked.
+    from forge.hls import tool_matrix
+
+    vitis_version = tool_matrix.installed_version()
+    vitis_status = tool_matrix.status_for(vitis_version)
+    checks["tool:vitis_hls"] = {
+        "status": "ok" if vitis_version else "missing (optional)",
+        "detail": (
+            f"{vitis_version} — HLS port prediction {vitis_status}: "
+            f"{tool_matrix.describe_status(vitis_status)}"
+            if vitis_version else "not on PATH"
+        ),
+    }
+
     checks["python:pyverilog"] = {
         "status": _check_status(_pyverilog_available()),
         "detail": "parser mode available" if _pyverilog_available() else "regex fallback active",

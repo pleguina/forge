@@ -311,6 +311,11 @@ forge:python-unit-tests:
         --junitxml=ci-logs/forge-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log
     - |
+      echo "--- subsystem coverage floors ---" | tee -a ci-logs/unit-tests.log
+      coverage json -o ci-logs/coverage.json
+      python3 ci/check_coverage_floors.py ci-logs/coverage.json \
+        2>&1 | tee -a ci-logs/unit-tests.log
+    - |
       echo "--- trigger_demo verify tests ---" | tee -a ci-logs/unit-tests.log
       python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests \
         --tb=short -q \
@@ -340,6 +345,7 @@ forge:python-unit-tests:
         - ci-logs/vision-pipeline-demo-junit.xml
     paths:
       - ci-logs/unit-tests.log
+      - ci-logs/coverage.json
       - ci-logs/forge-junit.xml
       - ci-logs/trigger-demo-junit.xml
       - ci-logs/passthrough-demo-junit.xml

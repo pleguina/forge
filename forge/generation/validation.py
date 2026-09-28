@@ -116,9 +116,15 @@ class DesignValidator:
         if not self.cfg.clock_period:
             return  # Already reported in basic validation
         
-        # Calculate batches against the design's reference period (defaults
-        # to the LHC 40 MHz / 25 ns BX period when not declared).
-        ref_period = self.cfg.reference_period_ns if self.cfg.reference_period_ns is not None else 25.0
+        # Only check divisibility against a reference period the design
+        # actually declares. Warning against the *fallback* (see
+        # generators/design_parameters.py, which still assumes the LHC
+        # 40 MHz / 25 ns BX period for testbench timing) meant every
+        # freshly-scaffolded, detector-agnostic design was told its clock
+        # didn't divide a period it had never heard of.
+        if self.cfg.reference_period_ns is None:
+            return
+        ref_period = self.cfg.reference_period_ns
         batches = round(ref_period / self.cfg.clock_period)
 
         if abs(batches * self.cfg.clock_period - ref_period) > 0.5:
@@ -249,8 +255,18 @@ class DesignValidator:
     def validate_connections(self):
         """Validate module connections."""
         if not self.cfg.connections:
-            self.add_warning('connection', "No connections defined between modules",
-                          suggestion="Add 'connections:' section to wire modules together")
+            # Only a genuinely unwired *multi-module* design is worth warning
+            # about. A single-module design has nothing to connect, and a
+            # design wired entirely through `topology_groups` is using the
+            # contract-driven style the docs recommend — telling either of
+            # them to "add a connections: section" is wrong advice.
+            # `validate_consistency` below already treats topology_groups as
+            # real connections; this check has to agree with it.
+            topology_groups = getattr(self.cfg, 'topology_groups', None) or []
+            if len(self.cfg.modules) > 1 and not topology_groups:
+                self.add_warning('connection', "No connections defined between modules",
+                              suggestion="Wire the modules with a 'topology_groups:' section "
+                                         "(contract-driven), or 'connections:' for scalar signals")
             return
         
         module_names = {m.name for m in self.cfg.modules}
@@ -522,7 +538,39 @@ class RegistryValidator:
                 if 'verify' in mod:
                     self._validate_verify_section(mod['verify'], name, f"{loc}.verify")
                 self._validate_unknown_keys(mod, _KNOWN_MODULE_KEYS, loc)
+                self._validate_contract_status(mod, name, loc)
         return len(self.errors) == 0
+
+    def _validate_contract_status(self, mod: Dict[str, Any], name: str, loc: str) -> None:
+        """Flag an interface contract still marked ``normalization_status: draft``.
+
+        `forge contract infer` emits draft skeletons: every port becomes a
+        role, but the integration semantics that cannot be inferred from a
+        port name (wiring_kind, protocol, partition, coordinates) still need
+        a human. Without this check a generated skeleton could be committed
+        and built against as though it had been reviewed — the field existed
+        but nothing ever read it.
+        """
+        contract_rel = mod.get('interface_contract')
+        if not contract_rel or self.registry_path is None:
+            return
+        contract_path = self.registry_path.parent / str(contract_rel)
+        if not contract_path.is_file():
+            return
+        try:
+            import yaml as _y
+            spec = (_y.safe_load(contract_path.read_text()) or {}).get('ip_interface', {})
+        except Exception:
+            return  # unreadable contracts are the contract verifier's business
+        if str(spec.get('normalization_status', '')).lower() == 'draft':
+            self.add_warning(
+                'contract',
+                f"Module '{name}' uses an unreviewed contract "
+                f"({contract_rel}): normalization_status is 'draft'",
+                location=loc,
+                suggestion="Add the wiring_kind/protocol/partition semantics the "
+                           "generator can't infer, then set normalization_status: ready",
+            )
 
     def has_errors(self) -> bool:
         return len(self.errors) > 0

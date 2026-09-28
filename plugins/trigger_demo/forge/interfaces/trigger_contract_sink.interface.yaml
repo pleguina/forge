@@ -12,14 +12,9 @@ ip_interface:
 
     clock_primary:
       raw_port: ap_clk
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: ap_rst
-      direction: input
-      width: 1
-      active_level: high
 
     accept_lane_array:
       array: true
@@ -46,16 +41,7 @@ ip_interface:
       wiring_kind: trigger_valid_lane
 
     trigger_accept:
-      raw_port: trigger_accept
-      direction: output
-      width: 1
 
     trigger_quality:
-      raw_port: trigger_quality
-      direction: output
-      width: 8
 
     trigger_valid:
-      raw_port: trigger_valid
-      direction: output
-      width: 1

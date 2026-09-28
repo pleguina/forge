@@ -54,10 +54,12 @@ def cmd_inspect(args):
     if not design_path.exists():
         sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
 
+    contracts_from = getattr(args, "contracts_from", None) or _design_registry(design_path)
+
     try:
         project, cfg, match_report = build_project_ir_with_match_report(
             design_path,
-            contracts_from=getattr(args, "contracts_from", None),
+            contracts_from=contracts_from,
             ip_info=getattr(args, "ip_info", None),
             build_dir=getattr(args, "build_dir", None),
             ip_root=getattr(args, "ip_root", None),
@@ -72,7 +74,10 @@ def cmd_inspect(args):
     # port-accounting fields (open_outputs/tied_inputs/strict_pass) stay
     # honestly absent (None) rather than fabricated. Module/connection/
     # wiring-method counts are knowable pre-generation and always populate.
-    maturity = _compute_maturity_summary(cfg, match_report)
+    ir_hash = content_hash(project)
+    maturity = _compute_maturity_summary(
+        cfg, match_report, ir_content_hash=ir_hash,
+    )
 
     diagnostics = [_ir_diagnostic_to_dict(d) for d in project.design.diagnostics]
     errors = [d for d in diagnostics if d["severity"] == "error"]
@@ -83,8 +88,17 @@ def cmd_inspect(args):
         diff_path = Path(args.diff).expanduser().resolve()
         if not diff_path.exists():
             sys.exit(_guided_failure(f"--diff file not found: {diff_path}", json_mode=json_mode))
-        previous = _project_from_json(json.loads(diff_path.read_text()))
+        from forge.ir.deserialize import IrSchemaError, from_json_dict
+
+        try:
+            previous, notes = from_json_dict(json.loads(diff_path.read_text()))
+        except IrSchemaError as e:
+            sys.exit(_guided_failure(str(e), json_mode=json_mode))
         result = diff_projects(previous, project)
+        # Reading an older snapshot may have migrated it; say so, because a
+        # migrated snapshot legitimately doesn't hash equal to a current one.
+        if notes:
+            result = {**result, "schema_notes": notes}
         status = "fail" if (not result["hash_equal"] and errors) else "pass"
         envelope = CommandEnvelope(status=status, metrics={"diff": result})
         if json_mode:
@@ -146,13 +160,14 @@ def cmd_inspect(args):
         from forge.analysis.design_explorer.graph_model import build_design_graph
         from forge.core.cli._shared import build_explorer_overlay_data
 
-        latency_by_instance, verification_flow_entry_points = build_explorer_overlay_data(
-            design_path, project, args,
+        latency_by_instance, verification_flow_entry_points, open_decisions = (
+            build_explorer_overlay_data(design_path, project, args)
         )
         graph = build_design_graph(
             project,
             latency_by_instance=latency_by_instance,
             verification_flow_entry_points=verification_flow_entry_points,
+            open_decisions=open_decisions,
             source_roots=[design_path.parent],
         )
         dot_text = render_dot(graph)
@@ -189,7 +204,6 @@ def cmd_inspect(args):
                 print(f"✅ SVG written to {svg_path}")
 
     status = "fail" if errors else ("warn" if warnings else "pass")
-    ir_hash = content_hash(project)
     envelope = CommandEnvelope(
         status=status,
         diagnostics=diagnostics,
@@ -212,6 +226,23 @@ def cmd_inspect(args):
         sys.exit(emit(envelope, json_mode=True))
     _print_human(project, ir_hash, envelope)
     sys.exit(envelope.exit_code())
+
+
+def _design_registry(design_path: Path) -> Optional[str]:
+    """The modules.yml named by design.yml's own ``registry:`` field, so a
+    plain ``forge inspect design.yml`` sees the same contracts that
+    ``forge analyze latency-check`` and generation do."""
+    import yaml
+
+    try:
+        design = yaml.safe_load(design_path.read_text()) or {}
+    except Exception:  # noqa: BLE001 — resolution reports a broken design itself
+        return None
+    registry = design.get("registry") if isinstance(design, dict) else None
+    if not registry:
+        return None
+    path = (design_path.parent / str(registry)).resolve()
+    return str(path) if path.is_file() else None
 
 
 def _command_options(args) -> dict:
@@ -257,29 +288,47 @@ def _compute_next_actions(diagnostics: list, maturity: dict) -> list:
     return actions
 
 
+#: Width every label in `forge inspect`'s human output is padded to, so the
+#: colons line up in one column. Previously hand-padded per line, which drifted.
+_LABEL_W = 18
+
+
+def _row(label: str, value) -> str:
+    return f"  {label:<{_LABEL_W}}: {value}"
+
+
 def _print_human(project, ir_hash: str, envelope) -> None:
     d = project.design
     print(f"forge inspect — {d.name}")
-    print(f"  IR schema version : {project.schema_version}")
-    print(f"  content hash       : {ir_hash}")
-    print(f"  modules            : {len(d.modules)}")
+    print(_row("IR schema version", project.schema_version))
+    print(_row("content hash", ir_hash))
+    print(_row("modules", len(d.modules)))
     for m in d.modules:
         flag = "" if m.ports_resolved else "  ⚠️  ports not resolved"
         print(f"    - {m.name} ({m.kind}, top={m.top}, {len(m.interfaces)} interface(s)){flag}")
-    print(f"  instances          : {len(d.instances)}")
-    print(f"  connections        : {len(d.connections)}")
-    print(f"  clock domains      : {[c.name for c in d.clock_domains]}")
-    print(f"  reset domains      : {[r.name for r in d.reset_domains]}")
+    print(_row("instances", len(d.instances)))
+    print(_row("connections", len(d.connections)))
+    print(_row("clock domains", ", ".join(c.name for c in d.clock_domains) or "(none)"))
+    print(_row("reset domains", ", ".join(r.name for r in d.reset_domains) or "(none)"))
     if d.diagnostics:
         print(f"  diagnostics ({len(d.diagnostics)}):")
         for diag in d.diagnostics:
             icon = {"error": "❌", "warning": "⚠️ ", "info": "ℹ️ "}.get(diag.severity, "•")
             print(f"    {icon} {diag.message}")
     else:
-        print("  diagnostics        : (none)")
+        print(_row("diagnostics", "(none)"))
 
-    maturity = envelope.metrics.get("maturity", {})
-    print(f"  contract maturity  : {maturity.get('modules', {})}")
+    # A raw dict repr is fine in --json and unreadable in a terminal.
+    modules_maturity = envelope.metrics.get("maturity", {}).get("modules", {}) or {}
+    if modules_maturity:
+        total = modules_maturity.get("total", 0)
+        driven = modules_maturity.get("contract_driven", 0)
+        compat = modules_maturity.get("compat_mode", 0)
+        summary = f"{driven}/{total} contract-driven"
+        if compat:
+            names = ", ".join(modules_maturity.get("compat_mode_names", []))
+            summary += f", {compat} in compat mode ({names})"
+        print(_row("contract maturity", summary))
     if envelope.next_actions:
         print("  next actions:")
         for action in envelope.next_actions:
@@ -287,6 +336,13 @@ def _print_human(project, ir_hash: str, envelope) -> None:
 
 
 def _print_diff(result: dict) -> None:
+    for note in result.get("schema_notes", []):
+        print(f"ℹ️  {note}")
+    if result.get("schema_a") != result.get("schema_b"):
+        print(
+            f"schema_version: {result.get('schema_a')} → {result.get('schema_b')} "
+            "(a schema change moves the content hash on its own)"
+        )
     print(f"hash_equal: {result['hash_equal']}")
     print(f"  before: {result['hash_a']}")
     print(f"  after:  {result['hash_b']}")
@@ -302,118 +358,6 @@ def _print_diff(result: dict) -> None:
                 print(f"  ~ changed: {d['changed']}")
 
 
-def _project_from_json(payload: dict):
-    """Reconstruct enough of a ResolvedProject from an emitted IR JSON dict
-    to diff against — used only by ``--diff``, not a general deserializer."""
-    from forge.ir.model import (
-        CardinalityCheckResult, MatchingEvidence, RejectedCandidate,
-        ResolvedClockDomain, ResolvedConnection, ResolvedDesign, ResolvedEndpoint,
-        ResolvedInstance, ResolvedInterfaceMember, ResolvedLogicalInterface,
-        ResolvedModuleDefinition, ResolvedPhysicalBinding, ResolvedProject,
-        ResolvedResetDomain, ResolvedTopLevelPort, ResolvedTransformation,
-        ResolvedVerificationPlan, SourceLocation, DiagnosticReference,
-    )
-    from forge.contracts.config import LatencyDeclaration
-
-    def _matching_evidence(me: Optional[dict]):
-        if not me:
-            return None
-        return MatchingEvidence(
-            producer_wiring_kind=me.get("producer_wiring_kind"),
-            consumer_wiring_kind=me.get("consumer_wiring_kind"),
-            producer_coordinates=me.get("producer_coordinates"),
-            consumer_coordinates=me.get("consumer_coordinates"),
-            producer_protocol=me.get("producer_protocol"),
-            consumer_protocol=me.get("consumer_protocol"),
-            producer_width=me.get("producer_width"),
-            consumer_width=me.get("consumer_width"),
-            producer_cardinality=(
-                CardinalityCheckResult(**me["producer_cardinality"])
-                if me.get("producer_cardinality") else None
-            ),
-            consumer_cardinality=(
-                CardinalityCheckResult(**me["consumer_cardinality"])
-                if me.get("consumer_cardinality") else None
-            ),
-            gather_scatter_pattern=me.get("gather_scatter_pattern"),
-            cdc_declared=me.get("cdc_declared"),
-            rejected_candidates=[
-                RejectedCandidate(
-                    producer=ResolvedEndpoint(**rc["producer"]), reason=rc["reason"],
-                ) for rc in me.get("rejected_candidates", [])
-            ],
-        )
-
-    def _loc(v):
-        return SourceLocation(**v) if v else None
-
-    d = payload["design"]
-    modules = [
-        ResolvedModuleDefinition(
-            name=m["name"], kind=m["kind"], top=m["top"],
-            source_files=m.get("source_files", []),
-            contract_path=m.get("contract_path"),
-            ports_resolved=m.get("ports_resolved", True),
-            interfaces=[
-                ResolvedLogicalInterface(
-                    name=i["name"], direction=i["direction"],
-                    wiring_kind=i.get("wiring_kind"), coordinates=i.get("coordinates"),
-                    protocol=i.get("protocol"), cardinality=i.get("cardinality"),
-                    members=[
-                        ResolvedInterfaceMember(
-                            name=mem["name"],
-                            binding=ResolvedPhysicalBinding(**mem["binding"]),
-                            direction=mem.get("direction"),
-                        ) for mem in i.get("members", [])
-                    ],
-                ) for i in m.get("interfaces", [])
-            ],
-            parameters=m.get("parameters", {}),
-            latency_cycles=m.get("latency_cycles"),
-            latency_hint=m.get("latency_hint"),
-            is_variable_latency=m.get("is_variable_latency", False),
-            latency=LatencyDeclaration(**m["latency"]) if m.get("latency") else None,
-            ip_info_key=m.get("ip_info_key"),
-        ) for m in d.get("modules", [])
-    ]
-    instances = [ResolvedInstance(**i) for i in d.get("instances", [])]
-    connections = [
-        ResolvedConnection(
-            id=c["id"],
-            producer=ResolvedEndpoint(**c["producer"]),
-            consumer=ResolvedEndpoint(**c["consumer"]),
-            wiring_method=c.get("wiring_method"),
-            transformations=[ResolvedTransformation(**t) for t in c.get("transformations", [])],
-            emission_order=c.get("emission_order", 0),
-            crosses_clock_domain=c.get("crosses_clock_domain", False),
-            crosses_reset_domain=c.get("crosses_reset_domain", False),
-            matching_evidence=_matching_evidence(c.get("matching_evidence")),
-        ) for c in d.get("connections", [])
-    ]
-    clock_domains = [ResolvedClockDomain(**c) for c in d.get("clock_domains", [])]
-    reset_domains = [ResolvedResetDomain(**r) for r in d.get("reset_domains", [])]
-    top_ports = [ResolvedTopLevelPort(**p) for p in d.get("top_ports", [])]
-    diagnostics = [
-        DiagnosticReference(
-            severity=diag["severity"], message=diag["message"], code=diag.get("code"),
-            object_id=diag.get("object_id"), location=_loc(diag.get("location")),
-        ) for diag in d.get("diagnostics", [])
-    ]
-    design = ResolvedDesign(
-        name=d["name"], modules=modules, instances=instances, connections=connections,
-        clock_domains=clock_domains, reset_domains=reset_domains, top_ports=top_ports,
-        verification_plan=ResolvedVerificationPlan(**d.get("verification_plan", {"populated": False})),
-        diagnostics=diagnostics, source=_loc(d.get("source")),
-    )
-    from forge.ir.model import IR_SCHEMA_VERSION
-    return ResolvedProject(
-        design=design,
-        schema_version=payload.get("schema_version", IR_SCHEMA_VERSION),
-        forge_version=payload.get("forge_version", ""),
-        generated_from=payload.get("generated_from", {}),
-    )
-
-
 def register(sub) -> None:
     """Register the top-level ``forge inspect`` command."""
     p = sub.add_parser(
@@ -421,7 +365,10 @@ def register(sub) -> None:
         help="Resolve a design into the canonical IR and inspect it (read-only)",
     )
     p.add_argument("design", help="Path to design.yml")
-    p.add_argument("--contracts-from", help="Path to modules.yml (interface_contract: entries)")
+    p.add_argument(
+        "--contracts-from",
+        help="Path to modules.yml (interface_contract: entries); default: registry: field in design.yml",
+    )
     p.add_argument("--ip-info", help="Path to a pre-built ip_info.yaml (optional)")
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
     p.add_argument("--ip-root", help="Additional IP repo root to scan (optional)")

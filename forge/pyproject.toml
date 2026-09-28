@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "FORGE Framework Team"}
+    {name = "Pelayo Leguina", email = "pleguina@cern.ch"},
+    {name = "Santiago Folgueras", email = "folguerassantiago@uniovi.es"}
 ]
 keywords = ["hdl", "vhdl", "fpga", "ip", "vivado", "top-level", "generator"]
 classifiers = [
@@ -83,6 +84,7 @@ packages = [
     "forge.contracts",
     "forge.generation", "forge.generation.generators",
     "forge.hls",
+    "forge.project",
     "forge.verification",
     "forge.analysis",
     "forge.analysis.hls_reports",
@@ -99,6 +101,7 @@ packages = [
 forge = [
     "py.typed", "contracts/*.yaml", "hls/templates/*.tcl.j2",
     "analysis/design_explorer/vendor/*",
+    "rtl/support/*.v",
 ]
 
 [tool.black]

@@ -129,7 +129,7 @@ Real dataset metadata: schema version, event ids, provenance, units,
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]')
+DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]', open_decisions: 'Tuple[OpenDecision, ...]' = ())
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -140,6 +140,7 @@ DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir
 | `nodes` | `tuple[GraphNode, ...]` | required | — |
 | `edges` | `tuple[GraphEdge, ...]` | required | — |
 | `objects` | `tuple[ObjectRecord, ...]` | required | — |
+| `open_decisions` | `tuple[OpenDecision, ...]` | optional | `()` |
 
 ### `Diagnostic`
 
@@ -356,6 +357,32 @@ A reference into one of the real IR object kinds — never
 | `kind` | `str` | required | — |
 | `id` | `str` | required | — |
 
+### `OpenDecision`
+
+*Defined in `forge.analysis.design_explorer.graph_model`.*
+
+One connection the design has not made, and what could make it.
+
+    The explorer's authoring half (Phase J): an unwired producer with
+    candidate consumers, or a consumer with competing producers.
+
+    Computed **nowhere near here**. ``forge.project.discovery`` is what
+    decides that a port is unwired and which candidates are equally valid;
+    this carries its answer, and ``declaration``/``command`` carry the exact
+    ``forge.yml`` entry and CLI invocation that record a choice. The
+    explorer therefore never resolves topology, never infers a candidate,
+    and never holds a decision the project file does not — which is the
+    difference between an authoring view and a private parallel state.
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `id` | `str` | required | — |
+| `subject` | `str` | required | — |
+| `question` | `str` | required | — |
+| `candidates` | `tuple[str, ...]` | optional | `()` |
+| `subject_is_producer` | `bool` | optional | `True` |
+| `node_id` | `str` | optional | `''` |
+
 ### `ProjectionDiagnostic`
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
@@ -492,13 +519,14 @@ The resolved design: modules, instances, connections, domains,
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `name` | `str` | required | — |
+| `top_module` | `Optional[str]` | optional | `None` |
 | `modules` | `list[ResolvedModuleDefinition]` | optional | `[]` |
 | `instances` | `list[ResolvedInstance]` | optional | `[]` |
 | `connections` | `list[ResolvedConnection]` | optional | `[]` |
 | `clock_domains` | `list[ResolvedClockDomain]` | optional | `[]` |
 | `reset_domains` | `list[ResolvedResetDomain]` | optional | `[]` |
 | `top_ports` | `list[ResolvedTopLevelPort]` | optional | `[]` |
-| `verification_plan` | `ResolvedVerificationPlan` | optional | `ResolvedVerificationPlan(populated=False, note='Verification planning is not yet migrated to the canonical IR.')` |
+| `verification_plan` | `ResolvedVerificationPlan` | optional | `ResolvedVerificationPlan(populated=False, note='Verification planning is not yet migrated to the canonical IR.', flows=[], stimulus=[], observation=[], clocks=[], resets=[])` |
 | `diagnostics` | `list[DiagnosticReference]` | optional | `[]` |
 | `source` | `Optional[SourceLocation]` | optional | `None` |
 
@@ -603,6 +631,7 @@ A module definition (shared across all its instances).
 | `kind` | `str` | required | — |
 | `top` | `str` | required | — |
 | `source_files` | `list[str]` | optional | `[]` |
+| `rtl_sources` | `list[str]` | optional | `[]` |
 | `contract_path` | `Optional[str]` | optional | `None` |
 | `ports_resolved` | `bool` | optional | `True` |
 | `interfaces` | `list[ResolvedLogicalInterface]` | optional | `[]` |
@@ -612,6 +641,7 @@ A module definition (shared across all its instances).
 | `is_variable_latency` | `bool` | optional | `False` |
 | `latency` | `Optional[ForwardRef('LatencyDeclaration')]` | optional | `None` |
 | `ip_info_key` | `Optional[str]` | optional | `None` |
+| `declaration_order` | `int` | optional | `0` |
 
 ### `ResolvedPhysicalBinding`
 
@@ -638,7 +668,7 @@ Top-level IR object returned by ``forge.ir.build.build_project_ir``.
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `design` | `ResolvedDesign` | required | — |
-| `schema_version` | `str` | optional | `'0.2.0'` |
+| `schema_version` | `str` | optional | `'0.3.0'` |
 | `forge_version` | `str` | optional | `''` |
 | `generated_from` | `dict[str, Optional[str]]` | optional | `{}` |
 
@@ -690,6 +720,9 @@ A resolved top-level (e.g. ``algo_top``) port — name, direction
 | `name` | `str` | required | — |
 | `direction` | `str` | required | — |
 | `width` | `int` | required | — |
+| `origin` | `Optional[str]` | optional | `None` |
+| `instance_id` | `Optional[str]` | optional | `None` |
+| `instance_port` | `Optional[str]` | optional | `None` |
 
 ### `ResolvedTransformation`
 
@@ -765,20 +798,102 @@ A generated (or declared-and-approved) element sitting on a
 | `cycles` | `Optional[int]` | optional | `None` |
 | `tag` | `Optional[str]` | optional | `None` |
 
+### `ResolvedVerificationBinding`
+
+*Defined in `forge.ir.model`.*
+
+One resolved point a testbench drives or observes: a top-level port
+    of the generated DUT, plus the instance pin behind it when the port
+    reaches exactly one (see ``ResolvedTopLevelPort``).
+
+    This is the same port identity generation used — not a second reading
+    of the generated Verilog, and not a re-derivation from
+    ``port_map.yaml``, which is itself rendered from this list.
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `top_port` | `str` | required | — |
+| `direction` | `str` | required | — |
+| `width` | `int` | required | — |
+| `origin` | `Optional[str]` | optional | `None` |
+| `instance_id` | `Optional[str]` | optional | `None` |
+| `instance_port` | `Optional[str]` | optional | `None` |
+
+### `ResolvedVerificationFlow`
+
+*Defined in `forge.ir.model`.*
+
+One flow from ``design.verification.yml``, resolved against this
+    design.
+
+    A verification contract covers a whole plugin, and a plugin may hold
+    several designs — so the first question about a flow is whether it is
+    about *this* design at all. ``targets_this_design`` answers it from the
+    flow's own ``dut_rtl_source``: a flow whose DUT is this run's generated
+    top level, or whose entry point is one of this design's modules, is
+    this design's flow. Anything else gets ``targets_this_design=False``
+    and a ``note`` saying what it is about instead — recorded rather than
+    dropped, because "this contract's other flows go elsewhere" is worth
+    being able to see.
+
+    ``dut_kind`` is ``generated_top`` (the DUT is the structural top FORGE
+    just wrote), ``module`` (one module's own RTL, typically an HLS unit
+    flow), or ``other``.
+
+    ``entry_point_module``/``entry_point_instances`` resolve the declared
+    ``top_module`` to a real IR module and its instances — matched against
+    both the design's module name and its ``ip_info_key`` (a flow declares
+    the ``modules.yml`` ref, which is not always the design.yml name).
+
+    ``unresolved_reason`` is set only for a flow that *is* about this design
+    and still doesn't line up — a DUT directory that is this design's own
+    output while the flow elaborates a different top-level module, say.
+    That is a configuration error worth reporting; a flow about another
+    design is not.
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `name` | `str` | required | — |
+| `kind` | `str` | required | — |
+| `backend` | `str` | required | — |
+| `declared_top_module` | `str` | required | — |
+| `dut_rtl_source` | `str` | optional | `''` |
+| `dut_kind` | `str` | optional | `'other'` |
+| `targets_this_design` | `bool` | optional | `False` |
+| `entry_point_module` | `Optional[str]` | optional | `None` |
+| `entry_point_instances` | `list[str]` | optional | `[]` |
+| `dataset` | `Optional[str]` | optional | `None` |
+| `stimulus_mode` | `Optional[str]` | optional | `None` |
+| `note` | `Optional[str]` | optional | `None` |
+| `unresolved_reason` | `Optional[str]` | optional | `None` |
+
 ### `ResolvedVerificationPlan`
 
 *Defined in `forge.ir.model`.*
 
-Placeholder for verification planning/bindings.
+What verification drives, observes and clocks, resolved from this
+    same IR rather than re-derived from the design configuration.
 
-    Deliberately unpopulated in this slice — ``populated`` is always
-    ``False`` here so consumers can tell "not yet migrated" apart from
-    "migrated and genuinely empty."
+    ``populated`` stays ``False`` for an IR built with no verification
+    contract in reach (``forge inspect`` on a design that has none, a
+    pre-generation IR with no top-level ports yet), so a consumer can still
+    tell "nothing to plan" apart from "planned, and genuinely empty".
+
+    ``stimulus``/``observation`` describe the *generated top level* as the
+    DUT — the case a generated testbench binds against. A flow whose DUT is
+    one HLS module's own RTL is recorded in ``flows`` with its entry point
+    resolved, but its ports are that module's, not the top level's, and are
+    not listed here.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `populated` | `bool` | optional | `False` |
 | `note` | `str` | optional | `'Verification planning is not yet migrated to the canonical IR.'` |
+| `flows` | `list[ResolvedVerificationFlow]` | optional | `[]` |
+| `stimulus` | `list[ResolvedVerificationBinding]` | optional | `[]` |
+| `observation` | `list[ResolvedVerificationBinding]` | optional | `[]` |
+| `clocks` | `list[str]` | optional | `[]` |
+| `resets` | `list[str]` | optional | `[]` |
 
 ### `SemanticMetadata`
 

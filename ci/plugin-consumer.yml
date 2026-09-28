@@ -76,10 +76,18 @@ default:
 # project at github.com/pleguina/forge, just not published to PyPI under
 # this name.
 #
-# Default: install directly from the forge git repo at FORGE_FRAMEWORK_REF
-# (default "main"). Override FORGE_FORGE_PIP_REF only if your org later
-# stands up its own internal package index and wants to mirror releases
-# there, e.g.:
+# Installs from the forge git repo at FORGE_FRAMEWORK_REF.
+#
+# **Set FORGE_FRAMEWORK_REF to a release tag** (e.g. "v2.0.0") in your
+# plugin's variables block. The fallback below is "main" so a pipeline that
+# sets nothing still runs — but main is whatever was merged most recently:
+# it changes under you, and it is not what any release note describes. Every
+# release ships a wheel, a source archive and SHA256SUMS (see
+# `ci/release_artifacts.sh`), so pinning a tag is also what makes a CI run
+# reproducible six months later.
+#
+# Override FORGE_FORGE_PIP_REF only if your org stands up its own internal
+# package index and wants to mirror releases there, e.g.:
 #   FORGE_FORGE_PIP_REF: "--index-url https://pypi.mycompany.internal/simple/ forge"
 # ---------------------------------------------------------------------------
 .forge_plugin_setup:

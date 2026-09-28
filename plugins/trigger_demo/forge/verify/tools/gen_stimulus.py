@@ -231,10 +231,18 @@ def _gen_hit_collector(events: list[Event]) -> str:
 def _gen_trigger_logic(events: list[Event]) -> str:
     """Tests trigger_logic with n_hits and phi_sum from each golden event."""
     THRESHOLD = 2
+    # trigger_logic is HLS-pipelined with a real, non-zero latency (modules.yml
+    # declares `latency: {kind: fixed, cycles: 3}`, confirmed by the csynth
+    # report: min=max=3 cycles, Pipeline=yes, II=1) -- unlike every other
+    # module in this capsule (all latency_hint: 0 / combinational). Inputs
+    # are held steady and outputs are sampled LATENCY_CYCLES after assertion
+    # instead of on the same cycle, or every event reads X here.
+    LATENCY_CYCLES = 3
     lines: list[str] = [_HDR.replace("{module}", "trigger_logic")
                             .replace("{xml_name}", "trigger_demo_golden.xml"),
                         "task automatic run_stimulus();",
                         "  integer _fail;",
+                        "  integer _step;",
                         "  _fail = 0;",
                         ""]
 
@@ -252,6 +260,9 @@ def _gen_trigger_logic(events: list[Event]) -> str:
         lines.append(f"  n_hits   = 3'd{g.n_hits};")
         lines.append(f"  phi_sum  = 16'h{g.phi_sum:04X};")
         lines.append(f"  in_valid = 1'b{in_valid};")
+        lines.append(
+            f"  for (_step = 0; _step < {LATENCY_CYCLES}; _step = _step + 1) @(posedge ap_clk);"
+        )
         lines.append(f"  #1;  // combinational settle")
         lines.append(
             f"  if (trigger_accept !== 1'b{exp_accept}) begin "
@@ -322,8 +333,28 @@ def _gen_trigger_output(events: list[Event]) -> str:
 
 
 def _gen_trigger_pipeline(events: list[Event]) -> str:
-    """Tests the generated algo_top integration with one event at a time."""
-    latency_cycles = 6
+    """Tests the generated algo_top integration with one event at a time.
+
+    tout_out_valid is a single-cycle pulse (found live, 2026-09: an earlier
+    version of this generator waited a fixed, hand-picked cycle count before
+    sampling once, and that specific constant did not match the real,
+    now-fully-declared per-module and per-connection pipeline latency, so
+    it sampled either before or after the pulse and saw 0 every time). A
+    correctly chosen fixed delay can sample a known-latency, known-phase
+    single-cycle pulse -- the bug was the chosen constant and/or sampling
+    phase, not that no constant could ever work. The real problem this
+    fix addresses is that this design's accumulated latency changes with
+    its topology (register-stage and signal-delay insertions, Section
+    2.1.3 of the article), so any hand-picked constant needs re-tuning
+    whenever the topology changes; polling for the pulse within a bounded
+    window (see max_wait_cycles below) avoids that re-tuning, at the cost
+    of only checking that a response arrives within the window, not its
+    exact cycle latency.
+    """
+    max_wait_cycles = 30  # generous bound: the deepest real path measured
+                          # in this capsule accumulates well under 20 cycles
+                          # (2-stage register + 3-cycle module + 3-cycle
+                          # delay); this is margin, not a tuned exact value.
     lines: list[str] = [_HDR.replace("{module}", "trigger_pipeline")
                             .replace("{xml_name}", "trigger_demo_golden.xml"),
                         "task automatic run_stimulus();",
@@ -346,23 +377,34 @@ def _gen_trigger_pipeline(events: list[Event]) -> str:
         for idx in range(4):
             lines.append(f"  dec_{idx}_raw_hit   = '0;")
             lines.append(f"  dec_{idx}_raw_valid = 1'b0;")
-        lines.append(f"  for (_step = 0; _step < {latency_cycles}; _step = _step + 1) @(posedge ap_clk);")
-        lines.append("  #1;")
+        lines.append(f"  _step = 0;")
+        lines.append(f"  #1;  // settle before the first poll read, same reason as below")
+        lines.append(f"  while (tout_out_valid !== 1'b1 && _step < {max_wait_cycles}) begin")
+        lines.append(f"    @(posedge ap_clk);")
+        lines.append(f"    #1;  // let this edge's NBA updates settle before reading --")
+        lines.append(f"         // reading tout_out_valid right at the edge risks the pre-edge")
+        lines.append(f"         // value on a signal driven combinationally from a register this")
+        lines.append(f"         // same posedge updates, which would miss a single-cycle pulse")
+        lines.append(f"    _step = _step + 1;")
+        lines.append(f"  end")
         if expected_valid:
             lines.append(
                 f"  if (tout_out_valid !== 1'b1) begin "
-                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid=%0b expect=1\", tout_out_valid); "
+                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid never asserted within %0d cycles\", {max_wait_cycles}); "
                 f"_fail = 1; end"
             )
             lines.append(
-                f"  if (tout_trigger_word !== 32'h{g.word:08X}) begin "
+                f"  else if (tout_trigger_word !== 32'h{g.word:08X}) begin "
                 f"$display(\"FAIL [E{ev.event_id}] tout_trigger_word=0x%08X expect=0x{g.word:08X}\", tout_trigger_word); "
                 f"_fail = 1; end"
             )
+            # Drain any remaining pipeline activity from this event before the
+            # next one asserts new inputs, same margin either branch took.
+            lines.append(f"  for (_step = _step; _step < {max_wait_cycles}; _step = _step + 1) @(posedge ap_clk);")
         else:
             lines.append(
-                f"  if (tout_out_valid !== 1'b0) begin "
-                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid=%0b expect=0\", tout_out_valid); "
+                f"  if (tout_out_valid === 1'b1) begin "
+                f"$display(\"FAIL [E{ev.event_id}] tout_out_valid unexpectedly asserted (word=0x%08X) within %0d cycles, expect no pulse\", tout_trigger_word, {max_wait_cycles}); "
                 f"_fail = 1; end"
             )
         lines.append("")

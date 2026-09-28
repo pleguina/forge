@@ -199,7 +199,9 @@ def _parse_event_checks(outputs: Dict[str, Any]) -> List[Any]:
     return parse_forge_check_lines(Path(log_path).read_text(errors="replace"))
 
 
-def _regenerate_stimulus_for_event(flow_name: str, event_id: int, flow_dir: Path) -> bool:
+def _regenerate_stimulus_for_event(
+    flow_name: str, event_id: int, flow_dir: Path, dataset_xml: "Path | None"
+) -> bool:
     """Call the plugin's own `tools/gen_stimulus.py::generate_for_flow`
     for *event_id*, regenerating `stimulus_current.svh` before that
     event's simulation.
@@ -219,15 +221,53 @@ def _regenerate_stimulus_for_event(flow_name: str, event_id: int, flow_dir: Path
     `gen_stimulus` module on `sys.path` (e.g. a csim-only flow) — in
     which case the caller proceeds with whatever stimulus is already
     there, same as `forge verify run` always has.
+
+    *dataset_xml*, when not None, is forwarded as `dataset_path` to plugins
+    whose `generate_for_flow` accepts it (e.g. `plugins/passthrough_demo/
+    forge/verify/tools/gen_stimulus.py`: `flow_name, event_id, out_path, *,
+    dataset_path=<default>`) — but that keyword is plugin-specific, not
+    part of the framework's own contract: the canonical scaffold this
+    function is really written against (`forge init`'s own template,
+    `forge/verification/__main__.py`'s `generate_for_flow(flow_name,
+    event_id, out_path)`) has no dataset override at all, reading a fixed
+    inline `_EVENTS` table instead. A previous fix here assumed every
+    plugin took `dataset_path` and called it unconditionally, breaking
+    scaffolded (non-customized) plugins with an unexpected-keyword
+    TypeError — this checks the target function's own signature first, so
+    both real shapes work. `out_path` is always `flow_dir /
+    "stimulus_current.svh"` in both shapes — the same convention every
+    other reader in this package uses, e.g. `verification/layout.py`'s
+    `stimulus_svh=flow_dir / "stimulus_current.svh"` (a still-earlier
+    version of this call passed `flow_dir.parent` instead, one directory
+    too high, and put the golden XML in the positional `out_path` slot —
+    both wrong).
+    `None` means the caller has no XML to regenerate from (readmemh mode
+    never calls this at all) — regeneration is skipped rather than
+    crashing, same fallback as the no-`gen_stimulus` case above.
     """
     import importlib
+    import inspect
 
+    if dataset_xml is None:
+        return False
     try:
         gen_stimulus_mod = importlib.import_module("gen_stimulus")
         generate_for_flow = gen_stimulus_mod.generate_for_flow
     except (ImportError, AttributeError):
         return False
-    generate_for_flow(flow_name, event_id, flow_dir / "stimulus_current.svh")
+    out_path = flow_dir / "stimulus_current.svh"
+    params = inspect.signature(generate_for_flow).parameters
+    if "xml_path" in params and "verify_root" in params:
+        # This plugin shape (as used by one production consumer's
+        # verify/tools/gen_stimulus.py) takes the dataset path and verify/
+        # root explicitly rather than a pre-computed out_path -- it derives
+        # out_path itself as verify_root/flow_name/"stimulus_current.svh",
+        # matching flow_dir here exactly (flow_dir IS verify_root/flow_name).
+        generate_for_flow(flow_name, event_id, xml_path=dataset_xml, verify_root=flow_dir.parent)
+    elif "dataset_path" in params:
+        generate_for_flow(flow_name, event_id, out_path, dataset_path=dataset_xml)
+    else:
+        generate_for_flow(flow_name, event_id, out_path)
     return True
 
 
@@ -415,7 +455,9 @@ def cmd_run(args) -> None:
             work_dir = readmemh_work_dir
         else:
             with _maybe_quiet_stdout(json_mode):
-                _regenerate_stimulus_for_event(flow_name, event_id, flow_path.parent)
+                _regenerate_stimulus_for_event(
+                    flow_name, event_id, flow_path.parent, selection.dataset_xml
+                )
             work_dir = flow_path.parent / "xsim_work" / "per_event" / str(event_id)
 
         ctx = _build_runtime_context(

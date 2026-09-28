@@ -24,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DESIGN_YML = REPO_ROOT / "plugins/passthrough_demo/forge/designs/design.yml"
 MODULES_YML = REPO_ROOT / "plugins/passthrough_demo/forge/modules.yml"
 DESIGN_VERIFICATION_YML = REPO_ROOT / "plugins/passthrough_demo/forge/verify/design.verification.yml"
+FOREIGN_PROJECT = REPO_ROOT / "forge/tests/fixtures/foreign/simple_pipeline"
 
 
 def _run(capsys: pytest.CaptureFixture[str], argv: list) -> tuple:
@@ -40,6 +41,16 @@ def _run(capsys: pytest.CaptureFixture[str], argv: list) -> tuple:
 
 _COMMANDS = [
     ["doctor", "--json"],
+    # The three new-user commands. `adopt` runs --dry-run so it stays
+    # read-only like the rest of this list; `check`/`next` are pointed at a
+    # scratch directory by the fixup below, where "this is not a project
+    # yet" is the real, exercised answer.
+    ["adopt", str(FOREIGN_PROJECT), "--dry-run", "--json"],
+    ["check", "--json"],
+    ["next", "--json"],
+    ["explain", "ATG037", "--json"],
+    ["fix", "--json"],
+    ["migrate", "--json"],
     ["inspect", str(DESIGN_YML), "--contracts-from", str(MODULES_YML), "--json"],
     ["build", str(DESIGN_YML), "--contracts-from", str(MODULES_YML), "--json"],
     ["topgen", "validate", str(DESIGN_YML), "--json"],
@@ -58,6 +69,15 @@ def test_json_output_round_trips_through_command_envelope(
     # analyze latency-check needs a real --output path.
     if argv[:2] == ["analyze", "latency-check"]:
         argv = argv + ["--output", str(tmp_path / "latency_check.md")]
+    # check/next take a project path positionally; run them somewhere that
+    # is definitely not inside a FORGE project, so the answer does not
+    # depend on where the test tree happens to sit.
+    if argv[0] in ("check", "next", "fix", "migrate"):
+        argv = [argv[0], str(tmp_path)] + argv[1:]
+    # explain takes its project as a flag, not positionally, and its
+    # diagnostic-code form is the one that works outside a project at all.
+    if argv[0] == "explain":
+        argv = argv + ["--path", str(tmp_path)]
 
     _code, out = _run(capsys, argv)
     payload = json.loads(out)

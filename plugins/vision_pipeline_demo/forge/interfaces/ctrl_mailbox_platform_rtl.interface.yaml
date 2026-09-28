@@ -23,32 +23,15 @@ ip_interface:
 
     clock_primary:
       raw_port: clk_control
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: rst_control
-      direction: input
-      width: 1
-      active_level: high
 
     threshold_in:
-      raw_port: threshold_in
-      direction: input
-      width: 8
 
     kernel_mode_in:
-      raw_port: kernel_mode_in
-      direction: input
-      width: 2
 
     frame_limit_in:
-      raw_port: frame_limit_in
-      direction: input
-      width: 16
 
     mailbox_out:
-      raw_port: mailbox_out
-      direction: output
-      width: 26
       notes: "{threshold[7:0], kernel_mode[1:0], frame_limit[15:0]} -- cdc: {kind: mailbox_transfer} source -> pixel"

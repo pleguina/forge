@@ -56,11 +56,21 @@ For the current public framework surface, Layer 2 standardizes:
 Generated DUT artifacts include:
 
 - `algo_top.v`
+- `design.ir.json` — the canonical IR the rest were generated from
+- `provenance.json`
 - `build_manifest.json`
 - `design_parameters.json`
 - `port_map.yaml`
 - `probe_map.yaml`
 - `tb_bindings.svh`
+
+`design.ir.json` is the resolved design: modules, instances, connections
+with their matching evidence, clock and reset domains, the top level's
+ports and the pin behind each one, and the verification plan resolved
+against it. Everything else in that list is generated from it, and the
+reports among them record its content hash — see
+[Schema versioning](../development/SCHEMA_VERSIONING.md) for its
+compatibility and migration policy.
 
 ## Analysis contract owned by Layer 2
 

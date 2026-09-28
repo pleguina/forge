@@ -1,9 +1,10 @@
 # config.py
 from __future__ import annotations
 
+import difflib
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dataclass_fields
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Dict, Any
 import yaml
@@ -31,6 +32,38 @@ def resolve_declared_path(path_value: str | Path, root: Path) -> Path:
     if not expanded.is_absolute():
         expanded = root / expanded
     return expanded.resolve()
+
+
+class UnknownConfigKeyError(ValueError):
+    """A design/registry file declares a key the schema doesn't define.
+
+    Its own class so callers can distinguish "the user's file is wrong"
+    (a real, reportable finding — exit 1) from "FORGE fell over"
+    (exit 2). See docs/development/cli_exit_codes.md.
+    """
+
+
+def _reject_unknown_keys(cls: type, data: Dict[str, Any], source: Path) -> None:
+    """Fail with a readable message on keys the dataclass doesn't define.
+
+    Passing an unrecognised key through to a dataclass constructor produces
+    `__init__() got an unexpected keyword argument 'x'` — technically true,
+    useless to the person who typed it. This names the file, the key, and
+    the closest real field, which is almost always the actual typo.
+    """
+    known = {f.name for f in dataclass_fields(cls)}
+    unknown = [k for k in data if k not in known]
+    if not unknown:
+        return
+
+    lines = [f"{source}: unrecognised key" + ("s" if len(unknown) > 1 else "") + ":"]
+    for key in sorted(unknown):
+        near = difflib.get_close_matches(key, sorted(known), n=1, cutoff=0.6)
+        hint = f" — did you mean {near[0]!r}?" if near else ""
+        lines.append(f"  {key!r}{hint}")
+    if not any("did you mean" in ln for ln in lines):
+        lines.append(f"  valid top-level keys: {', '.join(sorted(known))}")
+    raise UnknownConfigKeyError("\n".join(lines))
 
 
 def _load_registry(registry_path: Path) -> dict[str, dict]:
@@ -76,6 +109,20 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
                 str(resolve_declared_path(p, registry_root))
                 for p in mod_entry["includes"]
             ]
+        # rtl_packages/rtl_include_dirs are also path lists declared relative
+        # to the registry file, same as src/includes above -- without this,
+        # a design.yml elsewhere resolves them relative to ITS OWN directory
+        # instead (config.py's later abs_rtl_packages/abs_rtl_include_dirs
+        # resolution has no registry-root context to use), silently dropping
+        # any entry that doesn't happen to also exist at that wrong path
+        # (DesignConfig.load's existence check catches it -- but only as a
+        # generic "missing file" error with no hint that the root was wrong).
+        for _path_field in ("rtl_packages", "rtl_include_dirs"):
+            if _path_field in mod_entry:
+                mod_entry[_path_field] = [
+                    str(resolve_declared_path(p, registry_root))
+                    for p in mod_entry[_path_field]
+                ]
         result[name] = mod_entry
     return result
 
@@ -340,6 +387,38 @@ class Connection:
     # what actually checks a connection against this declaration.
     cdc: Optional[Dict[str, Any]] = None
 
+    # Declares this connection as a control/reset strobe (e.g. an
+    # event-boundary reset, a bank-swap pulse, an output-stamp tag) rather
+    # than a data path. Found needed on a real external consumer's
+    # topology: a bunch-crossing timing controller distributes several
+    # such strobes (new_event_rgf/mem/arb/best/nn) whose arrival cycle is
+    # deliberately derived from each receiving stage's own accumulated datapath depth —
+    # not required to exact-cycle-align with a sibling *data* predecessor
+    # the way two real data paths into the same merge point must. See
+    # forge.analysis.latency_static.graph for how this exempts the
+    # connection from exact-cycle merge-point comparison, the same way a
+    # cdc: mailbox_transfer/async_fifo edge is already exempted for a
+    # different reason (genuinely unknowable, not deliberately scheduled).
+    control_strobe: bool = False
+    # The data on this connection *enters the design at the source node* —
+    # through one of that node's ``external_in_ports`` — rather than flowing
+    # into it from its own predecessors. A node can be both a merge point for
+    # some inputs and an injection point for others (an aggregator that
+    # gathers already-decoded streams from upstream while a second family of
+    # raw streams arrives straight at its own top-level ports), and a single
+    # scalar node latency cannot express that: every branch leaving the node
+    # inherits the deepest arrival time among its predecessors, including
+    # branches whose data never traversed that path. Setting this stops the
+    # latency chain-fold at the source node, charging the branch only that
+    # node's own latency, so an injected stream is not billed for an upstream
+    # it never travelled. Found on a real external consumer's topology, where
+    # a stream arriving directly at an aggregator's own input ports was
+    # charged the full decode depth of the *other*, genuinely upstream
+    # streams that aggregator gathers, on top of its own alignment delay —
+    # reporting a large phantom mismatch at two downstream merge points on a
+    # design whose paths are in fact aligned.
+    external_source: bool = False
+
 @dataclass
 class InstanceAssign:
     """Maps a range of producer instances to a consumer coordinate.
@@ -369,6 +448,10 @@ class TopologyGroup:
     role_pairs: Optional[List[Tuple[str, str]]] = None  # explicit role pairing override
     src_instance_offset: int = 0  # source instance index offset for diagonal instance mapping
     notes: Optional[str] = None
+    # Same meaning as Connection.external_source: the streams this group
+    # carries enter the design at ``from_`` through that module's
+    # ``external_in_ports``, so the latency chain-fold must stop there.
+    external_source: bool = False
 
 @dataclass
 class ControlSignalTarget:
@@ -591,6 +674,8 @@ class DesignConfig:
             contract_wiring = c.get("contract_wiring", False)
             boundary = c.get("boundary", None)
             cdc = c.get("cdc", None)
+            control_strobe = bool(c.get("control_strobe", False))
+            external_source = bool(c.get("external_source", False))
 
             # Validation: a boundary tag without an actual register stage is
             # meaningless — the generator cannot emit a protected crossing delay
@@ -684,6 +769,8 @@ class DesignConfig:
                         contract_wiring = contract_wiring,
                         boundary        = boundary,
                         cdc             = cdc,
+                        control_strobe  = control_strobe,
+                        external_source = external_source,
                     )
                 )
 
@@ -772,6 +859,7 @@ class DesignConfig:
                     role_pairs=rp,
                     src_instance_offset=src_offset,
                     notes=tg.get("notes"),
+                    external_source=bool(tg.get("external_source", False)),
                 ))
 
         # ── Control Signals
@@ -875,6 +963,15 @@ class DesignConfig:
                     f"interface_metadata_file must contain a mapping: {metadata_path}"
                 )
             interface_metadata = _deep_merge_dict(loaded_metadata, interface_metadata)
+
+        # Every key this method understands has been popped by now, so
+        # anything still in `data` is passed straight to the dataclass
+        # constructor. An unrecognised key used to surface as a bare
+        # `TypeError: __init__() got an unexpected keyword argument 'x'`
+        # with no file, no line and no suggestion — for what is realistically
+        # the most common mistake anyone makes in a design.yml. Check it here
+        # instead and report it as a normal, actionable error.
+        _reject_unknown_keys(cls, data, yaml_path)
 
         cfg = cls(
             modules=modules,

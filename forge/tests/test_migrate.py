@@ -299,10 +299,58 @@ class TestInferContractSkeleton:
         assert "raw_port: ap_clk" in skeleton
         assert "reset_primary:" in skeleton
         assert "raw_port: ap_rst" in skeleton
-        # Data port is never assigned a role — only listed as a TODO.
-        assert "data_in:" not in skeleton
-        assert "# TODO" in skeleton
-        assert "data_in (direction=IN, width=8)" in skeleton
+
+    def test_every_port_is_emitted_as_a_real_role(self):
+        """Data ports used to come back as TODO *comments*, which the author
+        then had to retype as YAML — useless for the bulk of the work, since
+        308 of this repo's 324 roles are pure port transcription."""
+        import yaml
+        entry = {"ports": [
+            {"name": "ap_clk", "direction": "IN", "width": 1},
+            {"name": "data_in", "direction": "IN", "width": 8},
+            {"name": "data_out", "direction": "OUT", "width": 16},
+        ]}
+
+        skeleton = infer_contract_skeleton("mymod", entry)
+        roles = yaml.safe_load(skeleton)["ip_interface"]["roles"]
+
+        assert set(roles) == {"clock_primary", "data_in", "data_out"}
+        assert "# TODO" not in skeleton
+
+    def test_rtl_roles_omit_facts_the_source_already_states(self):
+        """For RTL, contract_loader derives raw_port/direction/width from the
+        module's own HDL, so emitting them would be transcription again."""
+        import yaml
+        entry = {"ports": [{"name": "data_in", "direction": "IN", "width": 8}]}
+
+        roles = yaml.safe_load(
+            infer_contract_skeleton("m", entry, source_type="rtl")
+        )["ip_interface"]["roles"]
+
+        assert roles["data_in"] is None
+
+    def test_hls_roles_carry_direction_and_width(self):
+        """An HLS module has no HDL to scan until its IP is built, so its
+        contract must state the port facts itself."""
+        import yaml
+        entry = {"ports": [{"name": "data_in", "direction": "IN", "width": 8}]}
+
+        roles = yaml.safe_load(
+            infer_contract_skeleton("m", entry, source_type="hls")
+        )["ip_interface"]["roles"]
+
+        assert roles["data_in"] == {"direction": "input", "width": 8}
+
+    def test_generated_contract_is_marked_unreviewed(self):
+        """`normalization_status: draft` is what stops a generated skeleton
+        being built against as though a human had checked the wiring
+        semantics — see RegistryValidator._validate_contract_status."""
+        import yaml
+        entry = {"ports": [{"name": "clk", "direction": "IN", "width": 1}]}
+
+        spec = yaml.safe_load(infer_contract_skeleton("m", entry))["ip_interface"]
+
+        assert spec["normalization_status"] == "draft"
 
     def test_no_clock_or_reset_found_omits_those_roles(self):
         entry = {"ports": [{"name": "weird_port", "direction": "IN", "width": 4}]}

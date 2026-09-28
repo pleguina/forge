@@ -12,7 +12,7 @@ path.
 
 | Module | Symbol | Kind | Summary |
 |---|---|---|---|
-| `forge` | `Connection` | class | Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None) |
+| `forge` | `Connection` | class | Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None, control_strobe: 'bool' = False, external_source: 'bool' = False) |
 | `forge` | `DesignConfig` | class | DesignConfig(part: 'str', clock_period: 'float', max_parallel_jobs: 'int' = 1, reference_period_ns: 'Optional[float]' = None, modules: 'List[Module]' = <factory>, connections: 'List[Connection]' = <factory>, topology_groups: 'List[TopologyGroup]' = <factory>, sweeps: 'Dict[str, SweepSpec]' = <factory>, block_protocol: 'BlockProto' = 'none', connect_clock: 'bool' = True, connect_reset: 'bool' = True, control_signals: 'Dict[str, ControlSignal]' = <factory>, testbench: 'Optional[TestBenchConfig]' = None, interface_metadata: 'Dict[str, Any]' = <factory>, interface_metadata_file: 'Optional[str]' = None, registry: 'Optional[str]' = None, allowed_unconnected: 'AllowedUnconnected' = <factory>, schema_version: 'Optional[str]' = None, clock_domains: 'Dict[str, Dict[str, Any]]' = <factory>, reset_domains: 'Dict[str, Dict[str, Any]]' = <factory>) |
 | `forge` | `Module` | class | Module(name: 'str', top: 'str', src: 'List[str]', kind: 'ModuleKind' = 'hls', rtl_lang: 'Optional[RtlLang]' = None, vhdl_library: 'Optional[str]' = None, vhdl_version: 'Optional[str]' = None, rtl_include_dirs: 'List[str]' = <factory>, verilog_defines: 'List[str]' = <factory>, rtl_packages: 'List[str]' = <factory>, parameters: 'Dict[str, Any]' = <factory>, tb: 'List[str]' = <factory>, includes: 'List[str]' = <factory>, cflags: 'List[str]' = <factory>, stages: 'List[Stage]' = <factory>, version: 'str' = '1.0', tb_args: 'Optional[TestBenchArgs]' = None, csim_opts: 'Optional[str]' = None, csynth_opts: 'Optional[str]' = None, cosim_opts: 'Optional[str]' = None, ip_opts: 'Optional[str]' = None, instances: 'int' = 1, external_in_ports: 'List[str]' = <factory>, external_out_ports: 'List[str]' = <factory>, debug: 'bool' = False, output_delays: 'Dict[str, int]' = <factory>, ip_info_key: 'Optional[str]' = None, timing: 'Optional[ModuleTiming]' = None) |
 | `forge` | `__version__` | value | str(object='') -> str |
@@ -21,11 +21,11 @@ path.
 | `forge` | `load_ip_info` | function | Thin YAML wrapper used by several sub-packages. |
 | `forge` | `parse_component` | function | Parse a single HLS-exported component.xml into a dict: |
 | `forge` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
-| `forge` | `write_bd_tcl` | function |  |
+| `forge` | `write_bd_tcl` | function | Generate a Vivado Block Design Tcl script wiring algorithm modules |
 | `forge` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
 | `forge` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
 | `forge.analysis.design_explorer` | `DESIGN_GRAPH_SCHEMA` | value | A ``{"name", "version"}`` tag carried by every structured artifact |
-| `forge.analysis.design_explorer` | `DesignGraph` | class | DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]') |
+| `forge.analysis.design_explorer` | `DesignGraph` | class | DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]', open_decisions: 'Tuple[OpenDecision, ...]' = ()) |
 | `forge.analysis.design_explorer` | `GraphEdge` | class | GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]', crosses_clock_domain: 'bool', crosses_reset_domain: 'bool', transformations: 'Tuple[Dict[str, Any], ...]', diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '') |
 | `forge.analysis.design_explorer` | `GraphNode` | class | GraphNode(id: 'str', kind: 'GraphNodeKind', label: 'str', parent: 'Optional[str]' = None, module: 'Optional[str]' = None, clock_domain: 'Optional[str]' = None, reset_domain: 'Optional[str]' = None, members: 'Tuple[str, ...]' = (), latency: 'Optional[Dict[str, Any]]' = None, maturity: 'Optional[MaturitySummary]' = None, diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), inherited_diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '') |
 | `forge.analysis.design_explorer` | `GraphNodeKind` | class | An enumeration. |
@@ -42,7 +42,7 @@ path.
 | `forge.contracts` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
 | `forge.contracts` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
 | `forge.core.cli` | `main` | value | forge CLI entry point. |
-| `forge.generation.generators` | `write_bd_tcl` | function |  |
+| `forge.generation.generators` | `write_bd_tcl` | function | Generate a Vivado Block Design Tcl script wiring algorithm modules |
 | `forge.generation.generators` | `write_structural_verilog` | function | Generate a structural Verilog top that wires algorithm modules together. |
 | `forge.generation.generators` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
 | `forge.ir` | `DiagnosticReference` | class | A diagnostic attached to a specific IR object, so tooling (CLI, |
@@ -62,22 +62,41 @@ path.
 | `forge.ir` | `ResolvedResetDomain` | class | A named reset domain — see ``ResolvedClockDomain``. |
 | `forge.ir` | `ResolvedTopLevelPort` | class | A resolved top-level (e.g. ``algo_top``) port — name, direction |
 | `forge.ir` | `ResolvedTransformation` | class | A generated (or declared-and-approved) element sitting on a |
-| `forge.ir` | `ResolvedVerificationPlan` | class | Placeholder for verification planning/bindings. |
+| `forge.ir` | `ResolvedVerificationBinding` | class | One resolved point a testbench drives or observes: a top-level port |
+| `forge.ir` | `ResolvedVerificationFlow` | class | One flow from ``design.verification.yml``, resolved against this |
+| `forge.ir` | `ResolvedVerificationPlan` | class | What verification drives, observes and clocks, resolved from this |
 | `forge.ir` | `SourceLocation` | class | A source reference, file-level only in this slice (no line/column |
 | `forge.ir` | `StalenessExplanation` | class | StalenessExplanation(stale: 'bool', reasons: 'List[str]' = <factory>) |
 | `forge.ir` | `assemble_project_ir` | function | Assemble a ``ResolvedProject`` from already-resolved facts. |
 | `forge.ir` | `build_project_ir` | function | Build a ``ResolvedProject`` for the design at *design_path*, loading |
 | `forge.ir` | `build_project_ir_with_match_report` | function | Same as :func:`build_project_ir`, but also returns the ``cfg``/ |
 | `forge.ir` | `build_provenance` | function | Build a provenance manifest for an already-built IR *project*. |
+| `forge.ir` | `build_verification_plan` | function | Resolve *contract*'s flows and this design's testbench-facing ports |
 | `forge.ir` | `content_hash` | function | Deterministic sha256 hex digest of the resolved design's content. |
 | `forge.ir` | `diff_projects` | function | A coarse but real diff between two IR snapshots. |
 | `forge.ir` | `explain_staleness` | function | Compare two provenance manifests and explain, in plain language, |
+| `forge.ir` | `port_divergences` | function | Compare a DUT's own port list against the plan's, and report every |
 | `forge.ir` | `project_to_conn_map` | function | Reconstruct ``(conn_map, global_nets)`` from *project*'s connections, |
 | `forge.ir` | `read_provenance` | function |  |
 | `forge.ir` | `render_provenance_markdown` | function | Render *manifest* as a Markdown summary — pure presentation over |
 | `forge.ir` | `to_json_dict` | function | Return a plain, JSON-serializable dict for *project*. |
 | `forge.ir` | `to_json_str` | function | Human/CI-friendly JSON rendering, with sorted keys for stable diffs. |
 | `forge.ir` | `write_provenance` | function |  |
+| `forge.project` | `Action` | class | One suggested next step, with enough structure to act on. |
+| `forge.project` | `Evidence` | class | One recorded reason FORGE reached a conclusion. |
+| `forge.project` | `Explanation` | class | A deterministic account of one decision. |
+| `forge.project` | `Fix` | class | One repair, computed but not yet applied. |
+| `forge.project` | `ForgeConfig` | class | The parsed contents of one ``forge.yml``. |
+| `forge.project` | `Migration` | class | One *file's* migration, computed but not applied. |
+| `forge.project` | `ModuleMaturity` | class | One HLS module's position on the ladder, and how it was determined. |
+| `forge.project` | `ModulePolicy` | class | How the user wants one specific module handled. |
+| `forge.project` | `ProjectPaths` | class | Every directory a FORGE subsystem is allowed to care about. |
+| `forge.project` | `Reconciliation` | class | The result of comparing a predicted interface with a synthesised one. |
+| `forge.project` | `explain` | function | Explain *target* in the project at (or above) *root*. |
+| `forge.project` | `find_project_root` | function | Walk up from *start* looking for a ``forge.yml``. |
+| `forge.project` | `plan_fixes` | function | Work out every repair available, without writing anything. |
+| `forge.project` | `plan_migration` | function | Work out every migration this project needs, writing nothing. |
+| `forge.project` | `reconcile` | function | Compare a predicted RTL interface against the built IP's real one. |
 
 ## Known inconsistencies
 

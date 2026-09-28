@@ -21,58 +21,26 @@ ip_interface:
 
     clock_primary:
       raw_port: ap_clk
-      direction: input
-      width: 1
 
     reset_primary:
       raw_port: ap_rst
-      direction: input
-      width: 1
-      active_level: high
 
     in_tile_id:
-      raw_port: in_tile_id
-      direction: input
-      width: 16
 
     in_minimum:
-      raw_port: in_minimum
-      direction: input
-      width: 8
 
     in_maximum:
-      raw_port: in_maximum
-      direction: input
-      width: 8
 
     in_mean:
-      raw_port: in_mean
-      direction: input
-      width: 16
 
     in_variance:
-      raw_port: in_variance
-      direction: input
-      width: 24
 
     in_frame_id:
-      raw_port: in_frame_id
-      direction: input
-      width: 16
 
     in_valid:
-      raw_port: in_valid
-      direction: input
-      width: 1
 
     out_record:
-      raw_port: out_record
-      direction: output
-      width: 129
       notes: "{toggle, record[127:0]} -- cdc: {kind: async_fifo} source -> output"
 
     out_record_valid:
-      raw_port: out_record_valid
-      direction: output
-      width: 1
       notes: "Real per-record write-enable -- cdc.write_enable_pin for the async_fifo crossing above"

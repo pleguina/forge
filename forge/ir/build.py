@@ -529,7 +529,7 @@ def assemble_project_ir(
     ip_ports_by_module: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     modules: List[ResolvedModuleDefinition] = []
-    for mod in cfg.modules:
+    for declaration_order, mod in enumerate(cfg.modules):
         ip_key = mod.ip_info_key or mod.name
         contract = contracts.get(mod.name) or contracts.get(ip_key)
         ip_entry = ip_info_data.get(mod.name) or ip_info_data.get(ip_key)
@@ -559,6 +559,14 @@ def assemble_project_ir(
             kind=mod.kind,
             top=mod.top,
             source_files=list(mod.src),
+            # The loader already resolved these against the design file's
+            # own directory (forge.contracts.config._load_design's
+            # `mod.abs_src = [resolve_declared_path(p, root) ...]`) — copied
+            # verbatim so no consumer has to re-resolve a declared path.
+            rtl_sources=(
+                [str(p) for p in (*mod.abs_src, *mod.abs_rtl_packages)]
+                if mod.kind == "rtl" else []
+            ),
             contract_path=str(contract.path) if contract is not None else None,
             ports_resolved=ports_resolved,
             interfaces=interfaces,
@@ -568,6 +576,7 @@ def assemble_project_ir(
             is_variable_latency=timing.variable_latency if timing else False,
             latency=timing.latency if timing else None,
             ip_info_key=mod.ip_info_key,
+            declaration_order=declaration_order,
         ))
     modules.sort(key=lambda m: m.name)
 
@@ -795,19 +804,36 @@ def assemble_project_ir(
                 groups.setdefault(name, []).append(inst.id)
         return groups
 
-    # Attach the design's optional, purely descriptive
-    # clock_domains:/reset_domains: relationship declarations, matched by
-    # the already-resolved domain (net) name.
+    def _domain_names(attr: str, declared: Dict[str, Any]) -> Dict[str, List[str]]:
+        """Every domain this design has: the ones instances resolved into,
+        plus the ones ``design.yml`` declares outright.
+
+        A declared domain with no resolved members is a real domain, not an
+        absence: ``reset_domains.<name>.sync: reset_sync`` makes the
+        structural generator emit a ``cdc_reset_sync`` instance for it
+        whether or not any module's reset pin resolved to that net. Dropping
+        such a domain left the IR unable to account for RTL its own
+        generator had emitted — found by the build manifest, which asks the
+        IR which support RTL the top level instantiates.
+        """
+        groups = _grouped_domains(attr)
+        for name in declared:
+            groups.setdefault(name, [])
+        return groups
+
+    # Attach the design's optional
+    # clock_domains:/reset_domains: declarations, matched by the
+    # already-resolved domain (net) name.
     clock_domains = [
         ResolvedClockDomain(
             name=name, instances=members,
             derived_from=cfg.clock_domains.get(name, {}).get("derived_from"),
             ratio=cfg.clock_domains.get(name, {}).get("ratio"),
         )
-        for name, members in sorted(_grouped_domains("clock_domain").items())
+        for name, members in sorted(_domain_names("clock_domain", cfg.clock_domains).items())
     ]
     reset_domains = []
-    for name, members in sorted(_grouped_domains("reset_domain").items()):
+    for name, members in sorted(_domain_names("reset_domain", cfg.reset_domains).items()):
         _rel = cfg.reset_domains.get(name, {})
         _sync = _rel.get("sync")
         # A real reset_synchronizer transformation,

@@ -141,6 +141,77 @@ def _check_port_signature(
         result.notes.append(f"Interface fingerprint OK: {sig_hash}")
 
 
+def _check_against_verification_plan(
+    port_map_path: Path,
+    result: PreflightResult,
+    *,
+    flow_name: str,
+) -> None:
+    """Compare the DUT's port map against the canonical IR's verification
+    plan — Phase G3's "consistent port identity".
+
+    The plan lives in the ``design.ir.json`` gen-top wrote beside the port
+    map, and states the top-level ports of the design that was actually
+    generated. The port map is rendered from the same run, so agreement is
+    the normal case; disagreement means the two artifacts came from
+    different generations, which is exactly the failure a testbench
+    otherwise discovers as an elaboration error against a port that isn't
+    there.
+
+    Every outcome short of a real disagreement is silent: no
+    ``design.ir.json`` (an older project, or a single-module HLS flow with
+    no generated top), an IR whose plan was never populated, or an IR this
+    build won't read. This check adds information when it is available; it
+    never turns a missing optional artifact into a failure.
+
+    Reported as a *warning*, not an error: the port-signature check above
+    already fails the run for the same class of mismatch when the hashes
+    disagree, and this one is the explanation rather than a second gate.
+    """
+    ir_path = port_map_path.parent / "design.ir.json"
+    if not ir_path.exists():
+        return
+
+    try:
+        import yaml as _yaml  # noqa: PLC0415
+
+        from forge.core.utils.port_signature import ports_from_port_map  # noqa: PLC0415
+        from forge.ir.deserialize import from_json_dict  # noqa: PLC0415
+        from forge.ir.verification_plan import port_divergences  # noqa: PLC0415
+
+        project, _notes = from_json_dict(json.loads(ir_path.read_text()))
+        port_map = _yaml.safe_load(port_map_path.read_text()) or {}
+    except Exception as exc:  # noqa: BLE001
+        result.notes.append(f"Verification plan not checked ({exc})")
+        return
+
+    plan = project.design.verification_plan
+    if not plan.populated:
+        return
+
+    divergences = port_divergences(plan, ports_from_port_map(port_map))
+    if divergences:
+        result.warnings.append(
+            "DUT port map disagrees with the resolved design "
+            f"({ir_path.name}):\n"
+            + "\n".join(f"      {d}" for d in divergences)
+            + "\n    → Re-run: forge topgen gen-top ..."
+        )
+        return
+
+    declared = [fl for fl in plan.flows if fl.name == flow_name]
+    for fl in declared:
+        if fl.unresolved_reason:
+            result.warnings.append(
+                f"Flow {flow_name!r} does not resolve against the design: "
+                f"{fl.unresolved_reason}"
+            )
+    result.notes.append(
+        f"DUT ports match the resolved design ({len(plan.stimulus)} stimulus, "
+        f"{len(plan.observation)} observation)"
+    )
+
+
 # ── Main preflight entry point ─────────────────────────────────────────────
 
 def run_preflight(cfg: "Any", xml_input: "Path | None" = None) -> PreflightResult:
@@ -171,6 +242,14 @@ def run_preflight(cfg: "Any", xml_input: "Path | None" = None) -> PreflightResul
     # 2. Signature consistency: only if both files exist.
     if pm_present and sig_present:
         _check_port_signature(cfg.dut_port_signature, cfg.dut_port_map, result)
+
+    # 2b. Port identity against the canonical IR's verification plan, when
+    #     the DUT was generated from one.
+    if pm_present:
+        _check_against_verification_plan(
+            Path(cfg.dut_port_map), result,
+            flow_name=str(getattr(cfg, "flow_name", "") or ""),
+        )
 
     # 3. Optional probe_map: warn only.
     if cfg.dut_probe_map and not cfg.dut_probe_map.exists():

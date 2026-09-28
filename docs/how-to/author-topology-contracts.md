@@ -94,22 +94,29 @@ forge topgen ip-summary plugins/<plugin>/forge/designs/design.yml --ip-root ips 
 
 ### 3. Write the interface contract
 
-Create `plugins/<plugin>/forge/interfaces/<module_name>.interface.yaml`:
+Start from a generated skeleton rather than a blank file — it emits every
+port the module actually has as a role:
+
+```bash
+forge contract infer my_module --contracts-from plugins/<plugin>/forge/modules.yml \
+    -o plugins/<plugin>/forge/interfaces/my_module.interface.yaml
+```
+
+Then add the integration semantics it can't infer. A finished RTL contract
+looks like this:
 
 ```yaml
 ip_interface:
   module_name: my_module
-  ip_info_key: my_module
-  source_type: hls
+  ip_info_key: my_module      # optional: defaults to module_name
+  source_type: rtl
   roles:
     clock_primary:
-      raw_port: ap_clk
-      direction: input
-      width: 1
+      raw_port: ap_clk        # only because the role name isn't the port name
     reset_primary:
       raw_port: ap_rst_n
-      direction: input
-      width: 1
+    data_in:                  # nothing to declare: the RTL already says it all
+    data_valid:
     # Data roles — see "Contract Authoring" below
     data_output:
       raw_port_prefix: out_data_
@@ -119,6 +126,26 @@ ip_interface:
       wiring_kind: processed_data        # required for contract-driven wiring
       partition: group_a                  # optional: for partitioned consumers
 ```
+
+#### Declare decisions, not transcription
+
+`raw_port`, `direction`, `width` and `active_level` are **optional**. FORGE
+reads them from the module's own Verilog/VHDL when they're omitted, and
+*verifies* them against the real ports when you do declare them — so
+declaring a width stays useful as an assertion, it just isn't required.
+`raw_port` defaults to the role name, so it's only needed for a rename.
+
+What always needs a human is the part no port list implies: `wiring_kind`,
+`protocol`, `partition`/`coordinates`, and the physical binding of array
+roles (`raw_port_prefix`/`count`, `raw_port_tpl`/`dims`).
+
+Two exceptions where the facts must be written out:
+
+* **HLS modules.** There is no HDL to scan until the IP is built, so an HLS
+  contract declares `direction` and `width` itself. `forge contract infer
+  --ip-info ...` emits them for you once the IP exists.
+* **Array and template roles.** Their binding is a real decision, and
+  expanding it needs `count`/`dims` that no port list supplies.
 
 ### 4. Register the module
 

@@ -69,6 +69,14 @@ def build_runtime_throughput_result(
     "not measured", not a fabricated value) rather than requiring every
     caller to have wired every probe.
 
+    ``clock_frequency_hz`` must be the clock that actually drove the
+    ``@(posedge ...)`` sampling this CSV — i.e. the value of
+    ``simulation.clk_period_ns`` in the flow's own ``verify.flow.yml``
+    converted to Hz — not a module's synthesis-target/HLS-estimated
+    frequency, which can differ from the clock the testbench actually
+    toggled. Getting this wrong silently corrupts ``elapsed_seconds`` and
+    ``measured_rate_records_per_sec`` without raising anything.
+
     Raises:
         ValueError: *probe_csv* has no rows for *full_signal* or
             *empty_signal* — both are required to derive anything at all.
@@ -107,6 +115,7 @@ def build_runtime_throughput_result(
 
     cycles = [c for c, _ in full_vals]
     total_cycles = (max(cycles) - min(cycles) + 1) if cycles else 0
+    elapsed_s = 0.0
     measured_rate = 0.0
     if clock_frequency_hz and total_cycles > 0:
         elapsed_s = total_cycles / clock_frequency_hz
@@ -123,5 +132,12 @@ def build_runtime_throughput_result(
         empty_events=empty_events,
         measured_rate_records_per_sec=measured_rate,
         dropped_transactions=dropped_transactions,
+        # Not measured by this generic, FIFO-level probe: it has no
+        # per-record identity to compare against, so it cannot itself
+        # distinguish "zero duplicates" from "duplicate detection not
+        # attempted". A caller with independent evidence (e.g. a
+        # content-checking scoreboard) may override this field, but must
+        # then attribute it to that evidence, not to this probe.
         duplicated_transactions=0,
+        elapsed_seconds=elapsed_s,
     )
