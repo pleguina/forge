@@ -1530,6 +1530,7 @@ class GenTopPlanContext:
     topology_group_issues: List[Any]
     cardinality_issues: List[Any]
     cdc_issues: List[Any]
+    contract_conflicts: List[str] = dataclasses.field(default_factory=list)
 
 
 def compute_gen_top_plan(
@@ -1602,17 +1603,20 @@ def compute_gen_top_plan(
     _modules_yml = getattr(args, "contracts_from", None)
     _modules_yml_path: Optional[Path] = None
     contracts = None
+    contract_conflicts: List[str] = []
     if _modules_yml:
         _modules_yml_path = _resolve_path(_modules_yml, c_root)
         if _modules_yml_path.exists():
             try:
+                drain_contract_conflicts()  # only this load's conflicts count below
                 contracts = load_contracts_for_design(_modules_yml_path, c_root)
                 if emit_progress:
                     print(f"📜 Contracts loaded: {len(contracts)} module(s) covered")
                 # Contracts whose omitted port facts couldn't be resolved, or
                 # that contradict their real ports. Silence here shows up much
                 # later as a role mysteriously absent from contract wiring.
-                for _conflict in drain_contract_conflicts():
+                contract_conflicts = drain_contract_conflicts()
+                for _conflict in contract_conflicts:
                     print(f"⚠️  {_conflict}")
             except Exception as _ce:
                 if emit_progress:
@@ -1734,6 +1738,7 @@ def compute_gen_top_plan(
         topology_group_issues=topology_group_issues,
         cardinality_issues=cardinality_issues,
         cdc_issues=cdc_issues,
+        contract_conflicts=contract_conflicts,
     )
 
 
@@ -1787,6 +1792,14 @@ def cmd_gen_top(args):
         global_nets = ctx.global_nets
         match_report = ctx.match_report
         wmc = match_report.wiring_method_counts
+
+        if getattr(args, "strict", False) and ctx.contract_conflicts:
+            print(
+                f"\n❌ Strict mode: {len(ctx.contract_conflicts)} interface contract "
+                "conflict(s) with the module source (listed above)."
+            )
+            print("   Correct the contract or the source, or remove --strict.")
+            sys.exit(1)
 
         if getattr(args, "strict", False) and match_report.has_compat_modules():
             print(

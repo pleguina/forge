@@ -462,37 +462,38 @@ def load_contracts_for_design(
         contract = LoadedContract(contract_path, spec)
 
         # A contract may omit the port facts its own source already states
-        # (raw_port/direction/width/active_level). Resolve those against a
-        # scan of the module's HDL, but only when something is actually
-        # missing — a fully-declared contract costs nothing here.
+        # (raw_port/direction/width/active_level); those are filled from a
+        # scan of the module's HDL. Fully-declared contracts are scanned too:
+        # generation takes widths from the contract, so a contract that has
+        # drifted from its RTL would otherwise produce a top level with the
+        # wrong port widths and no warning.
+        ports = _scan_module_ports(mod_entry, plugin_root)
+        if ports:
+            for conflict in contract.resolve_against_ports(ports):
+                _CONTRACT_CONFLICTS.append(f"{contract_path.name}: {conflict}")
         if contract.needs_port_resolution:
-            ports = _scan_module_ports(mod_entry, plugin_root)
-            if ports:
-                for conflict in contract.resolve_against_ports(ports):
-                    _CONTRACT_CONFLICTS.append(f"{contract_path.name}: {conflict}")
-            if contract.needs_port_resolution:
-                # Still incomplete: nothing scannable. This is the normal
-                # state for an HLS module before its IP is built — there is
-                # no HDL yet, and the contract is itself the stand-in for the
-                # port list (see synthesize_ip_info_from_contract). Say so
-                # here, because the downstream symptom is a role silently
-                # dropping out of contract-driven wiring and a much later
-                # "role not found in producer contract".
-                missing = sorted(
-                    name for name, role in contract._roles.items()
-                    if not any(k in role for k in ("raw_port_prefix", "raw_port_tpl"))
-                    and not role.get("array")
-                    and any(f not in role for f in ("raw_port", "direction", "width"))
-                )
-                _CONTRACT_CONFLICTS.append(
-                    f"{contract_path.name}: role(s) {', '.join(missing)} omit "
-                    f"raw_port/direction/width, and module "
-                    f"{mod_entry.get('name', '?')!r}'s ports could not be scanned "
-                    f"(source_type={contract.source_type!r}"
-                    + (" — an HLS module has no HDL to scan until it is built"
-                       if contract.source_type != "rtl" else "")
-                    + "). Declare those fields explicitly in the contract."
-                )
+            # Still incomplete: nothing scannable. This is the normal
+            # state for an HLS module before its IP is built — there is
+            # no HDL yet, and the contract is itself the stand-in for the
+            # port list (see synthesize_ip_info_from_contract). Say so
+            # here, because the downstream symptom is a role silently
+            # dropping out of contract-driven wiring and a much later
+            # "role not found in producer contract".
+            missing = sorted(
+                name for name, role in contract._roles.items()
+                if not any(k in role for k in ("raw_port_prefix", "raw_port_tpl"))
+                and not role.get("array")
+                and any(f not in role for f in ("raw_port", "direction", "width"))
+            )
+            _CONTRACT_CONFLICTS.append(
+                f"{contract_path.name}: role(s) {', '.join(missing)} omit "
+                f"raw_port/direction/width, and module "
+                f"{mod_entry.get('name', '?')!r}'s ports could not be scanned "
+                f"(source_type={contract.source_type!r}"
+                + (" — an HLS module has no HDL to scan until it is built"
+                   if contract.source_type != "rtl" else "")
+                + "). Declare those fields explicitly in the contract."
+            )
 
         # Key by the modules.yml module name — this is the value stored in
         # Module.ip_info_key (= the ref: name from design.yml) so the matcher

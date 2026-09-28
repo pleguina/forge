@@ -221,3 +221,37 @@ def test_verify_contract_still_catches_a_role_naming_no_real_port(tmp_path):
 
     errors = [i for i in result.issues if i.severity == "error"]
     assert any("data_inn" in i.message or "data_inn" == i.role for i in errors)
+
+
+def test_fully_declared_contract_is_still_checked_against_its_source(tmp_path):
+    """A contract that restates every port fact needs no resolution, but
+    generation takes its widths as given — so drift from the RTL must still
+    be reported, or the generated top silently carries the stale width."""
+    (tmp_path / "rtl").mkdir()
+    (tmp_path / "rtl" / "m.v").write_text(
+        "module m (\n"
+        "    input  wire        ap_clk,\n"
+        "    output wire [11:0] data_out\n"
+        ");\nendmodule\n"
+    )
+    (tmp_path / "c.interface.yaml").write_text(yaml.safe_dump({
+        "ip_interface": {
+            "module_name": "m", "ip_info_key": "m", "source_type": "rtl",
+            "roles": {
+                "clock_primary": {"raw_port": "ap_clk", "direction": "input", "width": 1},
+                "data_out": {"raw_port": "data_out", "direction": "output", "width": 8},
+            },
+        }
+    }))
+    (tmp_path / "modules.yml").write_text(yaml.safe_dump({
+        "modules": [{"name": "m", "kind": "rtl", "top": "m",
+                     "src": ["rtl/m.v"], "interface_contract": "c.interface.yaml"}]
+    }))
+    drain_contract_conflicts()
+
+    contracts = load_contracts_for_design(tmp_path / "modules.yml")
+    conflicts = drain_contract_conflicts()
+
+    assert contracts["m"].get_role("data_out")["width"] == 8
+    assert len(conflicts) == 1
+    assert "data_out" in conflicts[0] and "width=8" in conflicts[0] and "width=12" in conflicts[0]
