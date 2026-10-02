@@ -113,7 +113,7 @@ class MatchReport:
 
 def _inst(mod: Module, idx: int) -> str:
     """Helper to get instance name."""
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
 
 
 # ────────────────────────────────────────────────────────────

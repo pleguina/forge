@@ -62,7 +62,7 @@ def _canon_pin(ip_info: Dict[str, Dict], mod: str, pin: str) -> str:
 
 
 def _inst(mod: Module, idx: int) -> str:
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
 
 
 #: The clock/reset names collapsed onto the single top-level ``ap_clk``/
@@ -232,7 +232,7 @@ def _parse_system_aliases(
     def _inst_label(mod_name: str, idx: Optional[int]) -> str:
         m = name_to_mod.get(mod_name)
         n = int(idx or 0)
-        return mod_name if (m and m.instances == 1) else f"{mod_name}_{n}"
+        return m.instance_id(n) if m else f"{mod_name}_{n}"
 
     def _is_fw(x: Optional[str]) -> bool:
         return str(x).lower() in ("framework", "links")

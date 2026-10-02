@@ -504,7 +504,7 @@ def _build_graph_from_ir(
                 is_variable=is_var,
                 # Must match forge.ir.build.py's ResolvedInstance.id
                 # exactly, including its bracket-vs-underscore join.
-                instance_id=resolved_instance_id(mod.name, idx, mod.instances),
+                instance_id=mod.instance_id(idx),
                 display_name=inst_name,
             )
 
@@ -533,8 +533,13 @@ def _build_graph_from_ir(
         caller falls through to its next-best heuristic unchanged."""
         if conn_map is None:
             return None
-        src_ids = [resolved_instance_id(src_mod_name, i, len(src_names)) for i in range(len(src_names))]
-        dst_ids = [resolved_instance_id(dst_mod_name, i, len(dst_names)) for i in range(len(dst_names))]
+        def _ids(mod_name: str, names: list) -> List[str]:
+            m = mod_by_name.get(mod_name)
+            if m is not None:
+                return [m.instance_id(i) for i in range(len(names))]
+            return [resolved_instance_id(mod_name, i, len(names)) for i in range(len(names))]
+        src_ids = _ids(src_mod_name, src_names)
+        dst_ids = _ids(dst_mod_name, dst_names)
         src_idx_by_id = {sid: i for i, sid in enumerate(src_ids)}
         dst_idx_by_id = {did: i for i, did in enumerate(dst_ids)}
         pairs: List[tuple] = []
@@ -642,7 +647,9 @@ def _build_graph_legacy(
                 kind=kind,
                 latency=lat,
                 is_variable=is_var,
-                instance_id=resolved_instance_id(name, idx, instances),
+                instance_id=resolved_instance_id(name, idx, instances,
+                                                 mod.get("instance_name"),
+                                                 int(mod.get("instance_offset", 0))),
                 display_name=inst_name,
             )
 

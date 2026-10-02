@@ -243,7 +243,7 @@ def verify_cardinality(design_cfg: Any, contracts: Dict[str, Any], match_report:
 
             pins = _role_pin_names(role_spec)
             for i in range(max(1, mod.instances)):
-                inst = mod.name if mod.instances == 1 else f"{mod.name}_{i}"
+                inst = mod.instance_id(i)
                 for pin in pins:
                     if direction == "input" and resolved.producers is not None:
                         sink_key = (inst, pin)

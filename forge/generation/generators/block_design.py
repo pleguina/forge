@@ -21,7 +21,7 @@ NL = "\n"
 
 def _inst(mod: Module, idx: int) -> str:
     """Instance label inside the BD."""
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
 
 
 _re_num = re.compile(r"^(\w+?)_(\d+)$")

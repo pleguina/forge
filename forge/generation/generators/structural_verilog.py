@@ -72,7 +72,7 @@ def _base_of(name: str) -> str:
     return m.group(1) if m else name
 
 def _inst(mod: Module, idx: int) -> str:
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
 
 #: _domain_to_top_level_net/_reset_net_for_domain moved to
 #: _port_resolution.py, shared with write_bd_tcl — imported above.

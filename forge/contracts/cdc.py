@@ -105,7 +105,7 @@ def _resolve_pairs(
     mod_of_instance: Dict[str, str] = {}
     for mod in design_cfg.modules:
         for idx in range(max(1, mod.instances)):
-            inst_id = mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+            inst_id = mod.instance_id(idx)
             mod_of_instance[inst_id] = mod.name
 
     clock_of_module, reset_of_module, _unresolved = resolve_domain_nets(

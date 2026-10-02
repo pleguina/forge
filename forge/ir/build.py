@@ -69,7 +69,7 @@ def _instance_id(mod: Module, idx: int) -> str:
     Delegates to the one shared implementation (``forge.ir.identifiers``)
     also used by ``forge.analysis.latency_static.graph`` — see that
     module's docstring for the mismatch this closes."""
-    return resolved_instance_id(mod.name, idx, mod.instances)
+    return mod.instance_id(idx)
 
 
 def build_tie_off_connections(

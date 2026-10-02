@@ -333,6 +333,14 @@ class Module:
 
     # Instances & externalization hints
     instances:            int = 1
+    # Optional shared instance-id namespace. Several blocks that are
+    # different modules (so they cannot be one block with ``instances: N``)
+    # can still present one flat run of instances: a block with
+    # ``instance_name: X`` and ``instance_offset: K`` names its instances
+    # ``X_K``, ``X_{K+1}``, ... instead of ``<name>_0``, ``<name>_1``, ...
+    # Offsets across blocks sharing an ``instance_name`` must not overlap.
+    instance_name:        Optional[str] = None
+    instance_offset:      int = 0
     external_in_ports:    List[str] = field(default_factory=list)
     external_out_ports:   List[str] = field(default_factory=list)
     
@@ -361,6 +369,12 @@ class Module:
 
     def all_sources_exist(self) -> bool:
         return all(p.exists() for p in (*self.abs_src, *self.abs_tb))
+
+    def instance_id(self, idx: int) -> str:
+        """Canonical instance id of this block's ``idx``-th instance."""
+        from forge.ir.identifiers import resolved_instance_id
+        return resolved_instance_id(self.name, idx, self.instances,
+                                    self.instance_name, self.instance_offset)
 
 @dataclass
 class Connection:

@@ -19,7 +19,8 @@ from __future__ import annotations
 from typing import Optional
 
 
-def resolved_instance_id(module_name: str, instance_index: Optional[int], instance_count: int) -> str:
+def resolved_instance_id(module_name: str, instance_index: Optional[int], instance_count: int,
+                         instance_name: Optional[str] = None, instance_offset: int = 0) -> str:
     """The canonical instance id for one instance of a module definition.
 
     A module with exactly one instance keeps its bare module name (e.g.
@@ -28,6 +29,11 @@ def resolved_instance_id(module_name: str, instance_index: Optional[int], instan
     instance gets ``f"{module_name}_{instance_index}"`` (e.g. ``"dec_0"``,
     ``"dec_1"``).
     """
+    if instance_name is not None:
+        # The block shares an instance-id namespace with other blocks
+        # (design.yml ``instance_name`` / ``instance_offset``): always
+        # ``<instance_name>_<offset+index>``, even for a one-instance block.
+        return f"{instance_name}_{int(instance_index or 0) + instance_offset}"
     if instance_count == 1:
         return module_name
     return f"{module_name}_{instance_index}"
