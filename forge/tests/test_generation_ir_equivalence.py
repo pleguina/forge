@@ -254,3 +254,61 @@ def test_write_bd_tcl_instantiates_boundary_crossing_and_writes_manifest(tmp_pat
     assert stages[2]["cell_pattern"] == (
         "top_bd_i/bdry_slr0_to_slr1_dout_to_din/inst/gen_depth_general.stage_reg_reg[2]*"
     )
+
+
+def test_boundary_crossings_from_one_source_pin_get_distinct_instance_names(tmp_path):
+    """One source pin feeding the same-named input of two consumers (the NN
+    bypass shape) must not produce two crossing instances with one name."""
+    design_yml = tmp_path / "design.yml"
+    modules_yml = tmp_path / "modules.yml"
+    (tmp_path / "interfaces").mkdir()
+    (tmp_path / "interfaces" / "src.interface.yaml").write_text(
+        "ip_interface:\n"
+        "  module_name: src\n  ip_info_key: src\n  source_type: rtl\n"
+        "  roles:\n"
+        "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+        "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+        "    dout: {raw_port: dout, direction: output, width: 8}\n"
+    )
+    for name in ("dst_a", "dst_b"):
+        (tmp_path / "interfaces" / f"{name}.interface.yaml").write_text(
+            "ip_interface:\n"
+            f"  module_name: {name}\n  ip_info_key: {name}\n  source_type: rtl\n"
+            "  roles:\n"
+            "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}\n"
+            "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}\n"
+            "    din: {raw_port: din, direction: input, width: 8}\n"
+        )
+    modules_yml.write_text(
+        "registry_version: '1'\n"
+        "modules:\n"
+        "  - name: src\n    kind: rtl\n    top: src_top\n    src: [src.v]\n"
+        "    interface_contract: interfaces/src.interface.yaml\n"
+        "  - name: dst_a\n    kind: rtl\n    top: dst_top\n    src: [dst.v]\n"
+        "    interface_contract: interfaces/dst_a.interface.yaml\n"
+        "  - name: dst_b\n    kind: rtl\n    top: dst_top\n    src: [dst.v]\n"
+        "    interface_contract: interfaces/dst_b.interface.yaml\n"
+    )
+    design_yml.write_text(
+        "part: xcvu13p\nclock_period: 4.0\n"
+        "modules:\n"
+        "  - name: src\n    top: src_top\n    src: [src.v]\n"
+        "  - name: dst_a\n    top: dst_top\n    src: [dst.v]\n"
+        "  - name: dst_b\n    top: dst_top\n    src: [dst.v]\n"
+        "connections:\n"
+        "  - from: src\n    to: dst_a\n    port_map: [[dout, din]]\n"
+        "    delay_cycles: 3\n    boundary: tag\n"
+        "  - from: src\n    to: dst_b\n    port_map: [[dout, din]]\n"
+        "    delay_cycles: 3\n    boundary: tag\n"
+    )
+    cfg, contracts, ip_info, conn_map, global_nets, _p, _g = _resolve(design_yml, modules_yml)
+    out = tmp_path / "algo_top.v"
+    write_structural_verilog(
+        cfg=cfg, ip_info=ip_info, conn_map=conn_map, global_nets=global_nets,
+        ip_root=tmp_path / "ips", out_path=out, top_name="algo_top",
+        system_yml=None, contracts=contracts,
+    )
+    import re
+    names = re.findall(r"\)\s+(bdry_\w+)\s*\(", out.read_text())
+    assert len(names) == len(set(names)), names
+    assert "bdry_tag_dout_to_din" in names and "bdry_tag_dout_to_din_dst_b" in names

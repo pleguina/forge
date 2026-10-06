@@ -16,6 +16,7 @@ from ._port_resolution import (
     _boundary_inst_name,
     _collapses_to_global,
     _domain_to_top_level_net,
+    _ident_frag,
     _is_user_external,
     _reset_net_for_domain,
     resolve_top_ports,
@@ -809,6 +810,7 @@ def write_structural_verilog(
     emit("  // Signal delays for connection timing alignment")
     delay_counter = 0
     boundary_infos: List[Dict[str, Any]] = []  # collected for crossing manifest
+    boundary_names_used: Set[str] = set()
 
     for (src_i, dst_i), pairs in conn_map.items():
         num_delays = delay_cycles_map.get((src_i, dst_i), 0)
@@ -829,6 +831,11 @@ def write_structural_verilog(
                     # Boundary crossing: emit a protected slr_crossing_delay with
                     # a stable, deterministic instance name.
                     inst_name = _boundary_inst_name(tag, s_pin, d_pin)
+                    if inst_name in boundary_names_used:
+                        # One source pin feeding the same-named pin of several
+                        # consumers (or instances): name by consumer instance.
+                        inst_name = f"{inst_name}_{_ident_frag(dst_i)}"
+                    boundary_names_used.add(inst_name)
                     emit(f"  // Boundary crossing {src_i}.{s_pin} → {dst_i}.{d_pin} [boundary={tag}]")
                     emit(f'  (* KEEP_HIERARCHY = "TRUE" *)')
                     emit(f"  slr_crossing_delay #(")
