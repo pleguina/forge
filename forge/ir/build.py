@@ -666,6 +666,23 @@ def assemble_project_ir(
             ))
         if xforms:
             module_transforms.setdefault((c.from_, c.to), []).extend(xforms)
+    # A topology group can declare delay_cycles/boundary (no register_stages
+    # or cdc); same transformations, keyed by the same module pair.
+    for tg in cfg.topology_groups:
+        if not tg.delay_cycles:
+            continue
+        if tg.boundary:
+            module_transforms.setdefault((tg.from_, tg.to), []).append(
+                ResolvedTransformation(
+                    id=f"xform:{tg.from_}->{tg.to}:slr_crossing",
+                    kind="slr_crossing", cycles=tg.delay_cycles, tag=tg.boundary,
+                ))
+        else:
+            module_transforms.setdefault((tg.from_, tg.to), []).append(
+                ResolvedTransformation(
+                    id=f"xform:{tg.from_}->{tg.to}:latency_delay",
+                    kind="latency_delay", cycles=tg.delay_cycles,
+                ))
 
     # emission_order is assigned in the exact order connections are produced
     # below (conn_map, then global_nets) — the same order the legacy

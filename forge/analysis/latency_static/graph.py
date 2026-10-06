@@ -225,7 +225,8 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
     """
     cycles = 0
     details: List[str] = []
-    if conn.register_stages:
+    # A TopologyGroup carries delay_cycles/boundary only.
+    if getattr(conn, "register_stages", 0):
         cycles += conn.register_stages
         details.append(f"register_stages={conn.register_stages}")
     if conn.delay_cycles:
@@ -234,10 +235,11 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
         if conn.boundary:
             tag += f" (boundary={conn.boundary})"
         details.append(tag)
-    if conn.cdc and conn.cdc.get("kind") in ("level_sync", "2ff_sync"):
+    cdc = getattr(conn, "cdc", None)
+    if cdc and cdc.get("kind") in ("level_sync", "2ff_sync"):
         cycles += 2
         details.append("cdc:level_sync (cdc_sync2ff.v, fixed depth)")
-    if conn.cdc and conn.cdc.get("kind") == "pulse_sync":
+    if cdc and cdc.get("kind") == "pulse_sync":
         cycles += 3
         details.append("cdc:pulse_sync (cdc_pulse_sync.v, fixed depth)")
     if not details:
@@ -593,12 +595,14 @@ def _build_graph_from_ir(
             external_source=getattr(conn, "external_source", False),
         )
     for tg in cfg.topology_groups:
-        # TopologyGroup carries no register_stages/delay_cycles/cdc field —
-        # honestly latency=None (no data source), not a fabricated 0. Its
-        # real per-instance pairing (partition/instance_assign-based) is
-        # only resolvable via conn_map — see _conn_map_pairs above.
+        # TopologyGroup carries delay_cycles/boundary only (no register_stages
+        # or cdc); without a delay its latency is honestly None, not a
+        # fabricated 0. Its real per-instance pairing (partition/
+        # instance_assign-based) is only resolvable via conn_map — see
+        # _conn_map_pairs above.
         _add_instance_edges(
             tg.from_, tg.to,
+            _edge_latency_from_connection(tg),
             external_source=getattr(tg, "external_source", False),
         )
 

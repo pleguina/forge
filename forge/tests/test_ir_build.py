@@ -867,6 +867,44 @@ def test_matching_evidence_synthetic_scatter():
         assert any(x.kind == "gather_scatter" and x.tag == "scatter" for x in c.transformations)
 
 
+def test_topology_group_boundary_is_slr_crossing_transformation():
+    from forge.contracts.config import TopologyGroup
+
+    src = Module(name="src", top="src_top", src=["x.v"], instances=3)
+    dst = Module(name="dst", top="dst_top", src=["x.v"])
+    cfg = DesignConfig(
+        part="xcvu13p", clock_period=4.0, modules=[src, dst],
+        connections=[],
+        topology_groups=[TopologyGroup(
+            name="tg", family="wk", from_="src", to="dst",
+            role_pairs=[("a_out", "b_in")], delay_cycles=7, boundary="in_to_front",
+        )],
+    )
+    ip_info = {
+        "src": _ip_info_entry([_port("a_out", "OUT", 8)]),
+        "dst": _ip_info_entry([_port(f"b_in_{i}", "IN", 8) for i in range(3)]),
+    }
+    src_contract = _synthetic_contract({
+        "a_out": {"raw_port": "a_out", "direction": "output", "width": 8, "wiring_kind": "wk"},
+    })
+    dst_contract = _synthetic_contract({
+        "b_in": {"direction": "input", "wiring_kind": "wk",
+                 "raw_port_prefix": "b_in_", "count": 3, "width": 8},
+    })
+    contracts = {"src": src_contract, "dst": dst_contract}
+    conn_map, global_nets, report = auto_match_ports(cfg, ip_info, contracts=contracts)
+    project = assemble_project_ir(
+        cfg, "/tmp/design.yml", contracts=contracts, ip_info_data=ip_info,
+        conn_map=conn_map, global_nets=global_nets, match_report=report,
+    )
+    conns = [c for c in project.design.connections if c.producer.port == "a_out"]
+    assert conns
+    for c in conns:
+        crossings = [x for x in c.transformations if x.kind == "slr_crossing"]
+        assert len(crossings) == 1
+        assert crossings[0].cycles == 7 and crossings[0].tag == "in_to_front"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # tie_off connections
 # ─────────────────────────────────────────────────────────────────────────────
