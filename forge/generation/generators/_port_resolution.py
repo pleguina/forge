@@ -379,6 +379,12 @@ def resolve_top_ports(
             if pname in global_nets:
                 continue
 
+            # din/dout of a parameterized module (signal_delay, slr_crossing_delay): the instance
+            # WIDTH parameter, like the internal net of the instance (structural_verilog
+            # _pin_width_for_inst); the contract only says 1 bit
+            if pname in ("din", "dout") and "WIDTH" in (mod.parameters or {}):
+                w = int(mod.parameters["WIDTH"])
+
             for i in range(mod.instances):
                 ilabel = _inst(mod, i)
 
