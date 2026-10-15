@@ -14,6 +14,7 @@ from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
 from ._port_resolution import (
     _auto_mapped_global,
     _boundary_inst_name,
+    build_connection_maps,
     _collapses_to_global,
     _domain_to_top_level_net,
     _ident_frag,
@@ -307,51 +308,9 @@ def write_structural_verilog(
     lines: List[str] = []
     emit = lines.append
 
-    # Build maps for register_stages, delay_cycles, boundary tags, and CDC
-    # adapter declarations.
-    reg_stages_map: Dict[Tuple[str, str], int] = {}
-    delay_cycles_map: Dict[Tuple[str, str], int] = {}
-    boundary_map: Dict[Tuple[str, str], str] = {}  # (src_inst, dst_inst) -> tag
-    cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}  # (src_inst, dst_inst) -> cdc dict
-    for conn in cfg.connections:
-        src_mod_obj = next(m for m in cfg.modules if m.name == conn.from_)
-        dst_mod_obj = next(m for m in cfg.modules if m.name == conn.to)
-        # For each instance combination, store register stages and delay cycles
-        for src_idx in range(src_mod_obj.instances):
-            for dst_idx in range(dst_mod_obj.instances):
-                src_inst = _inst(src_mod_obj, src_idx)
-                dst_inst = _inst(dst_mod_obj, dst_idx)
-                if conn.register_stages > 0:
-                    reg_stages_map[(src_inst, dst_inst)] = conn.register_stages
-                if conn.delay_cycles > 0:
-                    delay_cycles_map[(src_inst, dst_inst)] = conn.delay_cycles
-                if conn.boundary:
-                    boundary_map[(src_inst, dst_inst)] = conn.boundary
-                if conn.cdc:
-                    # Normalize the '2ff_sync' backwards-compatible alias to
-                    # 'level_sync' here, once, so every dispatch site below
-                    # only ever has to recognize one spelling — callers may
-                    # construct Connection objects directly (bypassing
-                    # DesignConfig.load's own normalization, e.g. in tests),
-                    # so this generator cannot assume the alias was already
-                    # resolved upstream.
-                    cdc = conn.cdc
-                    if cdc.get("kind") == "2ff_sync":
-                        cdc = {**cdc, "kind": "level_sync"}
-                    cdc_map[(src_inst, dst_inst)] = cdc
-
-    for tg in getattr(cfg, "topology_groups", None) or []:
-        if not (tg.delay_cycles > 0 or tg.boundary):
-            continue
-        src_mod_obj = next(m for m in cfg.modules if m.name == tg.from_)
-        dst_mod_obj = next(m for m in cfg.modules if m.name == tg.to)
-        for src_idx in range(src_mod_obj.instances):
-            for dst_idx in range(dst_mod_obj.instances):
-                key = (_inst(src_mod_obj, src_idx), _inst(dst_mod_obj, dst_idx))
-                if tg.delay_cycles > 0:
-                    delay_cycles_map[key] = tg.delay_cycles
-                if tg.boundary:
-                    boundary_map[key] = tg.boundary
+    # register_stages, delay_cycles, boundary tags and CDC adapters per instance pair (shared
+    # with the block design generator).
+    reg_stages_map, delay_cycles_map, boundary_map, cdc_map = build_connection_maps(cfg)
 
     _reset_sync_declared = any(
         rel.get("sync") == "reset_sync" for rel in cfg.reset_domains.values()

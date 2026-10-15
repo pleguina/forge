@@ -517,6 +517,21 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`--mode bd` ignored the `delay_cycles` and `boundary` of `topology_groups`**, which
+  `--mode verilog` applies. A design that declared a delay or a boundary-tagged crossing on a
+  group got a block design without those delays and crossings (in one design: 15 crossings and
+  about 250 delay cells missing), a different latency from the Verilog output and no error. Both
+  generators now build the per-instance register-stage, delay, boundary and CDC maps with one
+  function, `build_connection_maps` in `_port_resolution.py`, so a connection feature cannot exist
+  in one output mode only. `forge/tests/test_connection_maps.py` pins the maps and fails if a
+  generator builds them itself again.
+- `--mode bd` named the cells of a block with `instance_name` / `instance_offset` `<block>_<idx>`
+  instead of the resolved instance ids the connections use, so such designs failed to connect.
+- `--mode bd` named two boundary crossings alike when one source pin feeds the same-named pin of
+  several consumers (the Verilog output already disambiguated them by consumer).
+- `--mode bd` ended with `make_wrapper -files [get_files *.bd]`, which wraps every block design of
+  the project; it now wraps only the generated one, so the Tcl can be sourced into a project that
+  already has other block designs.
 - `sv_testbench_generator.py` required BX (bunch-crossing) timing — the
   global BX0 pulse, the `cycle_in_bx` alignment wait, the `bx0` log
   column — unconditionally, regardless of whether the target design had

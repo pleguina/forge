@@ -7,6 +7,8 @@ from ...contracts.config import DesignConfig, Module, resolve_declared_path
 from ...contracts.domains import resolve_domain_nets
 from ._port_resolution import (
     _boundary_inst_name,
+    build_connection_maps,
+    _ident_frag,
     _domain_to_top_level_net,
     classify_connections,
     resolve_top_ports,
@@ -249,34 +251,9 @@ def write_bd_tcl(
         if rel.get("sync") == "reset_sync"
     }
 
-    # register_stages/delay_cycles/boundary/cdc, expanded per-instance —
-    # same construction write_structural_verilog uses.
-    reg_stages_map: Dict[Tuple[str, str], int] = {}
-    delay_cycles_map: Dict[Tuple[str, str], int] = {}
-    boundary_map: Dict[Tuple[str, str], str] = {}
-    cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    for conn in cfg.connections:
-        src_mod_obj = next(m for m in cfg.modules if m.name == conn.from_)
-        dst_mod_obj = next(m for m in cfg.modules if m.name == conn.to)
-        for src_idx in range(src_mod_obj.instances):
-            for dst_idx in range(dst_mod_obj.instances):
-                src_inst = _inst(src_mod_obj, src_idx)
-                dst_inst = _inst(dst_mod_obj, dst_idx)
-                if conn.register_stages > 0:
-                    reg_stages_map[(src_inst, dst_inst)] = conn.register_stages
-                if conn.delay_cycles > 0:
-                    delay_cycles_map[(src_inst, dst_inst)] = conn.delay_cycles
-                if conn.boundary:
-                    boundary_map[(src_inst, dst_inst)] = conn.boundary
-                if conn.cdc:
-                    # '2ff_sync' is a backwards-compatible alias for
-                    # 'level_sync' — normalized here, once, same as verilog
-                    # mode, so every dispatch site below only recognizes
-                    # one spelling.
-                    cdc = conn.cdc
-                    if cdc.get("kind") == "2ff_sync":
-                        cdc = {**cdc, "kind": "level_sync"}
-                    cdc_map[(src_inst, dst_inst)] = cdc
+    # register_stages/delay_cycles/boundary/cdc per instance pair, from the same function the
+    # verilog generator uses.
+    reg_stages_map, delay_cycles_map, boundary_map, cdc_map = build_connection_maps(cfg)
 
     if (reset_sync_domains or cdc_map) and match_report is None:
         raise ValueError(
@@ -426,6 +403,24 @@ def write_bd_tcl(
     tcl.append("# -- HLS IP / HDL module instantiation ----------------------")
     for mod in cfg.modules:
         meta = ip_info[mod.name]
+        if mod.instance_name:
+            # Explicit instance naming (instance_name / instance_offset): several blocks share
+            # one name sequence, so the cells are created one by one under the resolved ids
+            # that the connection code below uses (the loops would name them <block>_<idx>).
+            if _is_hdl(meta):
+                ref = meta.get("entity", mod.top)
+                create = f"create_bd_cell -type module -reference {ref}"
+            else:
+                create = "create_bd_cell -type ip -vlnv {vendor}:{lib}:{name}:{ver}".format(
+                    vendor=meta.get("vendor", "user"), lib=meta.get("library", "hls"),
+                    name=meta.get("name", mod.top), ver=meta.get("version", "1.0"))
+            for i in range(mod.instances):
+                cell = _inst(mod, i)
+                tcl.append(f"{create} {cell}")
+                if mod.parameters:
+                    tcl.append(f"set_property -dict {_config_dict(mod.parameters)} "
+                               f"[get_bd_cells {cell}]")
+            continue
         if _is_hdl(meta):
             # HDL module
             ref = meta.get("entity", mod.top)
@@ -568,6 +563,7 @@ def write_bd_tcl(
     cdc_sync_counter = 0
     _tie_wr_en_one_created = False
     boundary_infos: List[Dict[str, Any]] = []  # collected for the crossing manifest
+    boundary_names_used: set = set()
 
     for (src_mod, dst_mod), pairs in conn_map.items():
         cdc = cdc_map.get((src_mod, dst_mod))
@@ -720,6 +716,11 @@ def write_bd_tcl(
                     # (clk/rst/din/dout), not RegisterStage's.
                     depth = num_stages or num_delays
                     inst_name = _boundary_inst_name(tag, s_pin_c, d_pin_c)
+                    if inst_name in boundary_names_used:
+                        # One source pin feeding the same-named pin of several consumers
+                        # (or instances): name by consumer instance, as verilog mode does.
+                        inst_name = f"{inst_name}_{_ident_frag(dst_mod)}"
+                    boundary_names_used.add(inst_name)
                     tcl += [
                         f"# Boundary crossing {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} "
                         f"[boundary={tag}]",
@@ -862,7 +863,8 @@ def write_bd_tcl(
         f"close_bd_design [get_bd_designs {bd_name}]",
         "",
         "# HDL wrapper (auto)",
-        "make_wrapper -files [get_files *.bd] -top -inst_template -import",
+        # Only this design's file: the project may hold other block designs.
+        "make_wrapper -files [get_files -quiet \"*${_bd_name}.bd\"] -top -inst_template -import",
         "",
     ]
 

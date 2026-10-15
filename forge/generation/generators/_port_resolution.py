@@ -65,6 +65,61 @@ def _inst(mod: Module, idx: int) -> str:
     return mod.instance_id(idx)
 
 
+def build_connection_maps(cfg: DesignConfig) -> Tuple[
+    Dict[Tuple[str, str], int],
+    Dict[Tuple[str, str], int],
+    Dict[Tuple[str, str], str],
+    Dict[Tuple[str, str], Dict[str, Any]],
+]:
+    """``(reg_stages_map, delay_cycles_map, boundary_map, cdc_map)``, each keyed by
+    ``(src_instance, dst_instance)`` of the per-instance ids.
+
+    The one place that decides which wires get a pipeline stage, a delay, a boundary-tagged
+    crossing or a CDC adapter: explicit ``connections`` and ``topology_groups`` (whose
+    ``delay_cycles`` / ``boundary`` apply to every instance pair the group resolves to). Both
+    the structural Verilog and the block design generators call it, so a connection feature
+    cannot exist in one output mode and be missing in the other.
+    """
+    reg_stages_map: Dict[Tuple[str, str], int] = {}
+    delay_cycles_map: Dict[Tuple[str, str], int] = {}
+    boundary_map: Dict[Tuple[str, str], str] = {}
+    cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    mods = {m.name: m for m in cfg.modules}
+    for conn in cfg.connections:
+        src_mod_obj = mods[conn.from_]
+        dst_mod_obj = mods[conn.to]
+        for src_idx in range(src_mod_obj.instances):
+            for dst_idx in range(dst_mod_obj.instances):
+                key = (_inst(src_mod_obj, src_idx), _inst(dst_mod_obj, dst_idx))
+                if conn.register_stages > 0:
+                    reg_stages_map[key] = conn.register_stages
+                if conn.delay_cycles > 0:
+                    delay_cycles_map[key] = conn.delay_cycles
+                if conn.boundary:
+                    boundary_map[key] = conn.boundary
+                if conn.cdc:
+                    # '2ff_sync' is a backwards-compatible alias of 'level_sync', normalized
+                    # here once so every dispatch site only recognizes one spelling (callers
+                    # may build Connection objects directly, bypassing DesignConfig.load).
+                    cdc = conn.cdc
+                    if cdc.get("kind") == "2ff_sync":
+                        cdc = {**cdc, "kind": "level_sync"}
+                    cdc_map[key] = cdc
+    for tg in getattr(cfg, "topology_groups", None) or []:
+        if not (tg.delay_cycles > 0 or tg.boundary):
+            continue
+        src_mod_obj = mods[tg.from_]
+        dst_mod_obj = mods[tg.to]
+        for src_idx in range(src_mod_obj.instances):
+            for dst_idx in range(dst_mod_obj.instances):
+                key = (_inst(src_mod_obj, src_idx), _inst(dst_mod_obj, dst_idx))
+                if tg.delay_cycles > 0:
+                    delay_cycles_map[key] = tg.delay_cycles
+                if tg.boundary:
+                    boundary_map[key] = tg.boundary
+    return reg_stages_map, delay_cycles_map, boundary_map, cdc_map
+
+
 #: The clock/reset names collapsed onto the single top-level ``ap_clk``/
 #: ``ap_rst`` net. A name *outside* this that the design declared as its own
 #: domain (``clk_b``) must keep its own net — that distinction is
