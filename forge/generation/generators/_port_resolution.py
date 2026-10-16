@@ -62,7 +62,62 @@ def _canon_pin(ip_info: Dict[str, Dict], mod: str, pin: str) -> str:
 
 
 def _inst(mod: Module, idx: int) -> str:
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
+
+
+def build_connection_maps(cfg: DesignConfig) -> Tuple[
+    Dict[Tuple[str, str], int],
+    Dict[Tuple[str, str], int],
+    Dict[Tuple[str, str], str],
+    Dict[Tuple[str, str], Dict[str, Any]],
+]:
+    """``(reg_stages_map, delay_cycles_map, boundary_map, cdc_map)``, each keyed by
+    ``(src_instance, dst_instance)`` of the per-instance ids.
+
+    The one place that decides which wires get a pipeline stage, a delay, a boundary-tagged
+    crossing or a CDC adapter: explicit ``connections`` and ``topology_groups`` (whose
+    ``delay_cycles`` / ``boundary`` apply to every instance pair the group resolves to). Both
+    the structural Verilog and the block design generators call it, so a connection feature
+    cannot exist in one output mode and be missing in the other.
+    """
+    reg_stages_map: Dict[Tuple[str, str], int] = {}
+    delay_cycles_map: Dict[Tuple[str, str], int] = {}
+    boundary_map: Dict[Tuple[str, str], str] = {}
+    cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    mods = {m.name: m for m in cfg.modules}
+    for conn in cfg.connections:
+        src_mod_obj = mods[conn.from_]
+        dst_mod_obj = mods[conn.to]
+        for src_idx in range(src_mod_obj.instances):
+            for dst_idx in range(dst_mod_obj.instances):
+                key = (_inst(src_mod_obj, src_idx), _inst(dst_mod_obj, dst_idx))
+                if conn.register_stages > 0:
+                    reg_stages_map[key] = conn.register_stages
+                if conn.delay_cycles > 0:
+                    delay_cycles_map[key] = conn.delay_cycles
+                if conn.boundary:
+                    boundary_map[key] = conn.boundary
+                if conn.cdc:
+                    # '2ff_sync' is a backwards-compatible alias of 'level_sync', normalized
+                    # here once so every dispatch site only recognizes one spelling (callers
+                    # may build Connection objects directly, bypassing DesignConfig.load).
+                    cdc = conn.cdc
+                    if cdc.get("kind") == "2ff_sync":
+                        cdc = {**cdc, "kind": "level_sync"}
+                    cdc_map[key] = cdc
+    for tg in getattr(cfg, "topology_groups", None) or []:
+        if not (tg.delay_cycles > 0 or tg.boundary):
+            continue
+        src_mod_obj = mods[tg.from_]
+        dst_mod_obj = mods[tg.to]
+        for src_idx in range(src_mod_obj.instances):
+            for dst_idx in range(dst_mod_obj.instances):
+                key = (_inst(src_mod_obj, src_idx), _inst(dst_mod_obj, dst_idx))
+                if tg.delay_cycles > 0:
+                    delay_cycles_map[key] = tg.delay_cycles
+                if tg.boundary:
+                    boundary_map[key] = tg.boundary
+    return reg_stages_map, delay_cycles_map, boundary_map, cdc_map
 
 
 #: The clock/reset names collapsed onto the single top-level ``ap_clk``/
@@ -232,7 +287,7 @@ def _parse_system_aliases(
     def _inst_label(mod_name: str, idx: Optional[int]) -> str:
         m = name_to_mod.get(mod_name)
         n = int(idx or 0)
-        return mod_name if (m and m.instances == 1) else f"{mod_name}_{n}"
+        return m.instance_id(n) if m else f"{mod_name}_{n}"
 
     def _is_fw(x: Optional[str]) -> bool:
         return str(x).lower() in ("framework", "links")
@@ -378,6 +433,12 @@ def resolve_top_ports(
                 continue
             if pname in global_nets:
                 continue
+
+            # din/dout of a parameterized module (signal_delay, slr_crossing_delay): the instance
+            # WIDTH parameter, like the internal net of the instance (structural_verilog
+            # _pin_width_for_inst); the contract only says 1 bit
+            if pname in ("din", "dout") and "WIDTH" in (mod.parameters or {}):
+                w = int(mod.parameters["WIDTH"])
 
             for i in range(mod.instances):
                 ilabel = _inst(mod, i)

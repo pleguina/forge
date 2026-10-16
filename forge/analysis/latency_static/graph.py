@@ -225,7 +225,8 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
     """
     cycles = 0
     details: List[str] = []
-    if conn.register_stages:
+    # A TopologyGroup carries delay_cycles/boundary only.
+    if getattr(conn, "register_stages", 0):
         cycles += conn.register_stages
         details.append(f"register_stages={conn.register_stages}")
     if conn.delay_cycles:
@@ -234,10 +235,11 @@ def _edge_latency_from_connection(conn) -> Optional[LatencyValue]:
         if conn.boundary:
             tag += f" (boundary={conn.boundary})"
         details.append(tag)
-    if conn.cdc and conn.cdc.get("kind") in ("level_sync", "2ff_sync"):
+    cdc = getattr(conn, "cdc", None)
+    if cdc and cdc.get("kind") in ("level_sync", "2ff_sync"):
         cycles += 2
         details.append("cdc:level_sync (cdc_sync2ff.v, fixed depth)")
-    if conn.cdc and conn.cdc.get("kind") == "pulse_sync":
+    if cdc and cdc.get("kind") == "pulse_sync":
         cycles += 3
         details.append("cdc:pulse_sync (cdc_pulse_sync.v, fixed depth)")
     if not details:
@@ -504,7 +506,7 @@ def _build_graph_from_ir(
                 is_variable=is_var,
                 # Must match forge.ir.build.py's ResolvedInstance.id
                 # exactly, including its bracket-vs-underscore join.
-                instance_id=resolved_instance_id(mod.name, idx, mod.instances),
+                instance_id=mod.instance_id(idx),
                 display_name=inst_name,
             )
 
@@ -533,8 +535,13 @@ def _build_graph_from_ir(
         caller falls through to its next-best heuristic unchanged."""
         if conn_map is None:
             return None
-        src_ids = [resolved_instance_id(src_mod_name, i, len(src_names)) for i in range(len(src_names))]
-        dst_ids = [resolved_instance_id(dst_mod_name, i, len(dst_names)) for i in range(len(dst_names))]
+        def _ids(mod_name: str, names: list) -> List[str]:
+            m = mod_by_name.get(mod_name)
+            if m is not None:
+                return [m.instance_id(i) for i in range(len(names))]
+            return [resolved_instance_id(mod_name, i, len(names)) for i in range(len(names))]
+        src_ids = _ids(src_mod_name, src_names)
+        dst_ids = _ids(dst_mod_name, dst_names)
         src_idx_by_id = {sid: i for i, sid in enumerate(src_ids)}
         dst_idx_by_id = {did: i for i, did in enumerate(dst_ids)}
         pairs: List[tuple] = []
@@ -588,12 +595,14 @@ def _build_graph_from_ir(
             external_source=getattr(conn, "external_source", False),
         )
     for tg in cfg.topology_groups:
-        # TopologyGroup carries no register_stages/delay_cycles/cdc field —
-        # honestly latency=None (no data source), not a fabricated 0. Its
-        # real per-instance pairing (partition/instance_assign-based) is
-        # only resolvable via conn_map — see _conn_map_pairs above.
+        # TopologyGroup carries delay_cycles/boundary only (no register_stages
+        # or cdc); without a delay its latency is honestly None, not a
+        # fabricated 0. Its real per-instance pairing (partition/
+        # instance_assign-based) is only resolvable via conn_map — see
+        # _conn_map_pairs above.
         _add_instance_edges(
             tg.from_, tg.to,
+            _edge_latency_from_connection(tg),
             external_source=getattr(tg, "external_source", False),
         )
 
@@ -642,7 +651,9 @@ def _build_graph_legacy(
                 kind=kind,
                 latency=lat,
                 is_variable=is_var,
-                instance_id=resolved_instance_id(name, idx, instances),
+                instance_id=resolved_instance_id(name, idx, instances,
+                                                 mod.get("instance_name"),
+                                                 int(mod.get("instance_offset", 0))),
                 display_name=inst_name,
             )
 

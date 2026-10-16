@@ -333,6 +333,14 @@ class Module:
 
     # Instances & externalization hints
     instances:            int = 1
+    # Optional shared instance-id namespace. Several blocks that are
+    # different modules (so they cannot be one block with ``instances: N``)
+    # can still present one flat run of instances: a block with
+    # ``instance_name: X`` and ``instance_offset: K`` names its instances
+    # ``X_K``, ``X_{K+1}``, ... instead of ``<name>_0``, ``<name>_1``, ...
+    # Offsets across blocks sharing an ``instance_name`` must not overlap.
+    instance_name:        Optional[str] = None
+    instance_offset:      int = 0
     external_in_ports:    List[str] = field(default_factory=list)
     external_out_ports:   List[str] = field(default_factory=list)
     
@@ -361,6 +369,12 @@ class Module:
 
     def all_sources_exist(self) -> bool:
         return all(p.exists() for p in (*self.abs_src, *self.abs_tb))
+
+    def instance_id(self, idx: int) -> str:
+        """Canonical instance id of this block's ``idx``-th instance."""
+        from forge.ir.identifiers import resolved_instance_id
+        return resolved_instance_id(self.name, idx, self.instances,
+                                    self.instance_name, self.instance_offset)
 
 @dataclass
 class Connection:
@@ -452,6 +466,11 @@ class TopologyGroup:
     # carries enter the design at ``from_`` through that module's
     # ``external_in_ports``, so the latency chain-fold must stop there.
     external_source: bool = False
+    # Same meaning as Connection.delay_cycles / Connection.boundary, applied to
+    # every instance pair the group resolves to. With a boundary tag the
+    # generator emits one protected slr_crossing_delay per resolved wire.
+    delay_cycles: int = 0
+    boundary: Optional[str] = None
 
 @dataclass
 class ControlSignalTarget:
@@ -844,6 +863,16 @@ class DesignConfig:
                     rp.append((pair[0], pair[1]))
             to_modules = tg["to"] if isinstance(tg["to"], list) else [tg["to"]]
             src_offset = int(tg.get("src_instance_offset", 0))
+            tg_delay = int(tg.get("delay_cycles", 0) or 0)
+            tg_boundary = tg.get("boundary")
+            if tg_delay < 0:
+                raise ValueError(f"topology_group {tg['name']!r}: delay_cycles must be >= 0")
+            if tg_boundary and tg_delay <= 0:
+                raise ValueError(
+                    f"topology_group {tg['name']!r} sets boundary={tg_boundary!r} "
+                    "but delay_cycles is zero. A boundary tag must protect an "
+                    "inserted register stage."
+                )
             for to_module in to_modules:
                 topology_groups.append(TopologyGroup(
                     name=tg["name"],
@@ -857,6 +886,8 @@ class DesignConfig:
                     src_instance_offset=src_offset,
                     notes=tg.get("notes"),
                     external_source=bool(tg.get("external_source", False)),
+                    delay_cycles=tg_delay,
+                    boundary=tg_boundary,
                 ))
 
         # ── Control Signals

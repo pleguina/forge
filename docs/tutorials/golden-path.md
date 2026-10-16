@@ -178,7 +178,15 @@ hierarchy, the same way it already points at `u_algo_top` for a
 flat-Verilog build — no changes needed downstream.
 
 `--mode bd` now reaches full feature parity with `--mode verilog`: every
-design.yml feature generates real logic in both modes.
+design.yml feature generates real logic in both modes. That includes the
+`delay_cycles` / `boundary` of `topology_groups` and blocks with
+`instance_name` / `instance_offset`. Both modes take the per-instance
+register-stage, delay, boundary and CDC maps from one function
+(`build_connection_maps`), and `make_wrapper` wraps only the generated block
+design, so the Tcl can be sourced into a project that has others. Check a new
+design by generating both modes and comparing the crossing manifests
+(`algo_top.crossings.json` and `block_design.crossings.json`) and the delay
+cells.
 
 ## 5. Generate the verification flow
 

@@ -14,8 +14,10 @@ from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
 from ._port_resolution import (
     _auto_mapped_global,
     _boundary_inst_name,
+    build_connection_maps,
     _collapses_to_global,
     _domain_to_top_level_net,
+    _ident_frag,
     _is_user_external,
     _reset_net_for_domain,
     resolve_top_ports,
@@ -72,7 +74,7 @@ def _base_of(name: str) -> str:
     return m.group(1) if m else name
 
 def _inst(mod: Module, idx: int) -> str:
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
 
 #: _domain_to_top_level_net/_reset_net_for_domain moved to
 #: _port_resolution.py, shared with write_bd_tcl — imported above.
@@ -306,38 +308,9 @@ def write_structural_verilog(
     lines: List[str] = []
     emit = lines.append
 
-    # Build maps for register_stages, delay_cycles, boundary tags, and CDC
-    # adapter declarations.
-    reg_stages_map: Dict[Tuple[str, str], int] = {}
-    delay_cycles_map: Dict[Tuple[str, str], int] = {}
-    boundary_map: Dict[Tuple[str, str], str] = {}  # (src_inst, dst_inst) -> tag
-    cdc_map: Dict[Tuple[str, str], Dict[str, Any]] = {}  # (src_inst, dst_inst) -> cdc dict
-    for conn in cfg.connections:
-        src_mod_obj = next(m for m in cfg.modules if m.name == conn.from_)
-        dst_mod_obj = next(m for m in cfg.modules if m.name == conn.to)
-        # For each instance combination, store register stages and delay cycles
-        for src_idx in range(src_mod_obj.instances):
-            for dst_idx in range(dst_mod_obj.instances):
-                src_inst = _inst(src_mod_obj, src_idx)
-                dst_inst = _inst(dst_mod_obj, dst_idx)
-                if conn.register_stages > 0:
-                    reg_stages_map[(src_inst, dst_inst)] = conn.register_stages
-                if conn.delay_cycles > 0:
-                    delay_cycles_map[(src_inst, dst_inst)] = conn.delay_cycles
-                if conn.boundary:
-                    boundary_map[(src_inst, dst_inst)] = conn.boundary
-                if conn.cdc:
-                    # Normalize the '2ff_sync' backwards-compatible alias to
-                    # 'level_sync' here, once, so every dispatch site below
-                    # only ever has to recognize one spelling — callers may
-                    # construct Connection objects directly (bypassing
-                    # DesignConfig.load's own normalization, e.g. in tests),
-                    # so this generator cannot assume the alias was already
-                    # resolved upstream.
-                    cdc = conn.cdc
-                    if cdc.get("kind") == "2ff_sync":
-                        cdc = {**cdc, "kind": "level_sync"}
-                    cdc_map[(src_inst, dst_inst)] = cdc
+    # register_stages, delay_cycles, boundary tags and CDC adapters per instance pair (shared
+    # with the block design generator).
+    reg_stages_map, delay_cycles_map, boundary_map, cdc_map = build_connection_maps(cfg)
 
     _reset_sync_declared = any(
         rel.get("sync") == "reset_sync" for rel in cfg.reset_domains.values()
@@ -796,6 +769,7 @@ def write_structural_verilog(
     emit("  // Signal delays for connection timing alignment")
     delay_counter = 0
     boundary_infos: List[Dict[str, Any]] = []  # collected for crossing manifest
+    boundary_names_used: Set[str] = set()
 
     for (src_i, dst_i), pairs in conn_map.items():
         num_delays = delay_cycles_map.get((src_i, dst_i), 0)
@@ -816,6 +790,11 @@ def write_structural_verilog(
                     # Boundary crossing: emit a protected slr_crossing_delay with
                     # a stable, deterministic instance name.
                     inst_name = _boundary_inst_name(tag, s_pin, d_pin)
+                    if inst_name in boundary_names_used:
+                        # One source pin feeding the same-named pin of several
+                        # consumers (or instances): name by consumer instance.
+                        inst_name = f"{inst_name}_{_ident_frag(dst_i)}"
+                    boundary_names_used.add(inst_name)
                     emit(f"  // Boundary crossing {src_i}.{s_pin} → {dst_i}.{d_pin} [boundary={tag}]")
                     emit(f'  (* KEEP_HIERARCHY = "TRUE" *)')
                     emit(f"  slr_crossing_delay #(")

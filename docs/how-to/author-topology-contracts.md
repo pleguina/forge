@@ -565,3 +565,22 @@ forge core verify-contract \
 ```
 
 Exit codes: 0 = pass, 1 = warnings only, 2 = errors.
+
+## Registered crossings on a group
+
+A topology group accepts the same `delay_cycles` and `boundary` keys as a
+connection. They apply to every instance pair the group resolves to, and with a
+`boundary` tag the generator emits one protected `slr_crossing_delay` per
+resolved wire (named from the tag and the pins), listed in the crossing
+manifest. `boundary` requires `delay_cycles > 0`. A group still has no
+`register_stages` or `cdc`.
+
+```yaml
+topology_groups:
+  - name: dt_to_concentrator
+    family: detector_processed
+    from: dt
+    to: subdet
+    delay_cycles: 7
+    boundary: in0_to_front
+```

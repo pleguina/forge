@@ -54,7 +54,7 @@ def _base_of(name: str) -> str:
     return m.group(1) if m else name
 
 def _inst(mod: Module, idx: int) -> str:
-    return mod.name if mod.instances == 1 else f"{mod.name}_{idx}"
+    return mod.instance_id(idx)
 
 def _vtype(width: int) -> str:
     return "std_logic" if width == 1 else f"std_logic_vector({width-1} downto 0)"
@@ -312,7 +312,7 @@ def write_structural_vhdl(
         def _inst_label(mod_name: str, idx: int | None) -> str:
             m = name_to_mod.get(mod_name)
             n = int(idx or 0)
-            return mod_name if (m and m.instances == 1) else f"{mod_name}_{n}"
+            return m.instance_id(n) if m else f"{mod_name}_{n}"
 
         def _is_fw(x: str | None) -> bool:
             return str(x).lower() in ("framework", "links")
