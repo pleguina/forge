@@ -75,6 +75,10 @@ def test_internal_directory_is_excluded(tmp_path: Path) -> None:
 
 
 @skip_without_mkdocs
+@pytest.mark.skipif(
+    not (REPO_ROOT / "docs/plan/FORGE_release_plan.md").is_file(),
+    reason="docs/plan/ is gitignored and absent from this checkout",
+)
 def test_docs_source_files_remain_untouched(tmp_path: Path) -> None:
     """exclude_docs keeps excluded content out of the *build*, not off disk."""
     _build_site(tmp_path)

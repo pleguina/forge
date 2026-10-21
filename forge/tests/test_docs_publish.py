@@ -18,8 +18,11 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _REAL_DOCS_PUBLISH_SCRIPT = REPO_ROOT / "ci" / "docs_publish.sh"
 
+# The script runs the `mike` executable, so the package alone is not enough.
 skip_without_mike = pytest.mark.skipif(
-    importlib.util.find_spec("mike") is None or importlib.util.find_spec("mkdocs") is None,
+    importlib.util.find_spec("mike") is None
+    or importlib.util.find_spec("mkdocs") is None
+    or shutil.which("mike") is None,
     reason="mike/mkdocs not installed (optional 'docs' extra — pip install -e 'forge[docs]')",
 )
 

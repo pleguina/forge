@@ -16,6 +16,8 @@ gen-top'd canonical layout and real xsim execution, out of scope here.
 
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -40,6 +42,19 @@ def _run_verify(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[s
     return code, captured.out, captured.err
 
 
+@pytest.fixture
+def stale_design_verification(tmp_path: Path) -> Path:
+    """A copy of passthrough_demo whose design.verification.yml is newer than
+    its generated artifacts. A git checkout does not preserve mtimes, so the
+    repo's own copy cannot be relied on to be stale."""
+    plugin = tmp_path / "plugins/passthrough_demo"
+    shutil.copytree(REPO_ROOT / "plugins/passthrough_demo", plugin)
+    design = plugin / "forge/verify/design.verification.yml"
+    newest = max(p.stat().st_mtime for p in plugin.rglob("*") if p.is_file())
+    os.utime(design, (newest + 60, newest + 60))
+    return design
+
+
 def test_doctor_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     code, out, _err = _run_verify(monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML))
 
@@ -47,15 +62,14 @@ def test_doctor_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, capsys: p
     assert "PASS" in out
 
 
-def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stale_design_verification: Path) -> None:
     import json
 
-    code, out, _err = _run_verify(monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML), "--json")
+    code, out, _err = _run_verify(monkeypatch, capsys, "doctor", str(stale_design_verification), "--json")
 
     assert code == 0
     report = json.loads(out)
-    # passthrough_demo's fixture genuinely has 2 warnings (stale port_map.yaml)
-    # and 0 errors — this now actually exercises the "warn" branch, closing a
+    # The stale fixture has warnings (stale port_map.yaml) and 0 errors — this now actually exercises the "warn" branch, closing a
     # latent bug where DiagnosticReport.to_dict() only ever emitted
     # "pass"/"fail", never "warn", even with real warnings present.
     assert report["status"] == "warn"
@@ -66,12 +80,12 @@ def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, ca
 
 
 def test_doctor_json_strict_promotes_warn_to_fail_exit_code(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stale_design_verification: Path
 ) -> None:
     import json
 
     code, out, _err = _run_verify(
-        monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML), "--json", "--strict",
+        monkeypatch, capsys, "doctor", str(stale_design_verification), "--json", "--strict",
     )
 
     # --strict promotes a warning-only report's exit code to 1, without
@@ -98,15 +112,15 @@ def test_release_check_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, ca
     assert "PASS" in out
 
 
-def test_release_check_strict_fails_on_stale_warning(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    code, _out, _err = _run_verify(
-        monkeypatch, capsys, "release-check", str(DESIGN_VERIFICATION_YML), "--strict",
+def test_release_check_strict_fails_on_stale_warning(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stale_design_verification: Path) -> None:
+    code, _out, err = _run_verify(
+        monkeypatch, capsys, "release-check", str(stale_design_verification), "--strict",
     )
 
-    # The fixture's port_map.yaml predates design.verification.yml, which
-    # release-check's RC-10 stale-artifact check reports as a warning;
-    # --strict promotes any warning to a failure.
+    # RC-10 reports the stale artifacts as warnings; --strict promotes any
+    # warning to a failure.
     assert code == 1
+    assert "[RC-10]" in err and "is stale" in err
 
 
 def test_init_plugin_dry_run_lists_without_writing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

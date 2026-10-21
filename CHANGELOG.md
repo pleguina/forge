@@ -529,6 +529,13 @@ for the versioning policy.
   reruns a stale synth first. Build roots from before this change have no stamps and rerun once.
   New `--force` reruns every requested stage; new `--summary-json` and `--junit-xml` write a
   result per module and stage (`write_junit_xml` gains `skipped`).
+- **Tests that failed on a fresh clone or without optional tools.** The `doctor --json` and
+  `release-check --strict` tests relied on `port_map.yaml` being older than
+  `design.verification.yml`, which a git checkout does not preserve; they now age a copy of the
+  plugin. `test_docs_publish` skips when the `mike` executable is not on PATH (not only when the
+  package is missing); the passthrough golden-comparison test skips without `xsim` or generated
+  `gen-top/` outputs, as its vision-pipeline sibling does; `test_docs_source_files_remain_untouched`
+  skips when the gitignored `docs/plan/` is absent.
 - **`--mode bd` ignored the `delay_cycles` and `boundary` of `topology_groups`**, which
   `--mode verilog` applies. A design that declared a delay or a boundary-tagged crossing on a
   group got a block design without those delays and crossings (in one design: 15 crossings and
