@@ -623,7 +623,8 @@ optional arguments:
 usage: forge hls run [-h] [--registry REGISTRY] [--stages STAGES]
                      [--stage {csim,synth,cosim,export}] [--modules MODULES] [--jobs JOBS]
                      [--hls-build-root HLS_BUILD_ROOT] [--ip-packages-dir IP_PACKAGES_DIR]
-                     [--vitis-hls VITIS_HLS]
+                     [--vitis-hls VITIS_HLS] [--force] [--summary-json SUMMARY_JSON]
+                     [--junit-xml JUNIT_XML]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -641,6 +642,12 @@ optional arguments:
                         IP packages output directory (default: <hls-build-root>/ip_packages/)
   --vitis-hls VITIS_HLS, -v VITIS_HLS
                         Path to vitis_hls executable (default: vitis_hls on PATH)
+  --force               Re-initialize each project and rerun every requested stage, ignoring
+                        stamps
+  --summary-json SUMMARY_JSON
+                        Write per-module, per-stage results as JSON to this path
+  --junit-xml JUNIT_XML
+                        Write per-module, per-stage results as JUnit XML to this path
 ```
 
 ### `forge init`

@@ -517,6 +517,18 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`forge hls run` reported a stage as done from its output files alone.** csim counted as
+  passed if `solution1/csim` existed and the log said PASS, or if there was no log at all; synth,
+  cosim and export by the presence of a report, a directory or an IP archive. A testbench edited
+  to fail (`return 1;` in `main`) was skipped and reported `[OK]`, exit 0, in a reused build
+  root. Each stage now writes a stamp (`<build_root>/<module>/.forge_stamps/<stage>.json`) after
+  a successful run, holding the hash of everything it reads: its TCL scripts, the files they
+  name, headers under `-I` directories and next to sources, files listed in a `.txt` data
+  manifest, and the resolved `vitis_hls` path (`forge.hls.stage_stamp`). A stage is skipped only
+  if its stamp matches. A changed `project.tcl` re-initializes the project; cosim, like export,
+  reruns a stale synth first. Build roots from before this change have no stamps and rerun once.
+  New `--force` reruns every requested stage; new `--summary-json` and `--junit-xml` write a
+  result per module and stage (`write_junit_xml` gains `skipped`).
 - **`--mode bd` ignored the `delay_cycles` and `boundary` of `topology_groups`**, which
   `--mode verilog` applies. A design that declared a delay or a boundary-tagged crossing on a
   group got a block design without those delays and crossings (in one design: 15 crossings and

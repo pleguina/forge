@@ -37,6 +37,43 @@ def _find_hls_templates_dir() -> "Path | None":
     return None
 
 
+def _write_run_reports(
+    records: "list[dict]",
+    *,
+    summary_json: "Path | None",
+    junit_xml: "Path | None",
+    meta: dict,
+) -> None:
+    """Write the per-module, per-stage results of ``hls run`` as JSON and/or JUnit XML."""
+    import json
+
+    if summary_json:
+        path = Path(summary_json).expanduser().resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({**meta, "results": records}, indent=2) + "\n")
+        print(f"  summary : {path}")
+
+    if junit_xml:
+        from forge.verification.junit_xml import write_junit_xml
+
+        path = Path(junit_xml).expanduser().resolve()
+        write_junit_xml(
+            path,
+            suite_name="forge.hls",
+            results=[
+                {
+                    "name": f"{r['stage']}:{r['module']}",
+                    "success": r["status"] != "failed",
+                    "skipped": r["status"] == "skipped",
+                    "message": r.get("message") or (f"see {r['log']}" if r.get("log") else ""),
+                    "time": r.get("seconds"),
+                }
+                for r in records
+            ],
+        )
+        print(f"  junit   : {path}")
+
+
 # ---------------------------------------------------------------------------
 # Command implementations
 # ---------------------------------------------------------------------------
@@ -102,7 +139,10 @@ def cmd_hls_run(args):
     """Run parallel Vitis HLS jobs — pure Python, no shell script required."""
     import concurrent.futures
     import subprocess
+    import time
 
+    from forge.core.utils.content_hash import hash_bytes
+    from forge.hls import stage_stamp
     from forge.hls.catalog import load_hls_catalog
 
     # ── Resolve inputs ────────────────────────────────────────────────────
@@ -130,6 +170,9 @@ def cmd_hls_run(args):
     modules_arg = getattr(args, "modules", None) or "all"
     jobs = getattr(args, "jobs", None) or 1
     stages_arg = getattr(args, "stages", None)
+    force = bool(getattr(args, "force", False))
+    summary_json = getattr(args, "summary_json", None)
+    junit_xml = getattr(args, "junit_xml", None)
 
     # ── Load catalog if provided ──────────────────────────────────────────
     catalog = None
@@ -185,24 +228,51 @@ def cmd_hls_run(args):
         print(f"ERROR: cannot create build directories: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    tool = stage_stamp.resolve_tool(vitis_hls)
+    output_roots = (build_root, ip_pack_dir)
+
     # ── Completion detectors ──────────────────────────────────────────────
+    # Output presence is necessary but not sufficient: a stage is complete
+    # only if its stamp matches the current inputs (see forge.hls.stage_stamp).
+    def _inputs_hash(module: str, step: str) -> "str | None":
+        try:
+            return stage_stamp.compute_stage_hash(build_root / module, step, output_roots, tool)
+        except FileNotFoundError:
+            return None
+
+    def _stamp_matches(module: str, step: str) -> bool:
+        stamp = stage_stamp.read_stamp(build_root / module, step)
+        if stamp is None:
+            return False
+        current = _inputs_hash(module, step)
+        return current is not None and stamp.get("inputs_hash") == current
+
+    def _project_hash(module: str) -> "str | None":
+        project_tcl = build_root / module / "project.tcl"
+        if not project_tcl.exists():
+            return None
+        return hash_bytes(f"tool:{tool}\n".encode() + project_tcl.read_bytes())
+
     def _is_project_initialized(module: str) -> bool:
-        return (build_root / module / "solution1" / "solution1.aps").exists()
+        if not (build_root / module / "solution1" / "solution1.aps").exists():
+            return False
+        stamp = stage_stamp.read_stamp(build_root / module, "project")
+        return stamp is not None and stamp.get("inputs_hash") == _project_hash(module)
 
     def _is_csim_complete(module: str) -> bool:
         csim_dir = build_root / module / "solution1" / "csim"
         if not csim_dir.exists():
             return False
         log = build_root / module / "logs" / "csim.log"
-        if log.exists():
-            return "PASS" in log.read_text().upper()
-        return True
+        if not log.exists() or "PASS" not in log.read_text().upper():
+            return False
+        return _stamp_matches(module, "csim")
 
     def _is_synth_complete(module: str) -> bool:
         report_dir = build_root / module / "solution1" / "syn" / "report"
-        if not report_dir.exists():
+        if not report_dir.exists() or not any(report_dir.glob("*csynth.rpt")):
             return False
-        return any(report_dir.glob("*csynth.rpt"))
+        return _stamp_matches(module, "synth")
 
     def _is_cosim_complete(module: str) -> bool:
         mod_dir = build_root / module
@@ -213,15 +283,16 @@ def cmd_hls_run(args):
         if not has_dir:
             return False
         log = mod_dir / "logs" / "cosim.log"
-        if log.exists():
-            return "PASS" in log.read_text().upper()
-        return False
+        if not log.exists() or "PASS" not in log.read_text().upper():
+            return False
+        return _stamp_matches(module, "cosim")
 
     def _is_export_complete(module: str) -> bool:
         mod_dir = ip_pack_dir / module
-        if mod_dir.is_dir() and any(mod_dir.iterdir()):
-            return True
-        return any(ip_pack_dir.glob(f"{module}*.zip"))
+        exported = (mod_dir.is_dir() and any(mod_dir.iterdir())) or any(
+            ip_pack_dir.glob(f"{module}*.zip")
+        )
+        return exported and _stamp_matches(module, "export")
 
     def _is_step_complete(module: str, step: str) -> bool:
         return {
@@ -266,7 +337,32 @@ def cmd_hls_run(args):
                 f.write(f"ERROR: failed to launch vitis_hls: {exc}\n")
             return False, log_path
 
-    def _run_stage_for_module(module: str, step: str) -> "tuple[str, str, bool, str]":
+    # project.tcl opens the solution with -reset, which discards earlier
+    # stage outputs, so --force re-initializes each project only once.
+    reinitialized: "set[str]" = set()
+
+    def _ensure_project(module: str) -> "tuple[bool, str]":
+        if _is_project_initialized(module) and not (force and module not in reinitialized):
+            return True, ""
+        reinitialized.add(module)
+        stage_stamp.clear_all_stamps(build_root / module)
+        ok, log = _run_tcl(module, "project.tcl", "project.log")
+        if ok:
+            stage_stamp.write_stamp(build_root / module, "project", _project_hash(module), tool)
+        return ok, log
+
+    def _run_stamped(module: str, step: str, tcl_name: str, log_name: str) -> "tuple[bool, str]":
+        mod_dir = build_root / module
+        stage_stamp.clear_stamp(mod_dir, step)
+        # Hashed before the run: a source edited while the tool runs leaves
+        # a stamp that no longer matches, so the next run repeats the stage.
+        inputs_hash = _inputs_hash(module, step)
+        ok, log = _run_tcl(module, tcl_name, log_name)
+        if ok and inputs_hash is not None:
+            stage_stamp.write_stamp(mod_dir, step, inputs_hash, tool)
+        return ok, log
+
+    def _run_stage_for_module(module: str, step: str) -> "tuple[str, str, str, str, float]":
         tcl_map = {
             "csim": "csim.tcl",
             "synth": "synth.tcl",
@@ -280,27 +376,25 @@ def cmd_hls_run(args):
             "export": "ip_export.log",
         }
 
-        if _is_step_complete(module, step):
-            print(f"  [SKIP] {step:6s} already done for {module}")
-            return module, step, True, ""
+        start = time.monotonic()
 
-        if step == "export":
-            if not _is_project_initialized(module):
-                ok, log = _run_tcl(module, "project.tcl", "project.log")
-                if not ok:
-                    return module, step, False, log
-            if not _is_synth_complete(module):
-                ok, log = _run_tcl(module, "synth.tcl", "synth.log")
-                if not ok:
-                    return module, step, False, log
-        else:
-            if not _is_project_initialized(module):
-                ok, log = _run_tcl(module, "project.tcl", "project.log")
-                if not ok:
-                    return module, step, False, log
+        def _result(status: str, log: str = "") -> "tuple[str, str, str, str, float]":
+            return module, step, status, log, time.monotonic() - start
 
-        ok, log = _run_tcl(module, tcl_map[step], log_map[step])
-        return module, step, ok, log
+        if not force and _is_step_complete(module, step):
+            print(f"  [SKIP] {step:6s} up to date for {module}")
+            return _result("skipped")
+
+        ok, log = _ensure_project(module)
+        if not ok:
+            return _result("failed", log)
+        if step in ("cosim", "export") and not _is_synth_complete(module):
+            ok, log = _run_stamped(module, "synth", "synth.tcl", "synth.log")
+            if not ok:
+                return _result("failed", log)
+
+        ok, log = _run_stamped(module, step, tcl_map[step], log_map[step])
+        return _result("ok" if ok else "failed", log)
 
     # ── Driver ────────────────────────────────────────────────────────────
     sep = "=" * 50
@@ -312,8 +406,12 @@ def cmd_hls_run(args):
     print(f"  Jobs    : {jobs}")
     print(f"  Build   : {build_root}")
     print(f"  IPs     : {ip_pack_dir}")
+    print(f"  Tool    : {tool}")
+    if force:
+        print("  Force   : yes (stamps ignored)")
     print(f"{sep}\n")
 
+    records: "list[dict]" = []
     overall_ok = True
     for step in stage_list:
         print(f"--- Stage: {step} ---")
@@ -323,18 +421,28 @@ def cmd_hls_run(args):
             for fut in concurrent.futures.as_completed(futs):
                 mod_name = futs[fut]
                 try:
-                    module, _step, ok, log_path = fut.result()
+                    module, _step, status, log_path, seconds = fut.result()
                 except Exception as exc:
                     print(
                         f"  [FAIL] {mod_name}  (worker exception: {exc})",
                         file=sys.stderr,
                     )
                     results.append((mod_name, False))
+                    records.append({
+                        "module": mod_name, "stage": step, "status": "failed",
+                        "log": "", "seconds": 0.0, "message": f"worker exception: {exc}",
+                    })
                     continue
-                status = "OK  " if ok else "FAIL"
-                log_hint = f"  (log: {log_path})" if log_path and not ok else ""
-                print(f"  [{status}] {module}{log_hint}")
+                ok = status != "failed"
+                if status != "skipped":
+                    label = "OK  " if ok else "FAIL"
+                    log_hint = f"  (log: {log_path})" if log_path and not ok else ""
+                    print(f"  [{label}] {module}{log_hint}")
                 results.append((module, ok))
+                records.append({
+                    "module": module, "stage": step, "status": status,
+                    "log": log_path, "seconds": round(seconds, 3),
+                })
 
         failed = [m for m, ok in results if not ok]
         if failed:
@@ -342,6 +450,23 @@ def cmd_hls_run(args):
             overall_ok = False
             break
         print(f"  Stage {step}: all {len(module_list)} module(s) OK\n")
+
+    if summary_json or junit_xml:
+        _write_run_reports(
+            records,
+            summary_json=summary_json,
+            junit_xml=junit_xml,
+            meta={
+                "ok": overall_ok,
+                "force": force,
+                "tool": tool,
+                "build_root": str(build_root),
+                "ip_packages_dir": str(ip_pack_dir),
+                "modules": module_list,
+                "stages": stage_list,
+                "registry": str(registry_path) if registry_path else None,
+            },
+        )
 
     if overall_ok:
         print("forge hls run: all stages completed successfully.")
@@ -424,5 +549,17 @@ def register(sub) -> None:
     p_hls_run.add_argument(
         "--vitis-hls", "-v", dest="vitis_hls", type=Path,
         help="Path to vitis_hls executable (default: vitis_hls on PATH)",
+    )
+    p_hls_run.add_argument(
+        "--force", action="store_true", dest="force",
+        help="Re-initialize each project and rerun every requested stage, ignoring stamps",
+    )
+    p_hls_run.add_argument(
+        "--summary-json", dest="summary_json", type=Path,
+        help="Write per-module, per-stage results as JSON to this path",
+    )
+    p_hls_run.add_argument(
+        "--junit-xml", dest="junit_xml", type=Path,
+        help="Write per-module, per-stage results as JUnit XML to this path",
     )
     p_hls_run.set_defaults(func=cmd_hls_run)
