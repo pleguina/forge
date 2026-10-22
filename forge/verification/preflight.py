@@ -287,11 +287,14 @@ def run_preflight(cfg: "Any", xml_input: "Path | None" = None) -> PreflightResul
                 )
             _stim_file = _flow_dir / "stimulus_current.svh"
             if not _stim_file.exists():
-                result.errors.append(
-                    f"Stimulus handoff file not found: {_stim_file}\n"
-                    f"    → Re-run: plugin stimulus generator for this flow\n"
-                    f"    → See: docs/STIMULUS_HANDOFF_SPEC.md"
-                )
+                # With a dataset XML the backend's prepare step builds it, and
+                # validate_stimulus_handoff checks it afterwards.
+                if xml_input is None:
+                    result.errors.append(
+                        f"Stimulus handoff file not found: {_stim_file}\n"
+                        f"    → Re-run: plugin stimulus generator for this flow\n"
+                        f"    → See: docs/STIMULUS_HANDOFF_SPEC.md"
+                    )
             else:
                 # Validate stimulus contract when the file exists.
                 from forge.verification.stimulus_contract import validate_stimulus  # noqa: PLC0415
@@ -327,3 +330,16 @@ def run_preflight(cfg: "Any", xml_input: "Path | None" = None) -> PreflightResul
             result.warnings.append(_le)
 
     return result
+
+
+
+def validate_stimulus_handoff(cfg: "Any") -> "list[str]":
+    """Errors in the stimulus handoff file of an RTL simulation flow (missing,
+    or against the stimulus contract), for after the backend has prepared its
+    inputs. Empty for other flow kinds."""
+    if getattr(cfg, "flow_kind", "") not in ("full_chip_rtl", "reduced_chain_rtl", "single_module_rtl"):
+        return []
+    if getattr(cfg, "flow_file", None) is None:
+        return []
+    from forge.verification.stimulus_contract import validate_stimulus_for_flow  # noqa: PLC0415
+    return list(validate_stimulus_for_flow(cfg).errors)

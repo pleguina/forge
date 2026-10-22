@@ -439,6 +439,17 @@ def _run_one_loaded_flow(
             action="Re-run forge verify generate and ensure required DUT, testbench, and stimulus artifacts exist.",
         )
 
+    from forge.verification.preflight import validate_stimulus_handoff
+    stim_errors = validate_stimulus_handoff(cfg)
+    if stim_errors:
+        for e in stim_errors:
+            print(f"ERROR (stimulus): {e}", file=sys.stderr)
+        if capture is not None:
+            capture["result"] = ExecutionResult(
+                success=False, stage=ExecutionStage.PREFLIGHT, backend_id=adapter.backend_id,
+            )
+        return 1
+
     # ── 9. Run backend ───────────────────────────────────────────────────────
     try:
         result = adapter.run_backend(cfg, ctx)

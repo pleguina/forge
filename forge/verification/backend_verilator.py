@@ -174,22 +174,8 @@ class VerilatorBackend(BackendAdapter):
                     f"  RTL expected at: {dut_rtl_path}"
                 )
 
-        # ── 5. stimulus_current.svh exists ────────────────────────────────
-        from forge.verification.stimulus_contract import STIMULUS_FILE  # noqa: PLC0415
-        stim_svh = flow_dir / STIMULUS_FILE
-        if not stim_svh.exists():
-            errors.append(
-                f"stimulus_current.svh not found: {stim_svh}\n"
-                f"  → Generate it first: python3 tools/gen_stimulus.py"
-                f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
-            )
-        else:
-            # ── 6. Stimulus contract validation ───────────────────────────
-            from forge.verification.stimulus_contract import validate_stimulus  # noqa: PLC0415
-            sc = validate_stimulus(stim_svh)
-            if not sc.ok:
-                for e in sc.errors:
-                    errors.append(e)
+        # stimulus_current.svh is written by prepare_backend_inputs and
+        # checked after it (preflight.validate_stimulus_handoff).
 
         return errors
 

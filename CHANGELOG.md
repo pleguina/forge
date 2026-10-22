@@ -517,6 +517,14 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`forge verify run` failed on a fresh checkout of an RTL flow fed from a
+  dataset XML.** Preflight and the xsim/Verilator backend requirement checks
+  required `stimulus_current.svh`, which the plugin's `prepare_backend_inputs`
+  only writes later in the same run, so the run passed only where an earlier
+  run had left the file behind. With a dataset XML the file may now be missing
+  at preflight; it is checked against the stimulus contract after the inputs
+  are prepared (`preflight.validate_stimulus_handoff`), and the backends no
+  longer check it.
 - **`forge hls run` reported a stage as done from its output files alone.** csim counted as
   passed if `solution1/csim` existed and the log said PASS, or if there was no log at all; synth,
   cosim and export by the presence of a report, a directory or an IP archive. A testbench edited
