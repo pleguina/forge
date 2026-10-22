@@ -5,18 +5,23 @@ Render latency-check results as a Markdown report.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List, Optional
 
 from forge.analysis.latency_static.graph import LatencyGraph
 from forge.analysis.latency_static.checker import MismatchReport
+
+if TYPE_CHECKING:
+    from forge.analysis.latency_static.balance import AutoDelayResult
 
 
 def render_markdown(
     graph: LatencyGraph,
     reports: List[MismatchReport],
     out_path: Path,
+    auto_delays: Optional["AutoDelayResult"] = None,
 ) -> None:
-    """Write a Markdown latency-check report to *out_path*."""
+    """Write a Markdown latency-check report to *out_path*. The paths in
+    *reports* already include the depths in *auto_delays*."""
     lines: List[str] = ["# Latency Check Report", ""]
 
     # ── Module table ───────────────────────────────────────────────────────
@@ -37,6 +42,20 @@ def render_markdown(
             f"| {lat} | {node.latency_source} |"
         )
     lines.append("")
+
+    if auto_delays is not None and (auto_delays.delays or auto_delays.problems):
+        lines += [
+            "## delay_cycles: auto", "",
+            "| Declared on | Resolved on | Cycles |",
+            "|-------------|-------------|--------|",
+        ]
+        for d in auto_delays.delays:
+            lines.append(f"| {d.kind} {d.index} | `{d.src}` → `{d.dst}` | {d.cycles} |")
+        lines.append("")
+        for problem in auto_delays.problems:
+            lines.append(f"- ❌ {problem}")
+        if auto_delays.problems:
+            lines.append("")
 
     # ── Merge-point analysis ───────────────────────────────────────────────
     lines += ["## Merge Point Analysis", ""]
@@ -64,6 +83,8 @@ def render_markdown(
             ]
             for p in r.paths:
                 lat_str = str(p.total_cycles) if p.total_cycles is not None else "unknown"
+                if p.offset:
+                    lat_str += f" (offset {p.offset})"
                 path_str = " → ".join(p.path)
                 src_str = p.provenance.source if p.provenance else "unknown"
                 lines.append(f"| `{path_str}` | {lat_str} | {src_str} |")

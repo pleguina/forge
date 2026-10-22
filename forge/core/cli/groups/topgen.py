@@ -429,6 +429,7 @@ def generate_build_manifest(
     *,
     project_root: Path | None = None,
     hls_build_root: Path | None = None,
+    auto_delays=None,
 ):
     """Generate the simulation build manifest with all Verilog source paths.
 
@@ -449,6 +450,8 @@ def generate_build_manifest(
     The IR's schema version and content hash are recorded in the manifest
     so a consumer can tell which resolved design a compile list belongs to
     — the same identity ``design.ir.json`` and ``provenance.json`` carry.
+    *auto_delays* (an ``AutoDelayResult``) records the depth each
+    ``delay_cycles: auto`` was resolved to, which the design file does not.
     """
     import datetime
 
@@ -477,6 +480,12 @@ def generate_build_manifest(
 
     if hls_build_root is not None:
         manifest["hls_build_root"] = str(hls_build_root.resolve())
+
+    if auto_delays is not None:
+        manifest["resolved_auto_delays"] = [
+            {"kind": d.kind, "index": d.index, "src": d.src, "dst": d.dst, "cycles": d.cycles}
+            for d in auto_delays.delays
+        ]
 
     # Declaration order, not the IR's own name-sorted storage order: the
     # manifest is a compile list, and its file order is the order the
@@ -1529,6 +1538,9 @@ class GenTopPlanContext:
     cardinality_issues: List[Any]
     cdc_issues: List[Any]
     contract_conflicts: List[str] = dataclasses.field(default_factory=list)
+    # delay_cycles: auto, resolved from the module latencies (None: the design
+    # has no auto delay). Already applied to cfg when it has no problems.
+    auto_delays: Any = None
 
 
 def compute_gen_top_plan(
@@ -1716,6 +1728,15 @@ def compute_gen_top_plan(
     from forge.contracts.cdc import verify_cdc
     cdc_issues = verify_cdc(cfg, contracts or {}, match_report, conn_map, global_nets)
 
+    auto_delays = None
+    if any(c.delay_auto for c in cfg.connections) or any(t.delay_auto for t in cfg.topology_groups):
+        from forge.analysis.latency_static.balance import apply_auto_delays, resolve_design_auto_delays
+        auto_delays = resolve_design_auto_delays(design_path, hls_build_root, conn_map)
+        if not auto_delays.problems:
+            apply_auto_delays(cfg, auto_delays)
+        if emit_progress:
+            _print_auto_delays(cfg, auto_delays)
+
     project = assemble_project_ir(
         cfg, design_path,
         contracts=contracts or {}, ip_info_data=ip_info,
@@ -1737,7 +1758,18 @@ def compute_gen_top_plan(
         cardinality_issues=cardinality_issues,
         cdc_issues=cdc_issues,
         contract_conflicts=contract_conflicts,
+        auto_delays=auto_delays,
     )
+
+
+def _print_auto_delays(cfg: DesignConfig, result) -> None:
+    print(f"\n⏱️  delay_cycles: auto ({len(result.delays)} resolved from the module latencies)")
+    for d in result.delays:
+        owner = cfg.connections[d.index] if d.kind == "connection" else cfg.topology_groups[d.index]
+        label = getattr(owner, "name", None) or f"{owner.from_} -> {owner.to}"
+        print(f"  {label}: {d.cycles}")
+    for problem in result.problems:
+        print(f"  ❌ {problem}")
 
 
 def cmd_gen_top(args):
@@ -1790,6 +1822,10 @@ def cmd_gen_top(args):
         global_nets = ctx.global_nets
         match_report = ctx.match_report
         wmc = match_report.wiring_method_counts
+
+        if ctx.auto_delays is not None and ctx.auto_delays.problems:
+            print(f"\n❌ {len(ctx.auto_delays.problems)} delay_cycles: auto could not be resolved (listed above).")
+            sys.exit(1)
 
         if getattr(args, "strict", False) and ctx.contract_conflicts:
             print(
@@ -2072,6 +2108,7 @@ def cmd_gen_top(args):
                 manifest_output=manifest_output,
                 project_root=c_root,
                 hls_build_root=hls_build_root,
+                auto_delays=ctx.auto_delays,
             )
 
             port_map_output = output.parent / "port_map.yaml"
@@ -2262,6 +2299,7 @@ def cmd_gen_top(args):
                 manifest_output=manifest_output,
                 project_root=c_root,
                 hls_build_root=hls_build_root,
+                auto_delays=ctx.auto_delays,
             )
 
             port_map_output = output.parent / "port_map.yaml"

@@ -90,6 +90,8 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
         # Structured latency: {kind: fixed|bounded|elastic, ...} declaration
         # — same pass-through treatment as the three flat fields above.
         "latency",
+        # How the module's inputs must line up in time (InputAlignment).
+        "input_alignment",
     }
     result: dict[str, dict] = {}
     for raw_mod in raw.get("modules", []):
@@ -211,6 +213,43 @@ class LatencyDeclaration:
             )
 
 
+_INPUT_ALIGNMENT_KINDS = ("exact", "framed", "window")
+
+
+@dataclass
+class InputAlignment:
+    """How the inputs of a module must line up in time, for the latency
+    checker and for resolving ``delay_cycles: auto`` on the connections into it.
+
+    ``exact`` (the default without a declaration): every input arrives on the
+    same cycle. ``window``: the inputs may spread over ``window_cycles``.
+    ``framed``: the inputs carry their own framing (an in-band frame or event
+    tag), so no cycle relation between them is required.
+
+    ``offsets`` gives, per source module (its design name or its registry
+    entry), how many cycles after the module's other inputs that source's data
+    must arrive: a fixed protocol skew of the
+    module (e.g. a lookup that is read one stage after the data it reads was
+    written), which no latency report can provide.
+    """
+    kind: str = "exact"
+    window_cycles: Optional[int] = None
+    offsets: Dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.kind not in _INPUT_ALIGNMENT_KINDS:
+            raise ValueError(
+                f"InputAlignment: 'kind' must be one of {_INPUT_ALIGNMENT_KINDS}, got {self.kind!r}"
+            )
+        if self.kind == "window" and (self.window_cycles is None or self.window_cycles < 0):
+            raise ValueError("InputAlignment: kind='window' requires 'window_cycles' >= 0")
+        if self.kind != "window" and self.window_cycles is not None:
+            raise ValueError("InputAlignment: 'window_cycles' applies only to kind='window'")
+        for src, cycles in self.offsets.items():
+            if not isinstance(cycles, int) or isinstance(cycles, bool):
+                raise ValueError(f"InputAlignment: offset of {src!r} must be an integer, got {cycles!r}")
+
+
 @dataclass
 class ModuleTiming:
     """Optional per-module latency/timing metadata from the module
@@ -231,6 +270,7 @@ class ModuleTiming:
     latency_hint: Optional[int] = None
     variable_latency: bool = False
     latency: Optional[LatencyDeclaration] = None
+    input_alignment: Optional[InputAlignment] = None
 
     def __post_init__(self) -> None:
         if self.latency_cycles is not None and self.variable_latency:
@@ -250,6 +290,25 @@ class ModuleTiming:
         # the *original* raw YAML keys, before that normalization runs.
 
 
+def _parse_delay_cycles(
+    value, owner: str, boundary: Optional[str], register_stages: int = 0,
+) -> "tuple[int, bool]":
+    """``delay_cycles`` of a connection or topology group: an integer, or
+    ``auto`` to have it computed from the module latencies at generation.
+    Returns (cycles, is_auto)."""
+    if value == "auto":
+        if boundary and not register_stages:
+            raise ValueError(
+                f"{owner} sets delay_cycles: auto with boundary={boundary!r}. A boundary "
+                "crossing is a physical register chain: give its depth explicitly, as "
+                "register_stages (delay_cycles: auto then adds a plain delay after it)."
+            )
+        return 0, True
+    if isinstance(value, bool) or not isinstance(value, (int, type(None))):
+        raise ValueError(f"{owner}: delay_cycles must be an integer or 'auto', got {value!r}")
+    return int(value or 0), False
+
+
 def _pop_timing(raw: dict) -> Optional["ModuleTiming"]:
     """Pop latency_cycles/latency_hint/variable_latency/latency out of a
     merged module dict and return a ModuleTiming, or None if none were
@@ -261,7 +320,8 @@ def _pop_timing(raw: dict) -> Optional["ModuleTiming"]:
     lat_hint = raw.pop("latency_hint", None)
     variable = raw.pop("variable_latency", False)
     latency_block = raw.pop("latency", None)
-    if not has_flat and not has_latency_block:
+    alignment_block = raw.pop("input_alignment", None)
+    if not has_flat and not has_latency_block and alignment_block is None:
         return None
 
     if has_flat and has_latency_block:
@@ -288,11 +348,20 @@ def _pop_timing(raw: dict) -> Optional["ModuleTiming"]:
             # zero changes, while richer .latency data is also available.
             variable = True
 
+    alignment: Optional[InputAlignment] = None
+    if alignment_block is not None:
+        alignment = InputAlignment(
+            kind=alignment_block.get("kind", "exact"),
+            window_cycles=alignment_block.get("window_cycles"),
+            offsets=dict(alignment_block.get("offsets") or {}),
+        )
+
     return ModuleTiming(
         latency_cycles=int(lat_cycles) if lat_cycles is not None else None,
         latency_hint=int(lat_hint) if lat_hint is not None else None,
         variable_latency=bool(variable),
         latency=declaration,
+        input_alignment=alignment,
     )
 
 
@@ -384,6 +453,9 @@ class Connection:
     port_map_ranges: List[dict]     = field(default_factory=list)
     register_stages: int = 0  # Number of pipeline register stages to insert
     delay_cycles: int = 0     # Number of delay cycles to insert (using signal_delay)
+    # delay_cycles: auto in the design: delay_cycles is computed from the module
+    # latencies when the top is generated (forge.analysis.latency_static.balance).
+    delay_auto: bool = False
     contract_wiring: bool = False  # Derive array port_map_ranges from contract wiring_kind matching
 
     # Opaque physical-boundary tag. When set, the generator emits a protected
@@ -391,7 +463,9 @@ class Connection:
     # stable deterministic name, and writes a stage-level crossing manifest.
     # The tag is resolved to physical SLR placement exclusively by blobfish;
     # arc-framework and omtf-firmware treat it as an opaque string.
-    # A boundary tag requires delay_cycles > 0 or register_stages > 0.
+    # A boundary tag requires delay_cycles > 0 or register_stages > 0. The
+    # protected crossing is register_stages when declared, else delay_cycles;
+    # with both, delay_cycles is a plain delay after the crossing.
     boundary: Optional[str] = None
 
     # Declares an approved clock/reset-domain-crossing adapter for this
@@ -470,6 +544,7 @@ class TopologyGroup:
     # every instance pair the group resolves to. With a boundary tag the
     # generator emits one protected slr_crossing_delay per resolved wire.
     delay_cycles: int = 0
+    delay_auto: bool = False  # delay_cycles: auto, see Connection.delay_auto
     boundary: Optional[str] = None
 
 @dataclass
@@ -689,9 +764,12 @@ class DesignConfig:
                 pm.append((pair[0], pair[1]))
             raw_ranges = c.get("port_map_ranges", []) or []
             reg_stages = c.get("register_stages", 0)
-            delay_cycles = c.get("delay_cycles", 0)
             contract_wiring = c.get("contract_wiring", False)
             boundary = c.get("boundary", None)
+            delay_cycles, delay_auto = _parse_delay_cycles(
+                c.get("delay_cycles", 0), f"Connection {c['from']!r} -> {c.get('to')!r}", boundary,
+                int(reg_stages or 0),
+            )
             cdc = c.get("cdc", None)
             control_strobe = bool(c.get("control_strobe", False))
             external_source = bool(c.get("external_source", False))
@@ -785,6 +863,7 @@ class DesignConfig:
                         port_map_ranges = raw_ranges,
                         register_stages = reg_stages,
                         delay_cycles    = delay_cycles,
+                        delay_auto      = delay_auto,
                         contract_wiring = contract_wiring,
                         boundary        = boundary,
                         cdc             = cdc,
@@ -863,8 +942,10 @@ class DesignConfig:
                     rp.append((pair[0], pair[1]))
             to_modules = tg["to"] if isinstance(tg["to"], list) else [tg["to"]]
             src_offset = int(tg.get("src_instance_offset", 0))
-            tg_delay = int(tg.get("delay_cycles", 0) or 0)
             tg_boundary = tg.get("boundary")
+            tg_delay, tg_delay_auto = _parse_delay_cycles(
+                tg.get("delay_cycles", 0), f"topology_group {tg['name']!r}", tg_boundary,
+            )
             if tg_delay < 0:
                 raise ValueError(f"topology_group {tg['name']!r}: delay_cycles must be >= 0")
             if tg_boundary and tg_delay <= 0:
@@ -887,6 +968,7 @@ class DesignConfig:
                     notes=tg.get("notes"),
                     external_source=bool(tg.get("external_source", False)),
                     delay_cycles=tg_delay,
+                    delay_auto=tg_delay_auto,
                     boundary=tg_boundary,
                 ))
 

@@ -90,6 +90,7 @@ def cmd_hls_report(args) -> None:
 def cmd_latency_check(args) -> None:
     """Static latency mismatch checker from design.yml topology."""
     from forge.analysis.latency_static.graph import build_graph, resolve_conn_map
+    from forge.analysis.latency_static.balance import resolve_auto_delays
     from forge.analysis.latency_static.checker import check_merge_points
     from forge.analysis.latency_static.reporter import render_markdown
 
@@ -131,10 +132,12 @@ def cmd_latency_check(args) -> None:
         print(f"ERROR building latency graph: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    # The design is checked with its auto delays at the depths gen-top gives them.
+    auto_delays = resolve_auto_delays(graph)
     mismatch_reports = check_merge_points(graph)
 
     try:
-        render_markdown(graph, mismatch_reports, output_path)
+        render_markdown(graph, mismatch_reports, output_path, auto_delays=auto_delays)
     except OSError as exc:
         _emit_analyze_envelope(
             status="error", json_mode=json_mode,
@@ -145,23 +148,33 @@ def cmd_latency_check(args) -> None:
 
     mismatches = [r for r in mismatch_reports if r.is_mismatch]
     unknowns   = [r for r in mismatch_reports if r.has_unknowns]
+    failed = bool(mismatches or auto_delays.problems)
 
     _emit_analyze_envelope(
-        status="fail" if mismatches else "pass", json_mode=json_mode,
+        status="fail" if failed else "pass", json_mode=json_mode,
         diagnostics=[
             {
                 "severity": "error", "code": None, "category": "latency_mismatch",
                 "message": f"{r.merge_node}: delta {r.delta} cycles — {r.suggestion}",
             }
             for r in mismatches
+        ] + [
+            {"severity": "error", "code": None, "category": "auto_delay", "message": problem}
+            for problem in auto_delays.problems
         ],
         artifacts=[str(output_path)],
         metrics={
             "merge_points_checked": len(mismatch_reports),
             "mismatches": len(mismatches),
             "unknowns": len(unknowns),
+            "auto_delays": {f"{d.kind}[{d.index}]": d.cycles for d in auto_delays.delays},
         },
     )
+
+    for d in auto_delays.delays:
+        print(f"delay_cycles: auto  {d.kind} {d.index} ({d.src} -> {d.dst}): {d.cycles}")
+    for problem in auto_delays.problems:
+        print(f"❌ {problem}", file=sys.stderr)
 
     if mismatches:
         print(f"⚠ Latency mismatches: {len(mismatches)}", file=sys.stderr)
@@ -173,7 +186,7 @@ def cmd_latency_check(args) -> None:
         print(f"✅ No latency mismatches detected ({len(mismatch_reports)} merge point(s) checked)")
 
     print(f"Report: {output_path}")
-    sys.exit(1 if mismatches else 0)
+    sys.exit(1 if failed else 0)
 
 
 # ---------------------------------------------------------------------------

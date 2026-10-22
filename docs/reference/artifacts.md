@@ -737,10 +737,11 @@ A generated (or declared-and-approved) element sitting on a
       ``'register'`` before the IR schema 0.2.0 kind-vocabulary expansion).
     - ``latency_delay`` — from ``Connection.delay_cycles`` with no
       ``boundary`` tag (was ``'delay'``).
-    - ``slr_crossing`` — from ``Connection.delay_cycles`` *with* a
-      ``boundary`` tag (the generator emits ``slr_crossing_delay`` instead
-      of ``signal_delay`` for this case — one RTL instance, one
-      transformation, not both `latency_delay` and `slr_crossing`).
+    - ``slr_crossing`` — the protected crossing of a connection with a
+      ``boundary`` tag: its ``register_stages`` when declared, else its
+      ``delay_cycles`` (the generator emits ``slr_crossing_delay`` instead
+      of ``RegisterStage``/``signal_delay`` for it). A ``delay_cycles``
+      after a register-stage crossing is a separate ``latency_delay``.
       ``tag`` carries the boundary string.
     - ``fanout`` — computed generically (no new schema) whenever a
       producer pin drives more than one connection; excludes clock/reset

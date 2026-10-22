@@ -56,6 +56,7 @@ class HLSModuleReport:
     latency_best: int = 0
     latency_avg: int = 0
     latency_worst: int = 0
+    latency_reported: bool = False  # the report states latency_worst, so 0 means 0 cycles
     pipeline_ii: int = 0
     pipeline_depth: int = 0
     pipeline_type: str = ""
@@ -132,6 +133,7 @@ def _parse_xml(xml_path: Path, module_name: str, solution: str) -> HLSModuleRepo
         latency_best=lat["best_case_latency"],
         latency_avg=lat["average_case_latency"],
         latency_worst=lat["worst_case_latency"],
+        latency_reported=lat.get("worst_case_latency_reported", lat["worst_case_latency"] > 0),
         pipeline_ii=lat["pipeline_ii"],
         pipeline_depth=lat["pipeline_depth"],
         pipeline_type=lat["pipeline_type"],
@@ -177,9 +179,10 @@ def collect_reports(
 
 
 def latency_map_from_reports(reports: List[HLSModuleReport]) -> Dict[str, int]:
-    """Return ``{module_name: worst_case_latency_cycles}`` for all OK reports."""
+    """Return ``{module_name: worst_case_latency_cycles}`` for all OK reports that
+    state a latency, including 0 (a register-free passthrough)."""
     return {
         r.module_name: r.latency_worst
         for r in reports
-        if r.status == "ok" and r.latency_worst > 0
+        if r.status == "ok" and r.latency_reported
     }

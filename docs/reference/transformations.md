@@ -19,12 +19,12 @@ docstring copy could.
 | `cdc_synchronizer` | A two-flop synchronizer, from `Connection.cdc: {kind: level_sync}` (`2ff_sync` is a backwards-compatible alias, real generated RTL — `cdc_sync2ff`). |
 | `fanout` | Computed generically whenever a producer pin drives more than one connection; excludes clock/reset global-net fan-out. |
 | `gather_scatter` | Scatter/gather classification surfaced via `MatchReport.gather_scatter_evidence`; `tag` carries `"scatter"` or `"gather"`. |
-| `latency_delay` | A fixed-cycle latency delay element, from `Connection.delay_cycles` with no `boundary` tag. |
+| `latency_delay` | A fixed-cycle latency delay element, from `Connection.delay_cycles` with no `boundary` tag, or after a register-stage crossing. |
 | `mailbox_transfer` | A request/acknowledge handshake synchronizer for a coherent multi-bit payload, from `Connection.cdc: {kind: mailbox_transfer}` (real generated RTL — `cdc_mailbox`). |
-| `pipeline_register` | A pipeline register stage inserted on a connection, from `Connection.register_stages`. |
+| `pipeline_register` | A pipeline register stage inserted on a connection, from `Connection.register_stages` with no `boundary` tag. |
 | `pulse_sync` | A toggle + double-flop-sync + edge-detect pulse synchronizer, from `Connection.cdc: {kind: pulse_sync, min_spacing_cycles: N}` (real generated RTL — `cdc_pulse_sync`). |
 | `reset_synchronizer` | An async-assert/sync-deassert reset synchronizer, from `reset_domains.<name>.sync: reset_sync` (real generated RTL — `cdc_reset_sync`). Domain-keyed, not connection-keyed — see `ResolvedResetDomain.transformations`. |
-| `slr_crossing` | An SLR-crossing delay register — `Connection.delay_cycles` *with* a `boundary` tag; `tag` carries the boundary string. |
+| `slr_crossing` | An SLR-crossing delay register — the `register_stages` (else the `delay_cycles`) of a connection *with* a `boundary` tag; `tag` carries the boundary string. |
 | `tie_off` | Synthesized post-generation from the generator's `tied_to_zero` report (a `"$tie_off"` producer sentinel). |
 
 ## Reserved (declared, zero live instances today)

@@ -8,6 +8,20 @@ for the versioning policy.
 ## [Unreleased]
 
 ### Added
+- **`delay_cycles: auto`** on connections and topology groups: `gen-top` /
+  `forge build` compute the alignment depth from the latency graph
+  (`forge.analysis.latency_static.balance`), so the delays follow the
+  module latencies instead of being hand-maintained numbers. The resolved
+  depths are printed, recorded in `build_manifest.json`
+  (`resolved_auto_delays`) and listed by `forge analyze latency-check`,
+  which resolves them before checking. Unresolvable cases (unknown path
+  latency, mixed auto/fixed connections on one instance pair, one
+  connection needing different depths per instance, feedback loops) fail
+  generation.
+- **`input_alignment`** registry field (`InputAlignment`): a merge point can
+  declare per-source `offsets`, a `window` of allowed skew, or `framed`
+  inputs that need no cycle relation. Used by `latency-check` and by
+  `delay_cycles: auto`; validated by `validate-registry`.
 - **Framework support RTL now ships with forge** (`forge/rtl/support/`):
   `RegisterStage`, `signal_delay`, `slr_crossing_delay` and the CDC
   primitives `cdc_sync2ff`, `cdc_pulse_sync`, `cdc_mailbox`,
@@ -525,6 +539,20 @@ for the versioning policy.
   at preflight; it is checked against the stimulus contract after the inputs
   are prepared (`preflight.validate_stimulus_handoff`), and the backends no
   longer check it.
+- **`register_stages` and `delay_cycles` on one connection.** In verilog mode
+  the delay read the undelayed net, so the register stages were dead logic
+  while the latency graph counted them; with a `boundary` tag,
+  `register_stages` gave a plain `RegisterStage` in verilog mode, a protected
+  `slr_crossing_delay` in bd mode, and a `pipeline_register` in the IR. Both
+  generators and the IR now chain them: register stages (the protected
+  crossing when a `boundary` is set), then the delay. With a `boundary`,
+  `delay_cycles` after a register-stage crossing is a plain `signal_delay`
+  (IR `latency_delay`), and may be `auto`.
+- **An HLS module synthesised to 0 cycles had unknown latency.**
+  `latency_map_from_reports` dropped every report with a worst-case latency
+  of 0, so a register-free module fell back to its hint or to unknown. A
+  report's latency now counts when the report states a number
+  (`HLSModuleReport.latency_reported`), including 0.
 - **`forge hls run` reported a stage as done from its output files alone.** csim counted as
   passed if `solution1/csim` existed and the log said PASS, or if there was no log at all; synth,
   cosim and export by the presence of a report, a directory or an IP archive. A testbench edited

@@ -332,6 +332,7 @@ def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[st
 
 
 def _write_latency_check(design_path: Path, args, output_dir: Path) -> int:
+    from forge.analysis.latency_static.balance import resolve_auto_delays
     from forge.analysis.latency_static.checker import check_merge_points
     from forge.analysis.latency_static.graph import build_graph
     from forge.analysis.latency_static.reporter import render_markdown
@@ -339,9 +340,10 @@ def _write_latency_check(design_path: Path, args, output_dir: Path) -> int:
     contracts_from = getattr(args, "contracts_from", None)
     modules_yml = Path(contracts_from) if contracts_from else None
     graph = build_graph(design_path, modules_yml_path=modules_yml)
+    auto_delays = resolve_auto_delays(graph)
     mismatch_reports = check_merge_points(graph)
-    render_markdown(graph, mismatch_reports, output_dir / "latency_check.md")
-    return sum(1 for r in mismatch_reports if r.is_mismatch)
+    render_markdown(graph, mismatch_reports, output_dir / "latency_check.md", auto_delays=auto_delays)
+    return sum(1 for r in mismatch_reports if r.is_mismatch) + len(auto_delays.problems)
 
 
 def _write_hls_report(hls_build_root: Path, args, output_dir: Path) -> int:

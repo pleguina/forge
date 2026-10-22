@@ -622,16 +622,22 @@ def assemble_project_ir(
         xforms: List[ResolvedTransformation] = []
         if c.cdc:
             cdc_declared_by_pair[(c.from_, c.to)] = c.cdc.get("kind")
+        # With a boundary tag the protected crossing (slr_crossing_delay) is
+        # register_stages when declared, else delay_cycles; a delay_cycles
+        # after a register-stage crossing is a plain signal_delay.
         if c.register_stages:
-            xforms.append(ResolvedTransformation(
-                id=f"xform:{c.from_}->{c.to}:pipeline_register",
-                kind="pipeline_register", cycles=c.register_stages,
-            ))
-        if c.delay_cycles:
             if c.boundary:
-                # One generated RTL instance (slr_crossing_delay, not
-                # signal_delay) for this case — one transformation, not
-                # both latency_delay and slr_crossing.
+                xforms.append(ResolvedTransformation(
+                    id=f"xform:{c.from_}->{c.to}:slr_crossing",
+                    kind="slr_crossing", cycles=c.register_stages, tag=c.boundary,
+                ))
+            else:
+                xforms.append(ResolvedTransformation(
+                    id=f"xform:{c.from_}->{c.to}:pipeline_register",
+                    kind="pipeline_register", cycles=c.register_stages,
+                ))
+        if c.delay_cycles:
+            if c.boundary and not c.register_stages:
                 xforms.append(ResolvedTransformation(
                     id=f"xform:{c.from_}->{c.to}:slr_crossing",
                     kind="slr_crossing", cycles=c.delay_cycles, tag=c.boundary,

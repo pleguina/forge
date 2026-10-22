@@ -480,8 +480,11 @@ _KNOWN_MODULE_KEYS: Set[str] = {
     # Structured latency: {kind: fixed|bounded|elastic, ...} declaration
     # — coexists with, does not replace, the three flat fields above.
     'latency',
+    # How the module's inputs must line up in time (contracts.config.InputAlignment)
+    'input_alignment',
 }
 _KNOWN_LATENCY_KINDS: Set[str] = {'fixed', 'bounded', 'elastic'}
+_KNOWN_INPUT_ALIGNMENT_KINDS: Set[str] = {'exact', 'framed', 'window'}
 _KNOWN_BUILD_KEYS: Set[str] = {
     'stages', 'csim_opts', 'synth_opts', 'cosim_opts', 'export_opts',
     'aliases', 'clock_period', 'part',
@@ -533,6 +536,7 @@ class RegistryValidator:
                 self._validate_kind_requirements(mod, name, kind, loc)
                 self._validate_timing_fields(mod, name, loc)
                 self._validate_latency_block(mod, name, loc)
+                self._validate_input_alignment(mod, name, loc)
                 if 'build' in mod:
                     self._validate_build_section(mod['build'], name, kind, f"{loc}.build")
                 if 'verify' in mod:
@@ -786,6 +790,44 @@ class RegistryValidator:
                     f"{sorted(stray)} — elastic timing has no fixed cycle count",
                     location=f"{loc}.latency",
                 )
+
+    def _validate_input_alignment(self, mod: dict, name: str, loc: str):
+        """Structure of an ``input_alignment: {kind, window_cycles, offsets}`` block."""
+        block = mod.get('input_alignment')
+        if block is None:
+            return
+        where = f"{loc}.input_alignment"
+        if not isinstance(block, dict):
+            self.add_error('module', f"module '{name}' has 'input_alignment:' that is not a mapping",
+                           location=where)
+            return
+        unknown_keys = set(block) - {'kind', 'window_cycles', 'offsets'}
+        if unknown_keys:
+            self.add_error('module', f"module '{name}' has unknown key(s) in 'input_alignment:': "
+                                     f"{sorted(unknown_keys)}", location=where)
+        kind = block.get('kind', 'exact')
+        if kind not in _KNOWN_INPUT_ALIGNMENT_KINDS:
+            self.add_error('module', f"module '{name}' has input_alignment.kind {kind!r} — must be one of "
+                                     f"{sorted(_KNOWN_INPUT_ALIGNMENT_KINDS)}", location=f"{where}.kind")
+            return
+        window = block.get('window_cycles')
+        if kind == 'window':
+            if not isinstance(window, int) or isinstance(window, bool) or window < 0:
+                self.add_error('module', f"module '{name}' has input_alignment.kind='window' without an "
+                                         "integer 'window_cycles' >= 0", location=f"{where}.window_cycles")
+        elif window is not None:
+            self.add_error('module', f"module '{name}' sets input_alignment.window_cycles with "
+                                     f"kind={kind!r}; it applies only to kind='window'",
+                           location=f"{where}.window_cycles")
+        offsets = block.get('offsets') or {}
+        if not isinstance(offsets, dict):
+            self.add_error('module', f"module '{name}' has input_alignment.offsets that is not a mapping "
+                                     "of source module to cycles", location=f"{where}.offsets")
+            return
+        for src, cycles in offsets.items():
+            if not isinstance(cycles, int) or isinstance(cycles, bool):
+                self.add_error('module', f"module '{name}' has input_alignment.offsets[{src!r}] = "
+                                         f"{cycles!r}; must be an integer", location=f"{where}.offsets.{src}")
 
     def _validate_kind_requirements(self, mod: dict, name: str, kind: Optional[str], loc: str):
         """Enforce what each kind needs to be buildable / elaboratable."""

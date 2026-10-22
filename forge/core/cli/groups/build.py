@@ -152,6 +152,12 @@ def cmd_build(args) -> None:
         sys.exit(_guided_failure(f"Failed to compute plan: {e}", json_mode=json_mode))
         return
 
+    if ctx.auto_delays is not None and ctx.auto_delays.problems:
+        sys.exit(_guided_failure(
+            "delay_cycles: auto could not be resolved: " + "; ".join(ctx.auto_delays.problems),
+            json_mode=json_mode,
+        ))
+
     output_artifacts = _planned_output_artifacts(ctx, args)
     plan = build_generation_plan(
         ctx.project, ctx.match_report,
