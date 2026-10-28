@@ -1,7 +1,7 @@
 # ============================================================================
-# arc-framework/.gitlab-ci.yml
+# forge/.gitlab-ci.yml
 #
-# Pipeline for the arc-framework repository.
+# Pipeline for the forge repository.
 #
 # Workflow:
 #   - runs on merge requests (blocking correctness jobs)

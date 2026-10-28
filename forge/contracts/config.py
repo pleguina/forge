@@ -464,7 +464,7 @@ class Connection:
     # slr_crossing_delay instance instead of a plain signal_delay, gives it a
     # stable deterministic name, and writes a stage-level crossing manifest.
     # The tag is resolved to physical SLR placement exclusively by blobfish;
-    # arc-framework and omtf-firmware treat it as an opaque string.
+    # forge and omtf-firmware treat it as an opaque string.
     # A boundary tag requires delay_cycles > 0 or register_stages > 0. The
     # protected crossing is register_stages when declared, else delay_cycles;
     # with both, delay_cycles is a plain delay after the crossing.

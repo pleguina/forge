@@ -9,7 +9,7 @@
 # or `python3` aren't available. See runner.py's own module docstring for
 # the full stage sequence.
 #
-# Usage (from arc-framework repo root):
+# Usage (from the forge repository root):
 #   ./run_vision_pipeline_demo.sh                 # every step, all designs/flows
 #   ./run_vision_pipeline_demo.sh --list           # list every tutorial step
 #   ./run_vision_pipeline_demo.sh --step quickstart          # just one step

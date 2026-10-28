@@ -127,11 +127,11 @@ With DUT artifacts and Vivado available, run plugin simulations from the plugin 
 
 ```text
 workspace/
-  arc-framework/
+  forge/
   my-plugin/
 ```
 
-Install FORGE from `arc-framework/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `forge/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
+Install FORGE from `forge/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `forge/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
 
 ---
 

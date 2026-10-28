@@ -50,7 +50,7 @@ files live _inside_ `forge/verify/`, so they need no `../` prefix.
 
 ## Quick commands
 
-Run from the arc-framework repo root:
+Run from the forge repository root:
 
 ```bash
 # Validate registry

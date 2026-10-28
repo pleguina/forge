@@ -1,7 +1,7 @@
 # ============================================================================
 # ci/framework-base.yml
 #
-# Shared foundation for all arc-framework pipeline jobs.
+# Shared foundation for all forge pipeline jobs.
 # Provides:
 #   - canonical stage order
 #   - default image and runner tag

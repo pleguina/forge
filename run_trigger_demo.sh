@@ -12,7 +12,7 @@
 #   8. forge hls run synth   → RTL synthesis for all 4 HLS modules (needed by xsim)
 #   9. forge verify run      → all 9 flows (csim × 4, xsim × 4, full-chip × 1)
 #
-# Usage (from arc-framework repo root):
+# Usage (from the forge repository root):
 #   ./run_trigger_demo.sh              # full run
 #   ./run_trigger_demo.sh --skip-hls  # skip HLS gen-tcl + csim + synth (use existing build_hls_trigger_demo/)
 #   ./run_trigger_demo.sh --no-clean  # skip artifact cleanup

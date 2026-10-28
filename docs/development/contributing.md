@@ -33,16 +33,13 @@ This is the permanent installation story for this project — not a
 placeholder waiting for a PyPI slot, and not a sign it's meant to stay
 private; it's simply the name collision. If you stand up a package index
 (internal or public) and want to mirror releases there, override
-`FORGE_FORGE_PIP_REF` per the comment in `ci/plugin-consumer.yml`.
+`FORGE_PIP_REF` per the comment in `ci/plugin-consumer.yml`.
 
 ### Where this lives
 
 The canonical repo is [`https://github.com/pleguina/forge`](https://github.com/pleguina/forge).
-The project originated on a CERN GitLab instance
-(`gitlab.cern.ch/p2u-omtf-ops/arc-framework`), which is retained for its
-history but is no longer the primary source — treat any `gitlab.cern.ch`
-URL you still find in this repo as provenance, not a claim that the
-project is CERN-only.
+The project began on CERN GitLab as `arc-framework`; that repository has
+been removed, and GitHub is the only source.
 
 ## Running things locally before you push
 

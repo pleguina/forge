@@ -22,9 +22,8 @@ PyPI publish — a closed decision, not a placeholder pending one).
 Repository:
 
 - Canonical public host: [`https://github.com/pleguina/forge`](https://github.com/pleguina/forge).
-  The project originated on a CERN GitLab instance
-  (`gitlab.cern.ch/p2u-omtf-ops/arc-framework`); that origin is retained
-  for its history but is no longer the primary source.
+  The project began on CERN GitLab as `arc-framework`; that repository
+  has been removed, and GitHub is the only source.
 
 ## Current scope
 

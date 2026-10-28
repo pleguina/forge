@@ -47,10 +47,9 @@ If you have an existing checkout, CI pipeline, or downstream repository
 | `fw_verify` (legacy package name, predates the `arc` rename) | `forge.verify` (module), `forge verify` (CLI) |
 | `topgen` (legacy standalone command, predates the `arc` rename) | `forge topgen` |
 
-The GitLab project/remote itself
-(`gitlab.cern.ch/p2u-omtf-ops/arc-framework`) was **not** renamed — only the
-code, package, CLI, and branding inside it. Clone URLs and the repository
-name are unaffected.
+The GitLab project (`gitlab.cern.ch/p2u-omtf-ops/arc-framework`) kept its
+name through the rename and has since been removed; clone from
+`https://github.com/pleguina/forge`.
 
 ### If your plugin repo includes `ci/plugin-consumer.yml`
 
