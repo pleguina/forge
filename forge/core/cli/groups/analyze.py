@@ -89,7 +89,7 @@ def cmd_hls_report(args) -> None:
 
 def cmd_latency_check(args) -> None:
     """Static latency mismatch checker from design.yml topology."""
-    from forge.analysis.latency_static.graph import build_graph, resolve_conn_map
+    from forge.analysis.latency_static.graph import build_resolved_graph
     from forge.analysis.latency_static.balance import resolve_auto_delays
     from forge.analysis.latency_static.checker import check_merge_points
     from forge.analysis.latency_static.reporter import render_markdown
@@ -99,31 +99,13 @@ def cmd_latency_check(args) -> None:
     output_path = Path(args.output)
     modules_yml = Path(args.contracts_from) if getattr(args, "contracts_from", None) else None
 
-    # Optionally load HLS latency data
-    hls_reports: "dict | None" = None
     hls_root = getattr(args, "hls_build_root", None)
-    if hls_root:
-        hls_root_path = Path(hls_root)
-        if hls_root_path.exists():
-            from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
-            try:
-                raw_reports = collect_reports(hls_root_path)
-                hls_reports = latency_map_from_reports(raw_reports)
-            except Exception as exc:
-                print(f"WARNING: could not load HLS reports: {exc}", file=sys.stderr)
-
-    # Best-effort real per-instance connection map, via the same contract
-    # resolution forge.ir.build uses (see resolve_conn_map's docstring) —
-    # resolves exact instance pairing for topology_groups (partition/
-    # instance_assign wiring) and any port_map_ranges/port_map/
-    # contract_wiring connection alike, superseding the graph builder's
-    # own contract-free heuristics wherever it succeeds. None (silently)
-    # when contracts aren't available or don't resolve — same behavior as
-    # before this existed.
-    conn_map = resolve_conn_map(design_path, modules_yml_path=modules_yml) if modules_yml else None
 
     try:
-        graph = build_graph(design_path, modules_yml_path=modules_yml, hls_reports=hls_reports, conn_map=conn_map)
+        graph = build_resolved_graph(
+            design_path, modules_yml_path=modules_yml,
+            hls_build_root=Path(hls_root) if hls_root else None,
+        )
     except Exception as exc:
         _emit_analyze_envelope(
             status="error", json_mode=json_mode,

@@ -1074,7 +1074,7 @@ def _check_design_latency(status: ProjectStatus) -> Optional[_CheckOutput]:
     whose latency comes from its HLS reports (under ``build.hls_build_root``)
     counts as known, exactly as it does there.
     """
-    from forge.analysis.latency_static.graph import build_graph
+    from forge.analysis.latency_static.graph import build_resolved_graph
 
     config, paths = status.config, status.paths
     assert config is not None and paths is not None
@@ -1082,14 +1082,12 @@ def _check_design_latency(status: ProjectStatus) -> Optional[_CheckOutput]:
     if registry is None or not design.is_file() or not registry.is_file():
         return None
 
-    hls_reports = None
     hls_root = config.build.get("hls_build_root")
-    if hls_root and (config.root / hls_root).is_dir():
-        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
-
-        hls_reports = latency_map_from_reports(collect_reports(config.root / hls_root))
     try:
-        graph = build_graph(design, modules_yml_path=registry, hls_reports=hls_reports)
+        graph = build_resolved_graph(
+            design, modules_yml_path=registry,
+            hls_build_root=config.root / hls_root if hls_root else None,
+        )
     except Exception:  # noqa: BLE001 — a design that does not load is _check_design's finding
         return None
 

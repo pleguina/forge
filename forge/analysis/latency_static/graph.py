@@ -459,6 +459,33 @@ def build_graph(
     return _build_graph_from_ir(design_path, hls_reports, conn_map=conn_map)
 
 
+def build_resolved_graph(
+    design_path: Path,
+    modules_yml_path: Optional[Path] = None,
+    hls_build_root: Optional[Path] = None,
+    conn_map: "Optional[Dict[tuple, list]]" = None,
+) -> LatencyGraph:
+    """The latency graph of *design_path* as generation sees it.
+
+    HLS modules take their latency from the reports under *hls_build_root*
+    when it exists, and instance pairing comes from *conn_map*, or from
+    :func:`resolve_conn_map` when none is given. ``forge analyze
+    latency-check``, ``forge report``, ``forge check`` and
+    ``delay_cycles: auto`` all build the graph here, so they agree on the
+    same design.
+    """
+    hls_reports = None
+    if hls_build_root is not None and Path(hls_build_root).is_dir():
+        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
+
+        hls_reports = latency_map_from_reports(collect_reports(Path(hls_build_root)))
+    if conn_map is None:
+        conn_map = resolve_conn_map(design_path, modules_yml_path=modules_yml_path)
+    return build_graph(
+        design_path, modules_yml_path=modules_yml_path, hls_reports=hls_reports, conn_map=conn_map,
+    )
+
+
 def _build_graph_from_ir(
     design_path: Path,
     hls_reports: Optional[Dict[str, int]] = None,

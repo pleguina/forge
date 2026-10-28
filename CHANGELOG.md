@@ -53,6 +53,14 @@ for the versioning policy.
   top with inputs tied to zero or a driver dropped. `--strict` still adds
   the checks for heuristic wiring (no contract, auto-match,
   `port_map_ranges`) and validator warnings.
+- **One latency graph for every command.** `forge report`, `forge check`,
+  `forge analyze latency-check` and `delay_cycles: auto` build it through
+  `build_resolved_graph`: HLS latencies from `--hls-build-root` (or
+  `build.hls_build_root` in `forge.yml`) and the contract-resolved
+  instance pairing. `forge report` used neither, so it counted mismatches
+  `latency-check` did not (3 on the OMTF design, now 0). A malformed HLS
+  report now fails `latency-check` instead of being skipped with a
+  warning.
 - **Active-low module resets are driven by the inverted `ap_rst`.** The
   generated top keeps one active-high `ap_rst`; a reset pin that asserts low
   (by its contract's `active_level`, or by name: `rst_n`, `aresetn`,

@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple
 
 from forge.analysis.latency_model import LatencyProvenance, LatencyValue
 from forge.analysis.latency_static.checker import analyse_merge_point
-from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph, build_graph
+from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph, build_resolved_graph
 
 Ref = Tuple[str, int]  # ("connection" | "topology_group", index in DesignConfig)
 
@@ -152,11 +152,7 @@ def resolve_design_auto_delays(
 ) -> AutoDelayResult:
     """Build the latency graph of *design_path* (HLS report latencies from
     *hls_build_root* when it exists) and resolve its auto delays."""
-    hls_reports = None
-    if hls_build_root is not None and Path(hls_build_root).is_dir():
-        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
-        hls_reports = latency_map_from_reports(collect_reports(Path(hls_build_root)))
-    graph = build_graph(Path(design_path), hls_reports=hls_reports, conn_map=conn_map)
+    graph = build_resolved_graph(Path(design_path), hls_build_root=hls_build_root, conn_map=conn_map)
     return resolve_auto_delays(graph)
 
 

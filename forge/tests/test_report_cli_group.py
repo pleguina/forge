@@ -462,3 +462,61 @@ def test_report_topology_carries_real_latency_and_verification_overlays(
 
     explorer_html = (output_dir / "topology_explorer.html").read_text()
     assert '"verification_flow_entry_points":["hit_decoder_xsim"]' in explorer_html
+
+
+_CSYNTH_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<profile>
+  <PerformanceEstimates>
+    <SummaryOfOverallLatency>
+      <Best-caseLatency>{cycles}</Best-caseLatency>
+      <Worst-caseLatency>{cycles}</Worst-caseLatency>
+      <PipelineInitiationInterval>1</PipelineInitiationInterval>
+    </SummaryOfOverallLatency>
+  </PerformanceEstimates>
+</profile>
+"""
+
+
+def test_report_reads_hls_latencies_like_latency_check(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """`fast` is only hinted at 4 cycles; its HLS report says 9, which
+    balances the merge against `slow`."""
+    (tmp_path / "modules.yml").write_text(
+        "modules:\n"
+        "  - {name: slow, kind: hls, top: slow_top, src: [slow.cpp], latency_cycles: 9}\n"
+        "  - {name: fast, kind: hls, top: fast_top, src: [fast.cpp], latency_hint: 4}\n"
+        "  - {name: merge, kind: hls, top: merge_top, src: [merge.cpp], latency_cycles: 1}\n"
+    )
+    design = tmp_path / "design.yml"
+    design.write_text(
+        "part: xcvu13p\n"
+        "clock_period: 4.0\n"
+        "registry: modules.yml\n"
+        "modules:\n"
+        "  - {name: slow, ref: slow}\n"
+        "  - {name: fast, ref: fast}\n"
+        "  - {name: merge, ref: merge}\n"
+        "connections:\n"
+        "  - {from: slow, to: merge, port_map: [[dout, in_slow]]}\n"
+        "  - {from: fast, to: merge, port_map: [[dout, in_fast]]}\n"
+    )
+    report_dir = tmp_path / "build_hls" / "fast" / "solution1" / "syn" / "report"
+    report_dir.mkdir(parents=True)
+    (report_dir / "csynth.xml").write_text(_CSYNTH_XML.format(cycles=9))
+
+    def mismatches(*hls: str) -> tuple:
+        report = _run(
+            capsys, "report", str(design), "--output", str(tmp_path / "report"), "--json", *hls,
+        )
+        check = _run(
+            capsys, "analyze", "latency-check", str(design),
+            "--output", str(tmp_path / "latency_check.md"), "--json", *hls,
+        )
+        return (
+            json.loads(report.stdout)["metrics"]["latency_mismatches"],
+            json.loads(check.stdout)["metrics"]["mismatches"],
+        )
+
+    assert mismatches() == (1, 1)
+    assert mismatches("--hls-build-root", str(tmp_path / "build_hls")) == (0, 0)
