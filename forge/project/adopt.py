@@ -167,7 +167,7 @@ def _plan_state_files(plan: AdoptionPlan) -> None:
         for unit in managed:
             if _user_contract(config, unit.name) is None:
                 plan.files[paths.contract_root / f"{unit.name}.interface.yaml"] = (
-                    _render_contract(unit)
+                    _render_contract(unit, config)
                 )
     plan.files[paths.state_root / ".gitignore"] = _STATE_GITIGNORE
     plan.decisions = _decision_log(config, result)
@@ -482,7 +482,7 @@ def _render_design_yml(
 
 # ── .forge/contracts/*.interface.yaml ─────────────────────────────────────
 
-def _render_contract(unit: HdlUnit) -> str:
+def _render_contract(unit: HdlUnit, config: ForgeConfig) -> str:
     """One module's interface contract, from its real ports.
 
     Delegates to the generator ``forge contract infer`` uses, so an adopted
@@ -502,7 +502,10 @@ def _render_contract(unit: HdlUnit) -> str:
             for port in unit.ports.values()
         ]
     }
-    return infer_contract_skeleton(unit.name, entry, source_type="rtl")
+    return infer_contract_skeleton(
+        unit.name, entry, source_type="rtl",
+        reset_port=config.reset.port, reset_active_level=config.reset.active,
+    )
 
 
 # ── Decision log ──────────────────────────────────────────────────────────

@@ -43,7 +43,7 @@ ATG037  Ambiguous interface consumer (more than one valid consumer)
 ATG038  No connection resolved between any two managed modules
 ATG039  No clock port found, or the declared clock does not exist
 ATG040  Several clock candidates — the functional clock needs confirming
-ATG041  Active-low reset, whose polarity generation does not model
+ATG041  Retired (active-low resets are inverted at generation)
 ATG042  Module outside FORGE's supported envelope (e.g. multi-clock)
 ATG043  HLS interfaces predicted but not reconciled against synthesis
 ATG044  Verification not configured, or its config/dataset is missing

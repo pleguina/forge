@@ -35,6 +35,8 @@ from typing import Dict, List, Optional
 
 import yaml
 
+from forge.core.utils.signal_names import is_active_low_reset
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Generation-authoritative role set
 # ──────────────────────────────────────────────────────────────────────────────
@@ -309,10 +311,6 @@ class LoadedContract:
 #: the scanned source answer instead.
 DERIVABLE_ROLE_FIELDS = ("raw_port", "direction", "width", "active_level")
 
-#: Suffixes that mark an active-low reset by near-universal HDL convention.
-_ACTIVE_LOW_SUFFIXES = ("_n", "_b", "_l")
-
-
 def _derive_role_fields(
     role_name: str, spec: dict, ports: Dict[str, dict],
 ) -> tuple[dict, List[str]]:
@@ -346,9 +344,6 @@ def _derive_role_fields(
         "direction": direction,
         "width": port.get("width", 1),
     }
-    if role_name.startswith("reset_"):
-        derived["active_level"] = "low" if raw.endswith(_ACTIVE_LOW_SUFFIXES) else "high"
-
     conflicts: List[str] = []
     for field, value in derived.items():
         if field in spec and spec[field] != value:
@@ -356,6 +351,10 @@ def _derive_role_fields(
                 f"role {role_name!r}: contract declares {field}={spec[field]!r} "
                 f"but port {raw!r} is {field}={value!r}"
             )
+    if role_name.startswith("reset_"):
+        # A name only suggests the level, so a declared one is not a
+        # contradiction to report.
+        derived["active_level"] = "low" if is_active_low_reset(raw) else "high"
     return {**derived, **spec}, conflicts
 
 

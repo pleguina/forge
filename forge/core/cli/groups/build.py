@@ -84,6 +84,11 @@ def _strict_violations(ctx) -> List[str]:
     return violations
 
 
+#: Plan findings gen-top enforces only under --strict; without it they are
+#: warnings, so they neither stop generation nor read as failures.
+_STRICT_ONLY_CATEGORIES = ("topology_group", "cardinality")
+
+
 def _unresolved_issue_to_dict(issue) -> Dict[str, Any]:
     d: Dict[str, Any] = {
         "severity": issue.severity, "message": issue.message, "code": None,
@@ -120,6 +125,7 @@ def cmd_build(args) -> None:
 
     json_mode = getattr(args, "json", False)
     strict = getattr(args, "strict", False)
+    project = None
     if args.design is None:
         from forge.core.cli._shared import resolve_project_args
 
@@ -127,8 +133,10 @@ def cmd_build(args) -> None:
             project = resolve_project_args(args)
         except (FileNotFoundError, ValueError) as e:
             sys.exit(_guided_failure(str(e), json_mode=json_mode))
-        if args.output is None:
-            args.output = str(project.top_level(args.mode, args.top_name))
+    args.mode = args.mode or "verilog"
+    args.top_name = args.top_name or "algo_top"
+    if project is not None and args.output is None:
+        args.output = str(project.top_level(args.mode, args.top_name))
     design_path = Path(args.design).expanduser().resolve()
 
     if not design_path.exists():
@@ -194,6 +202,10 @@ def cmd_build(args) -> None:
         sys.exit(envelope.exit_code())
 
     diagnostics = [_unresolved_issue_to_dict(i) for i in plan.unresolved_issues]
+    if not strict:
+        for d in diagnostics:
+            if d["severity"] == "error" and d["category"] in _STRICT_ONLY_CATEGORIES:
+                d["severity"] = "warning"
     strict_violations = _strict_violations(ctx) if strict else []
     for v in strict_violations:
         diagnostics.append({
@@ -397,8 +409,8 @@ def register(sub) -> None:
         help="Path to design.yml (default: the forge.yml project around the current directory)",
     )
     p.add_argument(
-        "--mode", choices=["vhdl", "verilog", "bd"], default="verilog",
-        help="Output mode: vhdl, verilog, or bd (Block Design TCL)",
+        "--mode", choices=["vhdl", "verilog", "bd"], default=None,
+        help="Output mode: vhdl, verilog (default), or bd (Block Design TCL)",
     )
     p.add_argument("--consumer-root", help="Consumer workspace root used to resolve relative defaults")
     p.add_argument("--ip-root", help="IP directory (default: ips/)")
@@ -408,7 +420,7 @@ def register(sub) -> None:
     p.add_argument("--src-root", help="Source root for HDL files (default: design file's directory)")
     p.add_argument("--system", help="system.yml for global nets")
     p.add_argument("--output", "-o", help="Output file (same meaning as `gen-top --output`)")
-    p.add_argument("--top-name", default="algo_top", help="Top entity/module name")
+    p.add_argument("--top-name", default=None, help="Top entity/module name (default: algo_top)")
     p.add_argument(
         "--contracts-from", metavar="MODULES_YML",
         help="modules.yml with interface_contract paths; enables contract-driven wiring",

@@ -14,7 +14,9 @@ for the versioning policy.
   from it and the sources before running (`forge.project.resolve`). An open
   connection decision stops them with the question to answer.
 - **`forge build` generates by default**; `--dry-run` (or `--plan`) prints
-  the plan only. `--apply` is still accepted. Under `--json`, generation
+  the plan only. `--apply` is still accepted. A plan error stops
+  generation; topology-group and cardinality findings, which `gen-top`
+  enforces only under `--strict`, are warnings without it. Under `--json`, generation
   output goes to stderr so stdout stays one JSON document, and a
   `--provenance` manifest is written after generation instead of being
   replaced by the one generation writes next to the output.
@@ -30,6 +32,29 @@ for the versioning policy.
   every command, so `forge check` reports them as passing and no longer asks
   to mark them `ready` (ATG035 retired). Drift (ATG036) and missing files
   (ATG034) are checked for contracts named in `forge.yml`.
+- **A hand-written design behind the same entry point.** `forge.yml` may
+  name an existing `design:` (and `registry:`, by default the design's own
+  `registry:` key) plus `build:` options (`mode`, `top_name`,
+  `hls_build_root`, `ip_root`, `ip_info`, `build_dir`, `system`,
+  `rtl_resource_root`). Bare commands then use that design as it stands,
+  with every output under `.forge/`, and `forge check` validates the design
+  and registry and asks the latency graph (with the HLS reports under
+  `build.hls_build_root`) which modules have no known latency.
+- **An undeclared clock- or reset-domain crossing stops generation**
+  (`gen-top`, `build`, and `topgen validate` fail on ATG023/ATG024), with
+  or without `--strict`. A module's domain is now the top-level net its
+  port is wired to, so under `connect_clock` a module's `clk` and another's
+  `ap_clk` are one domain rather than a crossing. A crossing that needs no
+  synchronizer is declared `cdc: {kind: waived, reason: ...}`: it is wired
+  directly and listed with its reason in the crossing report.
+- **Active-low module resets are driven by the inverted `ap_rst`.** The
+  generated top keeps one active-high `ap_rst`; a reset pin that asserts low
+  (by its contract's `active_level`, or by name: `rst_n`, `aresetn`,
+  `rst_b`) is wired to `~ap_rst` in Verilog, an inverted signal in VHDL and
+  one `util_vector_logic` inverter in a block design. Previously it was
+  wired straight through, holding the module in reset while `ap_rst` was
+  released. An adopted project's `reset.active` in `forge.yml` sets the
+  level in its inferred contracts, and ATG041 is retired.
 - **Skipped is not passed.** `forge test` on a project builds the design,
   prepares and runs every flow, writes results to `.forge/reports/test/`
   (picked up by a bare `forge report`), and reports a flow whose simulator

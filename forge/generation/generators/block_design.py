@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
-from ...contracts.domains import resolve_domain_nets
+from ...contracts.domains import reset_is_active_low, resolve_domain_nets
 from ._port_resolution import (
     _boundary_inst_name,
     build_connection_maps,
@@ -477,6 +477,9 @@ def write_bd_tcl(
                 return "ap_rst"
             return net_name
 
+        # The global ap_rst is active-high; active-low reset pins read it
+        # through one inverter.
+        rst_inv_created = False
         for net, binds in global_nets.items():
             if net in reset_sync_domains:
                 # This domain's member instances are reset from a real
@@ -494,17 +497,28 @@ def write_bd_tcl(
                 groups.setdefault(key, []).append(inst)
 
             for base, insts in groups.items():
+                driver = f"[get_bd_ports {top_port}]"
+                if top_port == "ap_rst" and reset_is_active_low(net, (contracts or {}).get(base)):
+                    if not rst_inv_created:
+                        tcl += [
+                            "create_bd_cell -type ip -vlnv xilinx.com:ip:util_vector_logic:2.0 ap_rst_inv",
+                            "set_property -dict [list CONFIG.C_OPERATION {not} CONFIG.C_SIZE {1}] "
+                            "[get_bd_cells ap_rst_inv]",
+                            "connect_bd_net [get_bd_ports ap_rst] [get_bd_pins ap_rst_inv/Op1]",
+                        ]
+                        rst_inv_created = True
+                    driver = "[get_bd_pins ap_rst_inv/Res]"
                 numeric, _ = _pins_are_numeric(insts)
                 if numeric:
                     cmd_tpl = (
-                        f"connect_bd_net [get_bd_ports {top_port}] "
+                        f"connect_bd_net {driver} "
                         f"[get_bd_pins {base}_${{idx}}/{net}]"
                     )
                     tcl.append(_for_loop("idx", len(insts), [cmd_tpl]))
                 else:
                     for inst in insts:
                         tcl.append(
-                            f"connect_bd_net [get_bd_ports {top_port}] [get_bd_pins {inst}/{net}]"
+                            f"connect_bd_net {driver} [get_bd_pins {inst}/{net}]"
                         )
         tcl.append("")
 

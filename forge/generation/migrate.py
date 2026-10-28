@@ -351,6 +351,7 @@ _RESET_NAMES = ("ap_rst", "rst", "reset", "rst_n")
 
 def infer_contract_skeleton(
     module_name: str, ip_info_entry: Dict[str, Any], *, source_type: str = "rtl",
+    reset_port: Optional[str] = None, reset_active_level: Optional[str] = None,
 ) -> str:
     """Generate a *.interface.yaml skeleton for a module with no contract.
 
@@ -375,6 +376,10 @@ def infer_contract_skeleton(
     be inferred from a port name. The contract is emitted as
     ``normalization_status: draft`` so it is flagged as unreviewed until a
     human promotes it to ``ready``.
+
+    *reset_port* and *reset_active_level* are the reset the caller already
+    knows (``forge.yml``'s ``reset:``): that port's role records the level,
+    which the generators use to decide whether to invert ``ap_rst``.
     """
     ports = ip_info_entry.get("ports", []) or []
     port_names = {p["name"] for p in ports}
@@ -382,6 +387,7 @@ def infer_contract_skeleton(
     is_rtl = source_type == "rtl"
 
     clock_port = next((n for n in _CLOCK_NAMES if n in port_names), None)
+    known_reset = reset_port if reset_active_level and reset_port in port_names else None
     reset_port = next((n for n in _RESET_NAMES if n in port_names), None)
 
     lines = [
@@ -410,6 +416,8 @@ def infer_contract_skeleton(
 
     def _emit(role: str, port_name: str, *, extra: List[str] = ()) -> None:
         p = port_by_name.get(port_name, {})
+        if port_name == known_reset:
+            extra = [f"      active_level: {reset_active_level}"]
         body = [f"    {role}:"]
         if role != port_name:
             body.append(f"      raw_port: {port_name}")

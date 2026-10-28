@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 import yaml  # to read system.yml
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
+from ...contracts.domains import reset_is_active_low
 from ...contracts.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
 from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
@@ -493,9 +494,22 @@ def write_structural_vhdl(
             if net not in driver_net_set:
                 emit(f"  signal {net} : {_vtype(w)};")
                 driver_net_set.add(net)
+    # A port map cannot invert before VHDL-2008, so active-low resets read
+    # a signal driven from ap_rst.
+    needs_rst_inv = cfg.connect_reset and any(
+        (p["name"] in ("rst", "reset", "ap_rst", "rst_n") or p["name"].endswith("_rst")
+         or p["name"].endswith("_ap_rst") or p["name"].endswith("_rst_n"))
+        and reset_is_active_low(p["name"])
+        for mod in cfg.modules for p in ports_by_mod[mod.name]
+    )
+    if needs_rst_inv:
+        emit("  signal ap_rst_inv : std_logic;")
     emit("")
     emit("begin")
     emit("")
+    if needs_rst_inv:
+        emit("  ap_rst_inv <= not ap_rst;")
+        emit("")
 
     # ====== Instances + port maps ========================================
     for mod in cfg.modules:
@@ -589,7 +603,7 @@ def write_structural_vhdl(
                 if cfg.connect_clock and (pname in ("clk", "clock", "ap_clk") or pname.endswith("_clk") or pname.endswith("_ap_clk")):
                     pm.append("      " + pname + " => ap_clk"); continue
                 if cfg.connect_reset and (pname in ("rst", "reset", "ap_rst", "rst_n") or pname.endswith("_rst") or pname.endswith("_ap_rst") or pname.endswith("_rst_n")):
-                    pm.append("      " + pname + " => ap_rst"); continue
+                    pm.append("      " + pname + " => " + ("ap_rst_inv" if reset_is_active_low(pname) else "ap_rst")); continue
 
                 # other global nets (e.g., new_event)
                 if pname in global_nets:

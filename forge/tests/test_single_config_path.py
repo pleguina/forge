@@ -238,3 +238,100 @@ def test_init_without_a_simulator_does_not_report_a_pass(
     payload = json.loads(out)
     assert payload["status"] == "warn"
     assert payload["metrics"]["steps_skipped"] == ["test-run"]
+
+
+# ── A design named in forge.yml ───────────────────────────────────────────
+
+PASSTHROUGH = REPO_ROOT / "plugins" / "passthrough_demo" / "forge"
+
+
+def _snapshot(root: Path) -> dict:
+    return {p: p.stat().st_mtime for p in root.rglob("*") if p.is_file()}
+
+
+@pytest.fixture
+def authored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = tmp_path / "authored"
+    root.mkdir()
+    (root / "forge.yml").write_text(
+        f"project: authored\n"
+        f"design: {PASSTHROUGH / 'designs' / 'design.yml'}\n"
+        f"verification:\n  config: {PASSTHROUGH / 'verify' / 'design.verification.yml'}\n"
+    )
+    monkeypatch.chdir(root)
+    return root
+
+
+def test_an_authored_design_is_used_as_it_stands(authored: Path) -> None:
+    resolved = resolve_project(authored)
+
+    assert resolved.design == PASSTHROUGH / "designs" / "design.yml"
+    assert resolved.registry == PASSTHROUGH / "modules.yml"
+    assert not (authored / ".forge" / "project").exists()
+
+
+def test_a_missing_authored_design_is_reported(tmp_path: Path) -> None:
+    (tmp_path / "forge.yml").write_text("design: nope/design.yml\n")
+
+    with pytest.raises(FileNotFoundError, match="nope/design.yml"):
+        resolve_project(tmp_path)
+
+
+def test_an_unknown_build_option_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "forge.yml").write_text("build:\n  modes: verilog\n")
+
+    with pytest.raises(ValueError, match="modes"):
+        ForgeConfig.load(tmp_path)
+
+
+def test_bare_build_of_an_authored_design_writes_only_under_forge(
+    authored: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    before = _snapshot(PASSTHROUGH)
+    with (authored / "forge.yml").open("a") as handle:
+        handle.write("build:\n  top_name: pt_top\n")
+
+    code, _out, err = _run(capsys, ["build"])
+
+    assert code == 0, err
+    assert (authored / ".forge/generated/pt_top.v").is_file()
+    assert _snapshot(PASSTHROUGH) == before
+
+
+def test_check_on_an_authored_design_validates_it_instead_of_scanning(
+    authored: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    status = evaluate(authored)
+
+    assert status.discovery is None
+    assert status.section("Design").state == PASS
+    assert status.section("Latency model").state == PASS
+    assert status.section("Verification").state == PASS
+    assert status.recommended_action.command == "forge build"
+
+    assert _run(capsys, ["build"])[0] == 0
+    assert evaluate(authored).section("Generated artifacts").state == PASS
+
+
+def test_an_authored_design_that_does_not_validate_fails_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    design = tmp_path / "design.yml"
+    design.write_text(
+        (PASSTHROUGH / "designs" / "design.yml").read_text()
+        .replace("registry: ../modules.yml", f"registry: {PASSTHROUGH / 'modules.yml'}")
+        .replace("ref: passthrough", "ref: no_such_module")
+    )
+    (tmp_path / "forge.yml").write_text("design: design.yml\n")
+
+    status = evaluate(tmp_path)
+
+    assert status.section("Design").state == "FAIL"
+    assert "ATG015" in [d.code for d in status.blockers]
+
+
+def test_explaining_a_module_of_an_authored_design_points_at_inspect(authored: Path) -> None:
+    from forge.project.explain import UnknownTarget, explain
+
+    with pytest.raises(UnknownTarget, match="forge inspect"):
+        explain("pt", authored)

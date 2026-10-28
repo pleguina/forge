@@ -647,7 +647,7 @@ def assemble_project_ir(
                     id=f"xform:{c.from_}->{c.to}:latency_delay",
                     kind="latency_delay", cycles=c.delay_cycles,
                 ))
-        if c.cdc:
+        if c.cdc and c.cdc.get("kind") != "waived":
             # The 5-kind CDC primitive family.
             # 'level_sync'/'2ff_sync' (alias) both map to the existing
             # 'cdc_synchronizer' transformation kind; the other 3 declared

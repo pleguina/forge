@@ -256,9 +256,10 @@ def test_the_generated_top_keeps_the_domains_separate(
         assert f".{clock}(axi_bridge_{clock})" in generated
         assert f".{clock}(ap_clk)" not in generated
 
-    # The modules FORGE *does* model still take the global nets.
+    # The modules FORGE *does* model still take the global nets; presetn
+    # asserts low, so it reads ap_rst inverted.
     assert ".pclk(ap_clk)" in generated
-    assert ".presetn(ap_rst)" in generated
+    assert ".presetn(~ap_rst)" in generated
 
 
 def test_an_explicit_external_declaration_beats_the_clock_auto_map(

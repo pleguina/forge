@@ -344,7 +344,7 @@ class ResolvedConnection:
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
     ``forge.contracts.cdc.verify_cdc`` is what actually rejects an
-    undeclared crossing under ``--strict``.
+    undeclared crossing.
     """
     id: str
     producer: ResolvedEndpoint
@@ -361,7 +361,7 @@ class ResolvedConnection:
 class ResolvedClockDomain:
     """A named clock domain — one per distinct resolved clock net.
 
-    ``name`` is the resolved net's raw port name (e.g.
+    ``name`` is the top-level net the clock ports are wired to (e.g.
     ``"ap_clk"``), not a hardcoded literal. ``instances`` is *derived* from
     each ``ResolvedInstance.clock_domain`` (the per-instance scalar is the
     source of truth — this list is a grouping view of it, not maintained

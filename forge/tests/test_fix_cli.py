@@ -227,12 +227,10 @@ def test_an_action_a_fix_discharges_drops_off_the_manual_list(
 
 
 def test_decisions_stay_on_the_manual_list(adopted: Path) -> None:
-    """Confirming a reset polarity and declaring a latency are judgement
-    calls, and no fix may claim them."""
+    """Declaring a latency is a judgement call, and no fix may claim it."""
     plan = plan_fixes(adopted)
     manual = {a.id for a in plan.manual}
 
-    assert "confirm-reset-polarity" in manual
     assert "declare-latency" in manual
 
 

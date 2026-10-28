@@ -174,12 +174,12 @@ FORGE project status
   ✅ Sources                   PASS               3 RTL, 0 HLS, 3 modules
   ✅ Contracts                 PASS               3 inferred from source
   ✅ Topology                  PASS               4 connections, 2 in / 2 out
-  ⚠️  Clock/reset model         WARN               clock clk, reset rst_n (active low)
+  ✅ Clock/reset model         PASS               clock clk, reset rst_n (active low, driven by ~ap_rst)
   ◐  Latency model             PARTIAL            0 of 3 declared
   ○  Generated artifacts       NOT CONFIGURED     not generated yet
   ○  Verification              NOT CONFIGURED     no verification config
 
-  Project completion: 61% (in progress)
+  Project completion: 64% (in progress)
 ```
 
 `forge check` is to your project what [`forge doctor`](quickstart.md) is to
@@ -361,14 +361,10 @@ that performs it rather than done by a preview command.
 
 ## What FORGE told you about your design
 
-Two of the lines above are worth reading closely, because they are FORGE
-being honest about its own limits rather than about your code:
-
-**`Clock/reset model — WARN`.** Your reset is active-low. FORGE's generators
-collapse every module reset onto one top-level `ap_rst` net and do not model
-its polarity, so `rst_n` is wired straight through. You need to drive
-`ap_rst` with the polarity your modules expect. Better to learn that here
-than from a waveform.
+**`Clock/reset model`.** The generated top level has one active-high
+`ap_rst` input. Your reset is active-low, so each `rst_n` pin is driven by
+`~ap_rst`. FORGE reads the level from the port name; if the name misleads,
+set `reset.active` in `forge.yml` and that wins.
 
 **`Latency model — PARTIAL`.** A module's pipeline depth is not visible in
 its port list, so adoption never invents one. Until you declare it, the
@@ -450,6 +446,31 @@ question:
 ```
   ✅ Supported constructs      PASS               1 opaque: axi_bridge
 ```
+
+## Already have a design.yml?
+
+A project that already describes its design by hand — a `design.yml`, its
+`modules.yml` registry, HLS IP built somewhere — keeps those files and
+names them in `forge.yml` instead of being adopted:
+
+```yaml title="forge.yml"
+project: omtf
+design: forge_utils/designs/design.rpc_fp.yml
+# registry: forge_utils/modules.rpc.yml   # default: the design's own registry: key
+build:
+  hls_build_root: build_hls_fp
+verification:
+  config: forge_utils/verify/design.verification.yml
+```
+
+FORGE then uses the design as it stands: nothing is scanned or derived, and
+everything it writes goes under `.forge/`. `forge build`, `forge test`,
+`forge report` and `forge inspect` need no arguments, and `forge check`
+validates the design and its registry and reports any module whose latency
+neither the registry nor the HLS reports under `build.hls_build_root` give.
+`build:` accepts the `forge build` options `mode`, `top_name`,
+`hls_build_root`, `ip_root`, `ip_info`, `build_dir`, `system` and
+`rtl_resource_root`; an option given on the command line wins.
 
 ## Where to go next
 

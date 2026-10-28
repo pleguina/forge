@@ -137,7 +137,7 @@ DIAGNOSTICS: "dict[str, DiagnosticDefinition]" = {
         _atg("ATG038", "warning", "No connection resolved between any two managed modules — every port is exposed at the top level.", "Add the intended producer/consumer pairs to connections: in design.yml."),
         _atg("ATG039", "error", "No clock port found on any module, or forge.yml declares a clock port that does not exist.", "Set clock.port in forge.yml to a port the modules actually have."),
         _atg("ATG040", "warning", "Several clock candidates found — which one is the functional clock needs confirming.", "Confirm clock.port in forge.yml; import modules on other clocks as opaque."),
-        _atg("ATG041", "warning", "Reset is active-low, and generation wires every module reset to one active-high ap_rst net without inverting it.", "Drive ap_rst with the expected polarity above the generated top."),
+        _atg("ATG041", "warning", "Retired: generation drives an active-low module reset with the active-high ap_rst inverted.", "Nothing to do."),
         _atg("ATG042", "warning", "Module is outside FORGE's supported envelope (e.g. several functional clock domains) and was left out of the generated project.", "Import it as opaque, wrap one module per clock domain, or exclude it."),
         _atg("ATG043", "warning", "HLS interfaces are predicted from C++ and not yet reconciled against synthesis.", "Run `forge hls run --stages csim,synth` and re-check."),
         _atg("ATG044", "warning or error", "Verification is not configured, or the configured verification config or dataset does not exist.", "Set verification.config in forge.yml to a design.verification.yml, then run `forge test`."),

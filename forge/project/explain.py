@@ -174,6 +174,12 @@ def explain(target: str, root: "Path | str" = ".", *,
         return _explain_diagnostic(target, subject, status or _try_evaluate(root))
 
     resolved = status or evaluate(root)
+    if resolved.config is not None and resolved.config.authored:
+        raise UnknownTarget(
+            f"cannot explain {target!r}: modules, ports and connections are explained "
+            f"from source discovery, and this project names its own design. "
+            f"`forge inspect` shows how that design resolves."
+        )
     if resolved.discovery is None:
         raise UnknownTarget(
             f"cannot explain {target!r}: there is no FORGE project at {root}. "
@@ -659,10 +665,9 @@ def _explain_clock_or_reset(
         level = "low" if candidate.active_low else "high"
         explanation.section("Active level", [
             f"active {level}, read from the port name",
-            "FORGE's generators wire every module reset to one top-level "
-            "active-high ap_rst net and do not invert it"
+            "the generated top level drives it with its active-high ap_rst inverted"
             if candidate.active_low else
-            "matches the polarity the generated top level drives",
+            "the generated top level drives it with its active-high ap_rst",
         ])
 
     others = [c.name for c in pool if c.name != candidate.name]

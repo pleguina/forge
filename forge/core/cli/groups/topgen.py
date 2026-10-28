@@ -1334,9 +1334,9 @@ def cmd_validate(args):
                     _cdc_issues = verify_cdc(cfg, _cdc_contracts, _match_report, _conn_map, _global_nets)
                     cdc_diagnostics = [
                         {
-                            "severity": "warning", "code": issue.code or "ATG023",
+                            "severity": "error", "code": issue.code or "ATG023",
                             "category": "cdc", "message": f"[{issue.connection}] {issue.message}",
-                            "action": "Add a matching 'cdc:' block, or run gen-top --strict for a hard failure.",
+                            "action": "Add a matching 'cdc:' block to the connection.",
                         }
                         for issue in _cdc_issues
                     ]
@@ -1368,13 +1368,11 @@ def cmd_validate(args):
             if not json_mode:
                 print("\n🔌 CDC crossing check:")
                 for d in cdc_diagnostics:
-                    print(f"  ⚠️  [{d['code']}] {d['message']}")
-            if strict:
-                if not json_mode:
-                    print(f"\n⛔ Strict mode: treating {len(cdc_diagnostics)} CDC warning(s) as errors")
-                envelope = _validators_to_envelope(*validators)
-                envelope.diagnostics.extend(cdc_diagnostics)
-                sys.exit(emit(envelope, json_mode=json_mode, strict=True))
+                    print(f"  ❌ [{d['code']}] {d['message']}")
+            envelope = _validators_to_envelope(*validators)
+            envelope.diagnostics.extend(cdc_diagnostics)
+            envelope.status = "fail"
+            sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
 
         stale_diagnostic: Optional[dict] = None
         if getattr(args, "check_stale", False):
@@ -1885,16 +1883,12 @@ def cmd_gen_top(args):
                     print(str(_i))
                 sys.exit(1)
 
-        if getattr(args, "strict", False):
-            cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
-            if cdc_errors:
-                print(
-                    f"\n❌ Strict mode: {len(cdc_errors)} undeclared clock/reset "
-                    "domain crossing(s):"
-                )
-                for _i in cdc_errors:
-                    print(str(_i))
-                sys.exit(1)
+        cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
+        if cdc_errors:
+            print(f"\n❌ {len(cdc_errors)} undeclared clock/reset domain crossing(s):")
+            for _i in cdc_errors:
+                print(str(_i))
+            sys.exit(1)
 
         if args.mode == "bd":
             # --gen-testbench and --lint are Verilog/VHDL-specific (a real

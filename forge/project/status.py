@@ -242,15 +242,19 @@ def evaluate(
         return status
 
     status.paths = status.config.paths()
-    # The same decisions adoption honours: a question the project has
-    # already answered in forge.yml must not be re-asked by `forge check`
-    # either, or answering it would appear to have done nothing.
-    status.discovery = discovery or ProjectDiscovery(
-        decisions=status.config.decisions()
-    ).scan(root)
+    if status.config.authored:
+        checks = AUTHORED_CHECKS
+    else:
+        checks = CHECKS
+        # The same decisions adoption honours: a question the project has
+        # already answered in forge.yml must not be re-asked by `forge check`
+        # either, or answering it would appear to have done nothing.
+        status.discovery = discovery or ProjectDiscovery(
+            decisions=status.config.decisions()
+        ).scan(root)
 
     ranked: List[Tuple[int, int, Action]] = []
-    for order, check in enumerate(CHECKS):
+    for order, check in enumerate(checks):
         output = check(status)
         if output is None:
             continue
@@ -573,14 +577,7 @@ def _check_topology(status: ProjectStatus) -> _CheckOutput:
 
 
 def _check_clock_reset(status: ProjectStatus) -> _CheckOutput:
-    """Is there one clock and one reset, and can FORGE express them?
-
-    The active-low warning is the honest one: FORGE's generators collapse
-    every reset onto a single top-level ``ap_rst`` net and do not model its
-    polarity, so an active-low module reset is wired to it unchanged. That
-    is a real limitation, and the plan's rule for limitations is that the
-    user learns about them early rather than from a waveform.
-    """
+    """Is there one clock and one reset, and can FORGE express them?"""
     config, discovery = status.config, status.discovery
     assert config is not None and discovery is not None
 
@@ -650,27 +647,7 @@ def _check_clock_reset(status: ProjectStatus) -> _CheckOutput:
         details.append(f"clock {clocks[0].name}")
 
     if config.reset.active_low:
-        status.report.warn(
-            "ATG041",
-            f"reset {config.reset.port!r} is active-low, and FORGE's generators wire "
-            f"every module reset to one top-level active-high ap_rst net without "
-            f"inverting it",
-            action=(
-                "Drive ap_rst with the polarity your modules expect at the level above "
-                "the generated top, or invert inside the modules"
-            ),
-        )
-        codes.append("ATG041")
-        state = WARN if state == PASS else state
-        details.append(f"reset {config.reset.port} (active low)")
-        actions.append(Action(
-            id="confirm-reset-polarity",
-            description=(
-                f"Confirm how {config.reset.port!r} is driven — FORGE does not model "
-                f"reset polarity and wires it straight through"
-            ),
-            safe=False,
-        ))
+        details.append(f"reset {config.reset.port} (active low, driven by ~ap_rst)")
     elif discovery.managed_resets:
         details.append(f"reset {config.reset.port}")
 
@@ -960,7 +937,9 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
     config, paths = status.config, status.paths
     assert config is not None and paths is not None
 
-    top = paths.generated_root / "algo_top.v"
+    top = paths.top_level(
+        config.build.get("mode", "verilog"), config.build.get("top_name", "algo_top"),
+    )
     if not top.is_file():
         return _CheckOutput(
             StatusSection("Generated artifacts", NOT_CONFIGURED, "not generated yet"),
@@ -972,16 +951,19 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
         )
 
     generated_at = top.stat().st_mtime
-    own_contracts = [
-        (config.root / policy.contract).resolve()
-        for policy in config.modules.values() if policy.contract
-    ]
-    inputs = [
-        p for p in
-        [config.root / ROOT_CONFIG_NAME] + own_contracts
-        + config.resolve_sources("rtl") + config.resolve_sources("hls")
-        if p.is_file()
-    ]
+    if config.authored:
+        named = _authored_files(config)
+        candidates = [config.root / ROOT_CONFIG_NAME] + [p for p in named if p is not None]
+    else:
+        own_contracts = [
+            (config.root / policy.contract).resolve()
+            for policy in config.modules.values() if policy.contract
+        ]
+        candidates = (
+            [config.root / ROOT_CONFIG_NAME] + own_contracts
+            + config.resolve_sources("rtl") + config.resolve_sources("hls")
+        )
+    inputs = [p for p in candidates if p.is_file()]
     newer = [p for p in inputs if p.stat().st_mtime > generated_at]
     if newer:
         status.report.warn(
@@ -1005,6 +987,142 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
         "Generated artifacts", PASS, paths.relative(top)))
 
 
+# ── A design named in forge.yml ───────────────────────────────────────────
+
+def _authored_files(config: ForgeConfig) -> Tuple[Path, Optional[Path]]:
+    """The design ``forge.yml`` names and the registry that goes with it."""
+    from forge.project.resolve import design_registry
+
+    assert config.design is not None
+    design = (config.root / config.design).resolve()
+    if config.registry:
+        return design, (config.root / config.registry).resolve()
+    return design, design_registry(design) if design.is_file() else None
+
+
+def _check_design(status: ProjectStatus) -> _CheckOutput:
+    """Do the design and registry ``forge.yml`` names exist and validate?"""
+    from forge.contracts.config import DesignConfig
+    from forge.generation.validation import validate_design, validate_registry
+
+    config, paths = status.config, status.paths
+    assert config is not None and paths is not None
+    design, registry = _authored_files(config)
+
+    if not design.is_file():
+        status.report.error(
+            "ATG001",
+            f"{ROOT_CONFIG_NAME} names design {config.design}, which does not exist",
+            action=f"Correct design: in {ROOT_CONFIG_NAME}",
+            path=design,
+        )
+        return _CheckOutput(
+            StatusSection("Design", FAIL, "design missing", ("ATG001",)),
+            [Action(id="fix-design-path", description=f"Point design: in {ROOT_CONFIG_NAME} at a design.yml", safe=False)],
+        )
+    if registry is None or not registry.is_file():
+        named = paths.relative(registry) if registry else "none"
+        status.report.error(
+            "ATG008",
+            f"the design's module registry is missing ({named})",
+            action=f"Set registry: in {ROOT_CONFIG_NAME}, or the design's own registry: key",
+            path=registry or design,
+        )
+        return _CheckOutput(
+            StatusSection("Design", FAIL, "registry missing", ("ATG008",)),
+            [Action(id="fix-registry-path", description="Name the design's modules.yml", safe=False)],
+        )
+
+    try:
+        cfg = DesignConfig.load_relaxed(design)
+    except Exception as exc:  # noqa: BLE001 — the user's file is wrong, not FORGE
+        status.report.error(
+            "ATG015", f"{paths.relative(design)} could not be loaded: {exc}",
+            action=f"Fix {paths.relative(design)}", path=design,
+        )
+        return _CheckOutput(
+            StatusSection("Design", FAIL, "does not load", ("ATG015",)),
+            [Action(id="fix-design", description=f"Fix {paths.relative(design)}", safe=False)],
+        )
+
+    problems = list(validate_design(cfg, design).errors) + list(validate_registry(registry).errors)
+    for problem in problems:
+        status.report.error(
+            "ATG015", f"[{problem.category}] {problem.message}",
+            action=problem.suggestion or f"Fix {paths.relative(design)}",
+            path=design,
+        )
+    if problems:
+        return _CheckOutput(
+            StatusSection("Design", FAIL, f"{len(problems)} validation error(s)", ("ATG015",)),
+            [Action(
+                id="fix-design",
+                description=f"Fix the validation errors in {paths.relative(design)} and its registry",
+                safe=False,
+            )],
+        )
+    return _CheckOutput(StatusSection(
+        "Design", PASS,
+        f"{paths.relative(design)}, {len(cfg.modules)} modules, {len(cfg.connections)} connections",
+    ))
+
+
+def _check_design_latency(status: ProjectStatus) -> Optional[_CheckOutput]:
+    """Does the latency graph know every module's depth?
+
+    Asks the same graph ``forge analyze latency-check`` builds, so a module
+    whose latency comes from its HLS reports (under ``build.hls_build_root``)
+    counts as known, exactly as it does there.
+    """
+    from forge.analysis.latency_static.graph import build_graph
+
+    config, paths = status.config, status.paths
+    assert config is not None and paths is not None
+    design, registry = _authored_files(config)
+    if registry is None or not design.is_file() or not registry.is_file():
+        return None
+
+    hls_reports = None
+    hls_root = config.build.get("hls_build_root")
+    if hls_root and (config.root / hls_root).is_dir():
+        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
+
+        hls_reports = latency_map_from_reports(collect_reports(config.root / hls_root))
+    try:
+        graph = build_graph(design, modules_yml_path=registry, hls_reports=hls_reports)
+    except Exception:  # noqa: BLE001 — a design that does not load is _check_design's finding
+        return None
+
+    modules = sorted({node.module for node in graph.nodes.values()})
+    unknown = sorted({node.module for node in graph.nodes.values() if node.latency is None})
+    known = len(modules) - len(unknown)
+    if not unknown:
+        return _CheckOutput(StatusSection(
+            "Latency model", PASS, f"{known} of {len(modules)} known"))
+
+    status.report.warn(
+        "ATG045",
+        f"{len(unknown)} of {len(modules)} modules have no known latency "
+        f"({', '.join(unknown)}) — the static latency check cannot align a pipeline "
+        f"whose stage depths are unknown",
+        action=(
+            f"Declare `latency:` for them in {paths.relative(registry)}, or point "
+            f"build.hls_build_root in {ROOT_CONFIG_NAME} at their HLS reports"
+        ),
+        path=registry,
+    )
+    return _CheckOutput(
+        StatusSection(
+            "Latency model", PARTIAL, f"{known} of {len(modules)} known", ("ATG045",),
+        ),
+        [Action(
+            id="declare-latency",
+            description=f"Declare the missing latencies in {paths.relative(registry)}",
+            safe=False,
+        )],
+    )
+
+
 #: Run in dependency order — a project with no sources has nothing to say
 #: about its topology, and ``forge next`` reports the first action recorded,
 #: so this order *is* the recommended order of work.
@@ -1016,6 +1134,14 @@ CHECKS: Tuple[CheckFn, ...] = (
     _check_unsupported,
     _check_hls,
     _check_latency,
+    _check_generated,
+    _check_verification,
+)
+
+#: The checks for a project whose forge.yml names its own design.
+AUTHORED_CHECKS: Tuple[CheckFn, ...] = (
+    _check_design,
+    _check_design_latency,
     _check_generated,
     _check_verification,
 )

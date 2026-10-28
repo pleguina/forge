@@ -97,18 +97,22 @@ def resolve_project_args(args):
     working directory.
 
     Fills ``args.design`` and, where the command has them and the user left
-    them unset, ``args.contracts_from`` and ``args.consumer_root``. Returns
-    the :class:`forge.project.resolve.ResolvedProject`; raises what
+    them unset, ``args.contracts_from``, ``args.consumer_root`` and the
+    options ``forge.yml``'s ``build:`` sets. Returns the
+    :class:`forge.project.resolve.ResolvedProject`; raises what
     :func:`forge.project.resolve.resolve_project` raises.
     """
     from forge.project.resolve import resolve_project
 
     project = resolve_project(Path.cwd())
     args.design = str(project.design)
-    if getattr(args, "contracts_from", None) is None:
+    if getattr(args, "contracts_from", None) is None and project.registry is not None:
         args.contracts_from = str(project.registry)
     if hasattr(args, "consumer_root") and args.consumer_root is None:
         args.consumer_root = str(project.root)
+    for name, value in project.build_options().items():
+        if hasattr(args, name) and getattr(args, name) is None:
+            setattr(args, name, value)
     return project
 
 

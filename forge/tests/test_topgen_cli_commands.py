@@ -791,7 +791,10 @@ def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tu
     return design_yml, modules_yml
 
 
-def test_gen_top_strict_fails_on_undeclared_clock_crossing(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+@pytest.mark.parametrize("flags", [[], ["--strict"]])
+def test_gen_top_fails_on_undeclared_clock_crossing(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, flags: list,
+) -> None:
     design_yml, modules_yml = _write_two_clock_domain_design(tmp_path)
 
     result = _run_topgen(
@@ -799,12 +802,13 @@ def test_gen_top_strict_fails_on_undeclared_clock_crossing(capsys: pytest.Captur
         "--mode", "verilog",
         "--output", str(tmp_path / "algo_top.v"),
         "--contracts-from", str(modules_yml),
-        "--strict",
+        *flags,
     )
 
     assert result.returncode == 1
     assert "undeclared clock/reset domain crossing" in result.stdout
     assert "clk_a" in result.stdout and "clk_b" in result.stdout
+    assert not (tmp_path / "algo_top.v").exists()
 
 
 def test_gen_top_strict_passes_with_declared_cdc_adapter(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

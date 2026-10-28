@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 import yaml  # To read system.yml
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
-from ...contracts.domains import resolve_domain_nets
+from ...contracts.domains import reset_is_active_low, resolve_domain_nets
 from ...contracts.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
 from ._port_resolution import (
@@ -597,7 +597,8 @@ def write_structural_verilog(
                     pm.append(f"    .{pname}(ap_clk)")
                     continue
                 if _global == "reset":
-                    pm.append(f"    .{pname}(ap_rst)")
+                    _low = reset_is_active_low(pname, (contracts or {}).get(mod.name) or (contracts or {}).get(mod.ip_info_key or ""))
+                    pm.append(f"    .{pname}({'~ap_rst' if _low else 'ap_rst'})")
                     continue
 
                 # A non-standard-named
@@ -616,6 +617,8 @@ def write_structural_verilog(
                     domain_name = reset_of_module[mod.name]
                     if domain_name in reset_sync_domains:
                         rst_sync_net = _verilog_ident(f"rst_sync_{domain_name}")
+                        if reset_is_active_low(pname, (contracts or {}).get(mod.name) or (contracts or {}).get(mod.ip_info_key or "")):
+                            rst_sync_net = f"~{rst_sync_net}"
                         pm.append(f"    .{pname}({rst_sync_net})")
                         continue
 
@@ -869,13 +872,6 @@ def write_structural_verilog(
             src_mod = inst_to_mod[src_i]
             dst_mod = inst_to_mod[dst_i]
 
-            # resolve_domain_nets's domain identity is the raw port name
-            # verbatim (e.g. "rst") — but this generator's own clock/reset
-            # auto-map (above) aliases every standard-name variant onto the
-            # single literal ap_clk/ap_rst top-level port regardless of
-            # which variant a given module's contract used. Translate
-            # through the same rule here, or the synchronizer would
-            # reference a top-level net that doesn't exist.
             src_clk_domain = clock_of_module.get(src_mod)
             src_rst_domain = reset_of_module.get(src_mod)
             dst_clk_domain = clock_of_module.get(dst_mod)

@@ -91,13 +91,13 @@ def _write_two_clock_design(tmp_path: Path) -> Path:
     return design_path
 
 
-def test_validate_warns_on_undeclared_cdc_crossing(tmp_path, capsys):
+def test_validate_fails_on_undeclared_cdc_crossing(tmp_path, capsys):
     design_path = _write_two_clock_design(tmp_path)
     code, out, _err = _run_topgen(capsys, "validate", str(design_path), "--json")
 
-    assert code == 0  # non-strict: a warning, not a failure
+    assert code == 1
     payload = json.loads(out)
-    assert payload["status"] == "warn"
+    assert payload["status"] == "fail"
     assert any(d.get("code") == "ATG023" for d in payload["diagnostics"])
 
 

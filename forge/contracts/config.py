@@ -801,12 +801,22 @@ class DesignConfig:
                         f"must be a mapping with at least 'kind', got: {cdc!r}"
                     )
                 kind = cdc["kind"]
-                if kind not in ("level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
+                if kind not in ("level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo", "waived"):
                     raise ValueError(
                         f"[ATG021] Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind "
                         f"{kind!r} must be one of ('level_sync' (alias '2ff_sync'), "
-                        "'pulse_sync', 'mailbox_transfer', 'async_fifo')"
+                        "'pulse_sync', 'mailbox_transfer', 'async_fifo', 'waived')"
                     )
+                if kind == "waived":
+                    # No synchronizer is generated, so the reason is the only
+                    # record a reviewer has of why the crossing is safe.
+                    reason = cdc.get("reason")
+                    if not isinstance(reason, str) or not reason.strip():
+                        raise ValueError(
+                            f"[ATG021] Connection {c['from']!r} -> {c.get('to')!r}: "
+                            "cdc.kind='waived' requires a 'reason' saying why the "
+                            "crossing needs no synchronizer."
+                        )
                 if kind == "2ff_sync":
                     # Backwards-compatible alias — normalize to the
                     # canonical name so every downstream consumer (the

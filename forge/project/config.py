@@ -190,6 +190,14 @@ class ModulePolicy:
         return out
 
 
+#: ``build:`` keys in ``forge.yml``, each the ``forge build`` option of the
+#: same name. The path-valued ones resolve against the project root.
+BUILD_PATH_OPTIONS = (
+    "hls_build_root", "ip_root", "ip_info", "build_dir", "system", "rtl_resource_root",
+)
+BUILD_OPTIONS = ("mode", "top_name") + BUILD_PATH_OPTIONS
+
+
 def _latency(value: Any, *, module: str, source: Any) -> Dict[str, Any]:
     """Normalise a ``modules.<name>.latency`` entry to the registry's form."""
     from forge.contracts.config import LatencyDeclaration
@@ -260,6 +268,12 @@ class ForgeConfig:
         dataset: Verification dataset path, when one is configured.
         verification_config: The user's ``design.verification.yml``,
             relative to ``root``, which ``forge test`` runs.
+        design: A hand-written ``design.yml``, relative to ``root``. When
+            set, it is the design every command uses as it stands, and
+            nothing is derived from the sources.
+        registry: The ``modules.yml`` that goes with ``design``; by default
+            the one its ``registry:`` key names.
+        build: ``forge build`` options, by name (:data:`BUILD_OPTIONS`).
         modules: Per-module handling, by module name. Only modules the user
             has said something about appear; everything else is managed.
         connections: Producer/consumer pairs the user has decided on, for
@@ -282,11 +296,19 @@ class ForgeConfig:
     part: str = DEFAULT_PART
     dataset: Optional[str] = None
     verification_config: Optional[str] = None
+    design: Optional[str] = None
+    registry: Optional[str] = None
+    build: Dict[str, str] = field(default_factory=dict)
     modules: Dict[str, ModulePolicy] = field(default_factory=dict)
     #: Connections the user has decided on, where discovery found more than
     #: one equally valid reading. See :class:`DeclaredConnection`.
     connections: List[DeclaredConnection] = field(default_factory=list)
     schema_version: str = FORGE_YML_SCHEMA_VERSION
+
+    @property
+    def authored(self) -> bool:
+        """Whether the project names its own design rather than being derived."""
+        return self.design is not None
 
     @property
     def opaque_modules(self) -> "frozenset":
@@ -353,6 +375,16 @@ class ForgeConfig:
                 contract=str(contract) if contract else None,
             )
 
+        build_raw = raw.get("build") or {}
+        if not isinstance(build_raw, dict):
+            raise ValueError(f"{config_path}: 'build' must be a mapping of forge build options")
+        unknown = sorted(set(build_raw) - set(BUILD_OPTIONS))
+        if unknown:
+            raise ValueError(
+                f"{config_path}: unknown build option(s) {', '.join(unknown)}; "
+                f"known: {', '.join(BUILD_OPTIONS)}"
+            )
+
         connections_raw = raw.get("connections") or []
         if not isinstance(connections_raw, list):
             raise ValueError(
@@ -391,6 +423,9 @@ class ForgeConfig:
             verification_config=(
                 str(verification_raw["config"]) if verification_raw.get("config") else None
             ),
+            design=str(raw["design"]) if raw.get("design") else None,
+            registry=str(raw["registry"]) if raw.get("registry") else None,
+            build={str(k): str(v) for k, v in build_raw.items() if v is not None},
             modules=modules,
             connections=connections,
             schema_version=str(raw.get("schema_version") or FORGE_YML_SCHEMA_VERSION),
@@ -413,6 +448,12 @@ class ForgeConfig:
             out["sources"]["rtl"] = list(self.rtl_globs)
         if self.hls_globs:
             out["sources"]["hls"] = list(self.hls_globs)
+        if self.design:
+            out["design"] = self.design
+        if self.registry:
+            out["registry"] = self.registry
+        if self.build:
+            out["build"] = dict(self.build)
         if self.top:
             out["top"] = self.top
         out["part"] = self.part

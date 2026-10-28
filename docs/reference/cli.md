@@ -283,7 +283,7 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --mode {vhdl,verilog,bd}
-                        Output mode: vhdl, verilog, or bd (Block Design TCL)
+                        Output mode: vhdl, verilog (default), or bd (Block Design TCL)
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
   --ip-root IP_ROOT     IP directory (default: ips/)
@@ -296,7 +296,7 @@ optional arguments:
   --system SYSTEM       system.yml for global nets
   --output OUTPUT, -o OUTPUT
                         Output file (same meaning as `gen-top --output`)
-  --top-name TOP_NAME   Top entity/module name
+  --top-name TOP_NAME   Top entity/module name (default: algo_top)
   --contracts-from MODULES_YML
                         modules.yml with interface_contract paths; enables contract-driven wiring
   --rtl-resource-root RTL_RESOURCE_ROOT

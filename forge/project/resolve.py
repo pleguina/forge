@@ -2,48 +2,41 @@
 
 ``forge build``, ``forge test``, ``forge report`` and ``forge inspect``
 called without a design path all come here: find ``forge.yml`` above the
-working directory, regenerate ``.forge/`` from it and the sources, and hand
-back the paths the command would otherwise have needed on its command line.
+working directory and hand back the paths the command would otherwise have
+needed on its command line. A project whose ``forge.yml`` names its own
+``design:`` uses that design as it stands; any other project has
+``.forge/`` regenerated from ``forge.yml`` and the sources first.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from forge.project.adopt import plan_derived_state
-from forge.project.config import ForgeConfig
+from forge.project.config import BUILD_PATH_OPTIONS, ForgeConfig
 from forge.project.discovery import Ambiguity
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
 
 
 @dataclass(frozen=True)
 class ResolvedProject:
-    """A ``forge.yml`` project, with ``.forge/`` written for it."""
+    """A ``forge.yml`` project, ready for a command to run on."""
 
     config: ForgeConfig
     paths: ProjectPaths
+    design: Path
+    #: ``None`` when an authored design names no registry of its own.
+    registry: Optional[Path]
 
     @property
     def root(self) -> Path:
         return self.config.root
 
-    @property
-    def design(self) -> Path:
-        return self.paths.design_yml
-
-    @property
-    def registry(self) -> Path:
-        return self.paths.modules_yml
-
     def top_level(self, mode: str = "verilog", top_name: str = "algo_top") -> Path:
         """Where ``forge build`` writes the generated top level for *mode*."""
-        if mode == "vhdl":
-            return self.paths.generated_root / f"{top_name}.vhd"
-        if mode == "bd":
-            return self.paths.generated_root / "block_design.tcl"
-        return self.paths.generated_root / f"{top_name}.v"
+        return self.paths.top_level(mode, top_name)
 
     @property
     def verification(self) -> Optional[Path]:
@@ -52,13 +45,21 @@ class ResolvedProject:
             return None
         return (self.config.root / self.config.verification_config).resolve()
 
+    def build_options(self) -> Dict[str, str]:
+        """``forge.yml``'s ``build:`` options, path-valued ones made absolute."""
+        return {
+            name: str((self.root / value).resolve()) if name in BUILD_PATH_OPTIONS else value
+            for name, value in self.config.build.items()
+        }
+
 
 def resolve_project(start: "Path | str" = ".") -> ResolvedProject:
-    """Find the project around *start* and bring ``.forge/`` up to date.
+    """Find the project around *start* and make it ready to run on.
 
-    Raises ``FileNotFoundError`` outside a project and ``ValueError`` while
-    ``forge.yml`` leaves a question open that generation would otherwise
-    have to guess — both classified as a problem with the user's input.
+    Raises ``FileNotFoundError`` outside a project or when a file
+    ``forge.yml`` names is missing, and ``ValueError`` while ``forge.yml``
+    leaves a question open that generation would otherwise have to guess —
+    both classified as a problem with the user's input.
     """
     root = find_project_root(start)
     if root is None:
@@ -67,6 +68,9 @@ def resolve_project(start: "Path | str" = ".") -> ResolvedProject:
             f"run `forge adopt` to create one, or pass the design file explicitly"
         )
     config = ForgeConfig.load(root / ROOT_CONFIG_NAME)
+    if config.authored:
+        return _authored(config)
+
     plan = plan_derived_state(config)
     if plan.unresolved:
         raise ValueError(_unresolved_message(plan.unresolved))
@@ -83,7 +87,41 @@ def resolve_project(start: "Path | str" = ".") -> ResolvedProject:
             if stale not in plan.files:
                 stale.unlink()
     plan.write()
-    return ResolvedProject(config=config, paths=paths)
+    return ResolvedProject(
+        config=config, paths=paths, design=paths.design_yml, registry=paths.modules_yml,
+    )
+
+
+def _authored(config: ForgeConfig) -> ResolvedProject:
+    assert config.design is not None
+    design = (config.root / config.design).resolve()
+    if not design.is_file():
+        raise FileNotFoundError(f"{ROOT_CONFIG_NAME} names design {config.design}, which does not exist")
+    if config.registry:
+        registry: Optional[Path] = (config.root / config.registry).resolve()
+        if not registry.is_file():
+            raise FileNotFoundError(
+                f"{ROOT_CONFIG_NAME} names registry {config.registry}, which does not exist"
+            )
+    else:
+        registry = design_registry(design)
+    return ResolvedProject(
+        config=config, paths=config.paths(), design=design, registry=registry,
+    )
+
+
+def design_registry(design: Path) -> Optional[Path]:
+    """The ``modules.yml`` a design's own ``registry:`` key names, if any."""
+    import yaml
+
+    try:
+        document = yaml.safe_load(design.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    name = document.get("registry") if isinstance(document, dict) else None
+    if not name:
+        return None
+    return (design.parent / str(name)).resolve()
 
 
 def _unresolved_message(unresolved: List[Ambiguity]) -> str:

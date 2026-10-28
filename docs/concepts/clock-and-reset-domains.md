@@ -36,32 +36,36 @@ deferred" below.
 
 Separately from the per-module role model above, FORGE has a real,
 working clock-domain-crossing **checker** for connections *between*
-modules: `forge.contracts.cdc.verify_cdc`. It resolves which raw net
+modules: `forge.contracts.cdc.verify_cdc`. It resolves which top-level net
 drives each module's clock and reset (`forge.contracts.domains.resolve_domain_nets`,
-shared with the canonical IR so the two never disagree), and flags any
+shared with the canonical IR and the generators so they never disagree), and flags any
 wired connection between two modules whose resolved clock (or reset) nets
 differ and which has no matching `cdc:` declaration on its `design.yml`
 connection.
 
-`verify_cdc` runs in two places: under `forge topgen gen-top --strict`
-(an error, same as always) and, as of release-plan §10.0B, under plain
-`forge topgen validate` too — surfaced there as a warning (`ATG023`
-clock-domain / `ATG024` reset-domain crossing), whenever the design's
-registry and interface contracts can be loaded without needing already-
-built HDL. This gives authors CDC feedback at the earliest command,
-not just at final generation; `--strict` still escalates it to a hard
-failure at either command.
+Under `connect_clock`/`connect_reset`, every standard clock or reset
+name (`clk`, `ap_clk`, `*_clk`, `rst`, `ap_rst`, ...) is wired to the one
+global `ap_clk`/`ap_rst` net, so those modules share a domain whatever their
+port is called. Only a clock with its own top-level net (`clk_b`) is a
+separate domain.
 
-### The five CDC kinds
+An undeclared crossing is an error (`ATG023` clock-domain / `ATG024`
+reset-domain crossing) with or without `--strict`: `forge build` and
+`forge topgen gen-top` refuse to generate, and `forge topgen validate`
+fails whenever the design's registry and interface contracts can be loaded
+without needing already-built HDL.
+
+### The CDC kinds
 
 ```yaml
 connections:
   - from: producer
     to: consumer
     cdc:
-      kind: level_sync          # or pulse_sync, mailbox_transfer, async_fifo
+      kind: level_sync          # or pulse_sync, mailbox_transfer, async_fifo, waived
       depth: 4                  # required for async_fifo; must be a power of two
       min_spacing_cycles: 8     # required for pulse_sync
+      reason: "..."             # required for waived
 ```
 
 | `kind` | Use it for | Generated RTL | Static latency |
@@ -70,6 +74,7 @@ connections:
 | `pulse_sync` | A one-cycle source-domain event, with a declared minimum spacing between events | `cdc_pulse_sync` — toggle + double-flop-sync + edge-detect | Fixed +3 destination cycles |
 | `mailbox_transfer` | A coherent multi-bit payload, one outstanding transfer at a time | `cdc_mailbox` — full request/acknowledge handshake | Unknown — depends on relative clock phase |
 | `async_fifo` | A multi-bit stream needing real dual-clock buffering | `cdc_async_fifo` — Gray-code dual-pointer FIFO | Unknown — depends on relative write/read rates |
+| `waived` | A crossing that is safe without a synchronizer (related clocks, a quasi-static configuration value); `reason:` says why | None — a direct wire | Unchanged |
 
 `level_sync`'s double-flop pattern only guarantees per-bit metastability
 safety, not a coherent multi-bit sample — use `mailbox_transfer` (single,
