@@ -89,7 +89,7 @@ def _check_exists(path: Path, label: str, result: PreflightResult) -> bool:
     if not path.exists():
         result.errors.append(
             f"{label} not found: {path}\n"
-            f"    → Re-run: forge topgen gen-top ..."
+            f"    → Re-run: forge dev topgen gen-top ..."
         )
         return False
     return True
@@ -135,7 +135,7 @@ def _check_port_signature(
             f"Interface fingerprint mismatch — DUT artifacts are out of sync:\n"
             f"    port_map       port_signature_hash: {pm_hash!r}\n"
             f"    port_signature hash:                {sig_hash!r}\n"
-            f"    → Re-run: forge topgen gen-top ..."
+            f"    → Re-run: forge dev topgen gen-top ..."
         )
     else:
         result.notes.append(f"Interface fingerprint OK: {sig_hash}")
@@ -195,7 +195,7 @@ def _check_against_verification_plan(
             "DUT port map disagrees with the resolved design "
             f"({ir_path.name}):\n"
             + "\n".join(f"      {d}" for d in divergences)
-            + "\n    → Re-run: forge topgen gen-top ..."
+            + "\n    → Re-run: forge dev topgen gen-top ..."
         )
         return
 
@@ -282,7 +282,7 @@ def run_preflight(cfg: "Any", xml_input: "Path | None" = None) -> PreflightResul
             if _tb_name and not _tb_file.exists():
                 result.errors.append(
                     f"Generated testbench not found: {_tb_file}\n"
-                    f"    → Re-run: forge verify generate <design.verification.yml>"
+                    f"    → Re-run: forge dev verify generate <design.verification.yml>"
                     f" --flow {getattr(cfg, 'flow_name', '<flow>')}"
                 )
             _stim_file = _flow_dir / "stimulus_current.svh"

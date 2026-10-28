@@ -18,7 +18,7 @@ for the Layer 1 verification contract.
   flows in a single authored verification contract
 - Framework-owned `csim` and `xsim` backends are reusable beyond the minimal
   demo
-- The `full_chip_rtl` kind integrates with `forge topgen gen-top` output for
+- The `full_chip_rtl` kind integrates with `forge dev topgen gen-top` output for
   end-to-end integration verification
 
 ## Maintained proof surfaces (plugin-authored)
@@ -28,7 +28,7 @@ design.verification.yml            ← verification contract (9 flows)
 schemas/data/trigger_demo_golden.xml ← XML dataset (4 golden events)
 src/xml_event_reader.h             ← shared testbench header
 tests/tb_*.cpp                     ← HLS C-sim testbench sources
-tools/bootstrap.py                 ← forge verify plugin registration
+tools/bootstrap.py                 ← forge dev verify plugin registration
 tools/gen_stimulus.py              ← xsim stimulus generator
 tools/trigger_demo_verify_env.sh   ← shell PYTHONPATH helper
 tools/tests/                       ← unit tests for verify tooling
@@ -37,16 +37,16 @@ tools/tests/                       ← unit tests for verify tooling
 ## Framework-generated artifacts (committed as CI baseline)
 
 ```
-<flow>/verify.flow.yml      ← forge verify generate design.verification.yml
-<flow>/tb_*.sv              ← forge verify generate ...
-<flow>/wave.tcl             ← forge verify generate ...
+<flow>/verify.flow.yml      ← forge dev verify generate design.verification.yml
+<flow>/tb_*.sv              ← forge dev verify generate ...
+<flow>/wave.tcl             ← forge dev verify generate ...
 <flow>/stimulus_current.svh ← gen_stimulus.py (plugin-owned generator)
 ```
 
 Regenerate all:
 
 ```bash
-forge verify generate plugins/trigger_demo/forge/verify/design.verification.yml
+forge dev verify generate plugins/trigger_demo/forge/verify/design.verification.yml
 python3 plugins/trigger_demo/forge/verify/tools/gen_stimulus.py
 ```
 
@@ -64,19 +64,19 @@ python3 plugins/trigger_demo/forge/verify/tools/gen_stimulus.py
 python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests -q
 
 # Contract health check
-forge verify doctor plugins/trigger_demo/forge/verify/design.verification.yml
+forge dev verify doctor plugins/trigger_demo/forge/verify/design.verification.yml
 
 # Dry-run generate (validates contract without running simulation)
-forge verify generate plugins/trigger_demo/forge/verify/design.verification.yml --dry-run
+forge dev verify generate plugins/trigger_demo/forge/verify/design.verification.yml --dry-run
 
 # Run a specific csim flow (requires Vitis HLS)
-forge verify run plugins/trigger_demo/forge/verify/hit_decoder_csim/verify.flow.yml --plugin trigger_demo
+forge dev verify run plugins/trigger_demo/forge/verify/hit_decoder_csim/verify.flow.yml --plugin trigger_demo
 
 # Run a specific xsim flow (requires Vivado / xsim)
-forge verify run plugins/trigger_demo/forge/verify/hit_decoder_xsim/verify.flow.yml --plugin trigger_demo
+forge dev verify run plugins/trigger_demo/forge/verify/hit_decoder_xsim/verify.flow.yml --plugin trigger_demo
 
 # Full-chip integration (requires gen-top output — see main README Step 2)
-forge verify run plugins/trigger_demo/forge/verify/trigger_pipeline_xsim/verify.flow.yml --plugin trigger_demo
+forge dev verify run plugins/trigger_demo/forge/verify/trigger_pipeline_xsim/verify.flow.yml --plugin trigger_demo
 ```
 
 This consumer is part of the supported non-OMTF proof story and must remain

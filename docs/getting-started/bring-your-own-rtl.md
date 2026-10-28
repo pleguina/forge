@@ -486,7 +486,7 @@ flows:
 ## Where to go next
 
 Everything under `.forge/` is ordinary FORGE configuration — the same
-format a hand-authored project uses, which is why `forge topgen validate`
+format a hand-authored project uses, which is why `forge dev topgen validate`
 and the rest work on an adopted project unchanged. It is rewritten by every
 command, so when you need more than adoption can infer, record it in
 `forge.yml`: a module's latency, a contract of your own

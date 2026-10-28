@@ -1,4 +1,4 @@
-"""End-to-end coverage for `forge framework` (core/cli/groups/framework.py, ~22%).
+"""End-to-end coverage for `forge dev framework` (core/cli/groups/framework.py, ~22%).
 
 Same recipe as test_topgen_cli_commands.py: drive the real argparse entry
 point in-process (via build_parser()) against the same minimal ABI /

@@ -761,7 +761,7 @@ def _check_hls(status: ProjectStatus) -> Optional[_CheckOutput]:
             f"{assessment.module}: {assessment.description} "
             f"(maturity: {assessment.level})",
             action=(
-                "Run `forge hls run --stages csim,synth` so the real RTL ports are "
+                "Run `forge dev hls run --stages csim,synth` so the real RTL ports are "
                 "known, then re-check to reconcile them against the prediction"
             ),
             module=assessment.module,
@@ -791,7 +791,7 @@ def _check_hls(status: ProjectStatus) -> Optional[_CheckOutput]:
                 "Synthesise the HLS kernels so their real RTL ports are known and "
                 "can be reconciled against the prediction"
             ),
-            command="forge hls run --stages csim,synth",
+            command="forge dev hls run --stages csim,synth",
         )],
     )
 
@@ -850,7 +850,7 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
                     "design.verification.yml as verification.config in forge.yml — a "
                     "dataset with no flow to consume it does not test anything yet"
                 ),
-                command=f"forge verify init-plugin {config.project}",
+                command=f"forge dev verify init-plugin {config.project}",
             )],
         )
 
@@ -1074,7 +1074,7 @@ def _check_design(status: ProjectStatus) -> _CheckOutput:
 def _check_design_latency(status: ProjectStatus) -> Optional[_CheckOutput]:
     """Does the latency graph know every module's depth?
 
-    Asks the same graph ``forge analyze latency-check`` builds, so a module
+    Asks the same graph ``forge dev analyze latency-check`` builds, so a module
     whose latency comes from its HLS reports (under ``build.hls_build_root``)
     counts as known, exactly as it does there.
     """

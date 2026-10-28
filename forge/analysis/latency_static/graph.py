@@ -470,7 +470,7 @@ def build_resolved_graph(
 
     HLS modules take their latency from the reports under *hls_build_root*
     when it exists, and instance pairing comes from *conn_map*, or from
-    :func:`resolve_conn_map` when none is given. ``forge analyze
+    :func:`resolve_conn_map` when none is given. ``forge dev analyze
     latency-check``, ``forge report``, ``forge check`` and
     ``delay_cycles: auto`` all build the graph here, so they agree on the
     same design.

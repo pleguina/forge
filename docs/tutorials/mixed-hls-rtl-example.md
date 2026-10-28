@@ -30,7 +30,7 @@ hit_decoder × 4 ──(gather)──→ hit_collector ──→ trigger_logic
 | `trigger_contract_sink` | **RTL** | 1 | Proves `contract_wiring` (array consumer side) |
 
 The four algorithmic modules are C++ synthesized through Vitis HLS
-(`forge hls run`); the three RTL modules exist specifically to prove
+(`forge dev hls run`); the three RTL modules exist specifically to prove
 framework wiring patterns that don't need HLS at all, and are simulated
 directly. HLS target: `xcvu9p-flga2104-2L-e`, clock period 4 ns.
 
@@ -75,14 +75,14 @@ mirrors the shorter [golden-path tutorial](golden-path.md) but with an
 added HLS synthesis stage:
 
 ```bash
-forge hls run \
+forge dev hls run \
   --registry plugins/trigger_demo/forge/modules.yml \
   --modules all \
   --hls-build-root build_hls_trigger_demo \
   --stages csim,synth,cosim,export
 ```
 
-runs before `forge topgen gen-top`, since the four HLS modules must be
+runs before `forge dev topgen gen-top`, since the four HLS modules must be
 synthesized before the RTL top level can be generated around them.
 Running the full pipeline requires both Vitis HLS and Vivado `xsim` on
 `PATH`.

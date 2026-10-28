@@ -46,9 +46,9 @@ plugins/passthrough_demo/
 ```bash
 pip install -e forge/
 
-forge topgen validate plugins/passthrough_demo/forge/designs/design.yml
+forge dev topgen validate plugins/passthrough_demo/forge/designs/design.yml
 
-forge topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
+forge dev topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
   --mode verilog \
   --consumer-root . \
   --contracts-from plugins/passthrough_demo/forge/modules.yml \
@@ -56,16 +56,16 @@ forge topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
   --hls-build-root build_hls_passthrough_demo \
   --output gen-top/design_passthrough_demo/algo_top.v
 
-forge verify generate plugins/passthrough_demo/forge/verify/design.verification.yml
+forge dev verify generate plugins/passthrough_demo/forge/verify/design.verification.yml
 python3 plugins/passthrough_demo/forge/verify/tools/gen_stimulus.py --flow passthrough_xsim --event-id 0
-forge verify doctor   plugins/passthrough_demo/forge/verify/design.verification.yml
+forge dev verify doctor   plugins/passthrough_demo/forge/verify/design.verification.yml
 
 # Requires Vivado xsim on PATH:
-forge verify run plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml \
+forge dev verify run plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml \
   --plugin passthrough_demo --consumer-root .
 ```
 
-No `forge hls run` step — there's no HLS module to synthesize.
+No `forge dev hls run` step — there's no HLS module to synthesize.
 
 ## Golden events
 

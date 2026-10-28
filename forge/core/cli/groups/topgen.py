@@ -117,7 +117,7 @@ def _discover_verify_design(design_path: Path, args, consumer_root: Path | None)
 
     ``--verify-design`` wins; otherwise the conventional sibling location
     (``<plugin>/forge/verify/design.verification.yml``) is used when it
-    exists — the same discovery ``forge topgen clean`` already performs, so
+    exists — the same discovery ``forge dev topgen clean`` already performs, so
     a project doesn't have to name the file twice. ``--no-verify`` skips it.
     """
     if getattr(args, "no_verify", False):
@@ -144,7 +144,7 @@ def _attach_verification_plan(
     A contract that fails to load is reported and skipped rather than
     failing the build: verification planning is a description of what was
     generated, and a broken verification contract must not stop the RTL
-    from being written. Whoever runs `forge verify` gets the same load
+    from being written. Whoever runs `forge dev verify` gets the same load
     error from the loader that owns it.
     """
     from forge.ir.verification_plan import build_verification_plan
@@ -185,7 +185,7 @@ def cmd_clean(args):
         design_path = Path(args.design).expanduser().resolve()
         if not design_path.exists():
             print(f"❌ Design file not found: {design_path}", file=sys.stderr)
-            print("   → Check the design.yml path and re-run forge topgen clean.", file=sys.stderr)
+            print("   → Check the design.yml path and re-run forge dev topgen clean.", file=sys.stderr)
             sys.exit(1)
 
         c_root = _consumer_root(design_path, getattr(args, "consumer_root", None))
@@ -790,7 +790,7 @@ def cmd_gen_top(args):
         print_cli_error(
             "Generation failed",
             e,
-            hint="Check the design file, mode, and IP paths, then re-run forge topgen gen-top.",
+            hint="Check the design file, mode, and IP paths, then re-run forge dev topgen gen-top.",
         )
         sys.exit(1)
 
@@ -885,7 +885,7 @@ def _run_verilog_lint(output: Path, top_name: str) -> None:
 # constants, files_to_create dict, --dry-run lists without writing, skip
 # already-existing files on a real run). This scaffolds the *topgen* half
 # (modules.yml, designs/design.yml, interfaces/*.yaml, an RTL stub);
-# `forge verify init-plugin` scaffolds the verify/ half separately.
+# `forge dev verify init-plugin` scaffolds the verify/ half separately.
 #
 # plugin_id is used as both the module ref/registry name *and* the
 # design.yml instance name, so ip_info_key trivially equals the design
@@ -955,7 +955,7 @@ ip_interface:
   module_name: {plugin_id}
   # Optional: defaults to module_name above. Declare it only when a design
   # instance (design.yml modules[].name) is named differently from its
-  # module — `forge core verify-contract` names the available keys if it
+  # module — `forge dev core verify-contract` names the available keys if it
   # doesn't resolve.
   ip_info_key: {plugin_id}
   source_type: rtl
@@ -1005,7 +1005,7 @@ _INIT_RTL_STUB_TEMPLATE = '''\
 // Scaffolded by `forge init`. A minimal registered N-bit
 // passthrough with a valid strobe — replace the body with your real logic.
 // Ports and behavior deliberately match plugins/passthrough_demo's proven
-// reference implementation, so `forge topgen gen-top` succeeds immediately
+// reference implementation, so `forge dev topgen gen-top` succeeds immediately
 // with zero further edits.
 //
 // Parameters:
@@ -1088,7 +1088,7 @@ def cmd_init_plugin(args):
     # one of its stages and hides this epilogue, so what's printed here is
     # what someone who ran *this* command alone still has to do.
     print("\nNext steps:")
-    print(f"  1. Run: forge verify init-plugin {plugin_id}   (scaffolds the verify/ half)")
+    print(f"  1. Run: forge dev verify init-plugin {plugin_id}   (scaffolds the verify/ half)")
     print(
         f"  2. Run: forge build {design_yml} "
         f"--contracts-from {modules_yml} --output out/algo_top.v"
@@ -1207,11 +1207,11 @@ def cmd_migrate(args):
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge topgen`` subparser and its commands."""
+    """Register the ``forge dev topgen`` subparser and its commands."""
     p_tg = sub.add_parser("topgen", help="Generate hardware topology structure")
     tg_sub = p_tg.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    # forge topgen gen-top
+    # forge dev topgen gen-top
     p_gen = tg_sub.add_parser("gen-top", help="Generate algorithm top-level")
     p_gen.add_argument("design", type=Path, help="design.yaml file")
     p_gen.add_argument(
@@ -1286,7 +1286,7 @@ def register(sub) -> None:
     )
     p_gen.set_defaults(func=cmd_gen_top)
 
-    # forge topgen validate
+    # forge dev topgen validate
     p_validate = tg_sub.add_parser("validate", help="Validate design.yml without generating")
     p_validate.add_argument("design", type=Path, help="design.yaml file to validate")
     p_validate.add_argument("--strict", action="store_true", help="Treat warnings as errors")
@@ -1305,7 +1305,7 @@ def register(sub) -> None:
     )
     p_validate.set_defaults(func=cmd_validate)
 
-    # forge topgen validate-registry
+    # forge dev topgen validate-registry
     p_val_reg = tg_sub.add_parser(
         "validate-registry", help="Validate a modules.yml registry independently",
     )
@@ -1317,7 +1317,7 @@ def register(sub) -> None:
     )
     p_val_reg.set_defaults(func=cmd_validate_registry)
 
-    # forge topgen ip-summary
+    # forge dev topgen ip-summary
     p_summary = tg_sub.add_parser(
         "ip-summary", help="Generate IP metadata summary (ip_info.yaml)",
     )
@@ -1337,7 +1337,7 @@ def register(sub) -> None:
     )
     p_summary.set_defaults(func=cmd_ip_summary)
 
-    # forge topgen match-ports
+    # forge dev topgen match-ports
     p_match = tg_sub.add_parser("match-ports", help="Show port connection report")
     p_match.add_argument("design", type=Path, help="design.yaml file")
     p_match.add_argument(
@@ -1348,7 +1348,7 @@ def register(sub) -> None:
     p_match.add_argument("--system", type=Path, help="system.yml for global nets")
     p_match.set_defaults(func=cmd_match_ports)
 
-    # forge topgen unpack-ips
+    # forge dev topgen unpack-ips
     p_unpack = tg_sub.add_parser("unpack-ips", help="Extract IP archives")
     p_unpack.add_argument(
         "src", type=Path,
@@ -1362,7 +1362,7 @@ def register(sub) -> None:
     p_unpack.add_argument("--force", action="store_true", help="Overwrite existing directories")
     p_unpack.set_defaults(func=cmd_unpack_ips)
 
-    # forge topgen clean
+    # forge dev topgen clean
     p_clean = tg_sub.add_parser("clean", help="Remove generated artifacts for one design")
     p_clean.add_argument("design", type=Path, help="design.yaml file")
     p_clean.add_argument(
@@ -1391,7 +1391,7 @@ def register(sub) -> None:
     )
     p_clean.set_defaults(func=cmd_clean)
 
-    # forge topgen lint
+    # forge dev topgen lint
     p_lint = tg_sub.add_parser("lint", help="Lint VHDL file(s) using GHDL")
     p_lint.add_argument("files", nargs="+", type=Path, help="VHDL file(s) to lint")
     p_lint.add_argument(
@@ -1408,7 +1408,7 @@ def register(sub) -> None:
     )
     p_lint.set_defaults(func=cmd_lint)
 
-    # forge topgen lint-verilog
+    # forge dev topgen lint-verilog
     p_lint_verilog = tg_sub.add_parser(
         "lint-verilog", help="Lint Verilog file(s) with Verilator",
     )
@@ -1424,7 +1424,7 @@ def register(sub) -> None:
     )
     p_lint_verilog.set_defaults(func=cmd_lint_verilog)
 
-    # forge topgen init-plugin
+    # forge dev topgen init-plugin
     p_init = tg_sub.add_parser(
         "init-plugin",
         help="Scaffold the topgen side of a new plugin (modules.yml, "

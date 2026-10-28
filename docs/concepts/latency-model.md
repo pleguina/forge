@@ -39,7 +39,7 @@ modules:
     variable_latency: true # latency is data-dependent, not a fixed cycle count
 ```
 
-**Resolution order** (used by `forge analyze latency-check` and the
+**Resolution order** (used by `forge dev analyze latency-check` and the
 canonical IR's `ResolvedModuleDefinition.latency_cycles`/`.latency_hint`/
 `.is_variable_latency`): `latency_cycles` (explicit) > an externally
 supplied HLS synthesis report (a runtime overlay from actual build
@@ -49,7 +49,7 @@ unknown.
 
 **Conflict rule**: `latency_cycles` and `variable_latency: true` are
 contradictory — declaring both is a registry validation error
-(`forge topgen validate-registry`), not a silent override. Declare exactly
+(`forge dev topgen validate-registry`), not a silent override. Declare exactly
 one, or neither (unknown latency).
 
 All three fields are optional; a module that declares none of them has
@@ -99,7 +99,7 @@ modules:
   arrive. This is a protocol skew of
   the consuming module that no latency report can provide.
 
-`forge analyze latency-check` applies the declaration when it compares the
+`forge dev analyze latency-check` applies the declaration when it compares the
 paths into the module. A design-level module entry can declare or override
 it, like the latency fields.
 
@@ -116,7 +116,7 @@ connections:
     delay_cycles: auto
 ```
 
-`forge topgen gen-top` (and `forge build`) then computes the depth from
+`forge dev topgen gen-top` (and `forge build`) then computes the depth from
 the latency graph: each `auto` input of a merge point is delayed to the
 latest arrival at that merge point, after its `input_alignment` offsets.
 A `framed` merge point needs no delay, so its `auto` inputs resolve to 0.
@@ -125,7 +125,7 @@ merge point is part of every path below it. The depths follow the module
 latencies (`latency_cycles`, then the HLS reports under
 `--hls-build-root`, then `latency_hint`), so a re-synthesised module with a
 different latency changes the generated delays without an edit to the
-design. `forge analyze latency-check` resolves the same depths before it
+design. `forge dev analyze latency-check` resolves the same depths before it
 checks, and lists them in its report; `build_manifest.json` records them
 under `resolved_auto_delays`.
 

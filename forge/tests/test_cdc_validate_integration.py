@@ -1,7 +1,7 @@
 """
-Integration test for `forge topgen validate`'s CDC
+Integration test for `forge dev topgen validate`'s CDC
 wiring: `verify_cdc` used to be reachable only from `gen-top --strict`;
-this test drives the real `forge topgen validate` CLI entry point
+this test drives the real `forge dev topgen validate` CLI entry point
 against a small two-module, two-clock-domain synthetic design (built
 from scratch in tmp_path, mirroring test_cdc_generation.py's real-file
 manifest-test convention) and confirms an undeclared clock-domain

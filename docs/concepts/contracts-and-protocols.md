@@ -173,7 +173,7 @@ complete, generated list of recognized `protocol` values.
 `protocol` is optional and absent by default (`None`) — no existing
 interface contract needs to declare it to keep working. A declared value
 outside the recognized set is a contract-verification error
-(`forge topgen verify-contract`), not a silent no-op.
+(`forge dev topgen verify-contract`), not a silent no-op.
 
 **Scope of this release**: `protocol` is descriptive metadata, surfaced
 through `LoadedContract.get_connection_roles()` and the canonical IR
@@ -304,7 +304,7 @@ contracts, match_report)`, run against
 - **consumers outside `[min, max]`** (forbidden or insufficient fan-out on
   an output role).
 
-`forge build` and `forge topgen gen-top` fail, with or without `--strict`,
+`forge build` and `forge dev topgen gen-top` fail, with or without `--strict`,
 when `verify_cardinality` reports any `error`-severity issue, the same as
 for `verify_topology_groups`.
 

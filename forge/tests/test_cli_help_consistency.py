@@ -20,12 +20,12 @@ from argparse import ArgumentParser, _SubParsersAction
 
 import pytest
 
-from forge.core.cli.main import build_parser
+from forge.core.cli.main import DEV_GROUPS, build_parser
 from forge.verification.__main__ import build_parser as build_verify_parser
 
-# `forge verify` doesn't build its sub-commands directly under the top-level
-# parser: it swallows everything after "verify" into a REMAINDER positional
-# and hands off to forge.verification.__main__'s own parser (see
+# `forge dev verify` doesn't build its sub-commands directly under the
+# parser tree: it swallows everything after "verify" into a REMAINDER
+# positional and hands off to forge.verification.__main__'s own parser (see
 # core/cli/groups/verify.py::cmd_verify_dispatch). Use the real delegate
 # parser when validating "verify" examples/flags.
 _DELEGATED_GROUP_PARSERS = {"verify": build_verify_parser}
@@ -59,15 +59,16 @@ def test_epilog_groups_match_registered_groups() -> None:
     parser = build_parser()
     group_action = _subparsers_action(parser)
     assert group_action is not None
-    registered = set(group_action.choices)
+    # The `forge dev` groups' old top-level names parse but are not listed.
+    registered = set(group_action.choices) - set(DEV_GROUPS)
 
     epilog = parser.epilog or ""
-    # The epilog lists groups in two tiers ("Start here — the golden path"
-    # and "Direct stage access"), so match on the *shape* of a listing line
-    # — two-space indent, a name, then two or more spaces before its
-    # description — rather than on section headings. Example lines
-    # ("  forge init my_plugin") have a single space after the first token
-    # and so don't match; neither does prose, which isn't indented.
+    # The epilog lists commands in tiers ("Commands", "Also", "Stage-level"),
+    # so match on the *shape* of a listing line — two-space indent, a name,
+    # then two or more spaces before its description — rather than on
+    # section headings. Example lines ("  forge init my_plugin") have a
+    # single space after the first token and so don't match; neither does
+    # prose, which isn't indented.
     documented = set(
         re.findall(r"^ {2}(\w[\w-]*) {2,}\S", epilog, flags=re.MULTILINE)
     )
@@ -110,32 +111,24 @@ def test_epilog_examples_use_real_groups_subcommands_and_flags() -> None:
 
     for line in example_lines:
         assert line.startswith("forge "), f"example line does not start with 'forge': {line!r}"
-        tokens = line.split()
-        group_name = tokens[1]
-        assert group_name in group_action.choices, (
-            f"example references unknown group {group_name!r}: {line!r}"
-        )
-        group_parser = group_action.choices[group_name]
-        if group_name in _DELEGATED_GROUP_PARSERS:
-            group_parser = _DELEGATED_GROUP_PARSERS[group_name]()
-
-        cmd_action = _subparsers_action(group_parser)
-        target_parser = group_parser
-        rest = tokens[2:]
-        if cmd_action is not None and not cmd_action.required and (
-                not rest or rest[0].startswith("-")):
-            # A group that runs on its own (`forge test`) checks its flags
-            # against the group parser itself.
-            pass
-        elif cmd_action is not None:
-            assert rest, f"example for group {group_name!r} has no subcommand: {line!r}"
-            subcmd_name = rest[0]
-            assert subcmd_name in cmd_action.choices, (
-                f"example references unknown {group_name} subcommand "
-                f"{subcmd_name!r}: {line!r}"
-            )
-            target_parser = cmd_action.choices[subcmd_name]
+        rest = line.split()[1:]
+        target_parser = parser
+        # Follow the subcommand path as deep as the example goes.
+        while True:
+            cmd_action = _subparsers_action(target_parser)
+            if cmd_action is None or not rest or rest[0].startswith("-"):
+                # A group that runs on its own (`forge test`) checks its
+                # flags against the group parser itself.
+                assert cmd_action is None or not cmd_action.required, (
+                    f"example stops before a required subcommand: {line!r}"
+                )
+                break
+            name = rest[0]
+            assert name in cmd_action.choices, f"example references unknown command {name!r}: {line!r}"
+            target_parser = cmd_action.choices[name]
             rest = rest[1:]
+            if name in _DELEGATED_GROUP_PARSERS:
+                target_parser = _DELEGATED_GROUP_PARSERS[name]()
 
         valid_flags = _all_option_strings(target_parser)
         for token in rest:
@@ -150,7 +143,7 @@ def test_epilog_examples_use_real_groups_subcommands_and_flags() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [p for p, _ in _iter_command_tree(build_parser())],
+    [p for p, _ in _iter_command_tree(build_parser()) if not (p and p[0] in DEV_GROUPS)],
     ids=lambda p: " ".join(p) or "forge",
 )
 def test_help_runs_cleanly_for_every_command(path: tuple[str, ...]) -> None:

@@ -1,4 +1,4 @@
-"""End-to-end coverage for the `forge topgen` CLI commands.
+"""End-to-end coverage for the `forge dev topgen` CLI commands.
 
 core/cli/groups/topgen.py is a ~900-line, essentially-0%-covered CLI
 surface — everything in it was only exercised indirectly through
@@ -587,7 +587,7 @@ def test_check_stale_reports_fresh_after_real_gen_top_run(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
     """Real-design end-to-end proof: a real `gen-top` run followed
-    immediately by `forge topgen validate --check-stale` on the same
+    immediately by `forge dev topgen validate --check-stale` on the same
     design/output directory reports fresh — the content-hash-aware path
     confirms freshness via the provenance.json `gen-top` just wrote, not
     just a lucky mtime ordering."""

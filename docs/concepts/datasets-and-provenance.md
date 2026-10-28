@@ -67,7 +67,7 @@ modification times against their declared sources, e.g. detecting that
 generated). The two coexist deliberately; the content-hash manifest adds
 a reproducibility guarantee mtimes alone can't give (a file touched but
 not actually changed doesn't look stale to the hash-based model), it
-doesn't replace the existing mtime checks that `forge verify doctor` and
+doesn't replace the existing mtime checks that `forge dev verify doctor` and
 friends already rely on.
 
 The user-facing hook for the hash-based model is `forge inspect`:

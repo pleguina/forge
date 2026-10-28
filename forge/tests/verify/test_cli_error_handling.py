@@ -20,5 +20,5 @@ def test_generate_missing_design_is_guided_without_traceback(tmp_path: Path) -> 
 
     assert result.returncode == 1
     assert "ERROR (design): design file not found" in result.stderr
-    assert "Check the design.verification.yml path and re-run forge verify generate." in result.stderr
+    assert "Check the design.verification.yml path and re-run forge dev verify generate." in result.stderr
     assert "Traceback" not in result.stderr

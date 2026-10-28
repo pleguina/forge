@@ -11,113 +11,60 @@ exit-code / `--json` envelope contract every command follows.
 ## `forge`
 
 ```text
-usage: forge [-h] [--version] [--debug] GROUP ...
+usage: forge [-h] [--version] [--debug] COMMAND ...
 
-FORGE framework CLI — topology generation, HLS build, verification orchestration, and performance analysis
+FORGE — generate the structural top level of an FPGA design from its modules, balance its pipeline latencies, and simulate it
 
 positional arguments:
-  GROUP       Golden path: init | adopt | check | next | connect | explain | fix | migrate |
-              inspect | build | test | report | doctor. Direct stage access: topgen | contract |
-              verify | hls | analyze | framework | core.
-    init      Scaffold a new plugin and chain validate -> build -> test -> report
-    adopt     Scan an existing repository and create a FORGE project from what is in it
-    check     Report whether this project is completely and consistently described
-    next      Say what to do next, and why
-    connect   Declare which producer drives which consumer, in forge.yml
-    explain   Explain one FORGE decision — a connection, an inference, a diagnostic
-    fix       Apply the repairs this project's own sources prove
-    migrate   Bring a whole project up to the schemas this FORGE understands
-    inspect   Resolve a design into the canonical IR and inspect it (read-only)
-    build     Generate the structural top level (--dry-run: print the plan only)
-    test      Build and simulate the forge.yml project (or: check-only | prepare | run)
-    report    Generate a self-contained report bundle (maturity, latency, verification,
-              provenance, dashboard)
-    doctor    Check the local forge install/environment (toolchains, optional deps)
-    topgen    Generate hardware topology structure
-    contract  Author interface contracts (infer a skeleton from a module's ports)
-    verify    Run simulations and check correctness
-    hls       Build HLS modules and IPs
-    analyze   Performance analysis, latency checks, and reporting
-    framework
-              External framework import and detector I/O resolution
-    core      Shared schema, CLI, and plugin utilities
+  COMMAND     init | adopt | check | build | test | report | inspect | explain; also next | fix |
+              connect | migrate | doctor; and dev (topgen | contract | verify | hls | analyze |
+              framework | core).
 
 optional arguments:
   -h, --help  show this help message and exit
   --version   show program's version number and exit
   --debug     Print Python tracebacks for unexpected failures.
 
-Start here — the golden path, in the order you need it:
-  init        Scaffold a plugin and run validate -> build -> test -> report
-  adopt       Scan an existing repository and create a project from what is in it
-  check       Report whether this project is completely and consistently described
-  next        Say what to do next, and why
-  connect     Declare which producer drives which consumer
-  explain     Explain one FORGE decision — a connection, an inference, a diagnostic
-  fix         Apply the repairs this project's own sources prove
-  migrate     Bring a project up to the schemas this FORGE understands
-  inspect     Resolve a design into the canonical IR and read it back (read-only)
+Commands:
+  init        Scaffold a plugin, write forge.yml, and run build -> test -> report
+  adopt       Scan an existing repository and create forge.yml from what is in it
+  check       Report what is missing or inconsistent, and whether the tools are here
   build       Generate the structural top level
   test        Build the design and run its verification flows
   report      Collect topology, latency and results into one report bundle
-  doctor      Check the local forge install/environment
+  inspect     Resolve a design into the canonical IR and read it back (read-only)
+  explain     Explain one FORGE decision — a connection, an inference, a diagnostic
 
-Starting from nothing, `forge init my_plugin` takes an empty directory to a
-generated top level, a passing simulation and an HTML dashboard in one
-command. Starting from a repository you already have, `forge adopt .` reads
-it and builds the project model from its own sources — then `forge check`
-and `forge next` tell you what is left to decide. Inside a forge.yml project,
-`forge build`, `forge test` and `forge report` need no arguments.
+Also:
+  next        Say what to do next, and why
+  fix         Apply the repairs this project's own sources prove
+  connect     Declare which producer drives which consumer
+  migrate     Bring a project up to the schemas this FORGE understands
+  doctor      Check the forge install and the simulators on PATH
 
-Direct stage access — the individual stages the commands above orchestrate.
-Reach for these when you need a flag or a stage the golden path doesn't expose:
-  topgen      Topology generation, validation, linting, migration helpers
-  contract    Author interface contracts from a module's real ports
-  verify      Verification generate/prepare/run/doctor/release-check
-  hls         Vitis HLS TCL generation and parallel job execution
-  analyze     HLS reports, latency checks, result plots, dashboards
-  framework   External framework import and detector I/O resolution
-  core        Shared schema, CLI, and plugin utilities
+Stage-level:
+  dev         topgen, contract, verify, hls, analyze, framework, core
 
-Exit codes and --json output shape are documented once, for the whole
-CLI, in docs/development/cli_exit_codes.md: 0 = pass (or warn without
---strict), 1 = fail (or warn with --strict), 2 = a usage error or
-unexpected internal exception (never a real finding). Every --json-
-supporting command emits the same {schema_version, status, diagnostics,
-artifacts, metrics, next_actions} envelope shape.
+Inside a forge.yml project, check, build, test, report and inspect need no arguments.
+`forge dev --help` lists the stage-level groups; their old top-level names
+(`forge topgen ...`) still work.
 
-Examples — the golden path:
+Exit codes: 0 = pass (or warn without --strict), 1 = fail (or warn with
+--strict), 2 = a usage error or an internal exception. Every --json command
+emits the same {schema_version, status, diagnostics, artifacts, metrics,
+next_actions} envelope (docs/development/cli_exit_codes.md).
+
+Examples:
   forge init my_plugin
   forge adopt .
   forge check
-  forge next
-  forge explain ATG037
-  forge fix --apply
-  forge migrate
-  forge doctor
   forge build
   forge test
   forge report
+  forge explain ATG037
   forge build design.yml --contracts-from modules.yml --output algo_top.v
-  forge test run design.verification.yml --flow my_flow_xsim --event-id 0
-
-Examples — direct stage access:
-  forge inspect design.yml --emit-ir build/forge/design.ir.json
-  forge build design.yml --accept-plan-hash <hash> --json
-  forge topgen gen-top design.yml --mode verilog --output algo_top.v
-  forge topgen validate design.yml
-  forge contract infer my_module --contracts-from modules.yml -o m.interface.yaml
-  forge hls gen-tcl --hls-config catalog.yml
-  forge hls run --registry catalog.yml --stages csim,synth --jobs 4
-  forge verify generate plugins/my_plugin/verify/design.verification.yml
-  forge verify run plugins/my_plugin/verify/hit_decoder_xsim/verify.flow.yml --plugin my_plugin
-  forge verify doctor plugins/my_plugin/verify/design.verification.yml
-  forge core resources
-  forge core verify-contract --ip-info ip_info.yaml --contract ip_interface.yaml
-  forge analyze hls-report --hls-build-root build_hls --output out/reports
-  forge analyze latency-check design.yml --contracts-from modules.yml
-  forge analyze dashboard --input out/reports --output out/dashboard
-  forge framework import --provider blobfish --abi payload_abi.json --endpoints payload_endpoints.json --out out/
+  forge dev topgen gen-top design.yml --mode verilog --output algo_top.v
+  forge dev analyze latency-check design.yml --contracts-from modules.yml
 ```
 
 ### `forge adopt`
@@ -144,124 +91,6 @@ optional arguments:
   --interactive, -i  Ask about each decision FORGE will not make for you, and record the answers
                      in forge.yml (where you can change them)
   --json             Machine-readable JSON output
-```
-
-### `forge analyze`
-
-```text
-usage: forge analyze [-h] COMMAND ...
-
-Analysis commands.
-
-Available sub-commands:
-  hls-report       Parse HLS synthesis reports and emit CSV/MD/HTML
-  latency-check    Static latency mismatch checker
-  runtime-latency  HLS-predicted vs simulation-observed latency
-  plot-results     Render comparison plots from a config file
-  dashboard        Aggregate all analysis artifacts into HTML dashboard
-
-positional arguments:
-  COMMAND
-    hls-report     Parse HLS reports → CSV / MD / HTML
-    latency-check  Static latency mismatch detector from design topology
-    runtime-latency
-                   Compare HLS-predicted vs simulation-observed latency
-    plot-results   Render comparison figures from a plugin-defined config
-    dashboard      Aggregate analysis artifacts into HTML dashboard + Markdown summary
-
-optional arguments:
-  -h, --help       show this help message and exit
-
-Examples:
-  forge analyze hls-report --hls-build-root build_hls --output out/reports/hls_summary
-  forge analyze latency-check plugins/myplugin/designs/design.yml --contracts-from plugins/myplugin/modules.yml --hls-build-root build_hls --output out/reports/latency_check.md
-  forge analyze runtime-latency --probe-csv out/probes/probes.csv --probe-pairs 'mymod:in_valid:out_valid' --output out/reports/runtime_latency.md
-  forge analyze plot-results --config plot_config.yml --observed observed.csv --reference expected.csv --output out/plots
-  forge analyze dashboard --input out/reports --output out/dashboard
-```
-
-#### `forge analyze dashboard`
-
-```text
-usage: forge analyze dashboard [-h] [--input DIR] [--output DIR] [--json]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --input DIR, -i DIR   Reports directory (default: out/reports)
-  --output DIR, -o DIR  Output directory (default: out/dashboard)
-  --json                Machine-readable JSON output
-```
-
-#### `forge analyze hls-report`
-
-```text
-usage: forge analyze hls-report [-h] [--hls-build-root DIR] [--output DIR] [--solution NAME]
-                                [--json]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --hls-build-root DIR  HLS build directory (default: build_hls)
-  --output DIR, -o DIR  Output directory (default: out/reports)
-  --solution NAME       Vitis HLS solution name (default: solution1)
-  --json                Machine-readable JSON output
-```
-
-#### `forge analyze latency-check`
-
-```text
-usage: forge analyze latency-check [-h] [--contracts-from MODULES_YML] [--hls-build-root DIR]
-                                   [--output FILE] [--json]
-                                   DESIGN_YML
-
-positional arguments:
-  DESIGN_YML            Path to design.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --contracts-from MODULES_YML
-                        Explicit modules.yml path (default: registry: field in design.yml)
-  --hls-build-root DIR  HLS build directory — used to load synthesis latency values
-  --output FILE, -o FILE
-                        Output Markdown file (default: out/reports/latency_check.md)
-  --json                Machine-readable JSON output
-```
-
-#### `forge analyze plot-results`
-
-```text
-usage: forge analyze plot-results [-h] --config FILE --observed FILE [--reference FILE]
-                                  [--output DIR] [--json]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --config FILE         plot_config.yml — defines plots, column names, and kinds
-  --observed FILE       CSV of observed / simulated values
-  --reference FILE      Optional CSV of reference / expected values
-  --output DIR, -o DIR  Output directory for PNG figures (default: out/plots)
-  --json                Machine-readable JSON output
-```
-
-#### `forge analyze runtime-latency`
-
-```text
-usage: forge analyze runtime-latency [-h] --probe-csv FILE [--probe-format {long,wide}]
-                                     [--probe-pairs MODULE:IN_SIGNAL:OUT_SIGNAL [MODULE:IN_SIGNAL:OUT_SIGNAL ...]]
-                                     [--hls-build-root DIR] [--output FILE] [--json]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --probe-csv FILE      CSV with columns: cycle, signal, value (written by forge verify run)
-  --probe-format {long,wide}
-                        'long' (default): cycle,signal,value rows, one event per row. 'wide':
-                        cycle,<probe1>,<probe2>,... — one row per cycle, one column per probe (the
-                        format forge.verification.gen_sim's real Tier-2 probe emission produces
-                        under --probe-log/PROBE_LOG=1).
-  --probe-pairs MODULE:IN_SIGNAL:OUT_SIGNAL [MODULE:IN_SIGNAL:OUT_SIGNAL ...]
-                        One entry per module: module_name:input_valid_signal:output_valid_signal
-  --hls-build-root DIR  HLS build root — supplies predicted latency from csynth.xml
-  --output FILE, -o FILE
-                        Output Markdown file
-  --json                Machine-readable JSON output
 ```
 
 ### `forge build`
@@ -357,10 +186,151 @@ optional arguments:
   --json             Machine-readable JSON output
 ```
 
-### `forge contract`
+### `forge dev`
 
 ```text
-usage: forge contract [-h] COMMAND ...
+usage: forge dev [-h] GROUP ...
+
+The individual stages build, test and report orchestrate, for a flag or a stage the everyday
+commands do not expose.
+
+positional arguments:
+  GROUP
+    topgen    Generate hardware topology structure
+    contract  Author interface contracts (infer a skeleton from a module's ports)
+    verify    Run simulations and check correctness
+    hls       Build HLS modules and IPs
+    analyze   Performance analysis, latency checks, and reporting
+    framework
+              External framework import and detector I/O resolution
+    core      Shared schema, CLI, and plugin utilities
+
+optional arguments:
+  -h, --help  show this help message and exit
+```
+
+#### `forge dev analyze`
+
+```text
+usage: forge dev analyze [-h] COMMAND ...
+
+Analysis commands.
+
+Available sub-commands:
+  hls-report       Parse HLS synthesis reports and emit CSV/MD/HTML
+  latency-check    Static latency mismatch checker
+  runtime-latency  HLS-predicted vs simulation-observed latency
+  plot-results     Render comparison plots from a config file
+  dashboard        Aggregate all analysis artifacts into HTML dashboard
+
+positional arguments:
+  COMMAND
+    hls-report     Parse HLS reports → CSV / MD / HTML
+    latency-check  Static latency mismatch detector from design topology
+    runtime-latency
+                   Compare HLS-predicted vs simulation-observed latency
+    plot-results   Render comparison figures from a plugin-defined config
+    dashboard      Aggregate analysis artifacts into HTML dashboard + Markdown summary
+
+optional arguments:
+  -h, --help       show this help message and exit
+
+Examples:
+  forge dev analyze hls-report --hls-build-root build_hls --output out/reports/hls_summary
+  forge dev analyze latency-check plugins/myplugin/designs/design.yml --contracts-from plugins/myplugin/modules.yml --hls-build-root build_hls --output out/reports/latency_check.md
+  forge dev analyze runtime-latency --probe-csv out/probes/probes.csv --probe-pairs 'mymod:in_valid:out_valid' --output out/reports/runtime_latency.md
+  forge dev analyze plot-results --config plot_config.yml --observed observed.csv --reference expected.csv --output out/plots
+  forge dev analyze dashboard --input out/reports --output out/dashboard
+```
+
+##### `forge dev analyze dashboard`
+
+```text
+usage: forge dev analyze dashboard [-h] [--input DIR] [--output DIR] [--json]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --input DIR, -i DIR   Reports directory (default: out/reports)
+  --output DIR, -o DIR  Output directory (default: out/dashboard)
+  --json                Machine-readable JSON output
+```
+
+##### `forge dev analyze hls-report`
+
+```text
+usage: forge dev analyze hls-report [-h] [--hls-build-root DIR] [--output DIR] [--solution NAME]
+                                    [--json]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --hls-build-root DIR  HLS build directory (default: build_hls)
+  --output DIR, -o DIR  Output directory (default: out/reports)
+  --solution NAME       Vitis HLS solution name (default: solution1)
+  --json                Machine-readable JSON output
+```
+
+##### `forge dev analyze latency-check`
+
+```text
+usage: forge dev analyze latency-check [-h] [--contracts-from MODULES_YML] [--hls-build-root DIR]
+                                       [--output FILE] [--json]
+                                       DESIGN_YML
+
+positional arguments:
+  DESIGN_YML            Path to design.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --contracts-from MODULES_YML
+                        Explicit modules.yml path (default: registry: field in design.yml)
+  --hls-build-root DIR  HLS build directory — used to load synthesis latency values
+  --output FILE, -o FILE
+                        Output Markdown file (default: out/reports/latency_check.md)
+  --json                Machine-readable JSON output
+```
+
+##### `forge dev analyze plot-results`
+
+```text
+usage: forge dev analyze plot-results [-h] --config FILE --observed FILE [--reference FILE]
+                                      [--output DIR] [--json]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --config FILE         plot_config.yml — defines plots, column names, and kinds
+  --observed FILE       CSV of observed / simulated values
+  --reference FILE      Optional CSV of reference / expected values
+  --output DIR, -o DIR  Output directory for PNG figures (default: out/plots)
+  --json                Machine-readable JSON output
+```
+
+##### `forge dev analyze runtime-latency`
+
+```text
+usage: forge dev analyze runtime-latency [-h] --probe-csv FILE [--probe-format {long,wide}]
+                                         [--probe-pairs MODULE:IN_SIGNAL:OUT_SIGNAL [MODULE:IN_SIGNAL:OUT_SIGNAL ...]]
+                                         [--hls-build-root DIR] [--output FILE] [--json]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --probe-csv FILE      CSV with columns: cycle, signal, value (written by forge dev verify run)
+  --probe-format {long,wide}
+                        'long' (default): cycle,signal,value rows, one event per row. 'wide':
+                        cycle,<probe1>,<probe2>,... — one row per cycle, one column per probe (the
+                        format forge.verification.gen_sim's real Tier-2 probe emission produces
+                        under --probe-log/PROBE_LOG=1).
+  --probe-pairs MODULE:IN_SIGNAL:OUT_SIGNAL [MODULE:IN_SIGNAL:OUT_SIGNAL ...]
+                        One entry per module: module_name:input_valid_signal:output_valid_signal
+  --hls-build-root DIR  HLS build root — supplies predicted latency from csynth.xml
+  --output FILE, -o FILE
+                        Output Markdown file
+  --json                Machine-readable JSON output
+```
+
+#### `forge dev contract`
+
+```text
+usage: forge dev contract [-h] COMMAND ...
 
 Author and inspect module interface contracts.
 
@@ -372,13 +342,13 @@ optional arguments:
   -h, --help  show this help message and exit
 ```
 
-#### `forge contract infer`
+##### `forge dev contract infer`
 
 ```text
-usage: forge contract infer [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
-                            [--source-type {rtl,hls}] [--predict] [--output OUTPUT] [--dry-run]
-                            [--json]
-                            module
+usage: forge dev contract infer [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
+                                [--source-type {rtl,hls}] [--predict] [--output OUTPUT]
+                                [--dry-run] [--json]
+                                module
 
 Emit an interface-contract skeleton with every observed port as a role. RTL roles are emitted by
 name alone — raw_port, direction and width are derived from the module's own source at load time.
@@ -403,10 +373,10 @@ optional arguments:
   --json                Machine-readable JSON output
 ```
 
-### `forge core`
+#### `forge dev core`
 
 ```text
-usage: forge core [-h] COMMAND ...
+usage: forge dev core [-h] COMMAND ...
 
 positional arguments:
   COMMAND
@@ -418,10 +388,10 @@ optional arguments:
   -h, --help       show this help message and exit
 ```
 
-#### `forge core resources`
+##### `forge dev core resources`
 
 ```text
-usage: forge core resources [-h] [--key KEY] [--format {text,json}] [--json]
+usage: forge dev core resources [-h] [--key KEY] [--format {text,json}] [--json]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -430,11 +400,11 @@ optional arguments:
   --json                Machine-readable JSON output
 ```
 
-#### `forge core verify-contract`
+##### `forge dev core verify-contract`
 
 ```text
-usage: forge core verify-contract [-h] --ip-info IP_INFO [--contract CONTRACT]
-                                  [--all-contracts DIR [DIR ...]] [--verbose] [--json]
+usage: forge dev core verify-contract [-h] --ip-info IP_INFO [--contract CONTRACT]
+                                      [--all-contracts DIR [DIR ...]] [--verbose] [--json]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -444,6 +414,612 @@ optional arguments:
                         Directories to search recursively for ip_interface*.yaml files
   --verbose, -v         Print details even for passing contracts
   --json                Machine-readable JSON output
+```
+
+#### `forge dev framework`
+
+```text
+usage: forge dev framework [-h] COMMAND ...
+
+positional arguments:
+  COMMAND       framework sub-command
+    import      Load and validate a framework ABI + endpoint manifest
+    io-resolve  Resolve detector_io.yml against a framework import
+    emit-payload
+                Generate a Blobfish-compatible payload.v
+
+optional arguments:
+  -h, --help    show this help message and exit
+```
+
+##### `forge dev framework emit-payload`
+
+```text
+usage: forge dev framework emit-payload [-h] --framework FRAMEWORK [--detector-io DETECTOR_IO]
+                                        [--algo-module ALGO_MODULE] [--policies POLICIES]
+                                        [--out OUT]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --framework FRAMEWORK
+                        Directory containing framework_import.json
+  --detector-io DETECTOR_IO
+                        Path to detector_io.resolved.json (omit for dummy stub)
+  --algo-module ALGO_MODULE
+                        Algorithm top module name to instantiate
+  --policies POLICIES   Path to YAML file with control_policies
+  --out OUT             Output path for payload.v (default: build/generated/payload.v)
+```
+
+##### `forge dev framework import`
+
+```text
+usage: forge dev framework import [-h] --provider PROVIDER --abi ABI --endpoints ENDPOINTS --out
+                                  OUT
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --provider PROVIDER   Framework provider name (e.g. blobfish)
+  --abi ABI             Path to payload_abi.json
+  --endpoints ENDPOINTS
+                        Path to payload_endpoints.json
+  --out OUT             Output directory for framework_import.json
+```
+
+##### `forge dev framework io-resolve`
+
+```text
+usage: forge dev framework io-resolve [-h] --framework FRAMEWORK --detector-io DETECTOR_IO
+                                      [--plugin PLUGIN] --out OUT
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --framework FRAMEWORK
+                        Directory containing framework_import.json (output of 'framework import')
+  --detector-io DETECTOR_IO
+                        Path to detector_io.yml
+  --plugin PLUGIN       Path to plugin directory (for modules.yml registry validation)
+  --out OUT             Output directory for detector_io.resolved.json
+```
+
+#### `forge dev hls`
+
+```text
+usage: forge dev hls [-h] COMMAND ...
+
+positional arguments:
+  COMMAND
+    gen-tcl   Generate Vitis HLS TCL scripts from a plugin catalog
+    run       Run parallel Vitis HLS jobs (pure Python, no shell script)
+
+optional arguments:
+  -h, --help  show this help message and exit
+```
+
+##### `forge dev hls gen-tcl`
+
+```text
+usage: forge dev hls gen-tcl [-h] --hls-config HLS_CONFIG [--output-dir OUTPUT_DIR]
+                             [--ip-packages-dir IP_PACKAGES_DIR] [--template-dir TEMPLATE_DIR]
+                             [--flow {export,syn,impl}]
+                             [module]
+
+positional arguments:
+  module                Module name or 'all' (default: all)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --hls-config HLS_CONFIG
+                        Plugin HLS catalog YAML file
+  --output-dir OUTPUT_DIR
+                        Output directory for generated TCL (default: build_hls/)
+  --ip-packages-dir IP_PACKAGES_DIR
+                        Directory for exported IP archives
+  --template-dir TEMPLATE_DIR
+                        Override .tcl.j2 template directory
+  --flow {export,syn,impl}
+                        IP export flow: export (no synth), syn (RTL only), impl (synth+P&R)
+                        (default: impl)
+```
+
+##### `forge dev hls run`
+
+```text
+usage: forge dev hls run [-h] [--registry REGISTRY] [--stages STAGES]
+                         [--stage {csim,synth,cosim,export}] [--modules MODULES] [--jobs JOBS]
+                         [--hls-build-root HLS_BUILD_ROOT] [--ip-packages-dir IP_PACKAGES_DIR]
+                         [--vitis-hls VITIS_HLS] [--force] [--summary-json SUMMARY_JSON]
+                         [--junit-xml JUNIT_XML]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --registry REGISTRY   Plugin HLS catalog YAML file (modules registry)
+  --stages STAGES       Comma-separated HLS stages to run: csim,synth,cosim,export (default: all
+                        four)
+  --stage {csim,synth,cosim,export}, -c {csim,synth,cosim,export}
+                        Single HLS stage (legacy; use --stages for multiple)
+  --modules MODULES, -m MODULES
+                        Comma- or space-separated module names, or 'all' (default: all)
+  --jobs JOBS, -j JOBS  Maximum parallel jobs per stage (default: 1)
+  --hls-build-root HLS_BUILD_ROOT, -b HLS_BUILD_ROOT
+                        HLS build root directory (default: build_hls/)
+  --ip-packages-dir IP_PACKAGES_DIR, -i IP_PACKAGES_DIR
+                        IP packages output directory (default: <hls-build-root>/ip_packages/)
+  --vitis-hls VITIS_HLS, -v VITIS_HLS
+                        Path to vitis_hls executable (default: vitis_hls on PATH)
+  --force               Re-initialize each project and rerun every requested stage, ignoring
+                        stamps
+  --summary-json SUMMARY_JSON
+                        Write per-module, per-stage results as JSON to this path
+  --junit-xml JUNIT_XML
+                        Write per-module, per-stage results as JUnit XML to this path
+```
+
+#### `forge dev topgen`
+
+```text
+usage: forge dev topgen [-h] COMMAND ...
+
+positional arguments:
+  COMMAND
+    gen-top          Generate algorithm top-level
+    validate         Validate design.yml without generating
+    validate-registry
+                     Validate a modules.yml registry independently
+    ip-summary       Generate IP metadata summary (ip_info.yaml)
+    match-ports      Show port connection report
+    unpack-ips       Extract IP archives
+    clean            Remove generated artifacts for one design
+    lint             Lint VHDL file(s) using GHDL
+    lint-verilog     Lint Verilog file(s) with Verilator
+    init-plugin      Scaffold the topgen side of a new plugin (modules.yml, design.yml, interface
+                     contract, RTL stub)
+    migrate          Migration helpers: schema-version insertion, partition->coordinates, legacy
+                     plugin layout, legacy verify-contract filename
+
+optional arguments:
+  -h, --help         show this help message and exit
+```
+
+##### `forge dev topgen clean`
+
+```text
+usage: forge dev topgen clean [-h] [--consumer-root CONSUMER_ROOT] [--output OUTPUT]
+                              [--ip-info IP_INFO] [--verify-design VERIFY_DESIGN] [--no-verify]
+                              [--dry-run]
+                              design
+
+positional arguments:
+  design                design.yaml file
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Consumer workspace root used to resolve relative defaults
+  --output OUTPUT, -o OUTPUT
+                        Generated top file path used to anchor DUT artifact cleanup
+  --ip-info IP_INFO     Generated ip_info.yaml path if it lives outside the output directory
+  --verify-design VERIFY_DESIGN
+                        design.verification.yml to also clean generated verify artifacts
+  --no-verify           Only clean DUT artifacts; leave verify-generated files untouched
+  --dry-run             Print what would be removed without deleting files
+```
+
+##### `forge dev topgen gen-top`
+
+```text
+usage: forge dev topgen gen-top [-h] [--consumer-root CONSUMER_ROOT] --mode {vhdl,verilog,bd}
+                                [--ip-root IP_ROOT] [--ip-info IP_INFO] [--build-dir BUILD_DIR]
+                                [--hls-build-root HLS_BUILD_ROOT] [--src-root SRC_ROOT]
+                                [--system SYSTEM] [--output OUTPUT] [--top-name TOP_NAME]
+                                [--bd-name BD_NAME] [--gen-testbench]
+                                [--xml-stimulus XML_STIMULUS]
+                                [--xml-stimulus-tool XML_STIMULUS_TOOL] [--event-id EVENT_ID]
+                                [--hls-metrics HLS_METRICS] [--contracts-from MODULES_YML]
+                                [--strict] [--lint] [--fix-lint]
+                                [--rtl-resource-root RTL_RESOURCE_ROOT]
+                                [--verify-design VERIFY_DESIGN] [--no-verify] [--dry-run]
+                                design
+
+positional arguments:
+  design                design.yaml file
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Consumer workspace root used to resolve relative defaults
+  --mode {vhdl,verilog,bd}
+                        Output mode: verilog, vhdl (a VHDL entity around the Verilog top, written
+                        as <top>_core.v), or bd (Block Design TCL)
+  --ip-root IP_ROOT     IP directory (default: ips/)
+  --ip-info IP_INFO     IP info file (auto-generated if missing)
+  --build-dir BUILD_DIR
+                        Build directory (default: build/)
+  --hls-build-root HLS_BUILD_ROOT
+                        HLS build directory (default: build_hls/)
+  --src-root SRC_ROOT   Source root for HDL files (default: design file's directory)
+  --system SYSTEM       system.yml for global nets
+  --output OUTPUT, -o OUTPUT
+                        Output file
+  --top-name TOP_NAME   Top entity/module name
+  --bd-name BD_NAME     BD name (BD mode)
+  --gen-testbench       Generate SystemVerilog testbench (Verilog mode only)
+  --xml-stimulus XML_STIMULUS
+                        XML file for stimulus generation
+  --xml-stimulus-tool XML_STIMULUS_TOOL
+                        Path to the xml_to_sv_stimulus helper binary
+  --event-id EVENT_ID   Event ID to extract from XML (default: 1)
+  --hls-metrics HLS_METRICS
+                        HLS metrics JSON file
+  --contracts-from MODULES_YML
+                        modules.yml with interface_contract paths; enables contract-driven wiring
+  --strict              Fail if any module lacks a contract, any connection uses auto-match or
+                        port_map_ranges, topology groups have verification errors, a declared
+                        cardinality (producers/consumers/fanout/completeness) is violated, or a
+                        connection crosses clock/reset domains without a declared 'cdc:' adapter
+  --lint                Run linter after generation
+  --fix-lint            Auto-fix linting issues
+  --rtl-resource-root RTL_RESOURCE_ROOT
+                        Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}
+  --verify-design VERIFY_DESIGN
+                        design.verification.yml to resolve the IR's verification plan against
+                        (default: ../verify/design.verification.yml, when present)
+  --no-verify           Skip verification-plan resolution; the emitted IR carries no plan
+  --dry-run             Validate, resolve IP info, and match ports, then print what would be
+                        written without generating any output files.
+```
+
+##### `forge dev topgen init-plugin`
+
+```text
+usage: forge dev topgen init-plugin [-h] [--plugins-root PLUGINS_ROOT] [--algo-root ALGO_ROOT]
+                                    [--dry-run]
+                                    plugin_id
+
+positional arguments:
+  plugin_id             Plugin identifier (e.g. 'my_algo')
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --plugins-root PLUGINS_ROOT
+                        Root directory under which to create <plugin_id>/forge/ (default:
+                        plugins/)
+  --algo-root ALGO_ROOT
+                        Root directory under which to create <plugin_id>/algo/ (default: same as
+                        --plugins-root)
+  --dry-run             Print what would be created without writing files
+```
+
+##### `forge dev topgen ip-summary`
+
+```text
+usage: forge dev topgen ip-summary [-h] [--consumer-root CONSUMER_ROOT] [--ip-root IP_ROOT]
+                                   [--build-dir BUILD_DIR] [--src-root SRC_ROOT] [--output OUTPUT]
+                                   design
+
+positional arguments:
+  design                design.yaml file
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Consumer workspace root used to resolve relative defaults
+  --ip-root IP_ROOT     IP directory (default: ips/)
+  --build-dir BUILD_DIR
+                        Build directory (default: build/)
+  --src-root SRC_ROOT   Source root for HDL files (default: design file's directory)
+  --output OUTPUT, -o OUTPUT
+                        Output file (default: ip_info.yaml)
+```
+
+##### `forge dev topgen lint`
+
+```text
+usage: forge dev topgen lint [-h] [--fix] [--std STD] [--ieee IEEE] files [files ...]
+
+positional arguments:
+  files        VHDL file(s) to lint
+
+optional arguments:
+  -h, --help   show this help message and exit
+  --fix        Placeholder for compatibility (GHDL doesn't auto-fix)
+  --std STD    VHDL standard (87, 93, 02, 08, 19) — default: 08
+  --ieee IEEE  IEEE library (standard, synopsys, mentor) — default: synopsys
+```
+
+##### `forge dev topgen lint-verilog`
+
+```text
+usage: forge dev topgen lint-verilog [-h] [--top-module TOP_MODULE] [--no-warnings] [--strict]
+                                     files [files ...]
+
+positional arguments:
+  files                 Verilog file(s) to lint
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --top-module TOP_MODULE
+                        Top module name (auto-detected if not provided)
+  --no-warnings         Suppress warnings, show only errors
+  --strict              Enable strict mode with additional checks
+```
+
+##### `forge dev topgen match-ports`
+
+```text
+usage: forge dev topgen match-ports [-h] [--consumer-root CONSUMER_ROOT] [--ip-info IP_INFO]
+                                    [--system SYSTEM]
+                                    design
+
+positional arguments:
+  design                design.yaml file
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Consumer workspace root used to resolve relative defaults
+  --ip-info IP_INFO     IP info file (default: ip_info.yaml)
+  --system SYSTEM       system.yml for global nets
+```
+
+##### `forge dev topgen migrate`
+
+```text
+usage: forge dev topgen migrate [-h] --kind
+                                {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
+                                [--file FILE]
+                                [--schema-kind {design,registry,interface,verify_contract}]
+                                [--contract CONTRACT] [--axis AXIS] [--role ROLE]
+                                [--plugin-root PLUGIN_ROOT] [--dry-run]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --kind {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
+                        Which migration to run
+  --file FILE           [schema-version] path to the
+                        design.yml/modules.yml/*.interface.yaml/design.verification.yml file to
+                        migrate
+  --schema-kind {design,registry,interface,verify_contract}
+                        [schema-version] override auto-detection from --file's filename
+  --contract CONTRACT   [partition-to-coordinates] path to the *.interface.yaml file
+  --axis AXIS           [partition-to-coordinates] axis name to wrap the partition value under
+  --role ROLE           [partition-to-coordinates] migrate only this role (default: all eligible
+                        roles)
+  --plugin-root PLUGIN_ROOT
+                        [legacy-plugin-layout, rename-verify-contract] plugin root directory (the
+                        directory containing verify/ or forge/)
+  --dry-run             Show the planned change/diff without writing anything
+```
+
+##### `forge dev topgen unpack-ips`
+
+```text
+usage: forge dev topgen unpack-ips [-h] [--consumer-root CONSUMER_ROOT] [--ip-root IP_ROOT]
+                                   [--force]
+                                   src
+
+positional arguments:
+  src                   Directory containing IP archives (*.zip, *.tar.*)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Consumer workspace root used to resolve default output paths
+  --ip-root IP_ROOT     Output directory (default: ips/)
+  --force               Overwrite existing directories
+```
+
+##### `forge dev topgen validate`
+
+```text
+usage: forge dev topgen validate [-h] [--strict] [--check-stale]
+                                 [--cdc-result-json CDC_RESULT_JSON] [--json]
+                                 design
+
+positional arguments:
+  design                design.yaml file to validate
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --strict              Treat warnings as errors
+  --check-stale         Also verify that generated artifacts are not older than design.yml.
+  --cdc-result-json CDC_RESULT_JSON
+                        Write a forge.cdc_verification_result.v1 artifact to this path (only when
+                        the registry/contracts needed for the CDC check are available)
+  --json                Machine-readable JSON output instead of the human report.
+```
+
+##### `forge dev topgen validate-registry`
+
+```text
+usage: forge dev topgen validate-registry [-h] [--strict] [--json] registry
+
+positional arguments:
+  registry    modules.yml registry file to validate
+
+optional arguments:
+  -h, --help  show this help message and exit
+  --strict    Treat warnings as errors
+  --json      Machine-readable JSON output instead of the human report.
+```
+
+#### `forge dev verify`
+
+```text
+usage: forge dev verify [-h] {preflight,run,generate,prepare,init-plugin,doctor,release-check} ...
+
+Framework verification utilities.
+
+positional arguments:
+  {preflight,run,generate,prepare,init-plugin,doctor,release-check}
+    preflight           Run DUT artifact preflight checks.
+    run                 Execute the full verification lifecycle (prepare → simulate → check).
+    generate            Generate verify.flow.yml, tb_*.sv, and wave.tcl from
+                        design.verification.yml.
+    prepare             Generate artifacts + validate stimulus + check layout in one step. The
+                        normal 'make everything ready to run' entrypoint. Writes files — use
+                        doctor for a read-only health check.
+    init-plugin         Scaffold a new plugin skeleton under plugins/<plugin_id>/forge/verify/.
+    doctor              Run a comprehensive health-check on a plugin's verify setup. READ-ONLY —
+                        never writes any files.
+    release-check       Run the release-readiness gate — all RC-01…RC-10 criteria in one command.
+                        READ-ONLY — never writes any files.
+
+optional arguments:
+  -h, --help            show this help message and exit
+```
+
+##### `forge dev verify doctor`
+
+```text
+usage: forge dev verify doctor [-h] [--consumer-root CONSUMER_ROOT] [--strict] [--json]
+                               design_file
+
+positional arguments:
+  design_file           Path to design.verification.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
+  --strict              Strict mode: return non-zero exit code if there are ANY warnings (in
+                        addition to errors). Use this in CI to enforce a warning-free setup.
+  --json                Machine-readable JSON output. Emits a DiagnosticReport as JSON to stdout.
+                        Suitable for CI and automated support tooling.
+```
+
+##### `forge dev verify generate`
+
+```text
+usage: forge dev verify generate [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT]
+                                 [--port-map PORT_MAP] [--dry-run] [--use-kind-subdir] [--strict]
+                                 design_file
+
+positional arguments:
+  design_file           Path to design.verification.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --flow FLOW           Generate only this named flow (default: all flows)
+  --consumer-root CONSUMER_ROOT
+                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
+  --port-map PORT_MAP   Path to port_map.yaml for TB port connections (auto-discovered per flow
+                        dir if absent)
+  --dry-run             Print what would be generated without writing files
+  --use-kind-subdir     Write flow artifacts under <kind>/<flow_name>/ instead of the default flat
+                        <flow_name>/ layout
+  --strict              Strict mode: fail (exit 1) when RTL is absent for xsim flows rather than
+                        skipping, and reject any non-canonical layout deviation.
+```
+
+##### `forge dev verify init-plugin`
+
+```text
+usage: forge dev verify init-plugin [-h] [--plugins-root PLUGINS_ROOT] [--dry-run] plugin_id
+
+positional arguments:
+  plugin_id             Plugin identifier (e.g. 'my_trigger')
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --plugins-root PLUGINS_ROOT
+                        Root directory under which to create the plugin (default: plugins/)
+  --dry-run             Print what would be created without writing files
+```
+
+##### `forge dev verify preflight`
+
+```text
+usage: forge dev verify preflight [-h] [--consumer-root CONSUMER_ROOT] [--plugin PLUGIN] flow_file
+
+positional arguments:
+  flow_file             Path to verify.flow.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
+  --plugin PLUGIN       Plugin ID to bootstrap before loading the flow (use when flow.plugin is
+                        not declared in the YAML)
+```
+
+##### `forge dev verify prepare`
+
+```text
+usage: forge dev verify prepare [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT]
+                                [--port-map PORT_MAP] [--dry-run] [--strict]
+                                design_file
+
+positional arguments:
+  design_file           Path to design.verification.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --flow FLOW           Prepare only this named flow (default: all flows)
+  --consumer-root CONSUMER_ROOT
+                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
+  --port-map PORT_MAP   Path to port_map.yaml for TB port connections
+  --dry-run             Print what would be done without writing files
+  --strict              Strict mode: fail on missing RTL for xsim flows (instead of skipping), any
+                        layout violation, and any stimulus contract error.
+```
+
+##### `forge dev verify release-check`
+
+```text
+usage: forge dev verify release-check [-h] [--consumer-root CONSUMER_ROOT] [--strict] [--json]
+                                      [--check-tools] [--no-stale]
+                                      design_file
+
+positional arguments:
+  design_file           Path to design.verification.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
+  --strict              Treat warnings as errors (RC gate fails on any WARNING).
+  --json                Machine-readable JSON output (DiagnosticReport).
+  --check-tools         Also verify simulator binaries (xvlog, xelab, xsim) are on PATH. Disabled
+                        by default so the gate runs in tool-less CI containers.
+  --no-stale            Skip the RC-10 stale-artifact detection.
+```
+
+##### `forge dev verify run`
+
+```text
+usage: forge dev verify run [-h] [--consumer-root CONSUMER_ROOT] [--plugin PLUGIN]
+                            [--event-id EVENT_ID] [--all-events] [--event-list EVENT_LIST]
+                            [--xml-input XML_INPUT] [--all-dataset-parts]
+                            [--dataset-parts-glob DATASET_PARTS_GLOB] [--probe-log] [--strict]
+                            flow_file
+
+positional arguments:
+  flow_file             Path to verify.flow.yml
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --consumer-root CONSUMER_ROOT
+                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
+  --plugin PLUGIN       Plugin ID to bootstrap (use when flow.plugin is absent from YAML)
+  --event-id EVENT_ID   Framework-standard XML dataset event selector: choose one event to
+                        simulate (overrides EVENT_ID env var and flow dataset.default_event_id)
+  --all-events          Framework-standard XML dataset selector: feed every available event
+                        sequentially in one simulation (overrides ALL_EVENTS=1)
+  --event-list EVENT_LIST
+                        Framework-standard XML dataset selector: comma-separated event IDs or
+                        ranges (for example: 1,7,10-12)
+  --xml-input XML_INPUT
+                        Framework-standard dataset override: path to XML stimulus file (overrides
+                        XML_INPUT env var and flow dataset.xml)
+  --all-dataset-parts   Framework-standard XML dataset selector: run every XML part declared by
+                        dataset.parts_glob/parts, aggregating pass/fail
+  --dataset-parts-glob DATASET_PARTS_GLOB
+                        Override XML dataset part glob for --all-dataset-parts; relative paths are
+                        resolved from consumer-root
+  --probe-log           Enable Tier 2 probe CSV capture (overrides PROBE_LOG env var)
+  --strict              Strict mode: fail if any legacy hand-authored artifacts are detected where
+                        framework generation is expected, or if the canonical layout is violated.
 ```
 
 ### `forge doctor`
@@ -507,143 +1083,6 @@ optional arguments:
   --dry-run    Preview only — the default, accepted explicitly for scripts
   --only ONLY  Comma-separated fix ids to consider (default: all of them)
   --json       Machine-readable JSON output
-```
-
-### `forge framework`
-
-```text
-usage: forge framework [-h] COMMAND ...
-
-positional arguments:
-  COMMAND       framework sub-command
-    import      Load and validate a framework ABI + endpoint manifest
-    io-resolve  Resolve detector_io.yml against a framework import
-    emit-payload
-                Generate a Blobfish-compatible payload.v
-
-optional arguments:
-  -h, --help    show this help message and exit
-```
-
-#### `forge framework emit-payload`
-
-```text
-usage: forge framework emit-payload [-h] --framework FRAMEWORK [--detector-io DETECTOR_IO]
-                                    [--algo-module ALGO_MODULE] [--policies POLICIES] [--out OUT]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --framework FRAMEWORK
-                        Directory containing framework_import.json
-  --detector-io DETECTOR_IO
-                        Path to detector_io.resolved.json (omit for dummy stub)
-  --algo-module ALGO_MODULE
-                        Algorithm top module name to instantiate
-  --policies POLICIES   Path to YAML file with control_policies
-  --out OUT             Output path for payload.v (default: build/generated/payload.v)
-```
-
-#### `forge framework import`
-
-```text
-usage: forge framework import [-h] --provider PROVIDER --abi ABI --endpoints ENDPOINTS --out OUT
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --provider PROVIDER   Framework provider name (e.g. blobfish)
-  --abi ABI             Path to payload_abi.json
-  --endpoints ENDPOINTS
-                        Path to payload_endpoints.json
-  --out OUT             Output directory for framework_import.json
-```
-
-#### `forge framework io-resolve`
-
-```text
-usage: forge framework io-resolve [-h] --framework FRAMEWORK --detector-io DETECTOR_IO
-                                  [--plugin PLUGIN] --out OUT
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --framework FRAMEWORK
-                        Directory containing framework_import.json (output of 'framework import')
-  --detector-io DETECTOR_IO
-                        Path to detector_io.yml
-  --plugin PLUGIN       Path to plugin directory (for modules.yml registry validation)
-  --out OUT             Output directory for detector_io.resolved.json
-```
-
-### `forge hls`
-
-```text
-usage: forge hls [-h] COMMAND ...
-
-positional arguments:
-  COMMAND
-    gen-tcl   Generate Vitis HLS TCL scripts from a plugin catalog
-    run       Run parallel Vitis HLS jobs (pure Python, no shell script)
-
-optional arguments:
-  -h, --help  show this help message and exit
-```
-
-#### `forge hls gen-tcl`
-
-```text
-usage: forge hls gen-tcl [-h] --hls-config HLS_CONFIG [--output-dir OUTPUT_DIR]
-                         [--ip-packages-dir IP_PACKAGES_DIR] [--template-dir TEMPLATE_DIR]
-                         [--flow {export,syn,impl}]
-                         [module]
-
-positional arguments:
-  module                Module name or 'all' (default: all)
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --hls-config HLS_CONFIG
-                        Plugin HLS catalog YAML file
-  --output-dir OUTPUT_DIR
-                        Output directory for generated TCL (default: build_hls/)
-  --ip-packages-dir IP_PACKAGES_DIR
-                        Directory for exported IP archives
-  --template-dir TEMPLATE_DIR
-                        Override .tcl.j2 template directory
-  --flow {export,syn,impl}
-                        IP export flow: export (no synth), syn (RTL only), impl (synth+P&R)
-                        (default: impl)
-```
-
-#### `forge hls run`
-
-```text
-usage: forge hls run [-h] [--registry REGISTRY] [--stages STAGES]
-                     [--stage {csim,synth,cosim,export}] [--modules MODULES] [--jobs JOBS]
-                     [--hls-build-root HLS_BUILD_ROOT] [--ip-packages-dir IP_PACKAGES_DIR]
-                     [--vitis-hls VITIS_HLS] [--force] [--summary-json SUMMARY_JSON]
-                     [--junit-xml JUNIT_XML]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --registry REGISTRY   Plugin HLS catalog YAML file (modules registry)
-  --stages STAGES       Comma-separated HLS stages to run: csim,synth,cosim,export (default: all
-                        four)
-  --stage {csim,synth,cosim,export}, -c {csim,synth,cosim,export}
-                        Single HLS stage (legacy; use --stages for multiple)
-  --modules MODULES, -m MODULES
-                        Comma- or space-separated module names, or 'all' (default: all)
-  --jobs JOBS, -j JOBS  Maximum parallel jobs per stage (default: 1)
-  --hls-build-root HLS_BUILD_ROOT, -b HLS_BUILD_ROOT
-                        HLS build root directory (default: build_hls/)
-  --ip-packages-dir IP_PACKAGES_DIR, -i IP_PACKAGES_DIR
-                        IP packages output directory (default: <hls-build-root>/ip_packages/)
-  --vitis-hls VITIS_HLS, -v VITIS_HLS
-                        Path to vitis_hls executable (default: vitis_hls on PATH)
-  --force               Re-initialize each project and rerun every requested stage, ignoring
-                        stamps
-  --summary-json SUMMARY_JSON
-                        Write per-module, per-stage results as JSON to this path
-  --junit-xml JUNIT_XML
-                        Write per-module, per-stage results as JUnit XML to this path
 ```
 
 ### `forge init`
@@ -724,9 +1163,9 @@ usage: forge migrate [-h] [--apply] [--dry-run] [--only ONLY] [--json] [path]
 
 Find every schema-bearing file in a project — both the forge.yml + .forge/ layout and the
 plugins/<id>/forge/ one — work out what each needs, and preview the whole chain as one diff.
-Performs no migration itself: each is delegated to the same function `forge topgen migrate` uses,
-so the two routes cannot diverge. Migrations that move files are reported with the command that
-performs them, never performed here.
+Performs no migration itself: each is delegated to the same function `forge dev topgen migrate`
+uses, so the two routes cannot diverge. Migrations that move files are reported with the command
+that performs them, never performed here.
 
 positional arguments:
   path         Project directory (default: the current one)
@@ -808,13 +1247,13 @@ optional arguments:
                         repeatable, for the runtime throughput section (uses --probe-csv/--probe-
                         format)
   --cdc-result-json CDC_RESULT_JSON
-                        Existing forge.cdc_verification_result.v1 JSON (from a prior forge topgen
-                        validate --cdc-result-json)
+                        Existing forge.cdc_verification_result.v1 JSON, as `forge dev topgen
+                        validate --cdc-result-json` writes it
   --golden-comparison-json GOLDEN_COMPARISON_JSON
                         Existing forge.golden_comparison_result.v1 JSON (from a prior forge test
                         run --golden-comparison-json)
-  --plugin PLUGIN       Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and
-                        collect any report attachments it has registered via
+  --plugin PLUGIN       Bootstrap this plugin (same mechanism as `forge dev verify run --plugin`)
+                        and collect any report attachments it has registered via
                         forge.analysis.dashboards.attachments.register_report_attachment_provider
                         — e.g. project-owned image panels or ownership annotations
   --json                Machine-readable JSON output
@@ -830,7 +1269,8 @@ usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_L
 positional arguments:
   MODE
     check-only          Generate + validate stimulus + validate layout, no execution
-    prepare             Generate + validate + check layout (full forge verify prepare delegate)
+    prepare             Generate + validate + check layout (full forge dev verify prepare
+                        delegate)
     run                 Run one flow's selected event(s), one simulation per event, with real per-
                         event results
 
@@ -929,469 +1369,6 @@ optional arguments:
                         Write a forge.golden_comparison_result.v1 artifact to this path (only when
                         the plugin's gen_stimulus.py wrote a golden_model_provenance.json sidecar
                         next to this flow)
-  --strict              Also enforce canonical layout (same as forge verify run --strict)
+  --strict              Also enforce canonical layout (same as forge dev verify run --strict)
   --json                Machine-readable JSON output
-```
-
-### `forge topgen`
-
-```text
-usage: forge topgen [-h] COMMAND ...
-
-positional arguments:
-  COMMAND
-    gen-top          Generate algorithm top-level
-    validate         Validate design.yml without generating
-    validate-registry
-                     Validate a modules.yml registry independently
-    ip-summary       Generate IP metadata summary (ip_info.yaml)
-    match-ports      Show port connection report
-    unpack-ips       Extract IP archives
-    clean            Remove generated artifacts for one design
-    lint             Lint VHDL file(s) using GHDL
-    lint-verilog     Lint Verilog file(s) with Verilator
-    init-plugin      Scaffold the topgen side of a new plugin (modules.yml, design.yml, interface
-                     contract, RTL stub)
-    migrate          Migration helpers: schema-version insertion, partition->coordinates, legacy
-                     plugin layout, legacy verify-contract filename
-
-optional arguments:
-  -h, --help         show this help message and exit
-```
-
-#### `forge topgen clean`
-
-```text
-usage: forge topgen clean [-h] [--consumer-root CONSUMER_ROOT] [--output OUTPUT]
-                          [--ip-info IP_INFO] [--verify-design VERIFY_DESIGN] [--no-verify]
-                          [--dry-run]
-                          design
-
-positional arguments:
-  design                design.yaml file
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Consumer workspace root used to resolve relative defaults
-  --output OUTPUT, -o OUTPUT
-                        Generated top file path used to anchor DUT artifact cleanup
-  --ip-info IP_INFO     Generated ip_info.yaml path if it lives outside the output directory
-  --verify-design VERIFY_DESIGN
-                        design.verification.yml to also clean generated verify artifacts
-  --no-verify           Only clean DUT artifacts; leave verify-generated files untouched
-  --dry-run             Print what would be removed without deleting files
-```
-
-#### `forge topgen gen-top`
-
-```text
-usage: forge topgen gen-top [-h] [--consumer-root CONSUMER_ROOT] --mode {vhdl,verilog,bd}
-                            [--ip-root IP_ROOT] [--ip-info IP_INFO] [--build-dir BUILD_DIR]
-                            [--hls-build-root HLS_BUILD_ROOT] [--src-root SRC_ROOT]
-                            [--system SYSTEM] [--output OUTPUT] [--top-name TOP_NAME]
-                            [--bd-name BD_NAME] [--gen-testbench] [--xml-stimulus XML_STIMULUS]
-                            [--xml-stimulus-tool XML_STIMULUS_TOOL] [--event-id EVENT_ID]
-                            [--hls-metrics HLS_METRICS] [--contracts-from MODULES_YML] [--strict]
-                            [--lint] [--fix-lint] [--rtl-resource-root RTL_RESOURCE_ROOT]
-                            [--verify-design VERIFY_DESIGN] [--no-verify] [--dry-run]
-                            design
-
-positional arguments:
-  design                design.yaml file
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Consumer workspace root used to resolve relative defaults
-  --mode {vhdl,verilog,bd}
-                        Output mode: verilog, vhdl (a VHDL entity around the Verilog top, written
-                        as <top>_core.v), or bd (Block Design TCL)
-  --ip-root IP_ROOT     IP directory (default: ips/)
-  --ip-info IP_INFO     IP info file (auto-generated if missing)
-  --build-dir BUILD_DIR
-                        Build directory (default: build/)
-  --hls-build-root HLS_BUILD_ROOT
-                        HLS build directory (default: build_hls/)
-  --src-root SRC_ROOT   Source root for HDL files (default: design file's directory)
-  --system SYSTEM       system.yml for global nets
-  --output OUTPUT, -o OUTPUT
-                        Output file
-  --top-name TOP_NAME   Top entity/module name
-  --bd-name BD_NAME     BD name (BD mode)
-  --gen-testbench       Generate SystemVerilog testbench (Verilog mode only)
-  --xml-stimulus XML_STIMULUS
-                        XML file for stimulus generation
-  --xml-stimulus-tool XML_STIMULUS_TOOL
-                        Path to the xml_to_sv_stimulus helper binary
-  --event-id EVENT_ID   Event ID to extract from XML (default: 1)
-  --hls-metrics HLS_METRICS
-                        HLS metrics JSON file
-  --contracts-from MODULES_YML
-                        modules.yml with interface_contract paths; enables contract-driven wiring
-  --strict              Fail if any module lacks a contract, any connection uses auto-match or
-                        port_map_ranges, topology groups have verification errors, a declared
-                        cardinality (producers/consumers/fanout/completeness) is violated, or a
-                        connection crosses clock/reset domains without a declared 'cdc:' adapter
-  --lint                Run linter after generation
-  --fix-lint            Auto-fix linting issues
-  --rtl-resource-root RTL_RESOURCE_ROOT
-                        Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}
-  --verify-design VERIFY_DESIGN
-                        design.verification.yml to resolve the IR's verification plan against
-                        (default: ../verify/design.verification.yml, when present)
-  --no-verify           Skip verification-plan resolution; the emitted IR carries no plan
-  --dry-run             Validate, resolve IP info, and match ports, then print what would be
-                        written without generating any output files.
-```
-
-#### `forge topgen init-plugin`
-
-```text
-usage: forge topgen init-plugin [-h] [--plugins-root PLUGINS_ROOT] [--algo-root ALGO_ROOT]
-                                [--dry-run]
-                                plugin_id
-
-positional arguments:
-  plugin_id             Plugin identifier (e.g. 'my_algo')
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --plugins-root PLUGINS_ROOT
-                        Root directory under which to create <plugin_id>/forge/ (default:
-                        plugins/)
-  --algo-root ALGO_ROOT
-                        Root directory under which to create <plugin_id>/algo/ (default: same as
-                        --plugins-root)
-  --dry-run             Print what would be created without writing files
-```
-
-#### `forge topgen ip-summary`
-
-```text
-usage: forge topgen ip-summary [-h] [--consumer-root CONSUMER_ROOT] [--ip-root IP_ROOT]
-                               [--build-dir BUILD_DIR] [--src-root SRC_ROOT] [--output OUTPUT]
-                               design
-
-positional arguments:
-  design                design.yaml file
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Consumer workspace root used to resolve relative defaults
-  --ip-root IP_ROOT     IP directory (default: ips/)
-  --build-dir BUILD_DIR
-                        Build directory (default: build/)
-  --src-root SRC_ROOT   Source root for HDL files (default: design file's directory)
-  --output OUTPUT, -o OUTPUT
-                        Output file (default: ip_info.yaml)
-```
-
-#### `forge topgen lint`
-
-```text
-usage: forge topgen lint [-h] [--fix] [--std STD] [--ieee IEEE] files [files ...]
-
-positional arguments:
-  files        VHDL file(s) to lint
-
-optional arguments:
-  -h, --help   show this help message and exit
-  --fix        Placeholder for compatibility (GHDL doesn't auto-fix)
-  --std STD    VHDL standard (87, 93, 02, 08, 19) — default: 08
-  --ieee IEEE  IEEE library (standard, synopsys, mentor) — default: synopsys
-```
-
-#### `forge topgen lint-verilog`
-
-```text
-usage: forge topgen lint-verilog [-h] [--top-module TOP_MODULE] [--no-warnings] [--strict]
-                                 files [files ...]
-
-positional arguments:
-  files                 Verilog file(s) to lint
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --top-module TOP_MODULE
-                        Top module name (auto-detected if not provided)
-  --no-warnings         Suppress warnings, show only errors
-  --strict              Enable strict mode with additional checks
-```
-
-#### `forge topgen match-ports`
-
-```text
-usage: forge topgen match-ports [-h] [--consumer-root CONSUMER_ROOT] [--ip-info IP_INFO]
-                                [--system SYSTEM]
-                                design
-
-positional arguments:
-  design                design.yaml file
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Consumer workspace root used to resolve relative defaults
-  --ip-info IP_INFO     IP info file (default: ip_info.yaml)
-  --system SYSTEM       system.yml for global nets
-```
-
-#### `forge topgen migrate`
-
-```text
-usage: forge topgen migrate [-h] --kind
-                            {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
-                            [--file FILE]
-                            [--schema-kind {design,registry,interface,verify_contract}]
-                            [--contract CONTRACT] [--axis AXIS] [--role ROLE]
-                            [--plugin-root PLUGIN_ROOT] [--dry-run]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --kind {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
-                        Which migration to run
-  --file FILE           [schema-version] path to the
-                        design.yml/modules.yml/*.interface.yaml/design.verification.yml file to
-                        migrate
-  --schema-kind {design,registry,interface,verify_contract}
-                        [schema-version] override auto-detection from --file's filename
-  --contract CONTRACT   [partition-to-coordinates] path to the *.interface.yaml file
-  --axis AXIS           [partition-to-coordinates] axis name to wrap the partition value under
-  --role ROLE           [partition-to-coordinates] migrate only this role (default: all eligible
-                        roles)
-  --plugin-root PLUGIN_ROOT
-                        [legacy-plugin-layout, rename-verify-contract] plugin root directory (the
-                        directory containing verify/ or forge/)
-  --dry-run             Show the planned change/diff without writing anything
-```
-
-#### `forge topgen unpack-ips`
-
-```text
-usage: forge topgen unpack-ips [-h] [--consumer-root CONSUMER_ROOT] [--ip-root IP_ROOT] [--force]
-                               src
-
-positional arguments:
-  src                   Directory containing IP archives (*.zip, *.tar.*)
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Consumer workspace root used to resolve default output paths
-  --ip-root IP_ROOT     Output directory (default: ips/)
-  --force               Overwrite existing directories
-```
-
-#### `forge topgen validate`
-
-```text
-usage: forge topgen validate [-h] [--strict] [--check-stale] [--cdc-result-json CDC_RESULT_JSON]
-                             [--json]
-                             design
-
-positional arguments:
-  design                design.yaml file to validate
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --strict              Treat warnings as errors
-  --check-stale         Also verify that generated artifacts are not older than design.yml.
-  --cdc-result-json CDC_RESULT_JSON
-                        Write a forge.cdc_verification_result.v1 artifact to this path (only when
-                        the registry/contracts needed for the CDC check are available)
-  --json                Machine-readable JSON output instead of the human report.
-```
-
-#### `forge topgen validate-registry`
-
-```text
-usage: forge topgen validate-registry [-h] [--strict] [--json] registry
-
-positional arguments:
-  registry    modules.yml registry file to validate
-
-optional arguments:
-  -h, --help  show this help message and exit
-  --strict    Treat warnings as errors
-  --json      Machine-readable JSON output instead of the human report.
-```
-
-### `forge verify`
-
-```text
-usage: forge verify [-h] {preflight,run,generate,prepare,init-plugin,doctor,release-check} ...
-
-Framework verification utilities.
-
-positional arguments:
-  {preflight,run,generate,prepare,init-plugin,doctor,release-check}
-    preflight           Run DUT artifact preflight checks.
-    run                 Execute the full verification lifecycle (prepare → simulate → check).
-    generate            Generate verify.flow.yml, tb_*.sv, and wave.tcl from
-                        design.verification.yml.
-    prepare             Generate artifacts + validate stimulus + check layout in one step. The
-                        normal 'make everything ready to run' entrypoint. Writes files — use
-                        doctor for a read-only health check.
-    init-plugin         Scaffold a new plugin skeleton under plugins/<plugin_id>/forge/verify/.
-    doctor              Run a comprehensive health-check on a plugin's verify setup. READ-ONLY —
-                        never writes any files.
-    release-check       Run the release-readiness gate — all RC-01…RC-10 criteria in one command.
-                        READ-ONLY — never writes any files.
-
-optional arguments:
-  -h, --help            show this help message and exit
-```
-
-#### `forge verify doctor`
-
-```text
-usage: forge verify doctor [-h] [--consumer-root CONSUMER_ROOT] [--strict] [--json] design_file
-
-positional arguments:
-  design_file           Path to design.verification.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
-  --strict              Strict mode: return non-zero exit code if there are ANY warnings (in
-                        addition to errors). Use this in CI to enforce a warning-free setup.
-  --json                Machine-readable JSON output. Emits a DiagnosticReport as JSON to stdout.
-                        Suitable for CI and automated support tooling.
-```
-
-#### `forge verify generate`
-
-```text
-usage: forge verify generate [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT]
-                             [--port-map PORT_MAP] [--dry-run] [--use-kind-subdir] [--strict]
-                             design_file
-
-positional arguments:
-  design_file           Path to design.verification.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --flow FLOW           Generate only this named flow (default: all flows)
-  --consumer-root CONSUMER_ROOT
-                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
-  --port-map PORT_MAP   Path to port_map.yaml for TB port connections (auto-discovered per flow
-                        dir if absent)
-  --dry-run             Print what would be generated without writing files
-  --use-kind-subdir     Write flow artifacts under <kind>/<flow_name>/ instead of the default flat
-                        <flow_name>/ layout
-  --strict              Strict mode: fail (exit 1) when RTL is absent for xsim flows rather than
-                        skipping, and reject any non-canonical layout deviation.
-```
-
-#### `forge verify init-plugin`
-
-```text
-usage: forge verify init-plugin [-h] [--plugins-root PLUGINS_ROOT] [--dry-run] plugin_id
-
-positional arguments:
-  plugin_id             Plugin identifier (e.g. 'my_trigger')
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --plugins-root PLUGINS_ROOT
-                        Root directory under which to create the plugin (default: plugins/)
-  --dry-run             Print what would be created without writing files
-```
-
-#### `forge verify preflight`
-
-```text
-usage: forge verify preflight [-h] [--consumer-root CONSUMER_ROOT] [--plugin PLUGIN] flow_file
-
-positional arguments:
-  flow_file             Path to verify.flow.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
-  --plugin PLUGIN       Plugin ID to bootstrap before loading the flow (use when flow.plugin is
-                        not declared in the YAML)
-```
-
-#### `forge verify prepare`
-
-```text
-usage: forge verify prepare [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT]
-                            [--port-map PORT_MAP] [--dry-run] [--strict]
-                            design_file
-
-positional arguments:
-  design_file           Path to design.verification.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --flow FLOW           Prepare only this named flow (default: all flows)
-  --consumer-root CONSUMER_ROOT
-                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
-  --port-map PORT_MAP   Path to port_map.yaml for TB port connections
-  --dry-run             Print what would be done without writing files
-  --strict              Strict mode: fail on missing RTL for xsim flows (instead of skipping), any
-                        layout violation, and any stimulus contract error.
-```
-
-#### `forge verify release-check`
-
-```text
-usage: forge verify release-check [-h] [--consumer-root CONSUMER_ROOT] [--strict] [--json]
-                                  [--check-tools] [--no-stale]
-                                  design_file
-
-positional arguments:
-  design_file           Path to design.verification.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
-  --strict              Treat warnings as errors (RC gate fails on any WARNING).
-  --json                Machine-readable JSON output (DiagnosticReport).
-  --check-tools         Also verify simulator binaries (xvlog, xelab, xsim) are on PATH. Disabled
-                        by default so the gate runs in tool-less CI containers.
-  --no-stale            Skip the RC-10 stale-artifact detection.
-```
-
-#### `forge verify run`
-
-```text
-usage: forge verify run [-h] [--consumer-root CONSUMER_ROOT] [--plugin PLUGIN]
-                        [--event-id EVENT_ID] [--all-events] [--event-list EVENT_LIST]
-                        [--xml-input XML_INPUT] [--all-dataset-parts]
-                        [--dataset-parts-glob DATASET_PARTS_GLOB] [--probe-log] [--strict]
-                        flow_file
-
-positional arguments:
-  flow_file             Path to verify.flow.yml
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --consumer-root CONSUMER_ROOT
-                        Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
-  --plugin PLUGIN       Plugin ID to bootstrap (use when flow.plugin is absent from YAML)
-  --event-id EVENT_ID   Framework-standard XML dataset event selector: choose one event to
-                        simulate (overrides EVENT_ID env var and flow dataset.default_event_id)
-  --all-events          Framework-standard XML dataset selector: feed every available event
-                        sequentially in one simulation (overrides ALL_EVENTS=1)
-  --event-list EVENT_LIST
-                        Framework-standard XML dataset selector: comma-separated event IDs or
-                        ranges (for example: 1,7,10-12)
-  --xml-input XML_INPUT
-                        Framework-standard dataset override: path to XML stimulus file (overrides
-                        XML_INPUT env var and flow dataset.xml)
-  --all-dataset-parts   Framework-standard XML dataset selector: run every XML part declared by
-                        dataset.parts_glob/parts, aggregating pass/fail
-  --dataset-parts-glob DATASET_PARTS_GLOB
-                        Override XML dataset part glob for --all-dataset-parts; relative paths are
-                        resolved from consumer-root
-  --probe-log           Enable Tier 2 probe CSV capture (overrides PROBE_LOG env var)
-  --strict              Strict mode: fail if any legacy hand-authored artifacts are detected where
-                        framework generation is expected, or if the canonical layout is violated.
 ```

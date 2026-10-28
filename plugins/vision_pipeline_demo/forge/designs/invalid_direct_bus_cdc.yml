@@ -5,13 +5,13 @@
 # invalid_direct_bus_cdc.yml — a direct (undeclared) wire crossing clock
 # domains: ctrl_mailbox_rtl (control, ap_clk) -> pixel_sink_rtl (pixel,
 # clk_pixel), with NO `cdc:` block on the connection. Must fail
-# `forge topgen validate`/`gen-top --strict` with a real ATG023
+# `forge dev topgen validate`/`gen-top --strict` with a real ATG023
 # diagnostic (forge.contracts.cdc.verify_cdc) before any RTL is
 # generated — the same real, code-verified check design_cdc.yml's own
 # six real crossings are approved against, not a hypothetical.
 #
 # Real command run against this file:
-#   forge topgen validate plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml
+#   forge dev topgen validate plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml
 # ═══════════════════════════════════════════════════════════════════════════
 
 schema_version: "1.0"

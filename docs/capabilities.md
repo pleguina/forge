@@ -38,7 +38,7 @@ Turning a set of modules and a description of how they connect into a
 single structural top level.
 
 - **Three output modes** — structural Verilog, VHDL, or a Vivado Block
-  Design TCL script (`forge topgen gen-top --mode verilog|vhdl|bd`). All
+  Design TCL script (`forge dev topgen gen-top --mode verilog|vhdl|bd`). All
   three are driven by the same canonical IR rather than each re-deriving
   the topology.
 - **Contract-driven wiring** — modules declare typed roles, and a
@@ -97,7 +97,7 @@ a design topology, or one interface contract per module.
   [standard envelope](development/cli_exit_codes.md) as every other
   command.
 - **Ordinary configuration, not a dialect.** Everything adoption writes is
-  the same format a hand-authored project uses, so `forge topgen validate`
+  the same format a hand-authored project uses, so `forge dev topgen validate`
   works on an adopted project unchanged. `forge build`, `forge test`,
   `forge report` and `forge inspect` need no paths at all: they find
   `forge.yml` and regenerate `.forge/` from it before they run.
@@ -126,7 +126,7 @@ a design topology, or one interface contract per module.
   finds every schema-bearing file in either project layout, works out what
   each needs, and previews the whole chain as one diff. It performs no
   migration itself — each is delegated to the same function
-  `forge topgen migrate` uses, so the two routes cannot diverge — and a
+  `forge dev topgen migrate` uses, so the two routes cannot diverge — and a
   migration that *moves files* is reported with the command that performs
   it rather than performed by a preview command. Dry-run by default,
   idempotent, and it warns before writing to a project that is not under
@@ -136,7 +136,7 @@ a design topology, or one interface contract per module.
 
 The declarations that make wiring deterministic instead of name-guessed.
 
-- **`forge contract infer`** generates a contract skeleton from a module's
+- **`forge dev contract infer`** generates a contract skeleton from a module's
   real ports, emitting every port as a role. For RTL it scans the module's
   own source directly — no intermediate file needed.
 - **Declare decisions, not transcription.** `raw_port`, `direction`,
@@ -145,7 +145,7 @@ The declarations that make wiring deterministic instead of name-guessed.
   needs a human is what no port list implies — `wiring_kind`, `protocol`,
   `partition`/`coordinates`, and array bindings. See
   [Authoring Topology Contracts](how-to/author-topology-contracts.md).
-- **`forge core verify-contract`** checks a contract against the real built
+- **`forge dev core verify-contract`** checks a contract against the real built
   IP, so an omitted or drifted field is caught rather than assumed.
 
 ## HLS interface maturity
@@ -172,11 +172,11 @@ rules taken from real synthesis, and still a prediction.
 
 ## HLS orchestration
 
-- **`forge hls gen-tcl` / `forge hls run`** generate Vitis HLS scripts and
+- **`forge dev hls gen-tcl` / `forge dev hls run`** generate Vitis HLS scripts and
   run synthesis jobs in parallel, from a module catalog.
 - **Port prediction** — an HLS module's RTL ports don't exist until its IP
   is built, and their names shift with the interface pragma and argument
-  shape. `forge contract infer --predict` reads the C++ signature,
+  shape. `forge dev contract infer --predict` reads the C++ signature,
   pragmas, typedefs and constants and predicts the generated port list, so
   a contract can be drafted and reviewed before the first synthesis run.
   The prediction rules are derived from real synthesis output, and
@@ -187,27 +187,27 @@ rules taken from real synthesis, and still a prediction.
 
 - **Contract-driven flows** — a `design.verification.yml` declares
   datasets and flows; FORGE generates the testbench, wave script and flow
-  file, then runs them (`forge verify generate|prepare|run`).
+  file, then runs them (`forge dev verify generate|prepare|run`).
 - **Backends** — `xsim` and `csim`. Verilator is supported as a lint tool,
   not a simulation backend.
 - **XML golden datasets** with per-event selection, plus plugin-authored
   stimulus generation and golden-model hooks. See
   [Verification Model](concepts/verification-model.md) and
   [Datasets and Provenance](concepts/datasets-and-provenance.md).
-- **Diagnostics** — `forge verify doctor` reports what a plugin still
-  needs; `forge verify release-check` gates release readiness.
+- **Diagnostics** — `forge dev verify doctor` reports what a plugin still
+  needs; `forge dev verify release-check` gates release readiness.
 
 ## Analysis and reporting
 
-- **Static latency checking** (`forge analyze latency-check`) — builds a
+- **Static latency checking** (`forge dev analyze latency-check`) — builds a
   graph from the topology and finds merge points whose inputs don't
   arrive together, using declared latencies, HLS reports and contract
   data. See [Latency Model](concepts/latency-model.md).
-- **HLS report parsing** (`forge analyze hls-report`) into CSV, Markdown
+- **HLS report parsing** (`forge dev analyze hls-report`) into CSV, Markdown
   or HTML.
 - **Runtime latency and throughput** comparison against simulation probes.
 - **Result plots** from a plugin-defined config, and an aggregated
-  **HTML dashboard** (`forge analyze dashboard`).
+  **HTML dashboard** (`forge dev analyze dashboard`).
 - **Visual design explorer** — an interactive topology view that also
   shows the design's *open decisions*: a producer with several equally
   valid consumers, and for each candidate the exact `forge.yml` entry and
@@ -227,7 +227,7 @@ rules taken from real synthesis, and still a prediction.
 
 ## Integration with an external framework
 
-`forge framework import|io-resolve|emit-payload` loads an external
+`forge dev framework import|io-resolve|emit-payload` loads an external
 framework's ABI and endpoint manifest and resolves a design's I/O against
 it, for dropping a generated top level into a larger platform.
 

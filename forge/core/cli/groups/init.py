@@ -1,7 +1,7 @@
 """forge init — unify the two existing plugin scaffolders and chain the
 whole golden path: `forge init <plugin_id>`
 runs, in order, the topgen-side scaffolder, the (now-fixed) verify-side
-scaffolder, `forge topgen validate`, `forge build`, `forge test
+scaffolder, `forge dev topgen validate`, `forge build`, `forge test
 prepare`/`run`, and `forge report` — real invocations of those real
 commands (constructed as argv and run in-process through the full `forge`
 parser, exactly as a user typing each command would get), not
@@ -97,14 +97,14 @@ def cmd_init(args) -> None:
 
     # ── Step 1: topgen-side scaffold ────────────────────────────────────────
     _step("topgen-init-plugin", "topology scaffold", [
-        "topgen", "init-plugin", plugin_id,
+        "dev", "topgen", "init-plugin", plugin_id,
         "--plugins-root", str(plugins_root), "--algo-root", str(algo_root),
         *(["--dry-run"] if dry_run else []),
     ])
 
     # ── Step 2: verify-side scaffold ────────────────────────────────────────
     _step("verify-init-plugin", "verification scaffold", [
-        "verify", "init-plugin", plugin_id,
+        "dev", "verify", "init-plugin", plugin_id,
         "--plugins-root", str(plugins_root),
         *(["--dry-run"] if dry_run else []),
     ])
@@ -140,7 +140,7 @@ def cmd_init(args) -> None:
         print(f"  ⏭️  {forge_yml} already exists, left as it is")
 
     # ── Step 3: validate immediately ────────────────────────────────────────
-    _step("validate", "design validated", ["topgen", "validate", str(design_yml)])
+    _step("validate", "design validated", ["dev", "topgen", "validate", str(design_yml)])
 
     # ── Step 4: build immediately (real generation) ────────────────────────
     _step("build", f"top level generated ({gen_top_output.name})", [

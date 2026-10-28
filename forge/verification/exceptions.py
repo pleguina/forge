@@ -50,7 +50,7 @@ Usage
     if not tb_sv.exists():
         raise MissingArtifactError(
             f"Testbench not found: {tb_sv}",
-            action=f"Run: forge verify generate {design_yml} --flow {flow_name}",
+            action=f"Run: forge dev verify generate {design_yml} --flow {flow_name}",
             context={"path": str(tb_sv), "flow": flow_name},
         )
 

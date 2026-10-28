@@ -1,4 +1,4 @@
-"""Real end-to-end xsim coverage for `forge verify run` / `prepare`.
+"""Real end-to-end xsim coverage for `forge dev verify run` / `prepare`.
 
 test_verify_cli_commands.py deliberately stayed away from `run`/`generate`/
 `prepare` because they need a full gen-top'd canonical layout and a real
@@ -39,8 +39,8 @@ def consumer_root(tmp_path: Path) -> Path:
 
     Mirrors the real, documented workflow (see the header comment of
     plugins/passthrough_demo/forge/verify/design.verification.yml) but
-    rooted at tmp_path instead of the repo, so `forge topgen gen-top` and
-    `forge verify generate/run` write only into scratch space.
+    rooted at tmp_path instead of the repo, so `forge dev topgen gen-top` and
+    `forge dev verify generate/run` write only into scratch space.
     """
     dest_plugin = tmp_path / "plugins" / "passthrough_demo"
     shutil.copytree(

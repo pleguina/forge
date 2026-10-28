@@ -1,4 +1,4 @@
-"""End-to-end coverage for `forge verify` read-only CLI commands.
+"""End-to-end coverage for `forge dev verify` read-only CLI commands.
 
 verify/__main__.py is a ~720-line, ~15%-covered CLI surface, only
 exercised indirectly through integration scripts. These tests call

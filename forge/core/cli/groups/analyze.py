@@ -11,7 +11,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 def _emit_analyze_envelope(*, status: str, json_mode: bool, **kwargs) -> None:
-    """Shared tail for every `forge analyze` subcommand (a lighter-touch
+    """Shared tail for every `forge dev analyze` subcommand (a lighter-touch
     pass than the pass/fail-gate commands: `metrics`/`artifacts` matter
     more than `diagnostics` here,
     since these are report-generation commands, not verification gates).
@@ -349,7 +349,7 @@ def cmd_dashboard(args) -> None:
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge analyze`` sub-parser and all its commands."""
+    """Register the ``forge dev analyze`` sub-parser and all its commands."""
     import argparse
 
     p_analyze = sub.add_parser(
@@ -367,22 +367,22 @@ def register(sub) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  forge analyze hls-report --hls-build-root build_hls"
+            "  forge dev analyze hls-report --hls-build-root build_hls"
             " --output out/reports/hls_summary\n"
-            "  forge analyze latency-check plugins/myplugin/designs/design.yml"
+            "  forge dev analyze latency-check plugins/myplugin/designs/design.yml"
             " --contracts-from plugins/myplugin/modules.yml"
             " --hls-build-root build_hls"
             " --output out/reports/latency_check.md\n"
-            "  forge analyze runtime-latency"
+            "  forge dev analyze runtime-latency"
             " --probe-csv out/probes/probes.csv"
             " --probe-pairs 'mymod:in_valid:out_valid'"
             " --output out/reports/runtime_latency.md\n"
-            "  forge analyze plot-results"
+            "  forge dev analyze plot-results"
             " --config plot_config.yml"
             " --observed observed.csv"
             " --reference expected.csv"
             " --output out/plots\n"
-            "  forge analyze dashboard"
+            "  forge dev analyze dashboard"
             " --input out/reports"
             " --output out/dashboard\n"
         ),
@@ -438,7 +438,7 @@ def register(sub) -> None:
     )
     p_rt.add_argument(
         "--probe-csv", required=True, metavar="FILE",
-        help="CSV with columns: cycle, signal, value (written by forge verify run)",
+        help="CSV with columns: cycle, signal, value (written by forge dev verify run)",
     )
     p_rt.add_argument(
         "--probe-format", choices=["long", "wide"], default="long",

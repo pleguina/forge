@@ -104,7 +104,7 @@ reused as-is.
 - `/tmp/vpd_report/dashboard.html` — open it directly in a browser, no
   server needed. It embeds the topology SVG, the maturity/latency/HLS
   summaries, and (once you pass `--junit-xml`/`--golden-comparison-json`
-  from a real `forge verify run`) the verification results too.
+  from a real `forge dev verify run`) the verification results too.
 - Re-run `forge build --plan --accept-plan-hash <a-wrong-hash>` to see a
   real mismatch: FORGE reports the expected vs. actual hash and refuses
   to proceed, rather than silently accepting a stale plan.

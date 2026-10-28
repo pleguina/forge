@@ -8,7 +8,7 @@
 # see that file's own header for the full topology) in every respect
 # except one: the pixel-result path's async_fifo depth is 4 instead of
 # 64. depth=4 is still a valid power of two (passes ATG022/ATG026 at
-# `forge topgen validate` time -- depth *sufficiency* for a given burst
+# `forge dev topgen validate` time -- depth *sufficiency* for a given burst
 # pattern isn't and can't be a static topology-validity concern, only a
 # real simulated/measured one, unlike depth's own power-of-two
 # well-formedness). The real, already-measured burst this plugin's own

@@ -18,16 +18,16 @@ This inventory defines the support status for maintained surfaces referenced by 
 
 | Surface | Class | Why |
 |---|---|---|
-| `forge` CLI (`forge topgen validate`, `forge topgen gen-top`, `forge topgen ip-summary`, `forge topgen match-ports`, `forge topgen unpack-ips`, `forge core resources`, `forge core verify-contract`) | Public framework API | primary installed framework entrypoint |
+| `forge` CLI (`forge dev topgen validate`, `forge dev topgen gen-top`, `forge dev topgen ip-summary`, `forge dev topgen match-ports`, `forge dev topgen unpack-ips`, `forge dev core resources`, `forge dev core verify-contract`) | Public framework API | primary installed framework entrypoint |
 | `forge.verification` Python package (`forge/verification/`) | Public framework API | installed verification package boundary; `verify/src/xsi_loader.cpp` at repo root is a standalone XSI loader, not a built/linked library — plugins own their own C++ verify headers/sources under `plugins/<plugin>/forge/verify/include` and `.../src` |
 | `docs/concepts/core-interface.md` | Public framework API | defines Layer 1 contract |
 | `docs/getting-started/quickstart.md` | Public framework API | shortest supported adoption path |
 | downstream plugin guides | Downstream consumer only | plugin-specific integration guides belong in plugin repositories, not FORGE core |
 | `plugins/trigger_demo/README.md` | Supported proof consumer | multi-flow non-OMTF consumer documentation |
 | `plugins/trigger_demo/forge/verify/` | Supported proof consumer | supported proof that topology contracts plus framework-owned csim/xsim/full-chip flows work for a non-OMTF plugin |
-| `forge hls gen-tcl` | Supported optional tooling | preferred Layer 2 TCL-generation interface |
-| `forge hls run` | Supported optional tooling | preferred Layer 2 batch execution interface |
-| `forge/hls/generate_hls_tcl.py` | Supported optional tooling | implementation behind `forge hls gen-tcl` |
+| `forge dev hls gen-tcl` | Supported optional tooling | preferred Layer 2 TCL-generation interface |
+| `forge dev hls run` | Supported optional tooling | preferred Layer 2 batch execution interface |
+| `forge/hls/generate_hls_tcl.py` | Supported optional tooling | implementation behind `forge dev hls gen-tcl` |
 | `forge/hls/extract_hls_metrics.py` | Supported optional tooling | structured metrics extraction surface |
 | `docs/concepts/tooling-interface.md` | Supported optional tooling | defines Layer 2 contract |
 | `run_trigger_demo.sh` | Supported proof consumer | the actual hardware-toolchain-dependent release gate (`ci/framework-release.yml`); validate → gen-top → verify generate → doctor → HLS csim/synth → all 9 verification flows |

@@ -1,4 +1,4 @@
-"""End-to-end coverage for `forge analyze` (core/cli/groups/analyze.py, ~22%).
+"""End-to-end coverage for `forge dev analyze` (core/cli/groups/analyze.py, ~22%).
 
 `plot-results` is skipped: it imports forge.analysis.result_plots.engine
 at call time, which requires matplotlib — an optional dependency not

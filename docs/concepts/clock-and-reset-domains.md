@@ -51,7 +51,7 @@ separate domain.
 
 An undeclared crossing is an error (`ATG023` clock-domain / `ATG024`
 reset-domain crossing) with or without `--strict`: `forge build` and
-`forge topgen gen-top` refuse to generate, and `forge topgen validate`
+`forge dev topgen gen-top` refuse to generate, and `forge dev topgen validate`
 fails whenever the design's registry and interface contracts can be loaded
 without needing already-built HDL.
 
@@ -143,5 +143,5 @@ positive and negative fixture per kind),
 every kind (including the manifest's framework-support-RTL discovery),
 `forge/tests/test_cdc_schema_loading.py` covers `design.yml`-level
 parsing of `cdc:`/`clock_domains:`/`reset_domains:`, and
-`forge/tests/test_cdc_validate_integration.py` covers the `forge topgen
+`forge/tests/test_cdc_validate_integration.py` covers the `forge dev topgen
 validate` wiring end to end — all real, passing tests, not placeholders.

@@ -4,13 +4,13 @@
 # Runs every stage in order:
 #   1. Clean stale build artifacts
 #   2. Validate design.yml + modules.yml
-#   3. forge topgen gen-top  → gen-top/design_trigger_demo_pipeline/
-#   4. forge verify generate → regenerate flow YAML / SV / TCL files
+#   3. forge dev topgen gen-top  → gen-top/design_trigger_demo_pipeline/
+#   4. forge dev verify generate → regenerate flow YAML / SV / TCL files
 #   5. gen_stimulus.py     → stimulus_current.svh for every xsim flow
-#   6. forge verify doctor   → readiness health-check
-#   7. forge hls run csim    → C-simulation for all 4 HLS modules
-#   8. forge hls run synth   → RTL synthesis for all 4 HLS modules (needed by xsim)
-#   9. forge verify run      → all 9 flows (csim × 4, xsim × 4, full-chip × 1)
+#   6. forge dev verify doctor   → readiness health-check
+#   7. forge dev hls run csim    → C-simulation for all 4 HLS modules
+#   8. forge dev hls run synth   → RTL synthesis for all 4 HLS modules (needed by xsim)
+#   9. forge dev verify run      → all 9 flows (csim × 4, xsim × 4, full-chip × 1)
 #
 # Usage (from the forge repository root):
 #   ./run_trigger_demo.sh              # full run
@@ -81,8 +81,8 @@ fi
 # 2. Validate topology
 # ════════════════════════════════════════════════════════════════════════════
 step "Validate design + registry"
-forge topgen validate          "$DESIGN_YML"
-forge topgen validate-registry "$MODULES_YML"
+forge dev topgen validate          "$DESIGN_YML"
+forge dev topgen validate-registry "$MODULES_YML"
 ok "Validation passed"
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -108,8 +108,8 @@ ok "All required headers present"
 # ════════════════════════════════════════════════════════════════════════════
 # 3. Generate algo_top
 # ════════════════════════════════════════════════════════════════════════════
-step "forge topgen gen-top → $GEN_TOP_OUT"
-forge topgen gen-top "$DESIGN_YML" \
+step "forge dev topgen gen-top → $GEN_TOP_OUT"
+forge dev topgen gen-top "$DESIGN_YML" \
   --mode verilog \
   --consumer-root . \
   --contracts-from "$MODULES_YML" \
@@ -120,8 +120,8 @@ ok "algo_top generated"
 # ════════════════════════════════════════════════════════════════════════════
 # 4. Regenerate verification flow files
 # ════════════════════════════════════════════════════════════════════════════
-step "forge verify generate"
-forge verify generate "$VERIFY_YML"
+step "forge dev verify generate"
+forge dev verify generate "$VERIFY_YML"
 ok "Verify flow files regenerated"
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -134,8 +134,8 @@ ok "Stimulus files generated"
 # ════════════════════════════════════════════════════════════════════════════
 # 6. Doctor check
 # ════════════════════════════════════════════════════════════════════════════
-step "forge verify doctor"
-forge verify doctor "$VERIFY_YML"
+step "forge dev verify doctor"
+forge dev verify doctor "$VERIFY_YML"
 ok "Doctor passed"
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -146,14 +146,14 @@ HLS_MODULES="hit_decoder hit_collector trigger_logic trigger_output"
 if [[ $SKIP_HLS -eq 1 ]]; then
   echo "(--skip-hls: skipping HLS TCL generation + csim + synth)"
 else
-  step "forge hls gen-tcl — generate Vitis HLS TCL scripts"
-  forge hls gen-tcl \
+  step "forge dev hls gen-tcl — generate Vitis HLS TCL scripts"
+  forge dev hls gen-tcl \
     --hls-config "$MODULES_YML" \
     --output-dir "$HLS_BUILD_ROOT"
   ok "HLS TCL scripts generated"
 
-  step "forge hls run — csim (${JOBS} parallel job(s))"
-  forge hls run \
+  step "forge dev hls run — csim (${JOBS} parallel job(s))"
+  forge dev hls run \
     --registry "$MODULES_YML" \
     --hls-build-root "$HLS_BUILD_ROOT" \
     --stages csim \
@@ -161,8 +161,8 @@ else
     --modules "$HLS_MODULES"
   ok "HLS csim done"
 
-  step "forge hls run — synth (${JOBS} parallel job(s))"
-  forge hls run \
+  step "forge dev hls run — synth (${JOBS} parallel job(s))"
+  forge dev hls run \
     --registry "$MODULES_YML" \
     --hls-build-root "$HLS_BUILD_ROOT" \
     --stages synth \
@@ -198,9 +198,9 @@ FLOWS=(
 
 FAIL_COUNT=0
 for flow in "${FLOWS[@]}"; do
-  step "forge verify run — $flow"
+  step "forge dev verify run — $flow"
   flow_yml="$FORGE_ROOT/verify/${flow}/verify.flow.yml"
-  if forge verify run "$flow_yml" --plugin trigger_demo --consumer-root "$(pwd)"; then
+  if forge dev verify run "$flow_yml" --plugin trigger_demo --consumer-root "$(pwd)"; then
     ok "$flow PASSED"
   else
     echo "${RED}✘  $flow FAILED${RESET}" >&2

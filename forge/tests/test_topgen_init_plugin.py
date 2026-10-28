@@ -1,4 +1,4 @@
-"""Coverage for `forge topgen init-plugin` (core/cli/groups/topgen.py).
+"""Coverage for `forge dev topgen init-plugin` (core/cli/groups/topgen.py).
 
 Scaffolds the topgen side of a new plugin capsule. The real value claim
 is "zero further edits needed" — the end-to-end test below proves that by

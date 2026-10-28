@@ -627,7 +627,7 @@ def get_design_parameters(params_file: Path) -> Dict[str, Any]:
     if not params_file.exists():
         raise FileNotFoundError(
             f"Design parameters file not found: {params_file}\n"
-            f"Please generate it with: forge topgen gen-top <design.yml> --mode verilog"
+            f"Please generate it with: forge dev topgen gen-top <design.yml> --mode verilog"
         )
     
     with open(params_file, 'r') as f:

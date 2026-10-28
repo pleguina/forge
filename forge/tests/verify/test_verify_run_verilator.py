@@ -1,4 +1,4 @@
-"""Real end-to-end Verilator coverage for `forge verify run`.
+"""Real end-to-end Verilator coverage for `forge dev verify run`.
 
 Mirrors test_verify_run_xsim.py's convention exactly: tool-gated skip (real
 `shutil.which`, never mocked), a `shutil.copytree` of plugins/passthrough_demo

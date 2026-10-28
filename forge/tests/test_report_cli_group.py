@@ -265,7 +265,7 @@ def test_report_throughput_cdc_and_golden_comparison_sections(
 ) -> None:
     """End-to-end against
     vision_pipeline_demo's already-validated quickstart flow (reusing its
-    cached HLS build, no fresh synthesis) — forge topgen validate
+    cached HLS build, no fresh synthesis) — forge dev topgen validate
     --cdc-result-json, forge test run --golden-comparison-json, and
     forge report's three new sections, all together."""
     cdc_result_path = tmp_path / "cdc_result.json"
@@ -321,7 +321,7 @@ def test_report_throughput_cdc_and_golden_comparison_sections(
 @pytest.mark.skipif(not VPD_HLS_BUILD_ROOT.exists(), reason="no cached vision_pipeline_demo HLS build")
 @pytest.mark.skipif(
     not VPD_FULL_FUNCTIONAL_PROBE_CSV.exists(),
-    reason="no cached full_functional_xsim probe CSV (run `forge verify run "
+    reason="no cached full_functional_xsim probe CSV (run `forge dev verify run "
     ".../full_functional_xsim/verify.flow.yml --probe-log` first)",
 )
 def test_report_release_acceptance_for_full_functional_design(
@@ -331,7 +331,7 @@ def test_report_release_acceptance_for_full_functional_design(
     full-functional design (16x16/2x2-tile, single shared normalizer, both CDC
     crossings) -- real CDC verification (2 real async_fifo crossings)
     plus real runtime throughput (real probe CSV from a prior
-    ``forge verify run --probe-log`` against full_functional_xsim).
+    ``forge dev verify run --probe-log`` against full_functional_xsim).
 
     Deliberately does NOT pass --golden-comparison-json: this design's
     own real content-checked, dual-clock-domain scoreboard (see

@@ -764,7 +764,7 @@ def _add_hls_maturity(explanation: Explanation, candidate, status: ProjectStatus
 
     if not is_at_least(assessment.level, RECONCILED) or assessment.reconciliation is None:
         explanation.section("Next", [
-            "run `forge hls run --stages csim,synth` so the real RTL ports are known, "
+            "run `forge dev hls run --stages csim,synth` so the real RTL ports are known, "
             "then re-run this command to see them reconciled against the prediction",
         ])
         return
@@ -846,7 +846,7 @@ def _producing_command(path: Path, status: ProjectStatus) -> str:
     if status.paths.generated_root in parents or path.parent == status.paths.generated_root:
         return "forge build"
     if status.paths.contract_root in parents or path.parent == status.paths.contract_root:
-        return "forge adopt (or `forge contract infer`)"
+        return "forge adopt (or `forge dev contract infer`)"
     if status.paths.project_config_root in parents or path.parent == status.paths.project_config_root:
         return "forge adopt"
     if status.paths.report_root in parents or path.parent == status.paths.report_root:

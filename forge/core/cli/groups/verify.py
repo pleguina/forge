@@ -36,7 +36,7 @@ def cmd_verify_dispatch(args):
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge verify`` subparser."""
+    """Register the ``forge dev verify`` subparser."""
     p_verify = sub.add_parser(
         "verify",
         help="Run simulations and check correctness",
@@ -51,17 +51,17 @@ def register(sub) -> None:
             "  release-check Release-readiness gate (RC-01 … RC-10)\n"
             "  init-plugin   Scaffold a new plugin skeleton\n\n"
             "Pass --help after any sub-command to see its options:\n"
-            "  forge verify run --help"
+            "  forge dev verify run --help"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  forge verify generate plugins/my_plugin/verify/design.verification.yml\n"
-            "  forge verify run plugins/my_plugin/verify/hit_decoder_xsim/verify.flow.yml"
+            "  forge dev verify generate plugins/my_plugin/verify/design.verification.yml\n"
+            "  forge dev verify run plugins/my_plugin/verify/hit_decoder_xsim/verify.flow.yml"
             " --plugin my_plugin\n"
-            "  forge verify doctor plugins/my_plugin/verify/design.verification.yml\n"
-            "  forge verify release-check plugins/my_plugin/verify/design.verification.yml\n"
-            "  forge verify init-plugin my_trigger\n"
+            "  forge dev verify doctor plugins/my_plugin/verify/design.verification.yml\n"
+            "  forge dev verify release-check plugins/my_plugin/verify/design.verification.yml\n"
+            "  forge dev verify init-plugin my_trigger\n"
         ),
     )
     p_verify.add_argument("verify_args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)

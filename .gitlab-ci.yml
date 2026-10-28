@@ -117,35 +117,35 @@ forge:schema-validate:
   script:
     - mkdir -p ci-logs
     - |
-      echo "--- forge topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
-      forge topgen validate \
+      echo "--- forge dev topgen validate trigger_demo ---" | tee ci-logs/schema-validate.log
+      forge dev topgen validate \
         plugins/trigger_demo/forge/designs/design.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
-      echo "--- forge topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
-      forge topgen validate-registry \
+      echo "--- forge dev topgen validate-registry trigger_demo ---" | tee -a ci-logs/schema-validate.log
+      forge dev topgen validate-registry \
         plugins/trigger_demo/forge/modules.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
-      echo "--- forge topgen validate passthrough_demo ---" | tee -a ci-logs/schema-validate.log
-      forge topgen validate \
+      echo "--- forge dev topgen validate passthrough_demo ---" | tee -a ci-logs/schema-validate.log
+      forge dev topgen validate \
         plugins/passthrough_demo/forge/designs/design.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
-      echo "--- forge topgen validate-registry passthrough_demo ---" | tee -a ci-logs/schema-validate.log
-      forge topgen validate-registry \
+      echo "--- forge dev topgen validate-registry passthrough_demo ---" | tee -a ci-logs/schema-validate.log
+      forge dev topgen validate-registry \
         plugins/passthrough_demo/forge/modules.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
-      echo "--- forge topgen validate-registry vision_pipeline_demo ---" | tee -a ci-logs/schema-validate.log
-      forge topgen validate-registry \
+      echo "--- forge dev topgen validate-registry vision_pipeline_demo ---" | tee -a ci-logs/schema-validate.log
+      forge dev topgen validate-registry \
         plugins/vision_pipeline_demo/forge/modules.yml \
         2>&1 | tee -a ci-logs/schema-validate.log
     - |
       for d in design design_pixel_result design_tile_stats design_cdc \
                design_packetizer design_full_functional design_platform_wrapper; do
-        echo "--- forge topgen validate vision_pipeline_demo/${d}.yml ---" | tee -a ci-logs/schema-validate.log
-        forge topgen validate \
+        echo "--- forge dev topgen validate vision_pipeline_demo/${d}.yml ---" | tee -a ci-logs/schema-validate.log
+        forge dev topgen validate \
           "plugins/vision_pipeline_demo/forge/designs/${d}.yml" \
           2>&1 | tee -a ci-logs/schema-validate.log
       done
@@ -372,33 +372,33 @@ forge:verify-smoke:
     - mkdir -p ci-logs
     - DESIGN_FILE="plugins/trigger_demo/forge/verify/design.verification.yml"
     - |
-      echo "--- forge verify generate dry-run (hit_decoder_csim) ---" | tee ci-logs/verify-smoke.log
-      forge verify generate "${DESIGN_FILE}" \
+      echo "--- forge dev verify generate dry-run (hit_decoder_csim) ---" | tee ci-logs/verify-smoke.log
+      forge dev verify generate "${DESIGN_FILE}" \
         --flow hit_decoder_csim --dry-run \
         2>&1 | tee -a ci-logs/verify-smoke.log
     - |
-      echo "--- forge verify generate dry-run (trigger_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
-      forge verify generate "${DESIGN_FILE}" \
+      echo "--- forge dev verify generate dry-run (trigger_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
+      forge dev verify generate "${DESIGN_FILE}" \
         --flow trigger_pipeline_xsim --dry-run \
         2>&1 | tee -a ci-logs/verify-smoke.log
     - |
-      echo "--- forge verify doctor (trigger_demo) ---" | tee -a ci-logs/verify-smoke.log
-      forge verify doctor "${DESIGN_FILE}" \
+      echo "--- forge dev verify doctor (trigger_demo) ---" | tee -a ci-logs/verify-smoke.log
+      forge dev verify doctor "${DESIGN_FILE}" \
         2>&1 | tee -a ci-logs/verify-smoke.log
     - VPD_DESIGN_FILE="plugins/vision_pipeline_demo/forge/verify/design.verification.yml"
     - |
-      echo "--- forge verify generate dry-run (pixel_normalizer_csim) ---" | tee -a ci-logs/verify-smoke.log
-      forge verify generate "${VPD_DESIGN_FILE}" \
+      echo "--- forge dev verify generate dry-run (pixel_normalizer_csim) ---" | tee -a ci-logs/verify-smoke.log
+      forge dev verify generate "${VPD_DESIGN_FILE}" \
         --flow pixel_normalizer_csim --dry-run \
         2>&1 | tee -a ci-logs/verify-smoke.log
     - |
-      echo "--- forge verify generate dry-run (quickstart_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
-      forge verify generate "${VPD_DESIGN_FILE}" \
+      echo "--- forge dev verify generate dry-run (quickstart_pipeline_xsim) ---" | tee -a ci-logs/verify-smoke.log
+      forge dev verify generate "${VPD_DESIGN_FILE}" \
         --flow quickstart_pipeline_xsim --dry-run \
         2>&1 | tee -a ci-logs/verify-smoke.log
     - |
-      echo "--- forge verify doctor (vision_pipeline_demo) ---" | tee -a ci-logs/verify-smoke.log
-      forge verify doctor "${VPD_DESIGN_FILE}" \
+      echo "--- forge dev verify doctor (vision_pipeline_demo) ---" | tee -a ci-logs/verify-smoke.log
+      forge dev verify doctor "${VPD_DESIGN_FILE}" \
         2>&1 | tee -a ci-logs/verify-smoke.log
   artifacts:
     name: "forge-verify-smoke-${CI_COMMIT_SHORT_SHA}"
@@ -411,7 +411,7 @@ forge:verify-smoke:
 # forge:fresh-user-check
 #
 # Exercises the full framework onboarding path from package install through
-# forge verify init-plugin scaffold and doctor, and doubles as an
+# forge dev verify init-plugin scaffold and doctor, and doubles as an
 # agnosticism regression guard (the scaffolded plugin uses a generic,
 # non-CMS name). Catches regressions that only surface on a clean install.
 # ---------------------------------------------------------------------------

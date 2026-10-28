@@ -104,7 +104,7 @@ def describe_staleness_basis(content_confirmed_fresh: Optional[bool]) -> str:
     ``forge.ir.provenance.explain_staleness``'s reason-formatting
     convention (a short declarative clause, no trailing punctuation) so
     the IR-level (`forge inspect --explain-staleness`) and artifact-level
-    (`forge topgen validate --check-stale`/`forge verify`) staleness
+    (`forge dev topgen validate --check-stale`/`forge dev verify`) staleness
     surfaces read consistently.
     """
     if content_confirmed_fresh is False:

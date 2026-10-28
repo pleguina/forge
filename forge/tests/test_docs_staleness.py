@@ -87,7 +87,7 @@ _CAPABILITY_ALIASES = {"core": "verify-contract"}
 def test_capabilities_page_mentions_every_cli_command_group() -> None:
     """`docs/capabilities.md` is the one page that claims to cover what the
     framework does, so a command group it never mentions is a real gap —
-    exactly how `forge contract` and the golden-path verbs went unmentioned
+    exactly how `forge dev contract` and the golden-path verbs went unmentioned
     in the README for a whole release cycle.
     """
     from argparse import _SubParsersAction

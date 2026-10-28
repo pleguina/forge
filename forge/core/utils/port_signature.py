@@ -35,7 +35,7 @@ Artifact schema (port_signature.json)
   "top_module": "<string>",
   "source_file": "<string>",
   "port_count": <int>,
-  "generated_by": "forge topgen gen-top"
+  "generated_by": "forge dev topgen gen-top"
 }
 """
 from __future__ import annotations
@@ -143,7 +143,7 @@ class PortSignatureArtifact:
     top_module: str
     source_file: str
     port_count: int
-    generated_by: str = "forge topgen gen-top"
+    generated_by: str = "forge dev topgen gen-top"
 
     def matches(self, other_hash: str) -> bool:
         return self.hash == other_hash
@@ -191,7 +191,7 @@ def read_artifact(path: Path) -> PortSignatureArtifact:
     if not path.exists():
         raise FileNotFoundError(
             f"port_signature.json not found at {path}. "
-            "Regenerate the DUT with: forge topgen gen-top ..."
+            "Regenerate the DUT with: forge dev topgen gen-top ..."
         )
     data = json.loads(path.read_text())
     scheme = data.get("scheme", "")
@@ -206,5 +206,5 @@ def read_artifact(path: Path) -> PortSignatureArtifact:
         top_module=data.get("top_module", "algo_top"),
         source_file=data.get("source_file", ""),
         port_count=int(data.get("port_count", 0)),
-        generated_by=data.get("generated_by", "forge topgen gen-top"),
+        generated_by=data.get("generated_by", "forge dev topgen gen-top"),
     )

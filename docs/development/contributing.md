@@ -69,7 +69,7 @@ locally, it won't pass in CI either.
 
 ## Adding a plugin
 
-Start with `forge verify init-plugin <plugin_id>`, then read
+Start with `forge dev verify init-plugin <plugin_id>`, then read
 `docs/MINIMAL_CONSUMER_QUICKSTART.md` and `docs/PLUGIN_AUTHOR_GUIDE.md`.
 `plugins/trigger_demo/` is the maintained reference implementation —
 `plugins/trigger_demo/CANONICAL_PATTERNS.md` walks through every supported

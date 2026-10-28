@@ -181,7 +181,7 @@ def test_run_all_events_produces_two_distinct_per_event_results(
         assert float(tc.get("time")) > 0
 
     # Regression guard for a real bug found while building this slice:
-    # `forge verify prepare`'s own stimulus check never *generates*
+    # `forge dev verify prepare`'s own stimulus check never *generates*
     # stimulus_current.svh (that's a separate, plugin-owned step) — so
     # without `forge test run` regenerating it per event, a second event
     # would silently re-simulate the first event's stale golden data and

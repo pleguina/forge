@@ -102,7 +102,7 @@ crossing detects real novelty — see
 
 <figure markdown>
   ![Bar chart of real measured async FIFO high-water marks: packetizer's pixel-result crossing at 28, its tile-statistics crossing at 1](../../assets/generated/vision-pipeline/figures/fifo-high-water-mark.png){ width=500 }
-  <figcaption>Real, measured high-water marks (not predicted) — rendered by FORGE core's generic `forge analyze plot-results` from this design's own checked-in throughput_result.json. The full_functional bars are chapter 09's own larger-scale numbers, shown here for direct comparison.</figcaption>
+  <figcaption>Real, measured high-water marks (not predicted) — rendered by FORGE core's generic `forge dev analyze plot-results` from this design's own checked-in throughput_result.json. The full_functional bars are chapter 09's own larger-scale numbers, shown here for direct comparison.</figcaption>
 </figure>
 
 A dedicated `design_packetizer.yml` topology figure is not committed

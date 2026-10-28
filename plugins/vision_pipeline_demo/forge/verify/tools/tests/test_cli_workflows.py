@@ -95,7 +95,7 @@ def test_build_plan_hash_is_deterministic_for_full_functional_design(
     # tspack->pktz) resolve with zero inferred connections — every one of
     # this design's 116 connections is an explicit port_map, proven here
     # through forge build's own plan computation rather than assumed from
-    # forge analyze latency-check.
+    # forge dev analyze latency-check.
     counts = p1["metrics"]["counts"]
     assert counts["explicit_connections"] == 116
     assert counts["inferred_connections"] == 0

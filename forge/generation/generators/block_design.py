@@ -202,7 +202,7 @@ def write_bd_tcl(
     Returns a report dict with exactly the same shape
     ``write_structural_verilog`` returns (``open_outputs``, ``tied_to_zero``,
     ``total_modules``, ``total_instances``, ``total_connections``,
-    ``top_ports``), so ``forge topgen gen-top``'s reporting/manifest
+    ``top_ports``), so ``forge dev topgen gen-top``'s reporting/manifest
     pipeline works unmodified against either mode.
 
     Plain ``register_stages``/``delay_cycles`` (no ``boundary:`` tag) are

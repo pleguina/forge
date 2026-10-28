@@ -313,7 +313,7 @@ def cmd_hls_run(args):
         if not tcl_path.exists():
             with open(log_path, "w") as f:
                 f.write(f"ERROR: TCL script not found: {tcl_path}\n")
-                f.write("Generate TCL scripts first: forge hls gen-tcl ...\n")
+                f.write("Generate TCL scripts first: forge dev hls gen-tcl ...\n")
             return False, log_path
 
         try:
@@ -399,7 +399,7 @@ def cmd_hls_run(args):
     # ── Driver ────────────────────────────────────────────────────────────
     sep = "=" * 50
     print(f"\n{sep}")
-    print(f"  forge hls run")
+    print(f"  forge dev hls run")
     print(f"{sep}")
     print(f"  Modules : {', '.join(module_list)}")
     print(f"  Stages  : {', '.join(stage_list)}")
@@ -469,9 +469,9 @@ def cmd_hls_run(args):
         )
 
     if overall_ok:
-        print("forge hls run: all stages completed successfully.")
+        print("forge dev hls run: all stages completed successfully.")
     else:
-        print("forge hls run: completed with failures.", file=sys.stderr)
+        print("forge dev hls run: completed with failures.", file=sys.stderr)
         sys.exit(1)
 
 
@@ -480,11 +480,11 @@ def cmd_hls_run(args):
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge hls`` subparser and its commands."""
+    """Register the ``forge dev hls`` subparser and its commands."""
     p_hls = sub.add_parser("hls", help="Build HLS modules and IPs")
     hls_sub = p_hls.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    # forge hls gen-tcl
+    # forge dev hls gen-tcl
     p_hls_gen = hls_sub.add_parser(
         "gen-tcl", help="Generate Vitis HLS TCL scripts from a plugin catalog",
     )
@@ -514,7 +514,7 @@ def register(sub) -> None:
     )
     p_hls_gen.set_defaults(func=cmd_hls_gen_tcl)
 
-    # forge hls run
+    # forge dev hls run
     p_hls_run = hls_sub.add_parser(
         "run", help="Run parallel Vitis HLS jobs (pure Python, no shell script)",
     )

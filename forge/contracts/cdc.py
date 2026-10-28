@@ -46,7 +46,7 @@ Following the exact existing convention of
 ``forge.contracts.contract_verifier.verify_topology_groups``: this
 function only ever produces ``"error"``-severity issues (no warning
 tier). It is called both from ``gen-top --strict`` (as an error) and
-from ``forge topgen validate`` (surfaced as
+from ``forge dev topgen validate`` (surfaced as
 a warning, whenever contracts/ip_info are available) — see
 ``forge/core/cli/groups/topgen.py``.
 

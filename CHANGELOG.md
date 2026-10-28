@@ -53,6 +53,13 @@ for the versioning policy.
   top with inputs tied to zero or a driver dropped. `--strict` still adds
   the checks for heuristic wiring (no contract, auto-match,
   `port_map_ranges`) and validator warnings.
+- **`forge --help` lists the everyday commands; stage-level groups move
+  under `forge dev`.** The help lists `init`, `adopt`, `check`, `build`,
+  `test`, `report`, `inspect` and `explain`, then `next`, `fix`, `connect`,
+  `migrate` and `doctor`. `topgen`, `contract`, `verify`, `hls`, `analyze`,
+  `framework` and `core` are `forge dev <group>`; their old top-level names
+  still parse, with a note on stderr, and are documented once, under
+  `forge dev`. Every command hint, docstring and page names the new form.
 - **Generation is a library, not a CLI command.** Planning, the gates
   that stop generation, the generators and every artifact written next to
   the top level moved out of `forge/core/cli/groups/topgen.py`:

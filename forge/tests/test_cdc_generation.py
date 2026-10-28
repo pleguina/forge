@@ -515,7 +515,7 @@ def test_build_manifest_resolves_hls_build_dir_by_ip_info_key_not_instance_name(
     HLS run actually synthesized under), not the design.yml instance
     name — the two differ whenever an instance is aliased via `ref:` in
     design.yml (e.g. omtf-firmware's `dt` instance -> `dt_interface`
-    ip_info_key). Regression test for the 2026-09 forge topgen
+    ip_info_key). Regression test for the 2026-09 forge dev topgen
     file-attribution bug: instances with no ref alias (module_name ==
     ip_info_key) worked fine, so the bug only showed up on aliased
     instances in a real multi-module design — trigger_demo's `trig` ->

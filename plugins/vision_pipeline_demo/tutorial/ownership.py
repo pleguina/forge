@@ -68,7 +68,7 @@ _RULES = (
     # observed behavior against a golden model, not by FORGE's generators.
     (re.compile(rf"^plugins/vision_pipeline_demo/forge/verify/{_FLOW_DIR_ALT}/(throughput_result\.json|golden_model_provenance\.json|.*_probe\.csv)$"), VERIFICATION_RESULT),
 
-    # FORGE-generated: written by `forge topgen gen-top` / `forge verify
+    # FORGE-generated: written by `forge dev topgen gen-top` / `forge dev verify
     # generate` / `gen_stimulus_*.py`'s emitter, all carrying their own
     # "DO NOT EDIT — regenerate with ..." header.
     (re.compile(r"^gen-top/design_vision_pipeline_[a-z_]+/"), FORGE_GENERATED),

@@ -249,7 +249,7 @@ def cmd_report(args) -> None:
         diagnostics.append({
             "severity": "note",
             "message": "no --cdc-result-json given (or it doesn't exist) — CDC verification "
-                       "report omitted (see forge topgen validate --cdc-result-json)",
+                       "report omitted (see forge dev topgen validate --cdc-result-json)",
         })
 
     # ── Golden-model comparison ─────────────────────────────────────────────
@@ -494,7 +494,7 @@ def _write_project_attachments(
     plugin_id: str, design_path: Path, output_dir: Path,
     artifacts: List[str], diagnostics: List[Dict[str, Any]],
 ) -> None:
-    """Bootstrap *plugin_id* (same mechanism `forge verify run --plugin`
+    """Bootstrap *plugin_id* (same mechanism `forge dev verify run --plugin`
     uses) and collect whatever ReportAttachmentProvider it has registered.
 
     The plugin's own tools/ directory is derived from *design_path*'s
@@ -598,8 +598,8 @@ def register(sub) -> None:
     )
     p.add_argument(
         "--cdc-result-json",
-        help="Existing forge.cdc_verification_result.v1 JSON (from a prior "
-             "forge topgen validate --cdc-result-json)",
+        help="Existing forge.cdc_verification_result.v1 JSON, as `forge dev topgen validate "
+             "--cdc-result-json` writes it",
     )
     p.add_argument(
         "--golden-comparison-json",
@@ -608,7 +608,7 @@ def register(sub) -> None:
     )
     p.add_argument(
         "--plugin",
-        help="Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and "
+        help="Bootstrap this plugin (same mechanism as `forge dev verify run --plugin`) and "
              "collect any report attachments it has registered via "
              "forge.analysis.dashboards.attachments.register_report_attachment_provider "
              "— e.g. project-owned image panels or ownership annotations",

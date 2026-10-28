@@ -9,9 +9,9 @@ whose simulator is not installed is reported as skipped, never as passed.
 Three modes give direct access to one verification file:
 
 - ``forge test check-only`` — generate + validate stimulus + validate
-  layout, no execution. A fixed-mode call into `forge verify prepare`'s
+  layout, no execution. A fixed-mode call into `forge dev verify prepare`'s
   own machinery (`_cmd_prepare`).
-- ``forge test prepare`` — the same underlying call, with `forge verify
+- ``forge test prepare`` — the same underlying call, with `forge dev verify
   prepare`'s full knobs exposed (`--dry-run`/`--strict`/`--port-map`) —
   an unchanged delegate, not a reimplementation.
 - ``forge test run`` — the new work: resolves the set of selected events
@@ -96,7 +96,7 @@ def cmd_check_only(args) -> None:
 
 
 def cmd_prepare(args) -> None:
-    """`forge test prepare` — an unchanged delegate to `forge verify
+    """`forge test prepare` — an unchanged delegate to `forge dev verify
     prepare`'s `_cmd_prepare`, exposed under the `forge test` golden path
     for discoverability."""
     _run_prepare(args, mode="prepare")
@@ -290,7 +290,7 @@ def cmd_project_test(args) -> None:
 
 def _parse_event_list(event_list: str) -> List[str]:
     """Parse ``"1,7,10-12"``-style event-list syntax (the same syntax
-    `forge verify run --event-list`'s help text already documents) into a
+    `forge dev verify run --event-list`'s help text already documents) into a
     sorted, de-duplicated list of individual events.
 
     A token qualified with a colon (``"4:2"``, an event and the processor it ran on) names
@@ -407,7 +407,7 @@ def _regenerate_stimulus_for_event(
 
     Without this, looping `_run_one_loaded_flow` per event would silently
     re-simulate whichever event's stimulus happened to already be on
-    disk regardless of *event_id* — `forge verify prepare`'s own step 2
+    disk regardless of *event_id* — `forge dev verify prepare`'s own step 2
     only *checks* that a stimulus file exists, it never generates one
     (generation is a separate, plugin-owned step per the framework's
     documented contract; see `_cmd_prepare`'s own comment). `forge test
@@ -418,7 +418,7 @@ def _regenerate_stimulus_for_event(
     Returns True if regeneration happened, False if the plugin has no
     `gen_stimulus` module on `sys.path` (e.g. a csim-only flow) — in
     which case the caller proceeds with whatever stimulus is already
-    there, same as `forge verify run` always has.
+    there, same as `forge dev verify run` always has.
 
     *dataset_xml*, when not None, is forwarded as `dataset_path` to plugins
     whose `generate_for_flow` accepts it (e.g. `plugins/passthrough_demo/
@@ -851,7 +851,7 @@ def register(sub) -> None:
 
     p_prepare = test_sub.add_parser(
         "prepare",
-        help="Generate + validate + check layout (full forge verify prepare delegate)",
+        help="Generate + validate + check layout (full forge dev verify prepare delegate)",
     )
     _add_common_prepare_args(p_prepare)
     p_prepare.add_argument("--port-map", help="Pre-generated port_map.yaml to reuse (xsim flows)")
@@ -913,7 +913,7 @@ def register(sub) -> None:
     )
     p_run.add_argument(
         "--strict", action="store_true", default=False,
-        help="Also enforce canonical layout (same as forge verify run --strict)",
+        help="Also enforce canonical layout (same as forge dev verify run --strict)",
     )
     p_run.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p_run.set_defaults(func=cmd_run)

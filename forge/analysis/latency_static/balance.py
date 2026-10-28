@@ -2,7 +2,7 @@
 
 A connection or topology group declared with ``delay_cycles: auto`` gets the
 delay that lines its data up at the merge point it feeds, computed from the
-same latency graph and merge semantics as ``forge analyze latency-check``:
+same latency graph and merge semantics as ``forge dev analyze latency-check``:
 module latencies (``latency_cycles``, then the HLS synthesis reports, then
 ``latency_hint``), the register stages and delays already on the edges, and the
 merge node's ``input_alignment`` (per-source offsets, ``window``, ``framed``).

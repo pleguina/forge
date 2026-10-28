@@ -50,16 +50,16 @@ Diagnostics, not RTL — see each fixture below for exactly what.
 directly to `pxsink` (pixel, `clk_pixel`) with no `cdc:` block at all —
 a bare multi-bit wire crossing unrelated clock domains.
 
-1. `forge topgen validate` (non-strict) only *warns*, exit 0:
+1. `forge dev topgen validate` (non-strict) only *warns*, exit 0:
 
     ```bash
-    forge topgen validate plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml
+    forge dev topgen validate plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml
     ```
 
 2. The real hard-failure proof is `gen-top --strict`:
 
     ```bash
-    forge topgen gen-top plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml \
+    forge dev topgen gen-top plugins/vision_pipeline_demo/forge/designs/invalid_direct_bus_cdc.yml \
       --mode verilog --consumer-root . \
       --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
       --hls-build-root build_hls_vision_pipeline_demo \
@@ -78,12 +78,12 @@ depth is 4 instead of 64.
 
 ## Expected terminal result
 
-**Fixture 1:** `forge topgen validate` exits 0 with ATG023/ATG024
+**Fixture 1:** `forge dev topgen validate` exits 0 with ATG023/ATG024
 warnings. `gen-top --strict` exits 1 — **no RTL is written**.
 
 **Fixture 2:** depth=4 is still a valid power of two, so it passes
 `validate` — depth *sufficiency* for a given burst pattern can only be
-measured by actually running the simulation. `forge verify run` reports
+measured by actually running the simulation. `forge dev verify run` reports
 a scoreboard **FAIL** with real `overflow_attempt`/`dropped_transactions`
 events. This FAIL is the fixture working correctly, not a regression —
 `./run_vision_pipeline_demo.sh` itself checks for this *expected*

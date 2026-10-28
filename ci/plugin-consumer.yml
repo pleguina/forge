@@ -24,7 +24,7 @@
 #     extends: .forge_plugin_setup
 #     stage: validate
 #     script:
-#       - forge topgen validate-registry modules.yml --strict
+#       - forge dev topgen validate-registry modules.yml --strict
 # ============================================================================
 
 # ---------------------------------------------------------------------------
@@ -109,8 +109,8 @@ default:
   extends: .forge_plugin_setup
   stage: validate
   script:
-    - forge topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
-    - forge core verify-contract
+    - forge dev topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
+    - forge dev core verify-contract
         --ip-info "${PLUGIN_IP_INFO_YML:-ip_info.yaml}"
         --all-contracts "${PLUGIN_INTERFACES_DIR}"
   artifacts:
@@ -123,14 +123,14 @@ default:
 # ---------------------------------------------------------------------------
 # .forge_verify_doctor
 #
-# Hidden template: run forge verify doctor against the plugin verification
+# Hidden template: run forge dev verify doctor against the plugin verification
 # contract. Extend this in a concrete job; set PLUGIN_VERIFY_CONTRACT_PATH.
 # ---------------------------------------------------------------------------
 .forge_verify_doctor:
   extends: .forge_plugin_setup
   stage: smoke
   script:
-    - forge verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
+    - forge dev verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
   artifacts:
     name: "forge-verify-doctor-${CI_COMMIT_SHORT_SHA}"
     when: always

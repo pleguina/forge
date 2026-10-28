@@ -97,7 +97,7 @@ def check_ir_schema_version(value: str) -> Optional[str]:
         raise IrSchemaError(
             f"IR schema version {value} is incompatible with this FORGE build "
             f"(supports {cur_major}.x, currently {IR_SCHEMA_VERSION}). "
-            "Regenerate the IR with `forge topgen gen-top`, or use the FORGE "
+            "Regenerate the IR with `forge dev topgen gen-top`, or use the FORGE "
             "version that wrote it."
         )
     if minor > cur_minor:

@@ -1,4 +1,4 @@
-"""forge.hls.stage_stamp — content-hash stamps for ``forge hls run`` stages.
+"""forge.hls.stage_stamp — content-hash stamps for ``forge dev hls run`` stages.
 
 Output files show that a stage ran once, not that it ran on the current
 sources. A stage counts as done only when the stamp written after its last

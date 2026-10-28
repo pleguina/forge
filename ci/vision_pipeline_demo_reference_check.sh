@@ -63,7 +63,7 @@ hits="$(grep -rnE "$PATTERN" "${EXISTING_PATHS[@]}" \
 # from forge/verification/gen_sim.py (FORGE core, out of scope for this pass);
 # stimulus_current.svh's flagged line originates from this plugin's own
 # gen_stimulus_*.py, already cleaned — the checked-in file just predates
-# its last regeneration and self-heals on the next `forge verify
+# its last regeneration and self-heals on the next `forge dev verify
 # generate` run. Hand-editing generated output here would only be
 # overwritten.
 

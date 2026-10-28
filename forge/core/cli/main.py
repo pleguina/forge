@@ -18,6 +18,23 @@ from forge.core.cli.groups import (
 from forge.core.cli import _shared
 
 
+#: The everyday commands, listed first by `forge --help`.
+PRIMARY_COMMANDS = ("init", "adopt", "check", "build", "test", "report", "inspect", "explain")
+#: Public too, listed after them.
+SECONDARY_COMMANDS = ("next", "fix", "connect", "migrate", "doctor")
+#: Stage-level groups, under `forge dev`. Their old top-level names still
+#: parse (with a notice from main()) but appear in no listing.
+DEV_GROUPS = ("topgen", "contract", "verify", "hls", "analyze", "framework", "core")
+
+_GROUP_MODULES = {
+    "init": init, "adopt": adopt, "check": check, "build": build, "test": test,
+    "report": report, "inspect": inspect, "explain": explain,
+    "next": next_step, "fix": fix, "connect": connect, "migrate": migrate, "doctor": doctor,
+    "topgen": topgen, "contract": contract, "verify": verify, "hls": hls,
+    "analyze": analyze, "framework": framework, "core": core,
+}
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the full `forge` argument parser (all groups registered).
 
@@ -27,81 +44,50 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="forge",
         description=(
-            "FORGE framework CLI — topology generation, HLS build, "
-            "verification orchestration, and performance analysis"
+            "FORGE — generate the structural top level of an FPGA design from its "
+            "modules, balance its pipeline latencies, and simulate it"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""Start here — the golden path, in the order you need it:
-  init        Scaffold a plugin and run validate -> build -> test -> report
-  adopt       Scan an existing repository and create a project from what is in it
-  check       Report whether this project is completely and consistently described
-  next        Say what to do next, and why
-  connect     Declare which producer drives which consumer
-  explain     Explain one FORGE decision — a connection, an inference, a diagnostic
-  fix         Apply the repairs this project's own sources prove
-  migrate     Bring a project up to the schemas this FORGE understands
-  inspect     Resolve a design into the canonical IR and read it back (read-only)
+        epilog="""Commands:
+  init        Scaffold a plugin, write forge.yml, and run build -> test -> report
+  adopt       Scan an existing repository and create forge.yml from what is in it
+  check       Report what is missing or inconsistent, and whether the tools are here
   build       Generate the structural top level
   test        Build the design and run its verification flows
   report      Collect topology, latency and results into one report bundle
-  doctor      Check the local forge install/environment
+  inspect     Resolve a design into the canonical IR and read it back (read-only)
+  explain     Explain one FORGE decision — a connection, an inference, a diagnostic
 
-Starting from nothing, `forge init my_plugin` takes an empty directory to a
-generated top level, a passing simulation and an HTML dashboard in one
-command. Starting from a repository you already have, `forge adopt .` reads
-it and builds the project model from its own sources — then `forge check`
-and `forge next` tell you what is left to decide. Inside a forge.yml project,
-`forge build`, `forge test` and `forge report` need no arguments.
+Also:
+  next        Say what to do next, and why
+  fix         Apply the repairs this project's own sources prove
+  connect     Declare which producer drives which consumer
+  migrate     Bring a project up to the schemas this FORGE understands
+  doctor      Check the forge install and the simulators on PATH
 
-Direct stage access — the individual stages the commands above orchestrate.
-Reach for these when you need a flag or a stage the golden path doesn't expose:
-  topgen      Topology generation, validation, linting, migration helpers
-  contract    Author interface contracts from a module's real ports
-  verify      Verification generate/prepare/run/doctor/release-check
-  hls         Vitis HLS TCL generation and parallel job execution
-  analyze     HLS reports, latency checks, result plots, dashboards
-  framework   External framework import and detector I/O resolution
-  core        Shared schema, CLI, and plugin utilities
+Stage-level:
+  dev         topgen, contract, verify, hls, analyze, framework, core
 
-Exit codes and --json output shape are documented once, for the whole
-CLI, in docs/development/cli_exit_codes.md: 0 = pass (or warn without
---strict), 1 = fail (or warn with --strict), 2 = a usage error or
-unexpected internal exception (never a real finding). Every --json-
-supporting command emits the same {schema_version, status, diagnostics,
-artifacts, metrics, next_actions} envelope shape.
+Inside a forge.yml project, check, build, test, report and inspect need no arguments.
+`forge dev --help` lists the stage-level groups; their old top-level names
+(`forge topgen ...`) still work.
 
-Examples — the golden path:
+Exit codes: 0 = pass (or warn without --strict), 1 = fail (or warn with
+--strict), 2 = a usage error or an internal exception. Every --json command
+emits the same {schema_version, status, diagnostics, artifacts, metrics,
+next_actions} envelope (docs/development/cli_exit_codes.md).
+
+Examples:
   forge init my_plugin
   forge adopt .
   forge check
-  forge next
-  forge explain ATG037
-  forge fix --apply
-  forge migrate
-  forge doctor
   forge build
   forge test
   forge report
+  forge explain ATG037
   forge build design.yml --contracts-from modules.yml --output algo_top.v
-  forge test run design.verification.yml --flow my_flow_xsim --event-id 0
-
-Examples — direct stage access:
-  forge inspect design.yml --emit-ir build/forge/design.ir.json
-  forge build design.yml --accept-plan-hash <hash> --json
-  forge topgen gen-top design.yml --mode verilog --output algo_top.v
-  forge topgen validate design.yml
-  forge contract infer my_module --contracts-from modules.yml -o m.interface.yaml
-  forge hls gen-tcl --hls-config catalog.yml
-  forge hls run --registry catalog.yml --stages csim,synth --jobs 4
-  forge verify generate plugins/my_plugin/verify/design.verification.yml
-  forge verify run plugins/my_plugin/verify/hit_decoder_xsim/verify.flow.yml --plugin my_plugin
-  forge verify doctor plugins/my_plugin/verify/design.verification.yml
-  forge core resources
-  forge core verify-contract --ip-info ip_info.yaml --contract ip_interface.yaml
-  forge analyze hls-report --hls-build-root build_hls --output out/reports
-  forge analyze latency-check design.yml --contracts-from modules.yml
-  forge analyze dashboard --input out/reports --output out/dashboard
-  forge framework import --provider blobfish --abi payload_abi.json --endpoints payload_endpoints.json --out out/
+  forge dev topgen gen-top design.yml --mode verilog --output algo_top.v
+  forge dev analyze latency-check design.yml --contracts-from modules.yml
         """,
     )
 
@@ -116,39 +102,33 @@ Examples — direct stage access:
     sub = parser.add_subparsers(
         dest="group",
         required=True,
-        metavar="GROUP",
+        metavar="COMMAND",
         help=(
-            "Golden path: init | adopt | check | next | connect | explain | fix | "
-            "migrate | "
-            "inspect | build | test | report | doctor. Direct stage access: "
-            "topgen | contract | verify | hls | analyze | framework | core."
+            "init | adopt | check | build | test | report | inspect | explain; also "
+            "next | fix | connect | migrate | doctor; and dev "
+            "(topgen | contract | verify | hls | analyze | framework | core)."
         ),
     )
+    for name in PRIMARY_COMMANDS + SECONDARY_COMMANDS:
+        _GROUP_MODULES[name].register(sub)
 
-    # Golden path first — argparse lists subcommands in registration order,
-    # so this is what a newcomer reads before anything else.
-    init.register(sub)
-    adopt.register(sub)
-    check.register(sub)
-    next_step.register(sub)
-    connect.register(sub)
-    explain.register(sub)
-    fix.register(sub)
-    migrate.register(sub)
-    inspect.register(sub)
-    build.register(sub)
-    test.register(sub)
-    report.register(sub)
-    doctor.register(sub)
-    # Direct stage access.
-    topgen.register(sub)
-    contract.register(sub)
-    verify.register(sub)
-    hls.register(sub)
-    analyze.register(sub)
-    framework.register(sub)
-    core.register(sub)
+    dev = sub.add_parser(
+        "dev",
+        help="Stage-level commands behind the ones above",
+        description=(
+            "The individual stages build, test and report orchestrate, for a flag or a "
+            "stage the everyday commands do not expose."
+        ),
+    )
+    dev_sub = dev.add_subparsers(dest="dev_group", required=True, metavar="GROUP")
+    for name in DEV_GROUPS:
+        _GROUP_MODULES[name].register(dev_sub)
+    for name in DEV_GROUPS:
+        _GROUP_MODULES[name].register(sub)
 
+    # The epilog is the one listing, so argparse's own is dropped; every
+    # name still parses.
+    sub._choices_actions = []
     return parser
 
 
@@ -157,6 +137,11 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     _shared.set_debug(bool(getattr(args, "debug", False)))
+    if args.group in DEV_GROUPS:
+        print(
+            f"note: `forge {args.group}` is now `forge dev {args.group}`; the old name still works",
+            file=sys.stderr,
+        )
 
     try:
         args.func(args)

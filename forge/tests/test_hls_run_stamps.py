@@ -1,4 +1,4 @@
-"""`forge hls run` stage stamps: a stage is skipped only when nothing it reads
+"""`forge dev hls run` stage stamps: a stage is skipped only when nothing it reads
 has changed since its last successful run.
 
 A fake `vitis_hls` stands in for the real tool: it leaves the outputs each

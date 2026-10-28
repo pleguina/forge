@@ -193,7 +193,7 @@ def prepare_from_manifest(
                     f"HLS verilog not found for module '{mod_name}' (top '{top}'):\n"
                     + "\n".join(f"  - {candidate}" for candidate in candidates)
                     + "\n"
-                    f"  Run 'forge hls run --stages synth' first.",
+                    f"  Run 'forge dev hls run --stages synth' first.",
                     stacklevel=2,
                 )
 

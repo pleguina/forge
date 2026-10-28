@@ -32,7 +32,7 @@ override is registered.
 
 Auto-registration
 -----------------
-This module is auto-registered by ``forge verify`` at package import time.
+This module is auto-registered by ``forge dev verify`` at package import time.
 No plugin ``bootstrap.py`` needs to call ``register_backend("xsim", ...)``.
 Plugins that wish to override may re-register after import.
 
@@ -136,7 +136,7 @@ class XsimBackend(BackendAdapter):
         if not tb_sv.exists():
             errors.append(
                 f"SV testbench not found: {tb_sv}\n"
-                f"  → Regenerate with: forge verify generate design.verification.yml"
+                f"  → Regenerate with: forge dev verify generate design.verification.yml"
                 f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
             )
 
@@ -148,7 +148,7 @@ class XsimBackend(BackendAdapter):
                 errors.append(
                     f"DUT RTL file not found: {dut_rtl_path}\n"
                     f"  → Run HLS synthesis first:\n"
-                    f"      forge verify generate uses dut_rtl_source from design.verification.yml\n"
+                    f"      forge dev verify generate uses dut_rtl_source from design.verification.yml\n"
                     f"  RTL expected at: {dut_rtl_path}"
                 )
 
@@ -159,7 +159,7 @@ class XsimBackend(BackendAdapter):
             if not wave_tcl.exists():
                 errors.append(
                     f"wave.tcl not found: {wave_tcl}\n"
-                    f"  → Regenerate with: forge verify generate design.verification.yml"
+                    f"  → Regenerate with: forge dev verify generate design.verification.yml"
                     f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}\n"
                     f"  (or set wave_mode: none in design.verification.yml to disable waveforms)"
                 )

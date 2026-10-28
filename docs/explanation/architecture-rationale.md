@@ -22,7 +22,7 @@ yet have a contract — not as the primary mechanism. This ordering matters
 for a specific, real reason: heuristic matching that happens to work
 today can silently start wiring the wrong ports tomorrow, once port names
 drift, with no contract to catch it. A contract makes wiring intent
-explicit and checkable — `forge topgen gen-top --strict` can (and does)
+explicit and checkable — `forge dev topgen gen-top --strict` can (and does)
 fail loudly when a connection falls back to auto-match or a topology
 group has verification errors, exactly because heuristic wiring is
 something FORGE wants surfaced, not silently accepted. Every

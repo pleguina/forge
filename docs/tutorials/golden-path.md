@@ -5,8 +5,8 @@ simulation, using [`plugins/passthrough_demo/`](rtl-example.md) as the
 running example — it's the simplest real plugin in the repository: one
 RTL module, one instance, no HLS step. Every command below is copied from
 either `plugins/passthrough_demo/README.md` or the live `--help` output of
-the command itself (`forge --help`, `forge topgen gen-top --help`,
-`forge verify generate --help`, `forge verify run --help`), so nothing
+the command itself (`forge --help`, `forge dev topgen gen-top --help`,
+`forge dev verify generate --help`, `forge dev verify run --help`), so nothing
 here is aspirational.
 
 If you haven't installed FORGE yet, do that first:
@@ -21,7 +21,7 @@ pip install -e forge/
 ## 2. Validate the topology
 
 ```bash
-forge topgen validate plugins/passthrough_demo/forge/designs/design.yml
+forge dev topgen validate plugins/passthrough_demo/forge/designs/design.yml
 ```
 
 `passthrough_demo`'s `design.yml` declares one module instance (`pt`, a
@@ -35,10 +35,10 @@ checks the file's shape without generating anything.
 If you're not using an existing plugin, scaffold the topology side first:
 
 ```bash
-forge topgen init-plugin <plugin_id>
+forge dev topgen init-plugin <plugin_id>
 ```
 
-This is the `topgen` counterpart to `forge verify init-plugin` (covered in
+This is the `topgen` counterpart to `forge dev verify init-plugin` (covered in
 the [quickstart](../getting-started/quickstart.md)) — it writes a starter
 `modules.yml`, `design.yml`, an interface contract, and an RTL stub. See
 [Authoring topology contracts](../how-to/author-topology-contracts.md) for
@@ -47,7 +47,7 @@ what to put in each file.
 ## 4. Generate the algorithm top level
 
 ```bash
-forge topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
+forge dev topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
   --mode verilog \
   --consumer-root . \
   --contracts-from plugins/passthrough_demo/forge/modules.yml \
@@ -80,7 +80,7 @@ otherwise the same generator pipeline: the same validation, and the same
 `maturity_report.json`/`design.ir.json` artifacts get written alongside it.
 
 ```bash
-forge topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
+forge dev topgen gen-top plugins/passthrough_demo/forge/designs/design.yml \
   --mode bd \
   --bd-name passthrough_bd \
   --consumer-root . \
@@ -191,11 +191,11 @@ cells.
 ## 5. Generate the verification flow
 
 ```bash
-forge verify generate plugins/passthrough_demo/forge/verify/design.verification.yml
+forge dev verify generate plugins/passthrough_demo/forge/verify/design.verification.yml
 python3 plugins/passthrough_demo/forge/verify/tools/gen_stimulus.py --flow passthrough_xsim --event-id 0
 ```
 
-`forge verify generate` reads `design.verification.yml` and writes
+`forge dev verify generate` reads `design.verification.yml` and writes
 `verify.flow.yml`, the generated testbench, and `wave.tcl` into each
 declared flow's directory (`passthrough_xsim/` here — `passthrough_demo`
 declares exactly one flow, `full_chip_rtl` on the `xsim` backend). It's
@@ -208,7 +208,7 @@ commands instead.
 ## 6. Health-check before running
 
 ```bash
-forge verify doctor plugins/passthrough_demo/forge/verify/design.verification.yml
+forge dev verify doctor plugins/passthrough_demo/forge/verify/design.verification.yml
 ```
 
 At this point `doctor` should report clean — everything `verify generate`
@@ -217,7 +217,7 @@ and `gen_stimulus.py` needed to produce now exists.
 ## 7. Run the simulation
 
 ```bash
-forge verify run plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml \
+forge dev verify run plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml \
   --plugin passthrough_demo --consumer-root .
 ```
 

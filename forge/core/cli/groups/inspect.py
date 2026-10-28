@@ -238,7 +238,7 @@ def cmd_inspect(args):
 def _design_registry(design_path: Path) -> Optional[str]:
     """The modules.yml named by design.yml's own ``registry:`` field, so a
     plain ``forge inspect design.yml`` sees the same contracts that
-    ``forge analyze latency-check`` and generation do."""
+    ``forge dev analyze latency-check`` and generation do."""
     from forge.contracts.design_variant import load_design_document
 
     try:

@@ -39,7 +39,7 @@ derived from the source alone:
   a summed width is wrong in a way that looks plausible
 
 Anything unpredicted is reported, never guessed. A prediction is a draft to
-be confirmed against the built IP with ``forge core verify-contract``.
+be confirmed against the built IP with ``forge dev core verify-contract``.
 """
 
 from __future__ import annotations

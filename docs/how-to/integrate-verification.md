@@ -180,7 +180,7 @@ dataset:
 Then run the complete sweep with:
 
 ```bash
-forge verify run path/to/verify.flow.yml --all-dataset-parts
+forge dev verify run path/to/verify.flow.yml --all-dataset-parts
 ```
 
 FORGE executes each XML part through the normal backend and checker lifecycle,
@@ -296,40 +296,40 @@ And verify that it does not require authored copies of generated artifacts.
 
 ## 10. Post-verification analysis
 
-Once all flows pass, `forge analyze` provides latency measurement, static checks, plots,
+Once all flows pass, `forge dev analyze` provides latency measurement, static checks, plots,
 and an HTML dashboard.  It requires a small amount of plugin-authored content:
 
 | What | Where | Used by |
 |------|-------|---------|
-| `latency_hint: N` on each module | `modules.yml` | `forge analyze latency-check` |
-| `plot_config.yml` with figure specs | `plugins/<plugin>/forge/verify/plot_config.yml` | `forge analyze plot-results` |
-| Probe CSV (`cycle,signal,value`) | produced post-simulation | `forge analyze runtime-latency` |
-| Observed + reference CSVs | produced post-simulation | `forge analyze plot-results` |
+| `latency_hint: N` on each module | `modules.yml` | `forge dev analyze latency-check` |
+| `plot_config.yml` with figure specs | `plugins/<plugin>/forge/verify/plot_config.yml` | `forge dev analyze plot-results` |
+| Probe CSV (`cycle,signal,value`) | produced post-simulation | `forge dev analyze runtime-latency` |
+| Observed + reference CSVs | produced post-simulation | `forge dev analyze plot-results` |
 
-Quick run sequence (after `forge verify run` passes):
+Quick run sequence (after `forge dev verify run` passes):
 
 ```bash
-forge analyze hls-report \
+forge dev analyze hls-report \
     --hls-build-root build_hls_<plugin> --output out/reports
 
-forge analyze latency-check plugins/<plugin>/forge/designs/design.yml \
+forge dev analyze latency-check plugins/<plugin>/forge/designs/design.yml \
     --contracts-from plugins/<plugin>/forge/modules.yml \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/latency_check.md
 
-forge analyze runtime-latency \
+forge dev analyze runtime-latency \
     --probe-csv out/reports/pipeline_probe.csv \
     --probe-pairs "<module>:<in_valid>:<out_valid>" \
     --hls-build-root build_hls_<plugin> \
     --output out/reports/runtime_latency.md
 
-forge analyze plot-results \
+forge dev analyze plot-results \
     --config plugins/<plugin>/forge/verify/plot_config.yml \
     --observed out/reports/observed.csv \
     --reference out/reports/reference.csv \
     --output out/reports/plots
 
-forge analyze dashboard --input out/reports --output out/dashboard
+forge dev analyze dashboard --input out/reports --output out/dashboard
 ```
 
 See [How to Analyze Performance](analyze-performance.md) for the complete reference.

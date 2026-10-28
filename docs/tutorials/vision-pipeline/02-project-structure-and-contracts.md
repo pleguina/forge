@@ -40,14 +40,14 @@ You don't edit anything in this chapter, but you should open:
 
 ## What FORGE generates
 
-Nothing new — `forge topgen validate-registry`/`validate` only read
+Nothing new — `forge dev topgen validate-registry`/`validate` only read
 these files, they don't write anything.
 
 ## Command to run
 
 ```bash
-forge topgen validate-registry plugins/vision_pipeline_demo/forge/modules.yml
-forge topgen validate          plugins/vision_pipeline_demo/forge/designs/design.yml
+forge dev topgen validate-registry plugins/vision_pipeline_demo/forge/modules.yml
+forge dev topgen validate          plugins/vision_pipeline_demo/forge/designs/design.yml
 ```
 
 ## Expected terminal result
@@ -72,7 +72,7 @@ them (`pixel_normalizer` as `norm`, `threshold_rtl` as `thresh`).
   src: [../algo/normalizer/pixel_normalizer.cpp]
 ```
 
-`latency:` is not optional decoration — `forge analyze latency-check`
+`latency:` is not optional decoration — `forge dev analyze latency-check`
 (chapter 04) reads it to verify that parallel paths reconverge on the
 exact cycle they're supposed to. `kind: fixed`/`bounded`/`elastic` are
 the three latency shapes this tutorial covers (chapters 01, 05).
@@ -137,7 +137,7 @@ different," not "what is this file."
 
 A design that references a `ref:` not present in the registry, or an
 instance's `port_map` naming a role the contract doesn't declare, fails
-`forge topgen validate` with a clear diagnostic — see
+`forge dev topgen validate` with a clear diagnostic — see
 [chapter 12](12-diagnostics-and-negative-fixtures.md) for real examples
 of validation catching a structural mistake before any RTL is generated.
 

@@ -101,12 +101,12 @@ plugins/trigger_demo/
 │       ├── tests/                    ← authored: HLS C-sim testbench sources (tb_*.cpp)
 │       ├── include/                  ← authored: DUT adapter headers
 │       ├── tools/
-│       │   ├── bootstrap.py          ← authored: plugin registration with forge verify
+│       │   ├── bootstrap.py          ← authored: plugin registration with forge dev verify
 │       │   ├── gen_stimulus.py       ← authored: xsim stimulus generator
 │       │   └── tests/                ← authored: unit tests for verify tooling
-│       ├── <flow>/verify.flow.yml    ← generated: forge verify generate
-│       ├── <flow>/tb_*.sv            ← generated: forge verify generate
-│       ├── <flow>/wave.tcl           ← generated: forge verify generate
+│       ├── <flow>/verify.flow.yml    ← generated: forge dev verify generate
+│       ├── <flow>/tb_*.sv            ← generated: forge dev verify generate
+│       ├── <flow>/wave.tcl           ← generated: forge dev verify generate
 │       └── <flow>/stimulus_current.svh  ← plugin-generated: gen_stimulus.py
 ├── CANONICAL_PATTERNS.md
 └── README.md
@@ -118,7 +118,7 @@ See `docs/PLUGIN_AUTHOR_GUIDE.md` for the complete path model.
 
 > **What you author vs what the framework generates:**
 > Files under `forge/verify/<flow>/` are framework-generated or plugin-generated — do **not**
-> hand-edit them. Regenerate with `forge verify generate` and `gen_stimulus.py`.
+> hand-edit them. Regenerate with `forge dev verify generate` and `gen_stimulus.py`.
 
 ## End-to-end Workflow
 
@@ -132,7 +132,7 @@ export CONSUMER_ROOT="$(pwd)"
 ### Step 1 — HLS synthesis (all modules)
 
 ```bash
-forge hls run \
+forge dev hls run \
   --registry plugins/trigger_demo/forge/modules.yml \
   --modules all \
   --hls-build-root build_hls_trigger_demo \
@@ -142,7 +142,7 @@ forge hls run \
 ### Step 2 — Generate Verilog top
 
 ```bash
-forge topgen gen-top \
+forge dev topgen gen-top \
   plugins/trigger_demo/forge/designs/design.yml \
   --consumer-root "$CONSUMER_ROOT" \
   --contracts-from plugins/trigger_demo/forge/modules.yml \
@@ -155,7 +155,7 @@ forge topgen gen-top \
 ### Step 3 — Generate verification flow configs
 
 ```bash
-forge verify generate plugins/trigger_demo/forge/verify/design.verification.yml
+forge dev verify generate plugins/trigger_demo/forge/verify/design.verification.yml
 ```
 
 Writes `verify.flow.yml`, `tb_*.sv`, and `wave.tcl` into each of the 9 flow
@@ -173,7 +173,7 @@ Use `--module <name>` or `--dry-run` for selective runs.
 ### Step 5 — Contract health check
 
 ```bash
-forge verify doctor plugins/trigger_demo/forge/verify/design.verification.yml
+forge dev verify doctor plugins/trigger_demo/forge/verify/design.verification.yml
 ```
 
 ### Step 6 — Run verification flows
@@ -181,16 +181,16 @@ forge verify doctor plugins/trigger_demo/forge/verify/design.verification.yml
 ```bash
 # C-sim (HLS — requires Vitis HLS)
 for flow in hit_decoder_csim hit_collector_csim trigger_logic_csim trigger_output_csim; do
-  forge verify run plugins/trigger_demo/forge/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  forge dev verify run plugins/trigger_demo/forge/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Single-module RTL (requires Vivado/xsim)
 for flow in hit_decoder_xsim hit_collector_xsim trigger_logic_xsim trigger_output_xsim; do
-  forge verify run plugins/trigger_demo/forge/verify/${flow}/verify.flow.yml --plugin trigger_demo
+  forge dev verify run plugins/trigger_demo/forge/verify/${flow}/verify.flow.yml --plugin trigger_demo
 done
 
 # Full-chip RTL integration (requires gen-top output from Step 2)
-forge verify run \
+forge dev verify run \
   plugins/trigger_demo/forge/verify/trigger_pipeline_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```
@@ -209,7 +209,7 @@ To re-run a single flow after changing algo source:
 
 ```bash
 # Re-synthesise one module
-forge hls run \
+forge dev hls run \
   --registry plugins/trigger_demo/forge/modules.yml \
   --modules hit_decoder \
   --hls-build-root build_hls_trigger_demo \
@@ -217,7 +217,7 @@ forge hls run \
 
 # Re-run one xsim flow
 python3 plugins/trigger_demo/forge/verify/tools/gen_stimulus.py --module hit_decoder
-forge verify run \
+forge dev verify run \
   plugins/trigger_demo/forge/verify/hit_decoder_xsim/verify.flow.yml \
   --plugin trigger_demo
 ```

@@ -15,7 +15,7 @@ figures this script produces):
    XML plus this plugin's own `GoldenModelProvider` output — never
    invented pixel values.
 3. Performance figures (`figures/fifo-high-water-mark.png`) are rendered
-   by FORGE core's generic `forge analyze plot-results`, fed a CSV built
+   by FORGE core's generic `forge dev analyze plot-results`, fed a CSV built
    from this plugin's own checked-in `throughput_result.json` files.
 4. `manifest.json` records the design content hash (for diagrams) or
    source dataset hash (for image/performance figures) each committed

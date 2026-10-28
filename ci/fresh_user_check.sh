@@ -17,7 +17,7 @@
 #   3b.  init-plugin --dry-run regression check
 #   4b.  Scaffolded plugin's doctor --json structural check, plus file/
 #        import/load assertions the quickstart itself doesn't need
-#   5.   forge topgen validate + forge verify prepare --dry-run on trigger_demo
+#   5.   forge dev topgen validate + forge dev verify prepare --dry-run on trigger_demo
 #   6.   trigger_demo reference plugin passes doctor
 #   7.   forge unit tests + trigger_demo plugin tests (no HLS / Vivado required)
 #
@@ -80,22 +80,22 @@ fi
 python3 -c "import forge; print(f'  forge imported OK (location: {forge.__file__})')"
 pass "forge package importable"
 
-forge verify doctor --help > /dev/null
-pass "forge verify doctor --help"
+forge dev verify doctor --help > /dev/null
+pass "forge dev verify doctor --help"
 
-forge verify generate --help > /dev/null
-pass "forge verify generate --help"
+forge dev verify generate --help > /dev/null
+pass "forge dev verify generate --help"
 
-forge verify init-plugin --help > /dev/null
-pass "forge verify init-plugin --help"
+forge dev verify init-plugin --help > /dev/null
+pass "forge dev verify init-plugin --help"
 
 # ─────────────────────────────────────────────────────────────────────────
 section "Stage 3b: init-plugin --dry-run regression check"
 # ─────────────────────────────────────────────────────────────────────────
-forge verify init-plugin "${PLUGIN_ID}_dry_run_only" \
+forge dev verify init-plugin "${PLUGIN_ID}_dry_run_only" \
     --plugins-root "${SCRATCH_DIR}" \
     --dry-run | grep -q "Would create"
-pass "forge verify init-plugin --dry-run"
+pass "forge dev verify init-plugin --dry-run"
 
 SCAFFOLDED_VERIFY="${PLUGINS_ROOT}/${PLUGIN_ID}/forge/verify"
 
@@ -143,7 +143,7 @@ section "Stage 4b: doctor --json structural check"
 # ─────────────────────────────────────────────────────────────────────────
 DOCTOR_JSON="${SCRATCH_DIR}/doctor_out.json"
 set +e
-forge verify doctor "${SCAFFOLDED_VERIFY}/design.verification.yml" --json > "${DOCTOR_JSON}"
+forge dev verify doctor "${SCAFFOLDED_VERIFY}/design.verification.yml" --json > "${DOCTOR_JSON}"
 set -e
 
 python3 - "${DOCTOR_JSON}" <<'EOF'
@@ -157,25 +157,25 @@ EOF
 pass "doctor --json produces valid structured output for scaffolded plugin"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 5: forge topgen validate + prepare --dry-run on trigger_demo"
+section "Stage 5: forge dev topgen validate + prepare --dry-run on trigger_demo"
 # ─────────────────────────────────────────────────────────────────────────
 [[ -f "${TRIGGER_FORGE_ROOT}/designs/design.yml" ]] \
     || fail "trigger_demo design.yml not found: ${TRIGGER_FORGE_ROOT}/designs/design.yml"
 
-forge topgen validate "${TRIGGER_FORGE_ROOT}/designs/design.yml" > /dev/null
-pass "forge topgen validate (trigger_demo)"
+forge dev topgen validate "${TRIGGER_FORGE_ROOT}/designs/design.yml" > /dev/null
+pass "forge dev topgen validate (trigger_demo)"
 
-forge verify prepare "${TRIGGER_FORGE_ROOT}/verify/design.verification.yml" --dry-run > /dev/null
-pass "forge verify prepare --dry-run (trigger_demo)"
+forge dev verify prepare "${TRIGGER_FORGE_ROOT}/verify/design.verification.yml" --dry-run > /dev/null
+pass "forge dev verify prepare --dry-run (trigger_demo)"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 6: forge verify doctor on trigger_demo (canonical reference)"
+section "Stage 6: forge dev verify doctor on trigger_demo (canonical reference)"
 # ─────────────────────────────────────────────────────────────────────────
 TRIGGER_DESIGN="${TRIGGER_FORGE_ROOT}/verify/design.verification.yml"
 TRIGGER_JSON="${SCRATCH_DIR}/trigger_doctor.json"
 
 set +e
-forge verify doctor "${TRIGGER_DESIGN}" --json > "${TRIGGER_JSON}"
+forge dev verify doctor "${TRIGGER_DESIGN}" --json > "${TRIGGER_JSON}"
 set -e
 
 python3 - "${TRIGGER_JSON}" <<'EOF'
@@ -216,8 +216,8 @@ pass "forge adopt (foreign repository -> forge.yml + .forge/)"
 
 # Adoption must produce ordinary FORGE configuration, not a dialect only
 # the new commands understand.
-forge topgen validate "${FOREIGN_DIR}/.forge/project/design.yml" > /dev/null
-pass "forge topgen validate (adopted project)"
+forge dev topgen validate "${FOREIGN_DIR}/.forge/project/design.yml" > /dev/null
+pass "forge dev topgen validate (adopted project)"
 
 forge check "${FOREIGN_DIR}" > /dev/null
 pass "forge check (adopted project, no blockers)"
@@ -293,8 +293,8 @@ for project in peripheral_subsystem daq_readout; do
 
     forge adopt "${dst}" > /dev/null
     [[ -f "${dst}/forge.yml" ]] || fail "forge adopt produced no forge.yml for ${project}"
-    forge topgen validate "${dst}/.forge/project/design.yml" > /dev/null
-    pass "forge adopt + forge topgen validate (${project})"
+    forge dev topgen validate "${dst}/.forge/project/design.yml" > /dev/null
+    pass "forge adopt + forge dev topgen validate (${project})"
 done
 
 # B's vendor IP has three functional clocks. It must be reported and left
@@ -362,7 +362,7 @@ import json, sys
 metrics = json.load(open(sys.argv[1]))["metrics"]
 assert metrics["up_to_date"], f"migration is not idempotent: {metrics['migrations']}"
 EOF
-forge topgen validate "${MIG_DIR}/forge/designs/design.yml" > /dev/null
+forge dev topgen validate "${MIG_DIR}/forge/designs/design.yml" > /dev/null
 pass "forge migrate (preview -> apply -> idempotent -> still validates)"
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -449,7 +449,7 @@ IR_DIR="${SCRATCH_DIR}/ir_demo"
 mkdir -p "${IR_DIR}"
 (
   cd "${IR_DIR}"
-  forge topgen gen-top "${REPO_ROOT}/plugins/passthrough_demo/forge/designs/design.yml" \
+  forge dev topgen gen-top "${REPO_ROOT}/plugins/passthrough_demo/forge/designs/design.yml" \
       --mode verilog \
       --consumer-root . \
       --contracts-from "${REPO_ROOT}/plugins/passthrough_demo/forge/modules.yml" \

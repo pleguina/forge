@@ -307,7 +307,7 @@ class LoadedContract:
 #: for ~55% of all contract content lines, and 308 of 324 roles carry
 #: *nothing else* — they are pure transcription of the port list. Declaring
 #: them stays supported (and is then verified against the real ports, which
-#: is what `forge core verify-contract` has always done); omitting them lets
+#: is what `forge dev core verify-contract` has always done); omitting them lets
 #: the scanned source answer instead.
 DERIVABLE_ROLE_FIELDS = ("raw_port", "direction", "width", "active_level")
 
@@ -335,7 +335,7 @@ def _derive_role_fields(
     if port is None:
         # Not an error here: a contract may legitimately describe a module
         # whose source this caller couldn't scan. Leave it alone and let
-        # `forge core verify-contract` be the place that reports it.
+        # `forge dev core verify-contract` be the place that reports it.
         return spec, []
 
     direction = "input" if str(port.get("direction", "")).upper().startswith("IN") else "output"
@@ -361,7 +361,7 @@ def _derive_role_fields(
 #: Conflicts found while resolving contracts against their real port lists.
 #: Collected rather than raised so a single load reports every disagreement,
 #: and so this module stays free of CLI/diagnostic dependencies. Callers that
-#: care (``forge core verify-contract``, ``topgen validate``) drain it.
+#: care (``forge dev core verify-contract``, ``topgen validate``) drain it.
 _CONTRACT_CONFLICTS: List[str] = []
 
 

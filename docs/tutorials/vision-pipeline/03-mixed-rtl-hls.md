@@ -59,22 +59,22 @@ consumers: `window_builder_rtl` (which builds the 3×3 window
 ./run_vision_pipeline_demo.sh --step pixel_result
 ```
 
-Or manually, once `sobel_hls` is synthesized (`forge hls run --stages
+Or manually, once `sobel_hls` is synthesized (`forge dev hls run --stages
 synth --modules pixel_normalizer,sobel_hls ...`, same shape as chapter
 01's HLS build):
 
 ```bash
-forge topgen validate plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml
+forge dev topgen validate plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml
 
-forge topgen gen-top plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml \
+forge dev topgen gen-top plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml \
   --mode verilog --consumer-root . \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo \
   --output gen-top/design_vision_pipeline_pixel_result/algo_top.v
 
-forge verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml --flow pixel_result_xsim
+forge dev verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml --flow pixel_result_xsim
 python3 plugins/vision_pipeline_demo/forge/verify/tools/gen_stimulus_pixel_result.py --flow pixel_result_xsim
-forge verify run plugins/vision_pipeline_demo/forge/verify/pixel_result_xsim/verify.flow.yml \
+forge dev verify run plugins/vision_pipeline_demo/forge/verify/pixel_result_xsim/verify.flow.yml \
   --plugin vision_pipeline_demo --consumer-root .
 ```
 

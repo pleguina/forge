@@ -16,7 +16,7 @@ reconverge on the exact same cycle, and what happens when that's wrong.
 ## What you will learn
 
 - What an alignment delay is and why `threshold_rtl`'s branch needs one.
-- How `forge analyze latency-check` verifies a merge point statically, before any simulation.
+- How `forge dev analyze latency-check` verifies a merge point statically, before any simulation.
 - What `edge_mask_merge_rtl`'s own runtime `tag_mismatch` check re-verifies at runtime.
 
 ## Starting design
@@ -51,7 +51,7 @@ command below.
 ## Command to run
 
 ```bash
-forge analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml \
+forge dev analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_pixel_result.yml \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo
 ```
@@ -75,8 +75,8 @@ design:
 
 Both branches land on cycle 17 exactly (`norm`'s 3 cycles are common to
 both, then `winbld(10)+sobel(4)=14` vs. `thresh(2)+delay_cycles(12)=14`
-— 3+14=17 either way). `forge analyze latency-check` verifies this
-statically, at `forge topgen validate` time, from each module's own
+— 3+14=17 either way). `forge dev analyze latency-check` verifies this
+statically, at `forge dev topgen validate` time, from each module's own
 declared `latency:` — it never needs to run a simulation to catch a
 misalignment.
 

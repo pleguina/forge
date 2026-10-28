@@ -105,7 +105,7 @@ def build_plan(manifest: dict, step_ids: Optional[list] = None) -> Plan:
 def missing_tools(plan: Plan) -> list:
     """Real, PATH-checked missing-tool list across every requirement any
     selected step declares — checked once up front so a step fails fast
-    with one clear message instead of partway through `forge hls run`.
+    with one clear message instead of partway through `forge dev hls run`.
     """
     needed = set()
     for step in plan.steps:
@@ -418,16 +418,16 @@ def main(argv: Optional[list] = None) -> int:
     print("== Generate algo_top ==")
     _gen_top(plan, hls_build_root)
 
-    print("== forge verify generate ==")
+    print("== forge dev verify generate ==")
     _verify_generate(plan)
 
     print("== Generate stimulus ==")
     _gen_stimulus(plan)
 
-    print("== forge verify doctor ==")
+    print("== forge dev verify doctor ==")
     _doctor()
 
-    print("== forge verify run ==")
+    print("== forge dev verify run ==")
     outcomes = _verify_run(plan, hls_build_root)
 
     ok = _print_summary(plan, outcomes, time.time() - start, negative_topgen_ok)

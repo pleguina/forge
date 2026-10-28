@@ -1,6 +1,6 @@
 """Generating a structural top level: plan, gates, generation, artifacts.
 
-``forge build`` and ``forge topgen gen-top`` are both front ends to this
+``forge build`` and ``forge dev topgen gen-top`` are both front ends to this
 module. :func:`compute_gen_top_plan` resolves paths, contracts, IP metadata
 and wiring into a :class:`GenTopPlanContext`; :func:`gate_failure` says
 whether that plan may be generated; :func:`generate_top` writes the top
@@ -246,7 +246,7 @@ def compute_gen_top_plan(
                     f"have placeholder vendor/version from --contracts-from "
                     f"(e.g. {_placeholder_mods[0]!r}) -- Vivado's create_bd_cell will "
                     f"fail to resolve them. Generate real IP metadata with "
-                    f"`forge topgen ip-summary --ip-root <built-IP dir>` and pass it "
+                    f"`forge dev topgen ip-summary --ip-root <built-IP dir>` and pass it "
                     f"via --ip-info alongside --contracts-from."
                 )
     else:

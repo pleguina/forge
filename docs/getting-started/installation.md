@@ -73,14 +73,14 @@ are for developing FORGE itself — see
 A few things live outside the Python package and are installed separately,
 only if you need them:
 
-- **GHDL** — used by `forge topgen lint` for VHDL linting (`apt-get install ghdl` / `dnf install ghdl` / `brew install ghdl`).
-- **Verilator** — used by `forge topgen lint-verilog` for Verilog linting only, not as a simulation backend (`apt-get install verilator` / `dnf install verilator` / `brew install verilator`).
-- **Vivado / XSim** — required for any `forge verify run` flow that uses the `xsim` backend.
-- **Vitis HLS** — required for `forge hls run` and any `hls_csim` verification flow.
+- **GHDL** — used by `forge dev topgen lint` for VHDL linting (`apt-get install ghdl` / `dnf install ghdl` / `brew install ghdl`).
+- **Verilator** — used by `forge dev topgen lint-verilog` for Verilog linting only, not as a simulation backend (`apt-get install verilator` / `dnf install verilator` / `brew install verilator`).
+- **Vivado / XSim** — required for any `forge dev verify run` flow that uses the `xsim` backend.
+- **Vitis HLS** — required for `forge dev hls run` and any `hls_csim` verification flow.
 
 None of these are required just to install FORGE and scaffold a plugin —
 you'll hit a clear, specific error (or an honest `FAIL` from
-`forge verify doctor`) if a step needs one that isn't on `PATH`.
+`forge dev verify doctor`) if a step needs one that isn't on `PATH`.
 
 ## Next
 

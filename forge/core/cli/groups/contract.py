@@ -1,4 +1,4 @@
-"""``forge contract`` — author and inspect interface contracts.
+"""``forge dev contract`` — author and inspect interface contracts.
 
 Writing interface contracts is the single largest recurring authoring cost
 in a FORGE project: across this repo's reference plugins they run 79-174
@@ -7,7 +7,7 @@ lines each, and 308 of their 324 roles carry no integration decision at all
 already declares.
 
 A generator for that existed, but it was filed under
-``forge topgen migrate --kind infer-contract``: a verb that means "convert
+``forge dev topgen migrate --kind infer-contract``: a verb that means "convert
 an old project", not "author a new module". It also required the caller to
 produce an ``ip_info.yaml`` first, and handed every data port back as a
 TODO *comment* the author then retyped as YAML. This group is that
