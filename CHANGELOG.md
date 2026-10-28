@@ -69,6 +69,14 @@ for the versioning policy.
   on the plugin with no arguments. A `forge.yml` that names its own design
   is written without the `sources`, `part`, `clock` and `reset` keys,
   which the design carries.
+- **No Vivado logs in the working directory.** The toolchain-version probe
+  ran `xvlog`/`xelab`/`xsim -version` where FORGE was invoked, which left
+  `xvlog.log`/`xvlog.pb` and friends there; it now runs them in a
+  temporary directory.
+- **Union types in the generated reference are sorted.** Python 3.9 hands
+  back one cached object for equal unions, with the member order of
+  whichever spelling was created first, so the reference pages could
+  change with import order.
 - **A design can be a variant of another.** `variant_of: <design>` in a
   design file, with `remove:` (modules with everything touching them,
   connections, topology groups), `modules:` (fields set by module name,

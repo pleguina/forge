@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from typing import Dict, Iterable, Optional
 
 # Same 5 tools forge doctor already checks for presence. Xilinx tools
@@ -67,10 +68,13 @@ def tool_version(name: str, *, timeout: float = 5.0) -> Optional[str]:
 
     flag = _VERSION_FLAGS.get(name, "--version")
     try:
-        result = subprocess.run(
-            [resolved, flag],
-            capture_output=True, text=True, timeout=timeout,
-        )
+        # The Vivado tools write <tool>.log and <tool>.pb into their working
+        # directory even for -version; keep them out of the user's.
+        with tempfile.TemporaryDirectory(prefix="forge-version-") as scratch:
+            result = subprocess.run(
+                [resolved, flag],
+                capture_output=True, text=True, timeout=timeout, cwd=scratch,
+            )
     except Exception:
         return "unknown"
 
