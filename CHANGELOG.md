@@ -53,6 +53,22 @@ for the versioning policy.
   top with inputs tied to zero or a driver dropped. `--strict` still adds
   the checks for heuristic wiring (no contract, auto-match,
   `port_map_ranges`) and validator warnings.
+- **A flow names the design its DUT comes from.** `design:` on a flow in
+  `design.verification.yml` (relative to that file) makes bare `forge test`
+  build that design into the flow's `dut_rtl_source` before preparing it,
+  so a flow that simulates a variant of the project's design never runs
+  against a stale top level. A `forge.yml` that names its own design also
+  gets the `.forge/.gitignore` an adopted project has.
+- **`forge test --event-list` keeps a qualified event whole.** A token
+  such as `4:2` (an event and the processor it ran on) is passed to the
+  plugin as that run's `event_list` instead of failing to parse as an
+  integer, and gets its own result.
+- **An exception about the user's input exits 1.** A command that raises
+  `FileNotFoundError` or `ValueError` (a missing dataset XML, say) reports
+  `Error:` and exits 1 instead of `Unexpected error` and 2, matching
+  `status_for_exception`. Bare `forge test` and the other commands that
+  chain `forge` steps report such a step as failed instead of stopping
+  with a traceback-style error.
 - **One latency graph for every command.** `forge report`, `forge check`,
   `forge analyze latency-check` and `delay_cycles: auto` build it through
   `build_resolved_graph`: HLS latencies from `--hls-build-root` (or

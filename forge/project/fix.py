@@ -327,7 +327,7 @@ def _find_missing_state_gitignore(status: ProjectStatus) -> List[Fix]:
     project to version control — which is how a "why is my diff 4000 lines"
     afternoon starts.
     """
-    from forge.project.adopt import _STATE_GITIGNORE
+    from forge.project.adopt import STATE_GITIGNORE
 
     if status.paths is None or not status.paths.state_root.is_dir():
         return []
@@ -339,7 +339,7 @@ def _find_missing_state_gitignore(status: ProjectStatus) -> List[Fix]:
         title=".forge/.gitignore is missing — generated files would be committed",
         path=target,
         before="",
-        after=_STATE_GITIGNORE,
+        after=STATE_GITIGNORE,
         evidence=[Evidence(
             source=str(status.paths.state_root),
             rule="generated_state_directory",

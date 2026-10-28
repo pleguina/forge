@@ -335,3 +335,69 @@ def test_explaining_a_module_of_an_authored_design_points_at_inspect(authored: P
 
     with pytest.raises(UnknownTarget, match="forge inspect"):
         explain("pt", authored)
+
+
+def test_bare_test_builds_the_design_a_flow_names_before_running_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import forge.core.cli._shared as shared
+    import forge.core.toolchain_versions as toolchain
+
+    root = tmp_path / "flows"
+    (root / "verify").mkdir(parents=True)
+    contract = yaml.safe_load((PASSTHROUGH / "verify" / "design.verification.yml").read_text())
+    contract["datasets"] = {
+        name: {**dataset, "xml": str((PASSTHROUGH / "verify" / dataset["xml"]).resolve())}
+        for name, dataset in contract["datasets"].items()
+    }
+    contract["flows"] = [
+        {**contract["flows"][0], "dut_rtl_source": "sim/dut",
+         "design": str(PASSTHROUGH / "designs" / "design.yml")},
+    ]
+    (root / "verify" / "design.verification.yml").write_text(yaml.safe_dump(contract))
+    (root / "forge.yml").write_text(
+        f"design: {PASSTHROUGH / 'designs' / 'design.yml'}\n"
+        "build:\n  top_name: pt_top\n"
+        "verification:\n  config: verify/design.verification.yml\n"
+    )
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: True)
+
+    real = shared.run_forge_command
+    steps = []
+
+    def run(argv, *, quiet):
+        steps.append(argv[:2])
+        if argv[0] == "build":
+            return real(argv, quiet=quiet)
+        return 0, ""
+
+    monkeypatch.setattr(shared, "run_forge_command", run)
+
+    code, _out, err = _run(capsys, ["test"])
+
+    assert code == 0, err
+    assert (root / "sim" / "dut" / "algo_top.v").is_file()
+    assert (root / "sim" / "dut" / "port_map.yaml").is_file()
+    flow_build = steps.index(["build", str(PASSTHROUGH / "designs" / "design.yml")])
+    assert steps[flow_build + 1] == ["test", "prepare"]
+
+
+@pytest.mark.parametrize("error, code", [
+    (FileNotFoundError("XML dataset not found: part000.xml"), 1),
+    (RuntimeError("a bug"), 2),
+])
+def test_a_chained_command_that_raises_reports_like_forge_itself(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    error: Exception, code: int,
+) -> None:
+    import forge.core.cli.groups.report as report
+    from forge.core.cli._shared import run_forge_command
+
+    def raise_(args):
+        raise error
+
+    monkeypatch.setattr(report, "cmd_report", raise_)
+
+    assert run_forge_command(["report"], quiet=True)[0] == code
+    assert str(error) in capsys.readouterr().err

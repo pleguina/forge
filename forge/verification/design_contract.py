@@ -87,6 +87,7 @@ OPTIONAL_BEHAVIORAL_FIELDS: frozenset[str] = frozenset({
     "post_stimulus_drain_cycles",
     "checker",              # latency/tolerance/pass_condition expectations
     "xsim",                 # simulator-specific declarative config
+    "design",               # design.yml forge test generates the DUT from
 })
 
 INFORMATIONAL_FIELDS: frozenset[str] = frozenset({
@@ -257,6 +258,11 @@ class FlowDeclaration:
 
     checker: CheckerDeclaration | None = None
     xsim: XsimDeclaration | None = None
+
+    # The design.yml this flow's DUT is generated from, relative to the
+    # verification file. `forge test` builds it into dut_rtl_source before
+    # preparing the flow, so the flow never simulates a stale top level.
+    design: str | None = None
 
     # Coverage intent — INFORMATIONAL; framework must not change behaviour based on this
     coverage_intent: str = "functional"
@@ -616,6 +622,7 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
             extra_resets={str(k): str(v) for k, v in (sim_raw.get("extra_resets") or {}).items()},
             checker=checker,
             xsim=xsim,
+            design=str(fl_raw["design"]) if fl_raw.get("design") else None,
             coverage_intent=str(fl_raw.get("coverage_intent", "functional")),
             # Optional behavioral fields
             stimulus_mode=str(fl_raw.get("stimulus_mode", "svh_include")),

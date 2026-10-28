@@ -838,7 +838,8 @@ optional arguments:
   --flow FLOW           Run only this flow
   --event-id EVENT_ID   Run exactly this one event
   --event-list EVENT_LIST
-                        Comma-separated event IDs or ranges (e.g. 1,7,10-12)
+                        Comma-separated event IDs or ranges (e.g. 1,7,10-12); a plugin may qualify
+                        one (e.g. event:processor, 4:2)
   --all-events          Run every event in the dataset
   --plugin PLUGIN       Plugin ID to bootstrap (when flow.plugin is absent from YAML)
   --json                Machine-readable JSON output
@@ -911,7 +912,7 @@ optional arguments:
                         results)
   --event-list EVENT_LIST
                         Comma-separated event IDs or ranges (e.g. 1,7,10-12), one simulation per
-                        event
+                        event; a plugin may qualify one (e.g. event:processor, 4:2)
   --xml-input XML_INPUT
                         Override dataset XML path
   --all-dataset-parts   Run every XML part declared by dataset.parts_glob/parts (aggregate only,

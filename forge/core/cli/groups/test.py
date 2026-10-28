@@ -130,6 +130,26 @@ def _verification_or_exit(project, json_mode: bool) -> Path:
     return design
 
 
+def _flow_build_argv(project, verification: Path, flow) -> List[str]:
+    """`forge build` of a flow's own design into its dut_rtl_source, with the
+    project's build options and the design's own registry."""
+    from forge.project.resolve import design_registry
+
+    design = (verification.parent / flow.design).resolve()
+    argv = [
+        "build", str(design), "--mode", "verilog", "--top-name", flow.top_module,
+        "--output", str(project.root / flow.dut_rtl_source / f"{flow.top_module}.v"),
+        "--consumer-root", str(project.root),
+    ]
+    registry = design_registry(design)
+    if registry is not None:
+        argv += ["--contracts-from", str(registry)]
+    for name, value in project.build_options().items():
+        if name not in ("mode", "top_name"):
+            argv += [f"--{name.replace('_', '-')}", value]
+    return argv
+
+
 def cmd_project_test(args) -> None:
     """`forge test` with no design file: build the project, then prepare and
     run each flow of its verification config, one line per step."""
@@ -216,6 +236,21 @@ def cmd_project_test(args) -> None:
             say(f"  ⏭️  {flow.name}: skipped, {', '.join(missing)} not on PATH")
             continue
 
+        if flow.design:
+            code, output = run_forge_command(
+                _flow_build_argv(project, design, flow), quiet=True,
+            )
+            if code != 0:
+                failed.append(flow.name)
+                failed_output(output)
+                diagnostics.append({
+                    "severity": "error",
+                    "message": f"flow {flow.name!r}: its design {flow.design} did not build",
+                })
+                say(f"  ❌ {flow.name}: {flow.design} did not build")
+                continue
+            say(f"  ✅ built {flow.dut_rtl_source}/{flow.top_module}.v from {flow.design}")
+
         code, output = run_forge_command([
             "test", "prepare", str(design), "--flow", flow.name, "--consumer-root", root,
         ], quiet=True)
@@ -253,21 +288,25 @@ def cmd_project_test(args) -> None:
 
 # ── run ──────────────────────────────────────────────────────────────────
 
-def _parse_event_list(event_list: str) -> List[int]:
+def _parse_event_list(event_list: str) -> List[str]:
     """Parse ``"1,7,10-12"``-style event-list syntax (the same syntax
     `forge verify run --event-list`'s help text already documents) into a
-    sorted, de-duplicated list of individual event IDs."""
-    ids: List[int] = []
+    sorted, de-duplicated list of individual events.
+
+    A token qualified with a colon (``"4:2"``, an event and the processor it ran on) names
+    one event the plugin resolves further, and is kept whole."""
+    events: List[str] = []
     for part in event_list.split(","):
         part = part.strip()
         if not part:
             continue
-        if "-" in part:
+        if ":" not in part and "-" in part:
             lo, hi = part.split("-", 1)
-            ids.extend(range(int(lo), int(hi) + 1))
+            events.extend(str(i) for i in range(int(lo), int(hi) + 1))
         else:
-            ids.append(int(part))
-    return sorted(set(ids))
+            int(part.split(":", 1)[0])
+            events.append(part)
+    return sorted(set(events), key=lambda e: (int(e.split(":", 1)[0]), e))
 
 
 def _enumerate_xml_event_ids(xml_path: Path) -> List[int]:
@@ -286,7 +325,7 @@ def _enumerate_xml_event_ids(xml_path: Path) -> List[int]:
     return sorted(int(eid) for eid in serialized.metadata.event_ids)
 
 
-def _resolve_event_ids(selection) -> List[int]:
+def _resolve_event_ids(selection) -> List[str]:
     """The set of individual event IDs `forge test run` will simulate
     once each — event_list/event_id take precedence (matching
     `_resolve_xml_run_selection`'s own CLI-args precedence), otherwise
@@ -298,12 +337,12 @@ def _resolve_event_ids(selection) -> List[int]:
     if selection.event_list:
         return _parse_event_list(selection.event_list)
     if selection.event_id is not None:
-        return [selection.event_id]
+        return [str(selection.event_id)]
     if not selection.dataset_xml:
         raise ValueError(
             "no dataset XML resolved — pass --xml-input or check the flow's dataset.xml"
         )
-    return _enumerate_xml_event_ids(selection.dataset_xml)
+    return [str(eid) for eid in _enumerate_xml_event_ids(selection.dataset_xml)]
 
 
 def _tail_of_log(log_path: Any, *, lines: int = 20) -> Optional[str]:
@@ -598,17 +637,17 @@ def cmd_run(args) -> None:
     readmemh_work_dir = flow_path.parent / "xsim_work" / "readmemh_shared"
 
     event_results: List[EventResult] = []
-    for event_id in event_ids:
+    for event_id_str in event_ids:
+        event_id = int(event_id_str.split(":", 1)[0])
         part_selection = XmlRunSelection(
             event_id=event_id,
-            event_list=None,
+            event_list=event_id_str if ":" in event_id_str else None,
             all_events=False,
             all_dataset_parts=False,
             dataset_xml=selection.dataset_xml,
             dataset_parts_glob=None,
             probe_log=selection.probe_log,
         )
-        event_id_str = str(event_id)
         event_index: "int | None" = None
 
         if readmemh_mode:
@@ -626,7 +665,7 @@ def cmd_run(args) -> None:
                 _regenerate_stimulus_for_event(
                     flow_name, event_id, flow_path.parent, selection.dataset_xml
                 )
-            work_dir = flow_path.parent / "xsim_work" / "per_event" / str(event_id)
+            work_dir = flow_path.parent / "xsim_work" / "per_event" / event_id_str.replace(":", "_")
 
         ctx = _build_runtime_context(
             flow_path, cfg, part_selection, importlib_module, work_dir=work_dir,
@@ -791,7 +830,8 @@ def register(sub) -> None:
     p_test.add_argument("--event-id", dest="event_id", default=None, help="Run exactly this one event")
     p_test.add_argument(
         "--event-list", dest="event_list", default=None,
-        help="Comma-separated event IDs or ranges (e.g. 1,7,10-12)",
+        help="Comma-separated event IDs or ranges (e.g. 1,7,10-12); a plugin may qualify one "
+             "(e.g. event:processor, 4:2)",
     )
     p_test.add_argument(
         "--all-events", dest="all_events", action="store_true", default=False,
@@ -846,7 +886,8 @@ def register(sub) -> None:
     )
     p_run.add_argument(
         "--event-list", dest="event_list", default=None,
-        help="Comma-separated event IDs or ranges (e.g. 1,7,10-12), one simulation per event",
+        help="Comma-separated event IDs or ranges (e.g. 1,7,10-12), one simulation per event; "
+             "a plugin may qualify one (e.g. event:processor, 4:2)",
     )
     p_run.add_argument("--xml-input", dest="xml_input", default=None, help="Override dataset XML path")
     p_run.add_argument(

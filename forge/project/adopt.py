@@ -169,7 +169,7 @@ def _plan_state_files(plan: AdoptionPlan) -> None:
                 plan.files[paths.contract_root / f"{unit.name}.interface.yaml"] = (
                     _render_contract(unit, config)
                 )
-    plan.files[paths.state_root / ".gitignore"] = _STATE_GITIGNORE
+    plan.files[paths.state_root / ".gitignore"] = STATE_GITIGNORE
     plan.decisions = _decision_log(config, result)
 
 
@@ -604,7 +604,7 @@ _GENERATED_HEADER = """\
 # ─────────────────────────────────────────────────────────────────────────
 """
 
-_STATE_GITIGNORE = """\
+STATE_GITIGNORE = """\
 # Everything under .forge/ is generated from forge.yml and the project's
 # sources, and every forge command regenerates it. Nothing here is
 # authored, so nothing here needs to be committed.

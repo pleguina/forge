@@ -128,6 +128,9 @@ flows:
     dut_rtl_source:   out/algorithm
     dataset:          my_dataset
     default_event_id: 1
+    # Optional: the design.yml the DUT is generated from (relative to this file).
+    # `forge test` with no arguments builds it into dut_rtl_source first.
+    design:           ../designs/design.yml
 ```
 
 ### 5.2 `tools/bootstrap.py`

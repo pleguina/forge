@@ -458,7 +458,7 @@ project: omtf
 design: forge_utils/designs/design.rpc_fp.yml
 # registry: forge_utils/modules.rpc.yml   # default: the design's own registry: key
 build:
-  hls_build_root: build_hls_fp
+  hls_build_root: build_hls
 verification:
   config: forge_utils/verify/design.verification.yml
 ```
@@ -471,6 +471,17 @@ neither the registry nor the HLS reports under `build.hls_build_root` give.
 `build:` accepts the `forge build` options `mode`, `top_name`,
 `hls_build_root`, `ip_root`, `ip_info`, `build_dir`, `system` and
 `rtl_resource_root`; an option given on the command line wins.
+
+A flow that simulates a different variant of the design names it, relative
+to the verification file, and `forge test` generates that top level into
+the flow's `dut_rtl_source` before every run:
+
+```yaml title="design.verification.yml"
+flows:
+  - name:           full_chip_algo_top_xsim
+    dut_rtl_source: forge_utils/verify/full_chip_algo_top_xsim
+    design:         ../designs/design.xsim_fp.yml
+```
 
 ## Where to go next
 

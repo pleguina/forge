@@ -163,15 +163,7 @@ def main() -> None:
     except SystemExit:
         raise
     except Exception as exc:
-        _shared.print_cli_error(
-            "Unexpected error",
-            exc,
-            hint=(
-                "Check the command arguments and input files, "
-                "or re-run with --debug to capture traceback details."
-            ),
-        )
-        sys.exit(2)
+        sys.exit(_shared.report_command_error(exc))
 
 
 if __name__ == "__main__":

@@ -105,9 +105,14 @@ def _authored(config: ForgeConfig) -> ResolvedProject:
             )
     else:
         registry = design_registry(design)
-    return ResolvedProject(
-        config=config, paths=config.paths(), design=design, registry=registry,
-    )
+    paths = config.paths()
+    ignore = paths.state_root / ".gitignore"
+    if not ignore.exists():
+        from forge.project.adopt import STATE_GITIGNORE
+
+        ignore.parent.mkdir(parents=True, exist_ok=True)
+        ignore.write_text(STATE_GITIGNORE)
+    return ResolvedProject(config=config, paths=paths, design=design, registry=registry)
 
 
 def design_registry(design: Path) -> Optional[Path]:

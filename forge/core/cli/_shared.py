@@ -68,6 +68,22 @@ def consumer_root(anchor_path: Path | None = None, explicit_root: Path | None = 
     )
 
 
+def report_command_error(exc: Exception) -> int:
+    """Report an exception a command raised and return its exit code: 1 when
+    it describes the user's input (``status_for_exception``), 2 otherwise."""
+    if status_for_exception(exc) == "fail":
+        print_cli_error("Error", exc)
+        return 1
+    print_cli_error(
+        "Unexpected error", exc,
+        hint=(
+            "Check the command arguments and input files, "
+            "or re-run with --debug to capture traceback details."
+        ),
+    )
+    return 2
+
+
 def run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
     """Run a real `forge <argv>` invocation in-process through the full
     parser — the same argv a user would type, so every step here is a
@@ -89,6 +105,8 @@ def run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
             result = parsed.func(parsed)
         except SystemExit as exc:
             return (0 if exc.code is None else int(exc.code)), buffer.getvalue()
+        except Exception as exc:  # noqa: BLE001 — reported as `forge` itself would
+            return report_command_error(exc), buffer.getvalue()
     return (0 if result is None else int(result)), buffer.getvalue()
 
 
