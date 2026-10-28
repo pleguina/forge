@@ -299,8 +299,11 @@ def test_bare_build_of_an_authored_design_writes_only_under_forge(
 
 
 def test_check_on_an_authored_design_validates_it_instead_of_scanning(
-    authored: Path, capsys: pytest.CaptureFixture[str],
+    authored: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import forge.core.toolchain_versions as toolchain
+
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: True)
     status = evaluate(authored)
 
     assert status.discovery is None
@@ -401,3 +404,18 @@ def test_a_chained_command_that_raises_reports_like_forge_itself(
 
     assert run_forge_command(["report"], quiet=True)[0] == code
     assert str(error) in capsys.readouterr().err
+
+
+def test_check_says_which_flows_cannot_run_without_their_simulator(
+    authored: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import forge.core.toolchain_versions as toolchain
+
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: name == "verilator")
+    status = evaluate(authored)
+
+    section = status.section("Verification")
+    assert section.state == "WARN"
+    warning = next(d for d in status.warnings if d.code == "ATG049")
+    assert "passthrough_xsim needs xvlog, xelab, xsim" in warning.message
+    assert "passthrough_verilator" not in warning.message

@@ -796,6 +796,31 @@ def _check_hls(status: ProjectStatus) -> Optional[_CheckOutput]:
     )
 
 
+def _flows_without_simulator(design: Path) -> List[Tuple[str, List[str]]]:
+    """``(flow, missing tools)`` for each flow whose simulator is not on PATH.
+
+    A contract that does not load says nothing here; `forge test` reports it.
+    """
+    from forge.core.toolchain_versions import tool_present
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.design_contract import load_verify_design
+
+    try:
+        flows = load_verify_design(design).flows
+    except Exception:  # noqa: BLE001
+        return []
+    unrunnable = []
+    for flow in flows:
+        try:
+            required = get_adapter(flow.backend).required_tools
+        except Exception:  # noqa: BLE001 — an unknown backend fails in forge test itself
+            continue
+        missing = [tool for tool in required if not tool_present(tool)]
+        if missing:
+            unrunnable.append((flow.name, missing))
+    return unrunnable
+
+
 def _check_verification(status: ProjectStatus) -> _CheckOutput:
     """Is there anything to test the design against?"""
     config, paths = status.config, status.paths
@@ -804,6 +829,21 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
     if config.verification_config:
         design = (config.root / config.verification_config).resolve()
         if design.is_file():
+            unrunnable = _flows_without_simulator(design)
+            if unrunnable:
+                status.report.warn(
+                    "ATG049",
+                    f"{len(unrunnable)} verification flow(s) cannot run here: "
+                    + "; ".join(f"{flow} needs {', '.join(tools)}" for flow, tools in unrunnable)
+                    + " — `forge test` skips them",
+                    action="Put the simulator on PATH (`forge doctor` lists what it finds), "
+                           "or run `forge test` where it is installed",
+                )
+                return _CheckOutput(StatusSection(
+                    "Verification", WARN,
+                    f"{paths.relative(design)}, {len(unrunnable)} flow(s) without their simulator",
+                    ("ATG049",),
+                ))
             return _CheckOutput(StatusSection(
                 "Verification", PASS, paths.relative(design)))
         status.report.error(

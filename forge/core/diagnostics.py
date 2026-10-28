@@ -51,6 +51,7 @@ ATG045  Managed modules declare no latency
 ATG046  Generated artifacts older than their inputs
 ATG047  Module integrated as opaque (structure only, internals unmodelled)
 ATG048  HLS predicted interface differs from the built IP
+ATG049  A verification flow's simulator is not on PATH
 
 Public API
 ----------

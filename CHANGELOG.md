@@ -60,6 +60,10 @@ for the versioning policy.
   `framework` and `core` are `forge dev <group>`; their old top-level names
   still parse, with a note on stderr, and are documented once, under
   `forge dev`. Every command hint, docstring and page names the new form.
+- **`forge check` says which verification flows cannot run here.** A flow
+  whose simulator is not on PATH turns the Verification section to WARN
+  with ATG049, naming the flow and the missing tools, instead of `forge
+  test` discovering it by skipping the flow.
 - **Generation is a library, not a CLI command.** Planning, the gates
   that stop generation, the generators and every artifact written next to
   the top level moved out of `forge/core/cli/groups/topgen.py`:
