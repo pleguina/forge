@@ -550,28 +550,25 @@ def test_gen_top_writes_provenance_manifest_alongside_design_ir(
     # plan_hash matches forge build's own (pre-generation) plan for the
     # identical design/contracts — same content, computed via the same
     # build_generation_plan/plan_hash machinery.
-    from forge.core.cli.groups import topgen as topgen_mod
-    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
-    from forge.core.cli.groups.build import _planned_output_artifacts
-    import argparse
-
     from forge.contracts.config import DesignConfig
-    cfg = DesignConfig.load_relaxed(DESIGN_YML)
-    build_args = argparse.Namespace(
-        design=str(DESIGN_YML), mode="verilog", output=str(output),
-        top_name="algo_top", build_dir=str(tmp_path / "build"),
-        ip_root=None, hls_build_root=None, src_root=None,
-        xml_stimulus_tool=None, ip_info=None, system=None, consumer_root=None,
-        contracts_from=str(MODULES_YML),
+    from forge.generation.pipeline import (
+        GenTopOptions, compute_gen_top_plan, planned_output_artifacts,
     )
-    ctx = topgen_mod.compute_gen_top_plan(cfg, DESIGN_YML, build_args, read_only=True)
+    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
+
+    cfg = DesignConfig.load_relaxed(DESIGN_YML)
+    options = GenTopOptions(
+        mode="verilog", output=str(output), top_name="algo_top",
+        build_dir=str(tmp_path / "build"), contracts_from=str(MODULES_YML),
+    )
+    ctx = compute_gen_top_plan(cfg, DESIGN_YML, options, read_only=True)
     plan = build_generation_plan(
         ctx.project, ctx.match_report,
         topology_group_issues=ctx.topology_group_issues,
         cardinality_issues=ctx.cardinality_issues,
         cdc_issues=ctx.cdc_issues,
         compat_mode_modules=ctx.match_report.compat_mode_modules,
-        output_artifacts=_planned_output_artifacts(ctx, build_args),
+        output_artifacts=planned_output_artifacts(ctx, options),
     )
     assert manifest.plan_hash == _plan_hash_of(plan)
 

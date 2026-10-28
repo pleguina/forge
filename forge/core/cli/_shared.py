@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from forge.core.cli.envelope import status_for_exception
+from forge.core.utils.path_resolution import consumer_root, resolve_path  # noqa: F401 — CLI modules import them from here
 
 
 # ---------------------------------------------------------------------------
@@ -48,24 +49,8 @@ def print_cli_error(prefix: str, exc: Exception, *, hint: str | None = None) -> 
 
 
 # ---------------------------------------------------------------------------
-# Path resolution helpers
+# Running commands, project paths
 # ---------------------------------------------------------------------------
-
-def consumer_root(anchor_path: Path | None = None, explicit_root: Path | None = None) -> Path:
-    if explicit_root is not None:
-        return Path(explicit_root).expanduser().resolve()
-    env_root = os.environ.get("TOPGEN_CONSUMER_ROOT")
-    if env_root:
-        return Path(env_root).expanduser().resolve()
-    if anchor_path is not None:
-        resolved_anchor = Path(anchor_path).expanduser().resolve()
-        return resolved_anchor if resolved_anchor.is_dir() else resolved_anchor.parent
-    raise ValueError(
-        "Cannot determine consumer root. Pass --consumer-root, set "
-        "TOPGEN_CONSUMER_ROOT, or provide an input path that can anchor "
-        "relative defaults."
-    )
-
 
 def report_command_error(exc: Exception) -> int:
     """Report an exception a command raised and return its exit code: 1 when
@@ -131,20 +116,6 @@ def resolve_project_args(args):
         if hasattr(args, name) and getattr(args, name) is None:
             setattr(args, name, value)
     return project
-
-
-def resolve_path(
-    path_value: Path | str | None,
-    base_root: Path,
-    default: Path | str | None = None,
-) -> Path | None:
-    candidate = path_value if path_value is not None else default
-    if candidate is None:
-        return None
-    path = Path(candidate).expanduser()
-    if path.is_absolute():
-        return path.resolve()
-    return (base_root / path).resolve()
 
 
 def remove_path(path: Path, removed: list[Path]) -> None:

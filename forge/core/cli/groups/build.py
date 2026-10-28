@@ -5,17 +5,16 @@ is run in (see :mod:`forge.project.resolve`); ``forge build design.yml``
 builds that design. Either way it first computes and prints a
 ``GenerationPlan`` (inferred/explicit connections, generated
 transformations, latency changes, matching evidence, compatibility-mode
-use, unresolved issues, output artifacts) through
-``forge.core.cli.groups.topgen.compute_gen_top_plan`` with
-``read_only=True``, then generates by delegating to
-``topgen.cmd_gen_top``. ``--dry-run`` stops after the plan.
+use, unresolved issues, output artifacts) with
+:func:`forge.generation.pipeline.compute_gen_top_plan`, then generates
+from that same plan with :func:`forge.generation.pipeline.generate_top`.
+``--dry-run`` stops after the plan and writes nothing.
 
 ``--accept-plan-hash <hash>`` is a CI gate: exit 1 if the freshly computed
 plan's hash doesn't match.
 
 This command exposes a smaller flag surface than ``gen-top`` (no
-``--bd-name``/``--gen-testbench``/``--xml-stimulus``/``--lint`` knobs);
-gen-top's defaults fill those in when delegating.
+``--bd-name``/``--gen-testbench``/``--xml-stimulus``/``--lint`` knobs).
 """
 
 from __future__ import annotations
@@ -23,6 +22,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -88,7 +88,7 @@ def _build_command_options(args) -> Dict[str, Any]:
     provenance manifest so a future `--explain-staleness` can tell "you
     changed how you called forge build" apart from "an input file changed"
     (same rationale as `inspect._command_options`/
-    `topgen._gen_top_command_options`, scoped to `forge build`'s own flags)."""
+    `forge.generation.pipeline.command_options`, scoped to `forge build`'s own flags)."""
     system = getattr(args, "system", None)
     contracts_from = getattr(args, "contracts_from", None)
     return {
@@ -102,8 +102,10 @@ def _build_command_options(args) -> Dict[str, Any]:
 
 def cmd_build(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.core.cli.groups import topgen
     from forge.contracts.config import DesignConfig
+    from forge.generation.pipeline import (
+        GenTopOptions, compute_gen_top_plan, planned_output_artifacts,
+    )
     from forge.generation.validation import validate_design
     from forge.ir.plan import build_generation_plan, plan_hash
 
@@ -125,6 +127,10 @@ def cmd_build(args) -> None:
 
     if not design_path.exists():
         sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
+    if getattr(args, "rtl_resource_root", None):
+        os.environ["TOPGEN_RTL_RESOURCE_ROOT"] = str(
+            Path(args.rtl_resource_root).expanduser().resolve()
+        )
 
     try:
         cfg = DesignConfig.load_relaxed(design_path)
@@ -141,9 +147,11 @@ def cmd_build(args) -> None:
     if not json_mode:
         print("✅ Validation passed!\n")
 
+    options = GenTopOptions.from_namespace(args)
     try:
-        ctx = topgen.compute_gen_top_plan(
-            cfg, design_path, args, read_only=True, emit_progress=not json_mode,
+        ctx = compute_gen_top_plan(
+            cfg, design_path, options,
+            read_only=getattr(args, "dry_run", False), emit_progress=not json_mode,
         )
     except Exception as e:  # noqa: BLE001 - surfaced as a clean CLI error
         sys.exit(_guided_failure(f"Failed to compute plan: {e}", json_mode=json_mode))
@@ -155,7 +163,7 @@ def cmd_build(args) -> None:
             json_mode=json_mode,
         ))
 
-    output_artifacts = _planned_output_artifacts(ctx, args)
+    output_artifacts = planned_output_artifacts(ctx, options)
     plan = build_generation_plan(
         ctx.project, ctx.match_report,
         topology_group_issues=ctx.topology_group_issues,
@@ -273,18 +281,13 @@ def cmd_build(args) -> None:
 
     if not json_mode:
         print("\n▶ Generating …\n")
-    ns = _gen_top_namespace_from_build_args(args)
-    # gen-top narrates on stdout; under --json that would break the one
+    # Generation narrates on stdout; under --json that would break the one
     # JSON document stdout must hold, so it goes to stderr instead.
     narration = contextlib.redirect_stdout(sys.stderr) if json_mode else contextlib.nullcontext()
-    generated = 0
     with narration:
-        try:
-            topgen.cmd_gen_top(ns)
-        except SystemExit as exc:
-            generated = 0 if exc.code is None else int(exc.code)
+        generated = _generate(ctx, options, args, design_path)
 
-    if generated != 0:
+    if not generated:
         envelope.status = "fail"
         envelope.diagnostics.append({
             "severity": "error", "code": None, "category": "generation",
@@ -297,64 +300,33 @@ def cmd_build(args) -> None:
     sys.exit(envelope.exit_code())
 
 
-def _planned_output_artifacts(ctx, args) -> List[str]:
-    """The exact artifact list `gen-top --dry-run` already previews for
-    this mode (`forge/core/cli/groups/topgen.py`'s dry-run branch) —
-    duplicated here rather than shared, to avoid touching gen-top's own
-    code path for a purely read-only preview computation."""
-    from forge.core.cli.groups.topgen import _resolve_path
+def _generate(ctx, options, args, design_path: Path) -> bool:
+    """Generate from the plan already computed; whether it succeeded."""
+    from forge.core.cli._shared import print_cli_error
+    from forge.core.cli.groups.topgen import _attach_verification_plan
+    from forge.generation.pipeline import GenerationRefused, gate_failure, generate_top
 
-    if args.mode == "vhdl":
-        out = _resolve_path(args.output, ctx.c_root, Path(f"{args.top_name}.vhd"))
-    elif args.mode == "verilog":
-        out = _resolve_path(args.output, ctx.c_root, Path(f"{args.top_name}.v"))
-    else:
-        out = _resolve_path(args.output, ctx.c_root, Path("block_design.tcl"))
-
-    artifacts = [str(out)]
-    if args.mode in ("vhdl", "verilog"):
-        for name in (
-            "build_manifest.json", "port_map.yaml", "port_signature.json",
-            "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
-            "maturity_report.json",
-        ):
-            artifacts.append(str(out.parent / name))
-        artifacts.append(str(out.parent / "design.ir.json"))
-    elif args.mode == "bd":
-        artifacts.append(str(out.parent / "design.ir.json"))
-    return artifacts
-
-
-def _gen_top_namespace_from_build_args(args):
-    """Build an argparse.Namespace `topgen.cmd_gen_top` can consume
-    directly — copies every attribute `forge build` already has, and
-    fills in gen-top-only knobs `forge build` doesn't expose (see this
-    module's docstring "Scope note") with gen-top's own defaults."""
-    ns = argparse.Namespace(**vars(args))
-    ns.dry_run = False
-    # `strict` is already a real `forge build` flag and so is always
-    # present on `args`/`ns` here — no hardcoded
-    # fallback needed for it (unlike the gen-top-only knobs below, which
-    # `forge build` deliberately doesn't expose; see this module's
-    # docstring "Scope note").
-    for name, default in (
-        ("bd_name", "design_1"),
-        ("gen_testbench", False),
-        ("xml_stimulus", None),
-        ("xml_stimulus_tool", None),
-        ("event_id", 1),
-        ("hls_metrics", None),
-        ("lint", False),
-        ("fix_lint", False),
-        # Verification-plan resolution: gen-top discovers the conventional
-        # design.verification.yml when neither is given, which is what
-        # `forge build` wants too.
-        ("verify_design", None),
-        ("no_verify", False),
-    ):
-        if not hasattr(ns, name):
-            setattr(ns, name, default)
-    return ns
+    failure = gate_failure(ctx, options)
+    if failure:
+        print(failure)
+        return False
+    try:
+        generate_top(
+            ctx, options,
+            attach_verification=lambda project, dut_dir: _attach_verification_plan(
+                project, design_path, args, ctx.c_root, dut_dir=dut_dir,
+            ),
+        )
+    except GenerationRefused as refused:
+        print(refused)
+        return False
+    except Exception as e:  # noqa: BLE001 - reported, and the build fails
+        print_cli_error(
+            "Generation failed", e,
+            hint="Check the design file, mode, and IP paths, then re-run forge build.",
+        )
+        return False
+    return True
 
 
 def _print_plan_human(plan, plan_hash_value: str, envelope) -> None:

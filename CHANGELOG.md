@@ -53,6 +53,15 @@ for the versioning policy.
   top with inputs tied to zero or a driver dropped. `--strict` still adds
   the checks for heuristic wiring (no contract, auto-match,
   `port_map_ranges`) and validator warnings.
+- **Generation is a library, not a CLI command.** Planning, the gates
+  that stop generation, the generators and every artifact written next to
+  the top level moved out of `forge/core/cli/groups/topgen.py`:
+  `forge.generation.pipeline` (`GenTopOptions`, `compute_gen_top_plan`,
+  `gate_failure`, `generate_top`) and `forge.generation.artifacts` (build
+  manifest, port map, probe map, testbench bindings, maturity summary).
+  `forge build` generates from the plan it has already computed instead of
+  re-running `gen-top`, so it validates and plans once; `gen-top` is a thin
+  front end over the same calls. The outputs are byte-identical.
 - **`--mode vhdl` writes a VHDL entity around the Verilog top.** The
   separate VHDL generator tied every module output to `'0'`, left out the
   design's external ports and did not compile; it is removed, with
