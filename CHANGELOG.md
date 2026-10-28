@@ -62,6 +62,13 @@ for the versioning policy.
   gets every stage, crossing and synchronizer the Verilog top has. The
   design is mixed-language: Vivado elaborates it, a VHDL-only simulator
   does not.
+- **`forge init` writes `forge.yml`** at the consumer root, naming the new
+  plugin's design and verification file, unless one is already there, and
+  the scaffolded flow names its design (`design: ../designs/design.yml`).
+  `forge check`, `forge build`, `forge test` and `forge report` then work
+  on the plugin with no arguments. A `forge.yml` that names its own design
+  is written without the `sources`, `part`, `clock` and `reset` keys,
+  which the design carries.
 - **A design can be a variant of another.** `variant_of: <design>` in a
   design file, with `remove:` (modules with everything touching them,
   connections, topology groups), `modules:` (fields set by module name,

@@ -128,3 +128,40 @@ def test_init_registered_as_top_level_command() -> None:
     parser = build_parser()
     parsed = parser.parse_args(["init", "some_plugin"])
     assert parsed.func.__name__ == "cmd_init"
+
+
+def test_init_writes_a_forge_yml_the_bare_commands_use(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import forge.core.toolchain_versions as toolchain
+    from forge.project.status import PASS, evaluate
+
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: False)
+    result = _run(
+        capsys, "throwaway_plugin",
+        "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path), "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    forge_yml = tmp_path / "forge.yml"
+    assert "design: plugins/throwaway_plugin/forge/designs/design.yml" in forge_yml.read_text()
+    status = evaluate(tmp_path)
+    assert status.section("Design").state == PASS
+    assert status.section("Verification").state == PASS
+
+
+def test_init_leaves_an_existing_forge_yml_alone(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import forge.core.toolchain_versions as toolchain
+
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: False)
+    (tmp_path / "forge.yml").write_text("project: other\n")
+
+    result = _run(
+        capsys, "throwaway_plugin",
+        "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path), "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "forge.yml").read_text() == "project: other\n"

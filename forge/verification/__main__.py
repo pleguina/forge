@@ -1212,6 +1212,8 @@ flows:
     top_module:       algo_top
     tb_module:        tb_algo_top
     dut_rtl_source:   gen-top/design_{plugin_id}
+    # `forge test` with no arguments regenerates algo_top.v there from this design.
+    design:           ../designs/design.yml
     dataset:          {plugin_id}_golden
     default_event_id: 0
     simulation:

@@ -43,6 +43,7 @@ simulates it, and writes a report bundle:
 forge init — scaffolding 'my_plugin'
   ✅ topology scaffold
   ✅ verification scaffold
+  ✅ forge.yml written
   ✅ design validated
   ✅ top level generated (algo_top.v)
   ✅ testbench prepared
@@ -65,11 +66,16 @@ simulation result.
 Add `--verbose` to see each underlying stage's full output instead of one
 line per stage, or `--json` for the machine-readable envelope.
 
+`forge init` also writes `forge.yml` (unless the directory already has
+one), naming the plugin's design and verification file. From then on, anywhere
+under this directory, `forge check`, `forge build`, `forge test` and
+`forge report` need no arguments: after you edit the RTL or the golden
+data, `forge test` regenerates the top level and simulates it again.
+
 ## 4. Read the design back
 
 ```bash
-forge inspect plugins/my_plugin/forge/designs/design.yml \
-    --contracts-from plugins/my_plugin/forge/modules.yml
+forge inspect
 ```
 
 `forge inspect` resolves the design into FORGE's canonical IR and prints

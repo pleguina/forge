@@ -442,23 +442,27 @@ class ForgeConfig:
         out: Dict[str, Any] = {
             "schema_version": self.schema_version,
             "project": self.project,
-            "sources": {},
         }
-        if self.rtl_globs:
-            out["sources"]["rtl"] = list(self.rtl_globs)
-        if self.hls_globs:
-            out["sources"]["hls"] = list(self.hls_globs)
         if self.design:
+            # The part, clock and reset are the design's own.
             out["design"] = self.design
-        if self.registry:
-            out["registry"] = self.registry
-        if self.build:
-            out["build"] = dict(self.build)
-        if self.top:
-            out["top"] = self.top
-        out["part"] = self.part
-        out["clock"] = self.clock.to_dict()
-        out["reset"] = self.reset.to_dict()
+            if self.registry:
+                out["registry"] = self.registry
+            if self.build:
+                out["build"] = dict(self.build)
+        else:
+            out["sources"] = {}
+            if self.rtl_globs:
+                out["sources"]["rtl"] = list(self.rtl_globs)
+            if self.hls_globs:
+                out["sources"]["hls"] = list(self.hls_globs)
+            if self.build:
+                out["build"] = dict(self.build)
+            if self.top:
+                out["top"] = self.top
+            out["part"] = self.part
+            out["clock"] = self.clock.to_dict()
+            out["reset"] = self.reset.to_dict()
         verification: Dict[str, Any] = {}
         if self.dataset:
             verification["dataset"] = self.dataset
@@ -484,6 +488,19 @@ class ForgeConfig:
         import yaml
 
         body = yaml.safe_dump(self.to_dict(), sort_keys=False, default_flow_style=False)
+        if self.authored:
+            return (
+                f"# {self.project} — FORGE project\n"
+                f"#\n"
+                f"# The design is the hand-written file `design:` names, used as it\n"
+                f"# stands; FORGE writes everything it generates under .forge/.\n"
+                f"#\n"
+                f"#   forge check    what is missing or inconsistent\n"
+                f"#   forge build    generate the structural top level\n"
+                f"#   forge test     simulate it against verification.config\n"
+                f"#   forge report   collect the results\n"
+                f"#\n"
+            ) + body
         header = (
             f"# {self.project} — FORGE project\n"
             f"#\n"

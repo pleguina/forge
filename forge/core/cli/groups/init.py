@@ -19,6 +19,7 @@ and matched, so the whole chain runs with zero manual edits.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import List
@@ -119,6 +120,25 @@ def cmd_init(args) -> None:
         )
         sys.exit(emit(envelope, json_mode=json_mode))
 
+    # The project file the bare commands read, unless the repository already
+    # has one for another design.
+    from forge.project.config import ForgeConfig
+    from forge.project.paths import ROOT_CONFIG_NAME
+
+    forge_yml = consumer_root / ROOT_CONFIG_NAME
+    wrote_forge_yml = not forge_yml.exists()
+    if wrote_forge_yml:
+        ForgeConfig(
+            project=plugin_id,
+            root=consumer_root,
+            design=os.path.relpath(design_yml, consumer_root),
+            verification_config=os.path.relpath(design_verification_yml, consumer_root),
+        ).save()
+        if not json_mode:
+            print(f"  ✅ {ROOT_CONFIG_NAME} written")
+    elif not json_mode:
+        print(f"  ⏭️  {forge_yml} already exists, left as it is")
+
     # ── Step 3: validate immediately ────────────────────────────────────────
     _step("validate", "design validated", ["topgen", "validate", str(design_yml)])
 
@@ -169,7 +189,7 @@ def cmd_init(args) -> None:
         str(p) for p in (
             design_yml, modules_yml, interface_yaml, rtl_stub,
             design_verification_yml, bootstrap_py, gen_stimulus_py, golden_xml,
-            junit_path,
+            junit_path, *([forge_yml] if wrote_forge_yml else []),
         )
         if p.exists()
     ]
@@ -198,6 +218,10 @@ def cmd_init(args) -> None:
             ] if skipped_steps else []),
             f"Open {report_dir / 'dashboard.html'} to see the generated topology, "
             f"latency check and simulation result",
+            *([
+                f"From {consumer_root}, `forge check`, `forge build`, `forge test` and "
+                f"`forge report` work on {plugin_id!r} with no arguments"
+            ] if wrote_forge_yml else []),
             f"Replace the scaffolded RTL stub ({rtl_stub}) with your real algorithm, "
             f"then replace {golden_xml} with real golden data",
         ],
