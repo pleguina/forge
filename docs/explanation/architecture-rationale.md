@@ -61,8 +61,9 @@ flowchart TD
     Project --> Generators["Verilog / VHDL / Block-Design generators"]
 ```
 
-This isn't just tidiness. Once `write_structural_verilog`/
-`write_structural_vhdl`/`write_bd_tcl` all consume the same projected IR
+This isn't just tidiness. Once `write_structural_verilog` and
+`write_bd_tcl` (and the VHDL entity `--mode vhdl` wraps around the Verilog
+top) all consume the same projected IR
 connection topology, "does this design mean the same thing in every
 output mode" stops being a question you answer by re-reading three
 generators and becomes a question the IR itself already answers once.

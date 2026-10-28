@@ -22,8 +22,9 @@ path.
 | `forge` | `parse_component` | function | Parse a single HLS-exported component.xml into a dict: |
 | `forge` | `unpack_ip_archives` | function | Extract IP archives from source directory into IP root. |
 | `forge` | `write_bd_tcl` | function | Generate a Vivado Block Design Tcl script wiring algorithm modules |
-| `forge` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
+| `forge` | `write_structural_verilog` | function | Generate a structural Verilog top that wires algorithm modules together. |
 | `forge` | `write_summary` | function | Write the summary dict out in either JSON or YAML form. |
+| `forge` | `write_vhdl_wrapper` | function | Write entity *entity_name* instantiating Verilog module *core_name*. |
 | `forge.analysis.design_explorer` | `DESIGN_GRAPH_SCHEMA` | value | A ``{"name", "version"}`` tag carried by every structured artifact |
 | `forge.analysis.design_explorer` | `DesignGraph` | class | DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]', open_decisions: 'Tuple[OpenDecision, ...]' = ()) |
 | `forge.analysis.design_explorer` | `GraphEdge` | class | GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]', crosses_clock_domain: 'bool', crosses_reset_domain: 'bool', transformations: 'Tuple[Dict[str, Any], ...]', diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '') |
@@ -44,7 +45,7 @@ path.
 | `forge.core.cli` | `main` | value | forge CLI entry point. |
 | `forge.generation.generators` | `write_bd_tcl` | function | Generate a Vivado Block Design Tcl script wiring algorithm modules |
 | `forge.generation.generators` | `write_structural_verilog` | function | Generate a structural Verilog top that wires algorithm modules together. |
-| `forge.generation.generators` | `write_structural_vhdl` | function | Generate a structural RTL top that wires algorithm modules together. |
+| `forge.generation.generators` | `write_vhdl_wrapper` | function | Write entity *entity_name* instantiating Verilog module *core_name*. |
 | `forge.ir` | `DiagnosticReference` | class | A diagnostic attached to a specific IR object, so tooling (CLI, |
 | `forge.ir` | `IR_SCHEMA_VERSION` | value | str(object='') -> str |
 | `forge.ir` | `PROVENANCE_SCHEMA_VERSION` | value | str(object='') -> str |

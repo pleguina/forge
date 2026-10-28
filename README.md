@@ -72,7 +72,7 @@ flowchart TD
     Matching --> IR["forge.ir.assemble_project_ir\n(ResolvedProject — schema-versioned, hashable, JSON-exportable)"]
     IR --> Inspect["forge inspect --json / --emit-ir / --diff"]
     IR --> Project["forge.ir.project_to_conn_map\n(reproduces original iteration order via emission_order)"]
-    Project --> Generators["Verilog / VHDL / Block-Design generators\n(write_structural_verilog / write_structural_vhdl / write_bd_tcl)"]
+    Project --> Generators["Verilog / Block-Design generators, VHDL entity around the Verilog top\n(write_structural_verilog / write_bd_tcl / write_vhdl_wrapper)"]
     Generators --> Manifests[build_manifest.json / port_map.yaml / design_parameters.json / design.ir.json]
 
     VerifyContract --> VerifyRun[verify generate / prepare / run]

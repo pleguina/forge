@@ -54,8 +54,8 @@ GROUPS = [
         "sv_testbench_generator.py was 5% covered as of 2026-09-17 (the "
         "file the most recent shipped bugfix, 35b7c6e, touched) and is "
         "now at 100% — raised this group's floor 50% -> 70% to match. "
-        "structural_vhdl.py (55%) and design_parameters.py (54%) are the "
-        "two files keeping this group below target now.",
+        "design_parameters.py (54%) is the file keeping this group below "
+        "target now.",
     ),
     (
         "forge/verification/backend_*",

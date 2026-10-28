@@ -53,6 +53,15 @@ for the versioning policy.
   top with inputs tied to zero or a driver dropped. `--strict` still adds
   the checks for heuristic wiring (no contract, auto-match,
   `port_map_ranges`) and validator warnings.
+- **`--mode vhdl` writes a VHDL entity around the Verilog top.** The
+  separate VHDL generator tied every module output to `'0'`, left out the
+  design's external ports and did not compile; it is removed, with
+  `write_structural_vhdl`. `gen-top`/`build --mode vhdl` now write the
+  structural Verilog top as `<top>_core.v` and a VHDL entity `<top>` with
+  the same ports that instantiates it (`write_vhdl_wrapper`), so VHDL code
+  gets every stage, crossing and synchronizer the Verilog top has. The
+  design is mixed-language: Vivado elaborates it, a VHDL-only simulator
+  does not.
 - **A design can be a variant of another.** `variant_of: <design>` in a
   design file, with `remove:` (modules with everything touching them,
   connections, topology groups), `modules:` (fields set by module name,

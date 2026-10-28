@@ -20,7 +20,7 @@ from forge.contracts.contract_loader import (
     load_contracts_for_design,
     synthesize_ip_info,
 )
-from forge.generation.generators.structural_vhdl import write_structural_vhdl
+from forge.generation.generators.vhdl_wrapper import write_vhdl_wrapper
 from forge.generation.generators.structural_verilog import write_structural_verilog
 from forge.generation.generators.block_design import write_bd_tcl
 from forge.generation.generators.sv_testbench_generator import generate_sv_testbench
@@ -1908,6 +1908,8 @@ def cmd_gen_top(args):
         if getattr(args, "dry_run", False):
             if args.mode == "vhdl":
                 _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
+                print("\n[dry-run] Would also write the Verilog top it wraps:")
+                print(f"  {_preview_output.with_name(args.top_name + '_core.v')}")
             elif args.mode == "verilog":
                 _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
             else:
@@ -1927,7 +1929,7 @@ def cmd_gen_top(args):
                 # sibling.
                 print(f"  {_preview_output.parent / 'design.ir.json'}")
                 print(f"  {_preview_output.parent / 'provenance.json'}")
-                _should_gen_tb = args.mode == "verilog" and (
+                _should_gen_tb = (
                     args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
                 )
                 if _should_gen_tb:
@@ -1953,63 +1955,17 @@ def cmd_gen_top(args):
             print("\n[dry-run] No files written.")
             sys.exit(0)
 
-        if args.mode == "vhdl":
-            output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
-            print(f"🔨 Generating structural VHDL: {output}")
-
-            # Extended to vhdl mode (same pattern as verilog): proven
-            # byte-identical to the original direct conn_map/global_nets on
-            # both reference designs (test_generation_ir_equivalence.py)
-            # before this switch was made.
-            project = assemble_project_ir(
-                cfg,
-                design_path,
-                contracts=_contracts or {},
-                ip_info_data=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
-                match_report=match_report,
-                generated_from={
-                    "design": str(design_path),
-                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
-                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
-                    "build_dir": str(build_root),
-                },
-            )
-            conn_map_ir, global_nets_ir = project_to_conn_map(project)
-
-            report = write_structural_vhdl(
-                cfg=cfg,
-                ip_info=ip_info,
-                conn_map=conn_map_ir,
-                global_nets=global_nets_ir,
-                ip_root=ip_root,
-                out_path=output,
-                top_name=args.top_name,
-                system_yml=args.system,
-            )
-
-            print(f"✓ VHDL top generated: {output}")
-            _print_gen_report(report)
-
-            # Attach tie_off connections — see the
-            # verilog branch's identical comment above.
-            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
-            project.design.connections.sort(key=lambda c: c.id)
-
-            if getattr(args, "strict", False):
-                _strict_port_gate(report, cfg)
-
-            if args.lint:
-                _run_vhdl_lint(output)
-
-            ir_output = output.parent / "design.ir.json"
-            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
-            print(f"  ✓ Canonical IR snapshot: {ir_output}")
-            _write_gen_top_provenance(project, ctx, args, ir_output)
-
-        elif args.mode == "verilog":
-            output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
+        if args.mode in ("verilog", "vhdl"):
+            # --mode vhdl: the Verilog top is <top>_core, next to the VHDL
+            # entity <top> that instantiates it (vhdl_wrapper.py).
+            vhdl_output = None
+            top_name = args.top_name
+            if args.mode == "vhdl":
+                vhdl_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
+                top_name = f"{args.top_name}_core"
+                output = vhdl_output.with_name(f"{top_name}.v")
+            else:
+                output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
             print(f"🔨 Generating structural Verilog: {output}")
 
             # Generation is driven by the canonical IR rather than
@@ -2044,7 +2000,7 @@ def cmd_gen_top(args):
                 global_nets=global_nets_ir,
                 ip_root=ip_root,
                 out_path=output,
-                top_name=args.top_name,
+                top_name=top_name,
                 system_yml=args.system,
                 contracts=_contracts,
                 match_report=match_report,
@@ -2078,7 +2034,7 @@ def cmd_gen_top(args):
 
             # Before the manifest: the manifest records the IR's content
             # hash, and both of these are part of the IR's content.
-            project.design.top_module = args.top_name
+            project.design.top_module = top_name
             _attach_verification_plan(
                 project, design_path, args, c_root, dut_dir=output.parent,
             )
@@ -2203,7 +2159,16 @@ def cmd_gen_top(args):
                 print(f"✓ Testbench generated: {tb_path}")
 
             if args.lint:
-                _run_verilog_lint(output, args.top_name)
+                _run_verilog_lint(output, top_name)
+
+            if vhdl_output is not None:
+                write_vhdl_wrapper(
+                    report.get("top_ports", []),
+                    entity_name=args.top_name, core_name=top_name, out_path=vhdl_output,
+                )
+                print(f"✓ VHDL entity {args.top_name} around {top_name}: {vhdl_output}")
+                if args.lint:
+                    _run_vhdl_lint(vhdl_output)
 
         elif args.mode == "bd":
             output = _resolve_path(args.output, c_root, Path("block_design.tcl"))
@@ -2861,7 +2826,8 @@ def register(sub) -> None:
     )
     p_gen.add_argument(
         "--mode", choices=["vhdl", "verilog", "bd"], required=True,
-        help="Output mode: vhdl, verilog, or bd (Block Design TCL)",
+        help="Output mode: verilog, vhdl (a VHDL entity around the Verilog top, written as "
+             "<top>_core.v), or bd (Block Design TCL)",
     )
     p_gen.add_argument("--ip-root", type=Path, help="IP directory (default: ips/)")
     p_gen.add_argument("--ip-info", type=Path, help="IP info file (auto-generated if missing)")

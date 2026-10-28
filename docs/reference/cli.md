@@ -283,7 +283,8 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --mode {vhdl,verilog,bd}
-                        Output mode: vhdl, verilog (default), or bd (Block Design TCL)
+                        Output mode: verilog (default), vhdl (a VHDL entity around the Verilog
+                        top, written as <top>_core.v), or bd (Block Design TCL)
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
   --ip-root IP_ROOT     IP directory (default: ips/)
@@ -1004,7 +1005,8 @@ optional arguments:
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
   --mode {vhdl,verilog,bd}
-                        Output mode: vhdl, verilog, or bd (Block Design TCL)
+                        Output mode: verilog, vhdl (a VHDL entity around the Verilog top, written
+                        as <top>_core.v), or bd (Block Design TCL)
   --ip-root IP_ROOT     IP directory (default: ips/)
   --ip-info IP_INFO     IP info file (auto-generated if missing)
   --build-dir BUILD_DIR

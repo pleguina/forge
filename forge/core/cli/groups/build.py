@@ -390,7 +390,8 @@ def register(sub) -> None:
     )
     p.add_argument(
         "--mode", choices=["vhdl", "verilog", "bd"], default=None,
-        help="Output mode: vhdl, verilog (default), or bd (Block Design TCL)",
+        help="Output mode: verilog (default), vhdl (a VHDL entity around the Verilog top, "
+             "written as <top>_core.v), or bd (Block Design TCL)",
     )
     p.add_argument("--consumer-root", help="Consumer workspace root used to resolve relative defaults")
     p.add_argument("--ip-root", help="IP directory (default: ips/)")

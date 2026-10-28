@@ -77,7 +77,7 @@ def build_tie_off_connections(
 ) -> List[ResolvedConnection]:
     """Build synthetic ``tie_off`` connections from a generator's
     ``report["tied_to_zero"]`` list (``[(instance, port, width), ...]`` —
-    ``write_structural_verilog``/``write_structural_vhdl``).
+    ``write_structural_verilog``).
 
     Mirrors the existing ``"$external"`` sentinel convention: a tied port
     has no real producer in ``conn_map`` at all (there's nothing driving

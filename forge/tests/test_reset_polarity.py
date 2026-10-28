@@ -55,14 +55,16 @@ def test_verilog_drives_an_active_low_reset_with_ap_rst_inverted(
     assert ".rst_n(ap_rst)" not in top
 
 
-def test_vhdl_drives_an_active_low_reset_from_an_inverted_signal(
+def test_the_vhdl_entity_wraps_the_verilog_top_and_its_inverted_reset(
     adopted: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    top = _build(capsys, adopted, "vhdl", adopted / "out" / "algo_top.vhd")
+    entity = _build(capsys, adopted, "vhdl", adopted / "out" / "algo_top.vhd")
+    core = (adopted / "out" / "algo_top_core.v").read_text()
 
-    assert "signal ap_rst_inv : std_logic;" in top
-    assert "ap_rst_inv <= not ap_rst;" in top
-    assert top.count("rst_n => ap_rst_inv") == len(MODULES)
+    assert "entity algo_top is" in entity
+    assert "  core : algo_top_core" in entity
+    assert "ap_rst : in std_logic" in entity
+    assert core.count(".rst_n(~ap_rst)") == len(MODULES)
 
 
 def test_block_design_drives_an_active_low_reset_through_one_inverter(
