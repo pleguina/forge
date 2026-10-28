@@ -28,8 +28,8 @@ positional arguments:
     fix       Apply the repairs this project's own sources prove
     migrate   Bring a whole project up to the schemas this FORGE understands
     inspect   Resolve a design into the canonical IR and inspect it (read-only)
-    build     Compute (and optionally apply) a deterministic generation plan
-    test      Wrap verification preparation and execution (check-only | prepare | run)
+    build     Generate the structural top level (--dry-run: print the plan only)
+    test      Build and simulate the forge.yml project (or: check-only | prepare | run)
     report    Generate a self-contained report bundle (maturity, latency, verification,
               provenance, dashboard)
     doctor    Check the local forge install/environment (toolchains, optional deps)
@@ -57,8 +57,8 @@ Start here — the golden path, in the order you need it:
   fix         Apply the repairs this project's own sources prove
   migrate     Bring a project up to the schemas this FORGE understands
   inspect     Resolve a design into the canonical IR and read it back (read-only)
-  build       Generate the structural top level from a design
-  test        Prepare and run a design's verification flows
+  build       Generate the structural top level
+  test        Build the design and run its verification flows
   report      Collect topology, latency and results into one report bundle
   doctor      Check the local forge install/environment
 
@@ -66,7 +66,8 @@ Starting from nothing, `forge init my_plugin` takes an empty directory to a
 generated top level, a passing simulation and an HTML dashboard in one
 command. Starting from a repository you already have, `forge adopt .` reads
 it and builds the project model from its own sources — then `forge check`
-and `forge next` tell you what is left to decide.
+and `forge next` tell you what is left to decide. Inside a forge.yml project,
+`forge build`, `forge test` and `forge report` need no arguments.
 
 Direct stage access — the individual stages the commands above orchestrate.
 Reach for these when you need a flag or a stage the golden path doesn't expose:
@@ -94,10 +95,11 @@ Examples — the golden path:
   forge fix --apply
   forge migrate
   forge doctor
-  forge inspect design.yml --contracts-from modules.yml
-  forge build design.yml --contracts-from modules.yml --apply --output algo_top.v
+  forge build
+  forge test
+  forge report
+  forge build design.yml --contracts-from modules.yml --output algo_top.v
   forge test run design.verification.yml --flow my_flow_xsim --event-id 0
-  forge report design.yml --contracts-from modules.yml --output out/report
 
 Examples — direct stage access:
   forge inspect design.yml --emit-ir build/forge/design.ir.json
@@ -135,8 +137,8 @@ positional arguments:
 optional arguments:
   -h, --help         show this help message and exit
   --name NAME        Project name (default: the directory name)
-  --part PART        Target device (default: xcvu9p-flga2104-2L-e, a placeholder you can change
-                     later)
+  --part PART        Target device (default: the part already in forge.yml, else
+                     xcvu9p-flga2104-2L-e, a placeholder you can change later)
   --dry-run          Show what would be written without writing it
   --force            Overwrite an existing forge.yml (the .forge/ tree is always regenerated)
   --interactive, -i  Ask about each decision FORGE will not make for you, and record the answers
@@ -269,13 +271,14 @@ usage: forge build [-h] [--mode {vhdl,verilog,bd}] [--consumer-root CONSUMER_ROO
                    [--ip-root IP_ROOT] [--ip-info IP_INFO] [--build-dir BUILD_DIR]
                    [--hls-build-root HLS_BUILD_ROOT] [--src-root SRC_ROOT] [--system SYSTEM]
                    [--output OUTPUT] [--top-name TOP_NAME] [--contracts-from MODULES_YML]
-                   [--rtl-resource-root RTL_RESOURCE_ROOT] [--plan] [--dry-run] [--apply]
-                   [--strict] [--accept-plan-hash HASH] [--provenance PROVENANCE]
+                   [--rtl-resource-root RTL_RESOURCE_ROOT] [--dry-run] [--strict]
+                   [--accept-plan-hash HASH] [--provenance PROVENANCE]
                    [--explain-staleness EXPLAIN_STALENESS] [--json]
-                   design
+                   [design]
 
 positional arguments:
-  design                Path to design.yml
+  design                Path to design.yml (default: the forge.yml project around the current
+                        directory)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -298,14 +301,7 @@ optional arguments:
                         modules.yml with interface_contract paths; enables contract-driven wiring
   --rtl-resource-root RTL_RESOURCE_ROOT
                         Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}
-  --plan                Compute and print the generation plan (the default behavior — this flag
-                        exists for symmetry with --apply). Equivalent to --dry-run: both mean
-                        'never write, plan only'.
-  --dry-run             Alias for omitting --apply: compute the plan only, write nothing (this is
-                        already the default). Matches `gen-top --dry-run`'s meaning — see
-                        docs/development/cli_exit_codes.md.
-  --apply               After computing the plan, generate for real (delegates to `topgen gen-
-                        top`)
+  --dry-run, --plan     Compute and print the generation plan only; write nothing
   --strict              Fail if the plan would trigger any of `gen-top --strict`'s violations
                         (compat-mode modules, auto-match/port_map_ranges wiring, topology-
                         group/cardinality/CDC errors) — reported here, not just at generation
@@ -685,10 +681,11 @@ usage: forge inspect [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                      [--explain-staleness EXPLAIN_STALENESS] [--dot DOT] [--svg SVG]
                      [--explorer EXPLORER] [--verify-design VERIFY_DESIGN]
                      [--results-json RESULTS_JSON]
-                     design
+                     [design]
 
 positional arguments:
-  design                Path to design.yml
+  design                Path to design.yml (default: the forge.yml project around the current
+                        directory)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -769,10 +766,11 @@ usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                     [--module-width MODULE_WIDTH] [--fifo-probe FIFO_PROBE]
                     [--cdc-result-json CDC_RESULT_JSON]
                     [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--plugin PLUGIN] [--json]
-                    design
+                    [design]
 
 positional arguments:
-  design                Path to design.yml
+  design                Path to design.yml (default: the forge.yml project around the current
+                        directory)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -782,7 +780,8 @@ optional arguments:
   --build-dir BUILD_DIR
                         HLS/RTL build root to scan for component.xml (optional)
   --output OUTPUT, -o OUTPUT
-                        Report output directory (default: ./report)
+                        Report output directory (default: .forge/reports in a forge.yml project,
+                        else ./report)
   --hls-build-root HLS_BUILD_ROOT
                         build_hls root for the HLS summary section (optional)
   --solution SOLUTION   HLS solution name (default: solution1)
@@ -824,28 +823,37 @@ optional arguments:
 ### `forge test`
 
 ```text
-usage: forge test [-h] MODE ...
+usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_LIST]
+                  [--all-events] [--plugin PLUGIN] [--json]
+                  MODE ...
 
 positional arguments:
   MODE
-    check-only
-              Generate + validate stimulus + validate layout, no execution
-    prepare   Generate + validate + check layout (full forge verify prepare delegate)
-    run       Run one flow's selected event(s), one simulation per event, with real per-event
-              results
+    check-only          Generate + validate stimulus + validate layout, no execution
+    prepare             Generate + validate + check layout (full forge verify prepare delegate)
+    run                 Run one flow's selected event(s), one simulation per event, with real per-
+                        event results
 
 optional arguments:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+  --flow FLOW           Run only this flow
+  --event-id EVENT_ID   Run exactly this one event
+  --event-list EVENT_LIST
+                        Comma-separated event IDs or ranges (e.g. 1,7,10-12)
+  --all-events          Run every event in the dataset
+  --plugin PLUGIN       Plugin ID to bootstrap (when flow.plugin is absent from YAML)
+  --json                Machine-readable JSON output
 ```
 
 #### `forge test check-only`
 
 ```text
 usage: forge test check-only [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT] [--json]
-                             design_file
+                             [design_file]
 
 positional arguments:
-  design_file           Path to design.verification.yml
+  design_file           Path to design.verification.yml (default: verification.config of the
+                        forge.yml project around the current directory)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -860,10 +868,11 @@ optional arguments:
 ```text
 usage: forge test prepare [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT] [--json]
                           [--port-map PORT_MAP] [--dry-run] [--strict]
-                          design_file
+                          [design_file]
 
 positional arguments:
-  design_file           Path to design.verification.yml
+  design_file           Path to design.verification.yml (default: verification.config of the
+                        forge.yml project around the current directory)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -879,20 +888,22 @@ optional arguments:
 #### `forge test run`
 
 ```text
-usage: forge test run [-h] --flow FLOW [--consumer-root CONSUMER_ROOT] [--plugin PLUGIN]
+usage: forge test run [-h] [--flow FLOW] [--consumer-root CONSUMER_ROOT] [--plugin PLUGIN]
                       [--event-id EVENT_ID] [--all-events] [--event-list EVENT_LIST]
                       [--xml-input XML_INPUT] [--all-dataset-parts]
                       [--dataset-parts-glob DATASET_PARTS_GLOB] [--probe-log]
                       [--junit-xml JUNIT_XML] [--results-json RESULTS_JSON]
                       [--golden-comparison-json GOLDEN_COMPARISON_JSON] [--strict] [--json]
-                      design_file
+                      [design_file]
 
 positional arguments:
-  design_file           Path to design.verification.yml
+  design_file           Path to design.verification.yml (default: verification.config of the
+                        forge.yml project around the current directory)
 
 optional arguments:
   -h, --help            show this help message and exit
-  --flow FLOW           Flow name to run (see design.verification.yml)
+  --flow FLOW           Flow name to run (required with a design file; default: every flow of the
+                        project)
   --consumer-root CONSUMER_ROOT
                         Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
   --plugin PLUGIN       Plugin ID to bootstrap (use when flow.plugin is absent from YAML)

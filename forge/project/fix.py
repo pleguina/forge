@@ -196,7 +196,6 @@ def _fix_id_for(action_id: str) -> str:
     """
     return {
         "rebuild-design": "regenerate-stale-artifacts",
-        "generate-missing-contracts": "generate-missing-contract",
         "resolve-contract-drift": "correct-contract-drift",
     }.get(action_id, action_id)
 
@@ -206,7 +205,8 @@ def _fix_id_for(action_id: str) -> str:
 def _find_contract_drift(status: ProjectStatus) -> List[Fix]:
     """Correct a contract width the module's own source contradicts.
 
-    The plan's worked example of a safe fix. The RTL declares ``[31:0]``, the
+    Only a contract ``forge.yml`` names can drift: an inferred one is written
+    from the ports on every command. The RTL declares ``[31:0]``, the
     contract says ``31``; there is exactly one right answer and the source
     holds it. Only ``width`` is corrected: a ``raw_port`` naming a port that
     does not exist could mean the port was renamed *or* the role was
@@ -214,12 +214,15 @@ def _find_contract_drift(status: ProjectStatus) -> List[Fix]:
     """
     import yaml
 
-    if status.paths is None or status.discovery is None:
+    if status.config is None or status.discovery is None:
         return []
 
     fixes: List[Fix] = []
     for unit in status.discovery.managed_units:
-        contract = status.paths.contract_root / f"{unit.name}.interface.yaml"
+        policy = status.config.modules.get(unit.name)
+        if policy is None or not policy.contract:
+            continue
+        contract = (status.config.root / policy.contract).resolve()
         if not contract.is_file():
             continue
         text = contract.read_text()
@@ -293,41 +296,6 @@ def _replace_role_width(text: str, role: str, old: int, new: int) -> str:
     return "".join(lines)
 
 
-def _find_missing_contracts(status: ProjectStatus) -> List[Fix]:
-    """Generate a contract for a managed module that has none.
-
-    Safe because the contract is generated *from the module's own ports* by
-    the same generator ``forge contract infer`` uses, and is emitted as
-    ``normalization_status: draft`` — so nothing it contains is presented as
-    reviewed, and the semantics FORGE cannot infer stay absent rather than
-    invented.
-    """
-    from forge.project.adopt import _render_contract
-
-    if status.paths is None or status.discovery is None:
-        return []
-
-    fixes: List[Fix] = []
-    for unit in status.discovery.managed_units:
-        contract = status.paths.contract_root / f"{unit.name}.interface.yaml"
-        if contract.is_file():
-            continue
-        fixes.append(Fix(
-            id="generate-missing-contract",
-            title=f"{unit.name}: no interface contract — generate one from its ports",
-            path=contract,
-            before="",
-            after=_render_contract(unit),
-            evidence=[Evidence(
-                source=str(unit.path),
-                rule="ports_read_from_source",
-                value=f"{len(unit.ports)} ports",
-                confidence=DETERMINISTIC,
-            )],
-        ))
-    return fixes
-
-
 def _find_stale_generated(status: ProjectStatus) -> List[Fix]:
     """Regenerate a top level whose inputs have changed since it was built.
 
@@ -339,12 +307,10 @@ def _find_stale_generated(status: ProjectStatus) -> List[Fix]:
     if section is None or section.state != "STALE" or status.paths is None:
         return []
 
-    from forge.project.status import _build_command
-
     return [Fix(
         id="regenerate-stale-artifacts",
         title="generated top level is older than its inputs — regenerate it",
-        command=_build_command(status.paths),
+        command="forge build",
         evidence=[Evidence(
             source=str(status.paths.generated_root / "algo_top.v"),
             rule="inputs_newer_than_output",
@@ -385,11 +351,9 @@ def _find_missing_state_gitignore(status: ProjectStatus) -> List[Fix]:
 
 FinderFn = Callable[[ProjectStatus], List[Fix]]
 
-#: Ordered so a generated contract exists before anything that reads one,
-#: and regeneration comes last — after every input it would consume has been
+#: Regeneration comes last — after every input it would consume has been
 #: repaired.
 FINDERS: List[FinderFn] = [
-    _find_missing_contracts,
     _find_contract_drift,
     _find_missing_state_gitignore,
     _find_stale_generated,

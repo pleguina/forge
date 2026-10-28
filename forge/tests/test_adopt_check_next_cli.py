@@ -305,7 +305,7 @@ def test_next_and_check_never_disagree(
 # ── The whole new-user path ───────────────────────────────────────────────
 
 def test_a_foreign_repository_reaches_a_generated_top_level_with_no_hand_written_yaml(
-    capsys: pytest.CaptureFixture[str], foreign: Path,
+    capsys: pytest.CaptureFixture[str], foreign: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The plan's primary acceptance test, as a test."""
     assert _run(capsys, ["adopt", str(foreign)])[0] == 0
@@ -313,18 +313,13 @@ def test_a_foreign_repository_reaches_a_generated_top_level_with_no_hand_written
 
     _, next_out, _ = _run(capsys, ["next", str(foreign), "--json"])
     command = json.loads(next_out)["metrics"]["recommended_action"]["command"]
-    assert command.startswith("forge build ")
+    assert command == "forge build"
 
     # Run the very command `forge next` printed, from the project root, as a
     # user would — a recommendation that does not actually work is worse
     # than none.
-    argv = command.split()[1:]
-    argv = [
-        str(foreign / token) if token.startswith(".forge/") else token
-        for token in argv
-    ]
-    argv = [str(foreign) if token == "." else token for token in argv]
-    assert _run(capsys, argv)[0] == 0
+    monkeypatch.chdir(foreign)
+    assert _run(capsys, command.split()[1:])[0] == 0
 
     top = foreign / ".forge" / "generated" / "algo_top.v"
     assert top.is_file()

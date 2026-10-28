@@ -122,7 +122,12 @@ def test_epilog_examples_use_real_groups_subcommands_and_flags() -> None:
         cmd_action = _subparsers_action(group_parser)
         target_parser = group_parser
         rest = tokens[2:]
-        if cmd_action is not None:
+        if cmd_action is not None and not cmd_action.required and (
+                not rest or rest[0].startswith("-")):
+            # A group that runs on its own (`forge test`) checks its flags
+            # against the group parser itself.
+            pass
+        elif cmd_action is not None:
             assert rest, f"example for group {group_name!r} has no subcommand: {line!r}"
             subcmd_name = rest[0]
             assert subcmd_name in cmd_action.choices, (

@@ -7,6 +7,35 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Changed
+- **One configuration path for a `forge.yml` project.** `forge build`,
+  `forge test`, `forge report` and `forge inspect` with no design argument
+  find `forge.yml` above the working directory and regenerate `.forge/`
+  from it and the sources before running (`forge.project.resolve`). An open
+  connection decision stops them with the question to answer.
+- **`forge build` generates by default**; `--dry-run` (or `--plan`) prints
+  the plan only. `--apply` is still accepted. Under `--json`, generation
+  output goes to stderr so stdout stays one JSON document, and a
+  `--provenance` manifest is written after generation instead of being
+  replaced by the one generation writes next to the output.
+- **Decisions live in `forge.yml`, never under `.forge/`.** New keys:
+  `modules.<name>.latency` (a cycle count or any registry latency block),
+  `modules.<name>.contract` (a user-kept interface contract used instead of
+  the inferred one) and `verification.config` (the `design.verification.yml`
+  that `forge test` runs). `forge check`, `next`, `fix` and `explain` point
+  at these keys and recommend plain `forge build`. Re-running `forge adopt`
+  keeps them, and keeps the part, clock frequency and reset polarity already
+  in `forge.yml` (`--part` now defaults to the existing part).
+- **Inferred contracts need no review.** They are rewritten from the ports on
+  every command, so `forge check` reports them as passing and no longer asks
+  to mark them `ready` (ATG035 retired). Drift (ATG036) and missing files
+  (ATG034) are checked for contracts named in `forge.yml`.
+- **Skipped is not passed.** `forge test` on a project builds the design,
+  prepares and runs every flow, writes results to `.forge/reports/test/`
+  (picked up by a bare `forge report`), and reports a flow whose simulator
+  is not on `PATH` as skipped with status `warn`. `forge init` reports
+  `warn` instead of `pass` when it could not simulate.
+
 ### Added
 - **`delay_cycles: auto`** on connections and topology groups: `gen-top` /
   `forge build` compute the alignment depth from the latency graph

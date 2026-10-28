@@ -28,9 +28,9 @@ sources. Either way, each stage is also a command in its own right.
 | `forge fix` | Applies the repairs the project's own sources prove, and only those. Previews as a diff by default. |
 | `forge migrate` | Brings a whole project up to the schemas this build understands — both project layouts, one preview, one step. Previews as a diff by default. |
 | `forge inspect` | Resolves a design into the canonical IR and prints what it found: modules, instances, connections, clock/reset domains, diagnostics, contract maturity. Never writes unless asked (`--emit-ir`). |
-| `forge build` | Generates the structural top level from a design. `--plan` computes without writing; `--apply` performs the generation. |
-| `forge test` | Prepares and runs a design's verification flows (`check-only`, `prepare`, `run`). |
-| `forge report` | Collects topology, latency, verification results and provenance into one self-contained report bundle with an HTML dashboard. |
+| `forge build` | Generates the structural top level — of the `forge.yml` project around the current directory, or of a named design. `--dry-run` computes the plan without writing. |
+| `forge test` | Builds the project and runs every flow of its `verification.config`, reporting a flow whose simulator is missing as skipped. `check-only`, `prepare` and `run` give direct access to one verification file. |
+| `forge report` | Collects topology, latency, verification results and provenance into one self-contained report bundle with an HTML dashboard (under `.forge/reports/` in a `forge.yml` project). |
 
 ## Topology generation
 
@@ -97,9 +97,10 @@ a design topology, or one interface contract per module.
   [standard envelope](development/cli_exit_codes.md) as every other
   command.
 - **Ordinary configuration, not a dialect.** Everything adoption writes is
-  the same format a hand-authored project uses, so `forge topgen validate`,
-  `forge inspect`, `forge build` and `forge report` work on an adopted
-  project unchanged.
+  the same format a hand-authored project uses, so `forge topgen validate`
+  works on an adopted project unchanged. `forge build`, `forge test`,
+  `forge report` and `forge inspect` need no paths at all: they find
+  `forge.yml` and regenerate `.forge/` from it before they run.
 
 ## Explaining and repairing
 

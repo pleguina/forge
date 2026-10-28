@@ -499,10 +499,15 @@ def test_run_svh_include_flows_unaffected_by_readmemh_mechanism(
     assert (per_event / "1" / "simulate.log").exists()
 
 
-def test_run_requires_flow_argument(capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_requires_flow_argument_with_a_design_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     parser = build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["test", "run", "design.verification.yml"])
+    parsed = parser.parse_args(["test", "run", "design.verification.yml"])
+    with pytest.raises(SystemExit) as exc:
+        parsed.func(parsed)
+    assert exc.value.code == 1
+    assert "--flow is required" in capsys.readouterr().err
 
 
 def test_registered_as_top_level_command() -> None:

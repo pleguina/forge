@@ -1,7 +1,7 @@
 """forge init — unify the two existing plugin scaffolders and chain the
 whole golden path: `forge init <plugin_id>`
 runs, in order, the topgen-side scaffolder, the (now-fixed) verify-side
-scaffolder, `forge topgen validate`, `forge build --apply`, `forge test
+scaffolder, `forge topgen validate`, `forge build`, `forge test
 prepare`/`run`, and `forge report` — real invocations of those real
 commands (constructed as argv and run in-process through the full `forge`
 parser, exactly as a user typing each command would get), not
@@ -19,38 +19,13 @@ and matched, so the whole chain runs with zero manual edits.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
-
-def _run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
-    """Run a real `forge <argv>` invocation in-process through the full
-    parser — the same argv a user would type, so every step here is a
-    real command, not a hand-built call into internals.
-
-    Returns ``(exit_code, captured_stdout)``. When *quiet*, the step's own
-    output is captured rather than printed, so `forge init` can report one
-    line per stage instead of relaying seven commands' full output — and
-    can still show the captured text if that stage fails.
-    """
-    from forge.core.cli.main import build_parser
-
-    parser = build_parser()
-    parsed = parser.parse_args(argv)
-    buffer = io.StringIO()
-    ctx = contextlib.redirect_stdout(buffer) if quiet else contextlib.nullcontext()
-    with ctx:
-        try:
-            result = parsed.func(parsed)
-        except SystemExit as exc:
-            return (0 if exc.code is None else int(exc.code)), buffer.getvalue()
-    return (0 if result is None else int(result)), buffer.getvalue()
+from typing import List
 
 
 def cmd_init(args) -> None:
+    from forge.core.cli._shared import run_forge_command
     from forge.core.cli.envelope import CommandEnvelope, emit
 
     json_mode = getattr(args, "json", False)
@@ -109,7 +84,7 @@ def cmd_init(args) -> None:
 
     def _step(name: str, label: str, argv: List[str]) -> None:
         """Run one stage, record it, and report it as a single line."""
-        code, output = _run_forge_command(argv, quiet=quiet)
+        code, output = run_forge_command(argv, quiet=quiet)
         if code != 0:
             _fail(name, code, output)
         steps_completed.append(name)
@@ -139,7 +114,7 @@ def cmd_init(args) -> None:
             metrics={"steps_completed": steps_completed, "dry_run": True},
             next_actions=[
                 f"Re-run without --dry-run to write the plugin skeleton and chain "
-                f"validate -> build --apply -> test -> report for {plugin_id!r}",
+                f"validate -> build -> test -> report for {plugin_id!r}",
             ],
         )
         sys.exit(emit(envelope, json_mode=json_mode))
@@ -153,7 +128,6 @@ def cmd_init(args) -> None:
         "--contracts-from", str(modules_yml),
         "--consumer-root", str(consumer_root),
         "--output", str(gen_top_output),
-        "--apply",
     ])
 
     # ── Step 5: run at least one test ───────────────────────────────────────
@@ -203,7 +177,13 @@ def cmd_init(args) -> None:
         artifacts.extend(str(p) for p in sorted(report_dir.glob("*")) if p.is_file())
 
     envelope = CommandEnvelope(
-        status="pass",
+        # Nothing has checked the generated top level when the simulation
+        # did not run, so this is not a pass.
+        status="warn" if skipped_steps else "pass",
+        diagnostics=[{
+            "severity": "warning",
+            "message": "the generated top level was not simulated — xsim is not on PATH",
+        }] if skipped_steps else [],
         artifacts=artifacts,
         metrics={
             "steps_completed": steps_completed,

@@ -1,6 +1,12 @@
 """forge test — wraps verification preparation and execution.
 
-Three modes:
+``forge test`` on its own tests the ``forge.yml`` project around the working
+directory: it builds the design, then prepares and runs every flow of the
+``design.verification.yml`` that ``verification.config`` names, writing each
+flow's results under ``.forge/reports/test/`` for ``forge report``. A flow
+whose simulator is not installed is reported as skipped, never as passed.
+
+Three modes give direct access to one verification file:
 
 - ``forge test check-only`` — generate + validate stimulus + validate
   layout, no execution. A fixed-mode call into `forge verify prepare`'s
@@ -56,6 +62,11 @@ def _run_prepare(args, *, mode: str) -> None:
     from forge.verification.__main__ import _cmd_prepare
 
     json_mode = getattr(args, "json", False)
+    if args.design_file is None:
+        project = _project_or_exit(json_mode)
+        args.design_file = str(_verification_or_exit(project, json_mode))
+        if args.consumer_root is None:
+            args.consumer_root = str(project.root)
     prepare_ns = argparse.Namespace(
         design_file=args.design_file,
         flow=getattr(args, "flow", None),
@@ -89,6 +100,155 @@ def cmd_prepare(args) -> None:
     prepare`'s `_cmd_prepare`, exposed under the `forge test` golden path
     for discoverability."""
     _run_prepare(args, mode="prepare")
+
+
+# ── the forge.yml project ────────────────────────────────────────────────
+
+def _project_or_exit(json_mode: bool):
+    from forge.project.resolve import resolve_project
+
+    try:
+        return resolve_project(Path.cwd())
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
+
+
+def _verification_or_exit(project, json_mode: bool) -> Path:
+    design = project.verification
+    if design is None:
+        sys.exit(_guided_run_failure(
+            "forge.yml names no verification config, so there is nothing to run",
+            json_mode=json_mode,
+            action="Set verification.config in forge.yml to your design.verification.yml",
+        ))
+    if not design.is_file():
+        sys.exit(_guided_run_failure(
+            f"verification.config in forge.yml names {design}, which does not exist",
+            json_mode=json_mode,
+            action="Correct verification.config in forge.yml",
+        ))
+    return design
+
+
+def cmd_project_test(args) -> None:
+    """`forge test` with no design file: build the project, then prepare and
+    run each flow of its verification config, one line per step."""
+    from forge.core.cli._shared import run_forge_command
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.core.toolchain_versions import tool_present
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.design_contract import load_verify_design
+
+    json_mode = getattr(args, "json", False)
+    project = _project_or_exit(json_mode)
+    design = _verification_or_exit(project, json_mode)
+    try:
+        contract = load_verify_design(design)
+    except Exception as exc:  # noqa: BLE001
+        sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
+
+    flow_name = getattr(args, "flow", None)
+    flows = [f for f in contract.flows if flow_name in (None, f.name)]
+    if not flows:
+        available = ", ".join(f.name for f in contract.flows) or "(none)"
+        sys.exit(_guided_run_failure(
+            f"flow {flow_name!r} not found in {design} (available: {available})",
+            json_mode=json_mode,
+        ))
+
+    def say(line: str) -> None:
+        if not json_mode:
+            print(line)
+
+    def failed_output(output: str) -> None:
+        if output:
+            print(output, end="" if output.endswith("\n") else "\n", file=sys.stderr)
+
+    code, output = run_forge_command(["build"], quiet=True)
+    if code != 0:
+        failed_output(output)
+        sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
+    say(f"  ✅ built {project.paths.relative(project.top_level())}")
+
+    results_dir = project.paths.report_root / "test"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    root = str(project.root)
+    selection: List[str] = []
+    for flag, attr in (("--event-id", "event_id"), ("--event-list", "event_list")):
+        if getattr(args, attr, None):
+            selection += [flag, str(getattr(args, attr))]
+    if getattr(args, "all_events", False):
+        selection.append("--all-events")
+    # The verification file already names its plugin; passing it is what
+    # makes `forge test run` import that plugin's tools/bootstrap.py.
+    plugin = getattr(args, "plugin", None) or contract.plugin
+    if plugin:
+        selection += ["--plugin", plugin]
+
+    passed: List[str] = []
+    failed: List[str] = []
+    skipped: List[str] = []
+    diagnostics: List[Dict[str, Any]] = []
+    artifacts: List[str] = []
+    for flow in flows:
+        results_json = results_dir / f"{flow.name}.results.json"
+        junit_xml = results_dir / f"{flow.name}.junit.xml"
+        for stale in (results_json, junit_xml):
+            stale.unlink(missing_ok=True)
+
+        try:
+            required = get_adapter(flow.backend).required_tools
+        except (ValueError, ImportError, AttributeError, TypeError) as exc:
+            failed.append(flow.name)
+            diagnostics.append({"severity": "error", "message": f"flow {flow.name!r}: {exc}"})
+            say(f"  ❌ {flow.name}: {exc}")
+            continue
+        missing = [tool for tool in required if not tool_present(tool)]
+        if missing:
+            skipped.append(flow.name)
+            diagnostics.append({
+                "severity": "warning",
+                "message": (
+                    f"flow {flow.name!r} not simulated — the {flow.backend} backend "
+                    f"needs {', '.join(missing)} on PATH (run `forge doctor`)"
+                ),
+            })
+            say(f"  ⏭️  {flow.name}: skipped, {', '.join(missing)} not on PATH")
+            continue
+
+        code, output = run_forge_command([
+            "test", "prepare", str(design), "--flow", flow.name, "--consumer-root", root,
+        ], quiet=True)
+        if code == 0:
+            code, output = run_forge_command([
+                "test", "run", str(design), "--flow", flow.name, "--consumer-root", root,
+                "--results-json", str(results_json), "--junit-xml", str(junit_xml),
+                *selection,
+            ], quiet=True)
+        if code != 0:
+            failed.append(flow.name)
+            failed_output(output)
+            diagnostics.append({"severity": "error", "message": f"flow {flow.name!r} failed"})
+            say(f"  ❌ {flow.name}: failed")
+            continue
+        passed.append(flow.name)
+        artifacts += [str(p) for p in (results_json, junit_xml) if p.exists()]
+        say(f"  ✅ {flow.name}: passed")
+
+    if failed:
+        status = "fail"
+    elif skipped:
+        status = "warn"
+    else:
+        status = "pass"
+    envelope = CommandEnvelope(
+        status=status,
+        diagnostics=diagnostics,
+        artifacts=artifacts,
+        metrics={"flows_passed": passed, "flows_failed": failed, "flows_skipped": skipped},
+        next_actions=["Run `forge report` to collect these results"] if passed else [],
+    )
+    sys.exit(emit(envelope, json_mode=json_mode))
 
 
 # ── run ──────────────────────────────────────────────────────────────────
@@ -307,6 +467,15 @@ def cmd_run(args) -> None:
 
     json_mode = getattr(args, "json", False)
     strict = getattr(args, "strict", False)
+    if args.design_file is None:
+        cmd_project_test(args)
+        return
+    if getattr(args, "flow", None) is None:
+        sys.exit(_guided_run_failure(
+            "--flow is required with a design file",
+            json_mode=json_mode,
+            action=f"Name one of the flows in {args.design_file}",
+        ))
     design_path = Path(args.design_file).resolve()
 
     if not design_path.exists():
@@ -596,8 +765,14 @@ def _guided_run_failure(msg: str, *, json_mode: bool, action: Optional[str] = No
 
 # ── registration ─────────────────────────────────────────────────────────
 
+_DESIGN_FILE_HELP = (
+    "Path to design.verification.yml (default: verification.config of the "
+    "forge.yml project around the current directory)"
+)
+
+
 def _add_common_prepare_args(p) -> None:
-    p.add_argument("design_file", help="Path to design.verification.yml")
+    p.add_argument("design_file", nargs="?", default=None, help=_DESIGN_FILE_HELP)
     p.add_argument("--flow", help="Restrict to one flow by name (default: all flows)")
     p.add_argument(
         "--consumer-root",
@@ -610,9 +785,22 @@ def register(sub) -> None:
     """Register the top-level ``forge test`` command group."""
     p_test = sub.add_parser(
         "test",
-        help="Wrap verification preparation and execution (check-only | prepare | run)",
+        help="Build and simulate the forge.yml project (or: check-only | prepare | run)",
     )
-    test_sub = p_test.add_subparsers(dest="test_command", required=True, metavar="MODE")
+    p_test.add_argument("--flow", help="Run only this flow")
+    p_test.add_argument("--event-id", dest="event_id", default=None, help="Run exactly this one event")
+    p_test.add_argument(
+        "--event-list", dest="event_list", default=None,
+        help="Comma-separated event IDs or ranges (e.g. 1,7,10-12)",
+    )
+    p_test.add_argument(
+        "--all-events", dest="all_events", action="store_true", default=False,
+        help="Run every event in the dataset",
+    )
+    p_test.add_argument("--plugin", help="Plugin ID to bootstrap (when flow.plugin is absent from YAML)")
+    p_test.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
+    p_test.set_defaults(func=cmd_project_test)
+    test_sub = p_test.add_subparsers(dest="test_command", metavar="MODE")
 
     p_check = test_sub.add_parser(
         "check-only",
@@ -641,8 +829,11 @@ def register(sub) -> None:
         "run",
         help="Run one flow's selected event(s), one simulation per event, with real per-event results",
     )
-    p_run.add_argument("design_file", help="Path to design.verification.yml")
-    p_run.add_argument("--flow", required=True, help="Flow name to run (see design.verification.yml)")
+    p_run.add_argument("design_file", nargs="?", default=None, help=_DESIGN_FILE_HELP)
+    p_run.add_argument(
+        "--flow",
+        help="Flow name to run (required with a design file; default: every flow of the project)",
+    )
     p_run.add_argument(
         "--consumer-root",
         help="Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)",

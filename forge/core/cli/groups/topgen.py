@@ -224,7 +224,7 @@ def render_maturity_markdown(maturity: dict) -> str:
     ports = maturity.get("ports")
     if ports is None:
         lines.append(
-            "- **ports**: not available (no generator run — see `forge build --apply`"
+            "- **ports**: not available (no generator run — see `forge build`"
             " or `topgen gen-top`)"
         )
     else:
@@ -2746,7 +2746,7 @@ def cmd_init_plugin(args):
     print(f"  1. Run: forge verify init-plugin {plugin_id}   (scaffolds the verify/ half)")
     print(
         f"  2. Run: forge build {design_yml} "
-        f"--contracts-from {modules_yml} --apply --output out/algo_top.v"
+        f"--contracts-from {modules_yml} --output out/algo_top.v"
     )
     print(f"  3. Run: forge test prepare {forge_root / 'verify' / 'design.verification.yml'}")
     print("\n  (or run `forge init` next time to do all of the above in one step)")

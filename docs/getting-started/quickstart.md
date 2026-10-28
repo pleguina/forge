@@ -57,8 +57,9 @@ simulation result.
 
 !!! note "No simulator installed?"
     The simulation stage needs Vivado xsim on `PATH`. Without it that one
-    stage is skipped with a note and everything else still runs, so this
-    command works on a machine that has never had an EDA tool installed.
+    stage is skipped and everything else still runs, so this command works
+    on a machine that has never had an EDA tool installed. Nothing has then
+    checked the generated top level, so the result is `WARN`, not `PASS`.
     `forge doctor` tells you what's missing.
 
 Add `--verbose` to see each underlying stage's full output instead of one

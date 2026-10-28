@@ -1,6 +1,6 @@
 """Real end-to-end coverage for `forge init`
 — the command that unifies the topgen-side and verify-side scaffolders
-and chains validate -> build --apply -> test -> report, all with zero
+and chains validate -> build -> test -> report, all with zero
 manual edits.
 
 The acceptance bar is literal: run `forge
@@ -100,7 +100,7 @@ def test_init_runs_full_chain_with_zero_manual_edits(
     assert "event_0" in (report_dir / "verification_results.md").read_text()
     assert "PASS" in (report_dir / "verification_results.md").read_text()
 
-    # Real, generated build artifacts (not stubs) from the build --apply step.
+    # Real, generated build artifacts (not stubs) from the build step.
     gen_top_dir = tmp_path / "gen-top" / "design_throwaway_plugin"
     assert (gen_top_dir / "algo_top.v").exists()
     assert (gen_top_dir / "build_manifest.json").exists()

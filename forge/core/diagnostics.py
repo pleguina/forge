@@ -36,8 +36,8 @@ ATG030  Project configuration missing or unreadable (no/broken forge.yml)
 ATG031  No source files match the project's source globs
 ATG032  Duplicate module definition (one module name, two files)
 ATG033  Discovered module source no longer exists
-ATG034  No interface contract for a managed module
-ATG035  Interface contract still a draft (semantics unreviewed)
+ATG034  A contract named in forge.yml does not exist
+ATG035  Retired (inferred contracts need no review)
 ATG036  Contract/source drift (contract contradicts the module's own ports)
 ATG037  Ambiguous interface consumer (more than one valid consumer)
 ATG038  No connection resolved between any two managed modules
@@ -46,7 +46,7 @@ ATG040  Several clock candidates — the functional clock needs confirming
 ATG041  Active-low reset, whose polarity generation does not model
 ATG042  Module outside FORGE's supported envelope (e.g. multi-clock)
 ATG043  HLS interfaces predicted but not reconciled against synthesis
-ATG044  Verification not configured, or its dataset is missing
+ATG044  Verification not configured, or its config/dataset is missing
 ATG045  Managed modules declare no latency
 ATG046  Generated artifacts older than their inputs
 ATG047  Module integrated as opaque (structure only, internals unmodelled)

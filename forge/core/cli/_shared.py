@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
+import io
 import os
 import shutil
 import sys
 import traceback
 from pathlib import Path
+from typing import List, Tuple
 
 from forge.core.cli.envelope import status_for_exception
 
@@ -63,6 +66,50 @@ def consumer_root(anchor_path: Path | None = None, explicit_root: Path | None = 
         "TOPGEN_CONSUMER_ROOT, or provide an input path that can anchor "
         "relative defaults."
     )
+
+
+def run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
+    """Run a real `forge <argv>` invocation in-process through the full
+    parser — the same argv a user would type, so every step here is a
+    real command, not a hand-built call into internals.
+
+    Returns ``(exit_code, captured_stdout)``. When *quiet*, the step's own
+    output is captured rather than printed, so a command that chains others
+    (`forge init`, `forge test`) can report one line per stage — and can
+    still show the captured text if that stage fails.
+    """
+    from forge.core.cli.main import build_parser
+
+    parser = build_parser()
+    parsed = parser.parse_args(argv)
+    buffer = io.StringIO()
+    ctx = contextlib.redirect_stdout(buffer) if quiet else contextlib.nullcontext()
+    with ctx:
+        try:
+            result = parsed.func(parsed)
+        except SystemExit as exc:
+            return (0 if exc.code is None else int(exc.code)), buffer.getvalue()
+    return (0 if result is None else int(result)), buffer.getvalue()
+
+
+def resolve_project_args(args):
+    """Point a design-taking command at the ``forge.yml`` project around the
+    working directory.
+
+    Fills ``args.design`` and, where the command has them and the user left
+    them unset, ``args.contracts_from`` and ``args.consumer_root``. Returns
+    the :class:`forge.project.resolve.ResolvedProject`; raises what
+    :func:`forge.project.resolve.resolve_project` raises.
+    """
+    from forge.project.resolve import resolve_project
+
+    project = resolve_project(Path.cwd())
+    args.design = str(project.design)
+    if getattr(args, "contracts_from", None) is None:
+        args.contracts_from = str(project.registry)
+    if hasattr(args, "consumer_root") and args.consumer_root is None:
+        args.consumer_root = str(project.root)
+    return project
 
 
 def resolve_path(

@@ -41,8 +41,25 @@ def cmd_report(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
 
     json_mode = getattr(args, "json", False)
+    output = args.output
+    if args.design is None:
+        from forge.core.cli._shared import resolve_project_args
+
+        try:
+            project = resolve_project_args(args)
+        except (FileNotFoundError, ValueError) as exc:
+            envelope = CommandEnvelope(
+                status="fail", diagnostics=[{"severity": "error", "message": str(exc)}],
+            )
+            sys.exit(emit(envelope, json_mode=json_mode))
+        output = output or str(project.paths.report_root)
+        if getattr(args, "verify_design", None) is None and project.verification is not None:
+            args.verify_design = str(project.verification)
+        project_results = sorted((project.paths.report_root / "test").glob("*.results.json"))
+    else:
+        project_results = []
     design_path = Path(args.design).expanduser().resolve()
-    output_dir = Path(args.output).expanduser().resolve()
+    output_dir = Path(output or "report").expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not design_path.exists():
@@ -184,14 +201,23 @@ def cmd_report(args) -> None:
             render_junit_markdown(Path(junit_xml_path))
         )
         artifacts.append(str(output_dir / "verification_results.md"))
+    elif project_results:
+        import json
+
+        from forge.verification.results import render_results_markdown
+
+        (output_dir / "verification_results.md").write_text("\n".join(
+            render_results_markdown(json.loads(p.read_text())) for p in project_results
+        ))
+        artifacts.append(str(output_dir / "verification_results.md"))
     else:
         (output_dir / "verification_results.md").write_text(
             "# Verification results\n\n"
-            "No verification results yet — run `forge test run --results-json <path>` "
-            "(or `--junit-xml <path>`) and pass that path here.\n"
+            "No verification results yet — run `forge test`, or pass the "
+            "--results-json/--junit-xml of an earlier `forge test run` here.\n"
         )
         artifacts.append(str(output_dir / "verification_results.md"))
-        next_actions.append("No verification results yet — run `forge test run`")
+        next_actions.append("No verification results yet — run `forge test`")
 
     # ── Throughput ────────────────────────────────────────────────────────
     try:
@@ -525,11 +551,17 @@ def register(sub) -> None:
         help="Generate a self-contained report bundle (maturity, latency, "
              "verification, provenance, dashboard)",
     )
-    p.add_argument("design", help="Path to design.yml")
+    p.add_argument(
+        "design", nargs="?", default=None,
+        help="Path to design.yml (default: the forge.yml project around the current directory)",
+    )
     p.add_argument("--contracts-from", help="Path to modules.yml (interface_contract: entries)")
     p.add_argument("--ip-info", help="Path to a pre-built ip_info.yaml (optional)")
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
-    p.add_argument("--output", "-o", default="report", help="Report output directory (default: ./report)")
+    p.add_argument(
+        "--output", "-o", default=None,
+        help="Report output directory (default: .forge/reports in a forge.yml project, else ./report)",
+    )
     p.add_argument("--hls-build-root", help="build_hls root for the HLS summary section (optional)")
     p.add_argument("--solution", default="solution1", help="HLS solution name (default: solution1)")
     p.add_argument("--probe-csv", help="Probe CSV for the runtime-latency section (optional)")

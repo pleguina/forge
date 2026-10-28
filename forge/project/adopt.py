@@ -103,7 +103,7 @@ def plan_adoption(
     root: "Path | str",
     *,
     project_name: Optional[str] = None,
-    part: str = DEFAULT_PART,
+    part: Optional[str] = None,
     discovery: Optional[DiscoveryResult] = None,
 ) -> AdoptionPlan:
     """Work out the whole adoption without touching the filesystem.
@@ -111,12 +111,14 @@ def plan_adoption(
     Args:
         root: Repository to adopt.
         project_name: Overrides the directory name.
-        part: Target device. Not inferable from sources — a project adopted
-            without one gets a documented placeholder, not a silent guess.
+        part: Target device. Not inferable from sources — without one, an
+            existing ``forge.yml``'s part is kept, and a new project gets a
+            documented placeholder, not a silent guess.
         discovery: A scan already performed, to avoid walking twice.
     """
     root_path = Path(root).expanduser().resolve()
-    decided = _declared_decisions(root_path)
+    existing = _existing_config(root_path)
+    decided = existing.decisions() if existing else ProjectDecisions()
     if discovery is None:
         # Re-adopting a project reads back every decision the sources cannot
         # state — which modules are opaque, which clock drives the design,
@@ -126,34 +128,63 @@ def plan_adoption(
     result = discovery
 
     config = _build_config(
-        root_path, result, project_name=project_name, part=part, decided=decided,
+        root_path, result, project_name=project_name, part=part,
+        decided=decided, existing=existing,
     )
-    paths = config.paths()
 
     plan = AdoptionPlan(root=root_path, config=config, discovery=result)
+    plan.files[config.paths().config] = config.to_yaml()
+    _plan_state_files(plan)
+    return plan
+
+
+def plan_derived_state(config: ForgeConfig) -> AdoptionPlan:
+    """Everything under ``.forge/`` that *config* and the sources determine.
+
+    Unlike :func:`plan_adoption`, the configuration is taken as given: this
+    is what every command runs before it reads ``.forge/``, so an edit to
+    ``forge.yml`` or to a source takes effect without re-adopting, and a
+    deleted ``.forge/`` is simply written again.
+    """
+    result = ProjectDiscovery(decisions=config.decisions()).scan(config.root)
+    plan = AdoptionPlan(root=config.root, config=config, discovery=result)
+    _plan_state_files(plan)
+    return plan
+
+
+def _plan_state_files(plan: AdoptionPlan) -> None:
+    config, result = plan.config, plan.discovery
+    paths = config.paths()
     plan.unresolved = list(result.blocking_ambiguities) + list(result.unsupported)
     plan.skipped_modules = sorted(
         u.name for u in result.units if u.unsupported
     )
 
     managed = result.managed_units
-    plan.files[paths.config] = config.to_yaml()
     if managed:
         plan.files[paths.modules_yml] = _render_modules_yml(config, paths, managed, result)
         plan.files[paths.design_yml] = _render_design_yml(config, managed, result)
         for unit in managed:
-            plan.files[paths.contract_root / f"{unit.name}.interface.yaml"] = (
-                _render_contract(unit)
-            )
+            if _user_contract(config, unit.name) is None:
+                plan.files[paths.contract_root / f"{unit.name}.interface.yaml"] = (
+                    _render_contract(unit)
+                )
     plan.files[paths.state_root / ".gitignore"] = _STATE_GITIGNORE
     plan.decisions = _decision_log(config, result)
-    return plan
+
+
+def _user_contract(config: ForgeConfig, module: str) -> Optional[Path]:
+    """The contract ``forge.yml`` names for *module*, if it names one."""
+    policy = config.modules.get(module)
+    if policy is None or not policy.contract:
+        return None
+    return (config.root / policy.contract).resolve()
 
 
 # ── forge.yml ─────────────────────────────────────────────────────────────
 
-def _declared_decisions(root: Path) -> ProjectDecisions:
-    """Every decision an existing ``forge.yml`` records.
+def _existing_config(root: Path) -> Optional[ForgeConfig]:
+    """The project's current ``forge.yml``, if it has a readable one.
 
     Best-effort: a project with no config, or one that will not parse, has
     declared nothing. ``forge check`` is where a broken config is reported —
@@ -161,9 +192,9 @@ def _declared_decisions(root: Path) -> ProjectDecisions:
     someone does to repair a project.
     """
     try:
-        return ForgeConfig.load(root / ROOT_CONFIG_NAME).decisions()
+        return ForgeConfig.load(root / ROOT_CONFIG_NAME)
     except Exception:  # noqa: BLE001
-        return ProjectDecisions()
+        return None
 
 
 def _build_config(
@@ -171,8 +202,9 @@ def _build_config(
     result: DiscoveryResult,
     *,
     project_name: Optional[str],
-    part: str,
+    part: Optional[str],
     decided: Optional[ProjectDecisions] = None,
+    existing: Optional[ForgeConfig] = None,
 ) -> ForgeConfig:
     """Derive the root config from what discovery found.
 
@@ -206,12 +238,20 @@ def _build_config(
         found = reset_candidates[0]
         reset = ResetSpec(port=found.name, active="low" if found.active_low else "high")
 
+    if existing is not None:
+        # The rate and the polarity are the user's to state; a port name
+        # only suggests them.
+        if existing.clock.port == clock.port:
+            clock = existing.clock
+        if existing.reset.port == reset.port:
+            reset = existing.reset
+
     return ForgeConfig(
-        project=project_name or _slug(root.name),
+        project=project_name or (existing.project if existing else _slug(root.name)),
         root=root,
         # Carried through verbatim: this is user intent, and adoption
         # regenerates everything *except* what the user decided.
-        modules=_module_policies(result, decided),
+        modules=_module_policies(result, decided, existing),
         # Answers, carried through verbatim for the same reason: a decision
         # the user made once must survive every re-adoption.
         connections=[
@@ -222,30 +262,41 @@ def _build_config(
         top=decided.top or result.structural_top,
         clock=clock,
         reset=reset,
-        part=part,
+        part=part or (existing.part if existing else DEFAULT_PART),
+        dataset=existing.dataset if existing else None,
+        verification_config=existing.verification_config if existing else None,
         schema_version=FORGE_YML_SCHEMA_VERSION,
     )
 
 
 def _module_policies(
-    result: DiscoveryResult, decided: ProjectDecisions,
+    result: DiscoveryResult,
+    decided: ProjectDecisions,
+    existing: Optional[ForgeConfig] = None,
 ) -> Dict[str, ModulePolicy]:
     """The ``modules:`` block: what the user decided about each module.
 
-    Two kinds of intent live here, and both are the user's: which modules
-    are opaque (carried through from the previous config via
-    ``result.opaque_units``) and which function is an HLS kernel's top.
+    Opacity is carried through from the previous config via
+    ``result.opaque_units``, an HLS kernel's top via *decided*, and a
+    module's latency and own contract straight from *existing*.
     """
     policies: Dict[str, ModulePolicy] = {
         name: ModulePolicy(management=MANAGEMENT_OPAQUE)
         for name in sorted(unit.name for unit in result.opaque_units)
     }
     for name, top in sorted(decided.hls_tops.items()):
-        existing = policies.get(name)
+        current = policies.get(name)
         policies[name] = ModulePolicy(
-            management=existing.management if existing else MANAGEMENT_MANAGED,
+            management=current.management if current else MANAGEMENT_MANAGED,
             top=top,
         )
+    if existing is not None:
+        for name, previous in sorted(existing.modules.items()):
+            if previous.latency is None and not previous.contract:
+                continue
+            current = policies.setdefault(name, ModulePolicy())
+            current.latency = previous.latency
+            current.contract = previous.contract
     return policies
 
 
@@ -289,24 +340,32 @@ def _render_modules_yml(
 ) -> str:
     """The expanded module registry.
 
-    Every field here is derived: the language from the file suffix, the top
-    from the module's own declaration, the source path from where the file
-    was found. No ``latency_hint`` is emitted — latency is a property of the
-    implementation that no port list reveals, and a fabricated one would
+    The language comes from the file suffix, the top from the module's own
+    declaration, the source path from where the file was found. Latency is
+    a property of the implementation that no port list reveals, so it is
+    written only when ``forge.yml`` declares it — a fabricated one would
     silently corrupt the latency check.
     """
     import yaml
 
     modules: List[Dict[str, Any]] = []
     for unit in managed:
+        own_contract = _user_contract(config, unit.name)
         entry: Dict[str, Any] = {
             "name": unit.name,
             "kind": "rtl",
             "rtl_lang": "vhdl" if unit.language == "vhdl" else "verilog",
             "top": unit.name,
-            "interface_contract": f"../contracts/{unit.name}.interface.yaml",
+            "interface_contract": (
+                _relative_to(own_contract, paths.project_config_root)
+                if own_contract is not None
+                else f"../contracts/{unit.name}.interface.yaml"
+            ),
             "src": [_relative_to(unit.path, paths.project_config_root)],
         }
+        policy = config.modules.get(unit.name)
+        if policy is not None and policy.latency is not None:
+            entry["latency"] = dict(policy.latency)
         modules.append(entry)
         if unit.opaque:
             # Recorded for the reader of the generated registry, who would
@@ -533,19 +592,18 @@ _GENERATED_HEADER = """\
 # ─────────────────────────────────────────────────────────────────────────
 # {project} — {what} (generated)
 # ─────────────────────────────────────────────────────────────────────────
-# Generated by `forge adopt` from the project's own sources. Edits here are
-# overwritten on the next adopt; change forge.yml instead, or move a
-# decision you want to keep into it.
+# Generated from forge.yml and the project's own sources. Every forge
+# command rewrites this file; change forge.yml instead.
 #
-# Every field below was read from a source file. Nothing FORGE could not
-# determine has been filled in with a guess — run `forge check` for the
+# Every field below was read from a source file or from forge.yml.
+# Nothing FORGE could not determine has been filled in with a guess — run `forge check` for the
 # decisions still outstanding.
 # ─────────────────────────────────────────────────────────────────────────
 """
 
 _STATE_GITIGNORE = """\
 # Everything under .forge/ is generated from forge.yml and the project's
-# sources, and can be regenerated with `forge adopt`. Nothing here is
+# sources, and every forge command regenerates it. Nothing here is
 # authored, so nothing here needs to be committed.
 *
 """

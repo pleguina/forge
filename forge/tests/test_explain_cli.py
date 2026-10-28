@@ -147,11 +147,11 @@ def test_a_diagnostic_code_works_outside_any_project(tmp_path: Path) -> None:
 
 
 def test_inside_a_project_a_code_also_reports_where_it_fired(adopted: Path) -> None:
-    explanation = explain("ATG035", adopted)
+    explanation = explain("ATG045", adopted)
     occurrences = next(s for s in explanation.sections if s.heading == "In this project")
 
-    assert len(occurrences.lines) == 3
-    assert all("draft" in line for line in occurrences.lines)
+    assert len(occurrences.lines) == 1
+    assert "declare no latency" in occurrences.lines[0]
 
 
 def test_an_unknown_code_is_refused_rather_than_invented(tmp_path: Path) -> None:

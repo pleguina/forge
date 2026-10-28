@@ -156,10 +156,8 @@ def _endpoint(value: Any, *, field_name: str, source: Any) -> str:
 class ModulePolicy:
     """How the user wants one specific module handled.
 
-    The only per-module intent ``forge.yml`` carries. Everything else about a
-    module is derived from its source; this is the one thing no source can
-    state, because it is a decision about how much of the module FORGE
-    should claim to understand.
+    Everything else about a module is derived from its source; these are the
+    facts and decisions no port list can state.
     """
 
     management: str = MANAGEMENT_MANAGED
@@ -167,6 +165,12 @@ class ModulePolicy:
     #: named after the file: which one is the kernel top. Absent for every
     #: module whose top its source already proves.
     top: Optional[str] = None
+    #: The module registry's ``latency:`` block, e.g. ``{kind: fixed,
+    #: cycles: 3}``. ``latency: 3`` in ``forge.yml`` is read as fixed.
+    latency: Optional[Dict[str, Any]] = None
+    #: A user-maintained interface contract, relative to the project root,
+    #: used instead of the one inferred from the module's ports.
+    contract: Optional[str] = None
 
     @property
     def opaque(self) -> bool:
@@ -176,7 +180,35 @@ class ModulePolicy:
         out: Dict[str, Any] = {"management": self.management}
         if self.top:
             out["top"] = self.top
+        if self.latency is not None:
+            if self.latency.get("kind") == "fixed" and set(self.latency) == {"kind", "cycles"}:
+                out["latency"] = self.latency["cycles"]
+            else:
+                out["latency"] = dict(self.latency)
+        if self.contract:
+            out["contract"] = self.contract
         return out
+
+
+def _latency(value: Any, *, module: str, source: Any) -> Dict[str, Any]:
+    """Normalise a ``modules.<name>.latency`` entry to the registry's form."""
+    from forge.contracts.config import LatencyDeclaration
+
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        block: Dict[str, Any] = {"kind": "fixed", "cycles": value}
+    elif isinstance(value, dict):
+        block = dict(value)
+    else:
+        raise ValueError(
+            f"{source}: module {module!r} latency must be a cycle count "
+            f"(e.g. `latency: 3`) or a mapping such as "
+            f"`latency: {{kind: bounded, min_cycles: 2, max_cycles: 4}}`"
+        )
+    try:
+        LatencyDeclaration(**block)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{source}: module {module!r} latency: {exc}") from exc
+    return block
 
 
 @dataclass(frozen=True)
@@ -226,6 +258,8 @@ class ForgeConfig:
         clock / reset: See :class:`ClockSpec` / :class:`ResetSpec`.
         part: Target device.
         dataset: Verification dataset path, when one is configured.
+        verification_config: The user's ``design.verification.yml``,
+            relative to ``root``, which ``forge test`` runs.
         modules: Per-module handling, by module name. Only modules the user
             has said something about appear; everything else is managed.
         connections: Producer/consumer pairs the user has decided on, for
@@ -247,6 +281,7 @@ class ForgeConfig:
     reset: ResetSpec = field(default_factory=ResetSpec)
     part: str = DEFAULT_PART
     dataset: Optional[str] = None
+    verification_config: Optional[str] = None
     modules: Dict[str, ModulePolicy] = field(default_factory=dict)
     #: Connections the user has decided on, where discovery found more than
     #: one equally valid reading. See :class:`DeclaredConnection`.
@@ -307,9 +342,15 @@ class ForgeConfig:
                     f"{management!r}; must be one of {MANAGEMENT_KINDS}"
                 )
             top = fields.get("top")
+            contract = fields.get("contract")
             modules[str(name)] = ModulePolicy(
                 management=management,
                 top=str(top) if top else None,
+                latency=(
+                    _latency(fields["latency"], module=str(name), source=config_path)
+                    if fields.get("latency") is not None else None
+                ),
+                contract=str(contract) if contract else None,
             )
 
         connections_raw = raw.get("connections") or []
@@ -347,6 +388,9 @@ class ForgeConfig:
             ),
             part=str(raw.get("part") or DEFAULT_PART),
             dataset=str(verification_raw["dataset"]) if verification_raw.get("dataset") else None,
+            verification_config=(
+                str(verification_raw["config"]) if verification_raw.get("config") else None
+            ),
             modules=modules,
             connections=connections,
             schema_version=str(raw.get("schema_version") or FORGE_YML_SCHEMA_VERSION),
@@ -374,8 +418,13 @@ class ForgeConfig:
         out["part"] = self.part
         out["clock"] = self.clock.to_dict()
         out["reset"] = self.reset.to_dict()
+        verification: Dict[str, Any] = {}
         if self.dataset:
-            out["verification"] = {"dataset": self.dataset}
+            verification["dataset"] = self.dataset
+        if self.verification_config:
+            verification["config"] = self.verification_config
+        if verification:
+            out["verification"] = verification
         if self.modules:
             out["modules"] = {
                 name: policy.to_dict() for name, policy in sorted(self.modules.items())
@@ -397,14 +446,20 @@ class ForgeConfig:
         header = (
             f"# {self.project} — FORGE project\n"
             f"#\n"
-            f"# This is the only file you maintain by hand. Everything FORGE\n"
-            f"# resolves from it — the module registry, the design topology and\n"
-            f"# the interface contracts — is generated under .forge/ and can be\n"
-            f"# deleted and regenerated at any time.\n"
+            f"# Your decisions about the design live here, or in files this one\n"
+            f"# names. Everything FORGE derives from it and from the sources —\n"
+            f"# the module registry, the design topology and the inferred\n"
+            f"# interface contracts — is written under .forge/ and can be\n"
+            f"# deleted at any time; every command regenerates it.\n"
             f"#\n"
             f"#   forge check    what is missing or inconsistent\n"
-            f"#   forge next     the one thing to do next\n"
             f"#   forge build    generate the structural top level\n"
+            f"#   forge test     simulate it against verification.config\n"
+            f"#   forge report   collect the results\n"
+            f"#\n"
+            f"# Per module: `modules: {{<name>: {{latency: 3}}}}` declares a fixed\n"
+            f"# latency in cycles; `contract: <path>` uses your own interface\n"
+            f"# contract instead of the inferred one.\n"
             f"#\n"
         )
         return header + body

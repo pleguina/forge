@@ -288,8 +288,9 @@ def register(sub) -> None:
                    help="Project name (default: the directory name)")
     from forge.project.config import DEFAULT_PART
 
-    p.add_argument("--part", default=DEFAULT_PART,
-                   help=f"Target device (default: {DEFAULT_PART}, a placeholder you can change later)")
+    p.add_argument("--part", default=None,
+                   help=(f"Target device (default: the part already in forge.yml, else "
+                         f"{DEFAULT_PART}, a placeholder you can change later)"))
     p.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                    help="Show what would be written without writing it")
     p.add_argument("--force", action="store_true", default=False,

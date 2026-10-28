@@ -228,7 +228,7 @@ NEXT_CMD="$(python3 - "${NEXT_JSON}" <<'EOF'
 import json, sys
 action = json.load(open(sys.argv[1]))["metrics"]["recommended_action"]
 command = action["command"] or ""
-if not command.startswith("forge build "):
+if command != "forge build":
     print(f"unexpected recommendation: {action}", file=sys.stderr)
     sys.exit(1)
 print(command)
@@ -316,9 +316,7 @@ printf '\nmodules:\n  axi_bridge:\n    management: opaque\n' >> "${PERIPH}/forge
 forge adopt "${PERIPH}" > /dev/null
 grep -q "axi_bridge" "${PERIPH}/.forge/project/modules.yml" \
     || fail "a module declared opaque was still left out of the design"
-( cd "${PERIPH}" && forge build .forge/project/design.yml \
-    --contracts-from .forge/project/modules.yml --consumer-root . \
-    --output .forge/generated/algo_top.v --apply > /dev/null )
+( cd "${PERIPH}" && forge build > /dev/null )
 for clock in s_axi_aclk m_axi_aclk ref_clk; do
     grep -q "\.${clock}(axi_bridge_${clock})" "${PERIPH}/.forge/generated/algo_top.v" \
         || fail "opaque module's ${clock} was not routed to the top level"

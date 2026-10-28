@@ -1,31 +1,27 @@
-"""forge build — deterministic generation plan.
+"""forge build — compute the generation plan, then generate.
 
-``forge build design.yml`` computes and prints a ``GenerationPlan``
-(inferred/explicit connections, generated transformations, latency
-changes, matching evidence, compatibility-mode use, unresolved issues,
-output artifacts) without writing anything — the same read-only guarantee
-``forge inspect``/``gen-top --dry-run`` already provide, reusing
-``forge.core.cli.groups.topgen.compute_gen_top_plan`` (the same compute
-phase ``gen-top`` itself uses) with ``read_only=True`` unconditionally.
-
-``--apply`` performs the real generation by delegating to
-``topgen.cmd_gen_top`` directly — this reuses 100% of gen-top's existing
-write logic (artifact generation, manifests, testbenches, IR snapshot,
-tie-off/top-port attachment, lint) with zero duplication here.
+``forge build`` with no design argument builds the ``forge.yml`` project it
+is run in (see :mod:`forge.project.resolve`); ``forge build design.yml``
+builds that design. Either way it first computes and prints a
+``GenerationPlan`` (inferred/explicit connections, generated
+transformations, latency changes, matching evidence, compatibility-mode
+use, unresolved issues, output artifacts) through
+``forge.core.cli.groups.topgen.compute_gen_top_plan`` with
+``read_only=True``, then generates by delegating to
+``topgen.cmd_gen_top``. ``--dry-run`` stops after the plan.
 
 ``--accept-plan-hash <hash>`` is a CI gate: exit 1 if the freshly computed
-plan's hash doesn't match. No CI *pipeline* is implemented — this is just
-the flag/exit-code contract any CI runner can already invoke.
+plan's hash doesn't match.
 
-Scope note: this command intentionally exposes a smaller flag surface
-than ``gen-top`` (no ``--bd-name``/``--gen-testbench``/``--xml-stimulus``/
-``--lint`` knobs) — a deliberate v1 choice, not an oversight. ``--apply``
-fills in gen-top's defaults for those when delegating.
+This command exposes a smaller flag surface than ``gen-top`` (no
+``--bd-name``/``--gen-testbench``/``--xml-stimulus``/``--lint`` knobs);
+gen-top's defaults fill those in when delegating.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -124,6 +120,15 @@ def cmd_build(args) -> None:
 
     json_mode = getattr(args, "json", False)
     strict = getattr(args, "strict", False)
+    if args.design is None:
+        from forge.core.cli._shared import resolve_project_args
+
+        try:
+            project = resolve_project_args(args)
+        except (FileNotFoundError, ValueError) as e:
+            sys.exit(_guided_failure(str(e), json_mode=json_mode))
+        if args.output is None:
+            args.output = str(project.top_level(args.mode, args.top_name))
     design_path = Path(args.design).expanduser().resolve()
 
     if not design_path.exists():
@@ -202,7 +207,11 @@ def cmd_build(args) -> None:
 
     artifacts = list(plan.output_artifacts)
 
-    if getattr(args, "provenance", None):
+    def write_requested_provenance() -> None:
+        # Written last: generation writes a provenance.json of its own next
+        # to the output, which would replace this one at the same path.
+        if not getattr(args, "provenance", None):
+            return
         from forge.ir.provenance import build_provenance, write_provenance
 
         prov_path = Path(args.provenance).expanduser().resolve()
@@ -210,7 +219,7 @@ def cmd_build(args) -> None:
             ctx.project,
             command_options=_build_command_options(args),
             plan_hash=h,
-            output_paths=artifacts,
+            output_paths=list(plan.output_artifacts),
             project_identity=ctx.c_root.name or None,
         ))
         artifacts.append(str(prov_path))
@@ -261,23 +270,39 @@ def cmd_build(args) -> None:
         },
     )
 
-    if json_mode:
-        exit_code = emit(envelope, json_mode=True)
-    else:
+    if not json_mode:
         _print_plan_human(plan, h, envelope)
-        exit_code = envelope.exit_code()
 
-    if getattr(args, "apply", False):
-        if not json_mode:
-            # How `build` is implemented internally (it reuses gen-top's
-            # compute+emit path) is not something to teach the user at the
-            # moment they're succeeding with `build`.
-            print("\n▶ Applying — generating …\n")
-        ns = _gen_top_namespace_from_build_args(args)
-        topgen.cmd_gen_top(ns)  # SystemExit propagates: forge build's own exit code IS this one
-        return
+    if getattr(args, "dry_run", False) or status == "fail":
+        write_requested_provenance()
+        if json_mode:
+            sys.exit(emit(envelope, json_mode=True))
+        sys.exit(envelope.exit_code())
 
-    sys.exit(exit_code)
+    if not json_mode:
+        print("\n▶ Generating …\n")
+    ns = _gen_top_namespace_from_build_args(args)
+    # gen-top narrates on stdout; under --json that would break the one
+    # JSON document stdout must hold, so it goes to stderr instead.
+    narration = contextlib.redirect_stdout(sys.stderr) if json_mode else contextlib.nullcontext()
+    generated = 0
+    with narration:
+        try:
+            topgen.cmd_gen_top(ns)
+        except SystemExit as exc:
+            generated = 0 if exc.code is None else int(exc.code)
+
+    if generated != 0:
+        envelope.status = "fail"
+        envelope.diagnostics.append({
+            "severity": "error", "code": None, "category": "generation",
+            "message": "generation failed (see the messages above)",
+        })
+    else:
+        write_requested_provenance()
+    if json_mode:
+        sys.exit(emit(envelope, json_mode=True))
+    sys.exit(envelope.exit_code())
 
 
 def _planned_output_artifacts(ctx, args) -> List[str]:
@@ -365,9 +390,12 @@ def register(sub) -> None:
     """Register the top-level ``forge build`` command."""
     p = sub.add_parser(
         "build",
-        help="Compute (and optionally apply) a deterministic generation plan",
+        help="Generate the structural top level (--dry-run: print the plan only)",
     )
-    p.add_argument("design", help="Path to design.yml")
+    p.add_argument(
+        "design", nargs="?", default=None,
+        help="Path to design.yml (default: the forge.yml project around the current directory)",
+    )
     p.add_argument(
         "--mode", choices=["vhdl", "verilog", "bd"], default="verilog",
         help="Output mode: vhdl, verilog, or bd (Block Design TCL)",
@@ -389,21 +417,12 @@ def register(sub) -> None:
         "--rtl-resource-root", help="Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}",
     )
     p.add_argument(
-        "--plan", action="store_true", default=True,
-        help="Compute and print the generation plan (the default behavior — "
-             "this flag exists for symmetry with --apply). Equivalent to "
-             "--dry-run: both mean 'never write, plan only'.",
+        "--dry-run", "--plan", dest="dry_run", action="store_true", default=False,
+        help="Compute and print the generation plan only; write nothing",
     )
-    p.add_argument(
-        "--dry-run", dest="apply", action="store_false", default=argparse.SUPPRESS,
-        help="Alias for omitting --apply: compute the plan only, write nothing "
-             "(this is already the default). Matches `gen-top --dry-run`'s "
-             "meaning — see docs/development/cli_exit_codes.md.",
-    )
-    p.add_argument(
-        "--apply", action="store_true", default=False,
-        help="After computing the plan, generate for real (delegates to `topgen gen-top`)",
-    )
+    # Generation is the default; --apply is still accepted so existing
+    # command lines keep working.
+    p.add_argument("--apply", action="store_true", default=False, help=argparse.SUPPRESS)
     p.add_argument(
         "--strict", action="store_true", default=False,
         help="Fail if the plan would trigger any of `gen-top --strict`'s violations "

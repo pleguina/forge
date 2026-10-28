@@ -41,8 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
   fix         Apply the repairs this project's own sources prove
   migrate     Bring a project up to the schemas this FORGE understands
   inspect     Resolve a design into the canonical IR and read it back (read-only)
-  build       Generate the structural top level from a design
-  test        Prepare and run a design's verification flows
+  build       Generate the structural top level
+  test        Build the design and run its verification flows
   report      Collect topology, latency and results into one report bundle
   doctor      Check the local forge install/environment
 
@@ -50,7 +50,8 @@ Starting from nothing, `forge init my_plugin` takes an empty directory to a
 generated top level, a passing simulation and an HTML dashboard in one
 command. Starting from a repository you already have, `forge adopt .` reads
 it and builds the project model from its own sources — then `forge check`
-and `forge next` tell you what is left to decide.
+and `forge next` tell you what is left to decide. Inside a forge.yml project,
+`forge build`, `forge test` and `forge report` need no arguments.
 
 Direct stage access — the individual stages the commands above orchestrate.
 Reach for these when you need a flag or a stage the golden path doesn't expose:
@@ -78,10 +79,11 @@ Examples — the golden path:
   forge fix --apply
   forge migrate
   forge doctor
-  forge inspect design.yml --contracts-from modules.yml
-  forge build design.yml --contracts-from modules.yml --apply --output algo_top.v
+  forge build
+  forge test
+  forge report
+  forge build design.yml --contracts-from modules.yml --output algo_top.v
   forge test run design.verification.yml --flow my_flow_xsim --event-id 0
-  forge report design.yml --contracts-from modules.yml --output out/report
 
 Examples — direct stage access:
   forge inspect design.yml --emit-ir build/forge/design.ir.json

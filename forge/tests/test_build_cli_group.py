@@ -63,13 +63,13 @@ def test_build_registered_as_top_level_command() -> None:
     assert parsed.func.__name__ == "cmd_build"
 
 
-def test_plan_writes_zero_files(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    """--plan (the default) must never write — same read-only guarantee as
+def test_dry_run_writes_zero_files(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    """--dry-run must never write — same read-only guarantee as
     `forge inspect`/`gen-top --dry-run`."""
     before = _tree_snapshot(tmp_path)
     result = _run_build(
         capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
-        "--output", str(tmp_path / "algo_top.v"),
+        "--output", str(tmp_path / "algo_top.v"), "--dry-run",
     )
     after = _tree_snapshot(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -440,13 +440,13 @@ def test_strict_flags_compat_mode_module_that_plain_plan_only_warns_on(
 def test_dry_run_is_a_true_alias_for_plan_only(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """--dry-run must behave identically to omitting --apply (today's
-    default) — same plan_hash, same exit code, nothing written."""
+    """--dry-run and --plan behave identically — same plan_hash, same exit
+    code, nothing written."""
     before = _tree_snapshot(tmp_path)
 
     default_result = _run_build(
         capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
-        "--output", str(tmp_path / "algo_top.v"), "--json",
+        "--output", str(tmp_path / "algo_top.v"), "--plan", "--json",
     )
     dry_run_result = _run_build(
         capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
