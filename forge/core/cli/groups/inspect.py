@@ -43,7 +43,7 @@ def _guided_failure(msg: str, *, json_mode: bool) -> "int":
 
 def cmd_inspect(args):
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.core.cli.groups.topgen import _compute_maturity_summary
+    from forge.generation.artifacts import compute_maturity_summary
     from forge.ir import (
         build_project_ir_with_match_report, content_hash, diff_projects, to_json_dict,
     )
@@ -82,7 +82,7 @@ def cmd_inspect(args):
     # honestly absent (None) rather than fabricated. Module/connection/
     # wiring-method counts are knowable pre-generation and always populate.
     ir_hash = content_hash(project)
-    maturity = _compute_maturity_summary(
+    maturity = compute_maturity_summary(
         cfg, match_report, ir_content_hash=ir_hash,
     )
 

@@ -158,7 +158,7 @@ class ResolvedModuleDefinition:
     # The stored list is sorted by ``name`` for reproducible
     # hashing/diffing; this travels with each object so a consumer that
     # must reproduce declaration order (the build manifest's compile-file
-    # ordering — see ``forge.core.cli.groups.topgen.generate_build_manifest``)
+    # ordering — see ``forge.generation.artifacts.generate_build_manifest``)
     # can, without the IR having to give up its own stable sort. Exactly
     # the role ``ResolvedConnection.emission_order`` already plays for
     # connections.

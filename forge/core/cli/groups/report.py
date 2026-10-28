@@ -3,7 +3,7 @@
 This is a thin wrapper, not new rendering logic: every section reuses a
 renderer that already exists elsewhere in the codebase —
 
-- maturity/compatibility: `topgen._compute_maturity_summary`/
+- maturity/compatibility: `forge.generation.artifacts.compute_maturity_summary`/
   `render_maturity_markdown` (shared helper).
 - latency check: `forge.analysis.latency_static` (graph/checker/reporter).
 - HLS summary: `forge.analysis.hls_reports` (extractor/formatter) — only
@@ -339,7 +339,7 @@ def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
 
 
 def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[str, Any]:
-    from forge.core.cli.groups.topgen import _compute_maturity_summary, render_maturity_markdown
+    from forge.generation.artifacts import compute_maturity_summary, render_maturity_markdown
     from forge.ir import build_project_ir_with_match_report
 
     from forge.ir import content_hash
@@ -350,7 +350,7 @@ def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[st
         ip_info=getattr(args, "ip_info", None),
         build_dir=getattr(args, "build_dir", None),
     )
-    maturity = _compute_maturity_summary(
+    maturity = compute_maturity_summary(
         cfg, match_report, ir_content_hash=content_hash(project),
     )
     (output_dir / "maturity.md").write_text(render_maturity_markdown(maturity))

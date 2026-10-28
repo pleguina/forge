@@ -442,7 +442,7 @@ def test_build_manifest_includes_cdc_sync2ff_when_declared(tmp_path):
     """generate_build_manifest must include the framework's packaged
     cdc_sync2ff.v (forge/rtl/support/) when a connection declares
     cdc: {kind: 2ff_sync} — and must NOT include it when nothing does."""
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
 
@@ -479,7 +479,7 @@ def test_build_manifest_prefers_a_plugin_provided_support_module(tmp_path):
     """A design that already compiles its own cdc_sync2ff.v (a module whose
     src is a file of that name) keeps it — the framework copy is not added
     as well, which would define the same module twice."""
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
     own = Module(name="own_sync", top="cdc_sync2ff", src=["cdc_sync2ff.v"])
@@ -523,7 +523,7 @@ def test_build_manifest_resolves_hls_build_dir_by_ip_info_key_not_instance_name(
     instead of fabricating a synthetic one."""
     import json
 
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
     from forge.ir.build import build_project_ir
 
     project = build_project_ir(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
@@ -561,7 +561,7 @@ def test_build_manifest_omits_support_rtl_for_an_unwired_declaration(tmp_path):
     generates no synchronizer instance — so its RTL must not be in the
     compile list either. The manifest used to scan the raw design config
     and add it anyway; reading the resolved IR is what closes that gap."""
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
 
@@ -585,7 +585,7 @@ def test_build_manifest_records_the_ir_it_was_built_from(tmp_path):
     """Phase G4: a generated report records the IR hash it was built from
     — the manifest's compile list and `design.ir.json` must be traceable to
     the same resolved design."""
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
     from forge.ir.serialize import content_hash
 
     src, dst = _two_rtl_modules(tmp_path)
@@ -617,7 +617,7 @@ def test_build_manifest_includes_new_cdc_primitives_when_declared(tmp_path, kind
     """The 3 new CDC kinds' packaged RTL files must be
     included the same way cdc_sync2ff.v already is, and must NOT be
     included when nothing declares that kind."""
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
 
     src, dst = _two_rtl_modules(tmp_path)
 
@@ -656,7 +656,7 @@ def test_build_manifest_includes_cdc_reset_sync_when_declared(tmp_path):
     declared domain reaches the manifest through the IR even when no
     instance resolved into it (which is the real reference-design case:
     the synchronizer is generated for the domain, not for an instance)."""
-    from forge.core.cli.groups.topgen import generate_build_manifest
+    from forge.generation.artifacts import generate_build_manifest
 
     mod = Module(name="mod", top="mod_top", src=["mod.v"])
     (tmp_path / "mod.v").write_text("module mod_top(); endmodule\n")

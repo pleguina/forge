@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import copy
 import io
 import os
 import shutil
@@ -156,31 +155,6 @@ def remove_path(path: Path, removed: list[Path]) -> None:
     else:
         path.unlink()
     removed.append(path)
-
-
-# ---------------------------------------------------------------------------
-# Pattern helpers (used by topgen port filtering and port-map)
-# ---------------------------------------------------------------------------
-
-def match_patterns(name: str, patterns: list[str]) -> bool:
-    import re as _re
-    return any(_re.search(pattern, name) for pattern in patterns or [])
-
-
-def numeric_suffix_key(name: str) -> tuple[int, str]:
-    import re as _re
-    match = _re.search(r'_(\d+)(?:_|$)', name)
-    return (int(match.group(1)), name) if match else (0, name)
-
-
-def sort_entries(entries: list[dict], sort_mode: str | None) -> list[dict]:
-    if sort_mode == "numeric_suffix":
-        return sorted(entries, key=lambda e: numeric_suffix_key(e["name"]))
-    return sorted(entries, key=lambda e: e["name"])
-
-
-def resolve_interface_metadata(interface_metadata: dict | None) -> dict:
-    return copy.deepcopy(interface_metadata or {})
 
 
 # ---------------------------------------------------------------------------
