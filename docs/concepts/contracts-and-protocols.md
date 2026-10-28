@@ -304,9 +304,9 @@ contracts, match_report)`, run against
 - **consumers outside `[min, max]`** (forbidden or insufficient fan-out on
   an output role).
 
-`forge topgen gen-top --strict` fails the build when `verify_cardinality`
-reports any `error`-severity issue, the same pattern already used for
-`verify_topology_groups`.
+`forge build` and `forge topgen gen-top` fail, with or without `--strict`,
+when `verify_cardinality` reports any `error`-severity issue, the same as
+for `verify_topology_groups`.
 
 **Scope of this release**: cardinality is evaluated **per individual
 physical pin**, after array/N-D roles are expanded to concrete port names

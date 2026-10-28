@@ -352,6 +352,53 @@ def test_waived_cdc_requires_a_reason(
     assert not (tmp_path / "out" / "algo_top.v").exists()
 
 
+def _break_cardinality(tmp_path: Path) -> None:
+    contract = tmp_path / "interfaces" / "dst.interface.yaml"
+    contract.write_text(contract.read_text().replace(
+        "din: {raw_port: din, direction: input, width: 8}",
+        "din: {raw_port: din, direction: input, width: 8, "
+        "cardinality: {producers: {min: 2, max: 2}}}",
+    ))
+
+
+def _break_topology_group(tmp_path: Path) -> None:
+    design = tmp_path / "design.yml"
+    design.write_text(design.read_text() + (
+        "topology_groups:\n"
+        "  - name: tg\n"
+        "    family: wk\n"
+        "    from: src\n"
+        "    to: dst\n"
+        "    wiring_kind: no_such_kind\n"
+    ))
+
+
+@pytest.mark.parametrize("break_design, message", [
+    (_break_cardinality, "cardinality"),
+    (_break_topology_group, "no_such_kind"),
+])
+@pytest.mark.parametrize("command", ["build", "gen-top"])
+def test_a_violated_declaration_stops_generation_without_strict(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, break_design, message: str, command: str,
+) -> None:
+    design_yml, modules_yml = _write_two_clock_domain_design(
+        tmp_path, src_clock="ap_clk", dst_clock="clk",
+    )
+    break_design(tmp_path)
+    output = tmp_path / "out" / "algo_top.v"
+
+    run = _run_build if command == "build" else _run_topgen
+    extra = ["--mode", "verilog"] if command == "gen-top" else []
+    result = run(
+        capsys, *([command] if command == "gen-top" else []), str(design_yml), *extra,
+        "--contracts-from", str(modules_yml), "--output", str(output),
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert message in result.stdout + result.stderr
+    assert not output.exists()
+
+
 def test_strict_plan_only_passes_with_declared_cdc_adapter(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:

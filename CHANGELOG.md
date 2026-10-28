@@ -15,8 +15,7 @@ for the versioning policy.
   connection decision stops them with the question to answer.
 - **`forge build` generates by default**; `--dry-run` (or `--plan`) prints
   the plan only. `--apply` is still accepted. A plan error stops
-  generation; topology-group and cardinality findings, which `gen-top`
-  enforces only under `--strict`, are warnings without it. Under `--json`, generation
+  generation. Under `--json`, generation
   output goes to stderr so stdout stays one JSON document, and a
   `--provenance` manifest is written after generation instead of being
   replaced by the one generation writes next to the output.
@@ -47,6 +46,13 @@ for the versioning policy.
   `ap_clk` are one domain rather than a crossing. A crossing that needs no
   synchronizer is declared `cdc: {kind: waived, reason: ...}`: it is wired
   directly and listed with its reason in the crossing report.
+- **Topology-group and cardinality errors stop generation** in `gen-top`
+  and `build` with or without `--strict`, like an undeclared crossing: a
+  group that resolves to no roles, or a role with fewer or more drivers
+  than its contract's `cardinality:` allows, would otherwise generate a
+  top with inputs tied to zero or a driver dropped. `--strict` still adds
+  the checks for heuristic wiring (no contract, auto-match,
+  `port_map_ranges`) and validator warnings.
 - **Active-low module resets are driven by the inverted `ap_rst`.** The
   generated top keeps one active-high `ap_rst`; a reset pin that asserts low
   (by its contract's `active_level`, or by name: `rst_n`, `aresetn`,

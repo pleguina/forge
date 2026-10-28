@@ -47,12 +47,12 @@ def _guided_failure(msg: str, *, json_mode: bool) -> int:
 
 
 def _strict_violations(ctx) -> List[str]:
-    """The same 6 strict-mode checks `gen-top --strict` performs
-    (`core/cli/groups/topgen.py::cmd_gen_top`), computed here as plain
-    description strings instead of print+`sys.exit` — presentation only,
-    reusing *ctx*'s already-computed `match_report`/`topology_group_issues`/
-    `cardinality_issues`/`cdc_issues`. Called
-    only when `--strict` is set; an empty result means no violations."""
+    """The checks only `gen-top --strict` applies
+    (`core/cli/groups/topgen.py::cmd_gen_top`), as plain description
+    strings instead of print+`sys.exit` — presentation only, reusing
+    *ctx*'s already-computed `match_report`. Topology-group, cardinality
+    and CDC errors are plan errors with or without --strict. Called only
+    when `--strict` is set; an empty result means no violations."""
     violations: List[str] = []
     match_report = ctx.match_report
     wmc = match_report.wiring_method_counts
@@ -70,23 +70,7 @@ def _strict_violations(ctx) -> List[str]:
         violations.append(
             f"{wmc['port_map_ranges']} connection(s) still use port_map_ranges"
         )
-    if ctx.contracts and ctx.cfg.topology_groups:
-        tg_errors = [i for i in ctx.topology_group_issues if i.severity == "error"]
-        if tg_errors:
-            violations.append(f"{len(tg_errors)} topology group verification error(s)")
-    if ctx.contracts:
-        card_errors = [i for i in ctx.cardinality_issues if i.severity == "error"]
-        if card_errors:
-            violations.append(f"{len(card_errors)} declarative cardinality violation(s)")
-    cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
-    if cdc_errors:
-        violations.append(f"{len(cdc_errors)} undeclared clock/reset domain crossing(s)")
     return violations
-
-
-#: Plan findings gen-top enforces only under --strict; without it they are
-#: warnings, so they neither stop generation nor read as failures.
-_STRICT_ONLY_CATEGORIES = ("topology_group", "cardinality")
 
 
 def _unresolved_issue_to_dict(issue) -> Dict[str, Any]:
@@ -202,10 +186,6 @@ def cmd_build(args) -> None:
         sys.exit(envelope.exit_code())
 
     diagnostics = [_unresolved_issue_to_dict(i) for i in plan.unresolved_issues]
-    if not strict:
-        for d in diagnostics:
-            if d["severity"] == "error" and d["category"] in _STRICT_ONLY_CATEGORIES:
-                d["severity"] = "warning"
     strict_violations = _strict_violations(ctx) if strict else []
     for v in strict_violations:
         diagnostics.append({
@@ -437,9 +417,9 @@ def register(sub) -> None:
     p.add_argument("--apply", action="store_true", default=False, help=argparse.SUPPRESS)
     p.add_argument(
         "--strict", action="store_true", default=False,
-        help="Fail if the plan would trigger any of `gen-top --strict`'s violations "
-             "(compat-mode modules, auto-match/port_map_ranges wiring, topology-group/"
-             "cardinality/CDC errors) — reported here, not just at generation time.",
+        help="Also fail on heuristic wiring (modules with no contract, auto-match, "
+             "port_map_ranges), as `gen-top --strict` does. Topology-group, cardinality "
+             "and clock-domain-crossing errors fail without it.",
     )
     p.add_argument(
         "--accept-plan-hash", default=None, metavar="HASH",

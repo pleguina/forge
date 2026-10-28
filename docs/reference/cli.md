@@ -302,10 +302,9 @@ optional arguments:
   --rtl-resource-root RTL_RESOURCE_ROOT
                         Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}
   --dry-run, --plan     Compute and print the generation plan only; write nothing
-  --strict              Fail if the plan would trigger any of `gen-top --strict`'s violations
-                        (compat-mode modules, auto-match/port_map_ranges wiring, topology-
-                        group/cardinality/CDC errors) — reported here, not just at generation
-                        time.
+  --strict              Also fail on heuristic wiring (modules with no contract, auto-match,
+                        port_map_ranges), as `gen-top --strict` does. Topology-group, cardinality
+                        and clock-domain-crossing errors fail without it.
   --accept-plan-hash HASH
                         Fail (exit 1) if the freshly computed plan's hash doesn't match HASH — a
                         CI gate

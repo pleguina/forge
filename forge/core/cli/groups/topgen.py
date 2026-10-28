@@ -1861,27 +1861,19 @@ def cmd_gen_top(args):
             print("   Migrate to topology_groups (contract-driven) or remove --strict.")
             sys.exit(1)
 
-        if getattr(args, "strict", False) and _contracts and cfg.topology_groups:
-            tg_errors = [i for i in ctx.topology_group_issues if i.severity == "error"]
-            if tg_errors:
-                print(
-                    f"\n❌ Strict mode: {len(tg_errors)} topology group "
-                    "verification error(s):"
-                )
-                for _i in tg_errors:
-                    print(str(_i))
-                sys.exit(1)
+        tg_errors = [i for i in ctx.topology_group_issues if i.severity == "error"]
+        if tg_errors:
+            print(f"\n❌ {len(tg_errors)} topology group verification error(s):")
+            for _i in tg_errors:
+                print(str(_i))
+            sys.exit(1)
 
-        if getattr(args, "strict", False) and _contracts:
-            card_errors = [i for i in ctx.cardinality_issues if i.severity == "error"]
-            if card_errors:
-                print(
-                    f"\n❌ Strict mode: {len(card_errors)} declarative "
-                    "cardinality violation(s):"
-                )
-                for _i in card_errors:
-                    print(str(_i))
-                sys.exit(1)
+        card_errors = [i for i in ctx.cardinality_issues if i.severity == "error"]
+        if card_errors:
+            print(f"\n❌ {len(card_errors)} declarative cardinality violation(s):")
+            for _i in card_errors:
+                print(str(_i))
+            sys.exit(1)
 
         cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
         if cdc_errors:

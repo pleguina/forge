@@ -442,7 +442,7 @@ Pass `--contracts-from plugins/<plugin>/forge/modules.yml` and ensure your modul
 
 Migrate the connection to a `topology_group` entry. See topology group strategies above.
 
-### `--strict` fails: "topology group verification error(s)"
+### Generation fails: "topology group verification error(s)"
 
 Check that partition labels in `instance_assign` match the consumer contract,
 role names in `role_pairs` exist in the contracts, and `wiring_kind` matches roles

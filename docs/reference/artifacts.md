@@ -65,7 +65,7 @@ A ``{"name", "version"}`` tag carried by every structured artifact
 The resolved cardinality bound an endpoint's interface declared,
     checked against how many connections actually exist. Descriptive only
     — ``forge.contracts.cardinality.verify_cardinality`` is what actually
-    enforces this design-wide under ``--strict``.
+    enforces this design-wide.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
