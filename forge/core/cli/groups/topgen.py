@@ -1252,9 +1252,9 @@ def cmd_validate(args):
         if not design_path.exists():
             _fail_early(f"Design file not found: {design_path}")
 
-        import yaml as _yaml
+        from forge.contracts.design_variant import load_design_document
 
-        _raw_design = _yaml.safe_load(design_path.read_text()) or {}
+        _raw_design = load_design_document(design_path)
         _registry_ref = _raw_design.get("registry")
         validators: List[Any] = []
 

@@ -424,6 +424,32 @@ allowed_unconnected:
     - "my_module.unused_cfg"
 ```
 
+## A Variant of Another Design
+
+A design that differs from another in a few places — a simulation build
+without the board's register bus or routing delays, say — is written as
+those differences rather than as a copy, so a change to the base reaches it:
+
+```yaml
+# design.sim.yml, next to design.yml
+variant_of: design.yml
+remove:
+  modules: [tx_dly]                  # with every connection and topology group touching it
+  connections: [{from: a, to: b}]    # a fan-out connection loses only this destination
+  topology_groups: [cfg_to_dt]
+modules:
+  dt: {external_in_ports: [csp_in, cfg64, cfg_valid]}   # null removes a field
+add:
+  allowed_unconnected: {open_outputs: ["tx_linker.orbit_out"]}
+```
+
+`add:` appends to the base's lists and merges into its mappings; any other
+top-level key replaces the base's value. The base must be in the same
+directory, so its relative paths keep their meaning, and every module,
+connection and group the variant names must exist in it. Every FORGE command
+reads the resolved design, and `forge check` reports the generated top level
+stale when either file changes.
+
 ---
 
 ## Troubleshooting

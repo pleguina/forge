@@ -239,10 +239,10 @@ def _design_registry(design_path: Path) -> Optional[str]:
     """The modules.yml named by design.yml's own ``registry:`` field, so a
     plain ``forge inspect design.yml`` sees the same contracts that
     ``forge analyze latency-check`` and generation do."""
-    import yaml
+    from forge.contracts.design_variant import load_design_document
 
     try:
-        design = yaml.safe_load(design_path.read_text()) or {}
+        design = load_design_document(design_path)
     except Exception:  # noqa: BLE001 — resolution reports a broken design itself
         return None
     registry = design.get("registry") if isinstance(design, dict) else None

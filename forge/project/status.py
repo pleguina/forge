@@ -952,8 +952,12 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
 
     generated_at = top.stat().st_mtime
     if config.authored:
-        named = _authored_files(config)
-        candidates = [config.root / ROOT_CONFIG_NAME] + [p for p in named if p is not None]
+        from forge.contracts.design_variant import design_sources
+
+        design, registry = _authored_files(config)
+        candidates = [config.root / ROOT_CONFIG_NAME] + design_sources(design)
+        if registry is not None:
+            candidates.append(registry)
     else:
         own_contracts = [
             (config.root / policy.contract).resolve()

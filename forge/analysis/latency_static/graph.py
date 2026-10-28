@@ -54,6 +54,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from forge.analysis.latency_model import LatencyProvenance, LatencyValue
+from forge.contracts.design_variant import load_design_document
 from forge.ir.identifiers import resolved_instance_id
 
 
@@ -355,7 +356,7 @@ def _resolved_registry_path(design_path: Path) -> Optional[Path]:
     """The registry path design.yml's own `registry:` field resolves to,
     or None if it doesn't declare one — used to decide whether a caller's
     `modules_yml_path` override actually differs (see build_graph)."""
-    design = _load_yaml(design_path)
+    design = load_design_document(design_path)
     reg_field = design.get("registry")
     if not reg_field:
         return None
@@ -671,7 +672,7 @@ def _build_graph_legacy(
     `modules_yml_path` override that genuinely differs from design.yml's
     own `registry:` field — never observed in real/documented usage, but
     the public `build_graph` signature has always allowed it."""
-    design = _load_yaml(design_path)
+    design = load_design_document(design_path)
 
     if modules_yml_path is not None:
         registry = _load_yaml(modules_yml_path)

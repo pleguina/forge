@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Dict, Any
 import yaml
 
+from .design_variant import load_design_document
+
 
 # Schema-version identity for the two user-authored YAML schemas this
 # module loads — see forge/core/schema_version.py for
@@ -670,7 +672,7 @@ class DesignConfig:
         if yaml_path.suffix not in (".yaml", ".yml"):
             raise ValueError(f"Config file must end in .yaml/.yml: {yaml_path}")
 
-        data = yaml.safe_load(yaml_path.read_text())
+        data = load_design_document(yaml_path)
 
         # ── Extract sweeps
         raw_sweeps = data.pop("sweeps", {}) or {}

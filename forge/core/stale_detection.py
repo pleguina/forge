@@ -156,7 +156,9 @@ def check_top_gen_staleness(
     if design_yml is not None:
         dyl = Path(design_yml)
         if dyl.exists():
-            sources.append(dyl)
+            from forge.contracts.design_variant import design_sources
+
+            sources.extend(design_sources(dyl))
     else:
         for candidate in (
             output_dir / "design.yml",

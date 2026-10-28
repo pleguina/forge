@@ -53,6 +53,14 @@ for the versioning policy.
   top with inputs tied to zero or a driver dropped. `--strict` still adds
   the checks for heuristic wiring (no contract, auto-match,
   `port_map_ranges`) and validator warnings.
+- **A design can be a variant of another.** `variant_of: <design>` in a
+  design file, with `remove:` (modules with everything touching them,
+  connections, topology groups), `modules:` (fields set by module name,
+  `null` removing one) and `add:` (appended to lists, merged into
+  mappings), describes a design by its differences from a base in the same
+  directory (`forge.contracts.design_variant`). Every reader of a design
+  goes through `load_design_document`, a name the base does not have is an
+  error, and the generated top level goes stale when the base changes.
 - **A flow names the design its DUT comes from.** `design:` on a flow in
   `design.verification.yml` (relative to that file) makes bare `forge test`
   build that design into the flow's `dut_rtl_source` before preparing it,

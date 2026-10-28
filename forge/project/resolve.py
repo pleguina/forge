@@ -119,9 +119,11 @@ def design_registry(design: Path) -> Optional[Path]:
     """The ``modules.yml`` a design's own ``registry:`` key names, if any."""
     import yaml
 
+    from forge.contracts.design_variant import load_design_document
+
     try:
-        document = yaml.safe_load(design.read_text()) or {}
-    except (OSError, yaml.YAMLError):
+        document = load_design_document(design)
+    except (OSError, ValueError, yaml.YAMLError):
         return None
     name = document.get("registry") if isinstance(document, dict) else None
     if not name:

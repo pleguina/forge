@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from forge.contracts.design_variant import load_design_document
 from jinja2 import Environment, FileSystemLoader
 
 
@@ -195,7 +197,7 @@ def modules_for_stage(catalog: dict[str, Any], stage: str) -> list[str]:
 
 def modules_from_design(catalog: dict[str, Any], design_path: Path | str) -> list[str]:
     resolved_design = Path(design_path).expanduser().resolve()
-    design_data = yaml.safe_load(resolved_design.read_text()) or {}
+    design_data = load_design_document(resolved_design)
     modules = []
     for module in design_data.get("modules", []):
         # ref: is the primary lookup key in the new registry-based format
