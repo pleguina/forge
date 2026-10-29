@@ -184,3 +184,27 @@ def test_predict_reports_what_it_could_not_resolve(capsys, tmp_path):
     assert result.returncode == 0, result.stderr
     assert "confirm against the built IP" in result.stdout
     assert "could not resolve the width" in result.stdout
+
+
+def test_a_synthesised_ip_is_the_interface_not_the_prediction(capsys, tmp_path):
+    (tmp_path / "m.cpp").write_text("void m(int x, int *y) {\n#pragma HLS INTERFACE ap_ctrl_none port=return\n}\n")
+    (tmp_path / "modules.yml").write_text(yaml.safe_dump({
+        "modules": [{"name": "m", "kind": "hls", "top": "m", "src": ["m.cpp"]}]}))
+    ip = tmp_path / "build_hls" / "m" / "solution1" / "impl" / "ip"
+    (ip / "hdl" / "vhdl").mkdir(parents=True)
+    (ip / "component.xml").write_text(
+        '<?xml version="1.0"?>\n<spirit:component xmlns:spirit='
+        '"http://www.spiritconsortium.org/XMLSchema/SPIRIT/1685-2009">'
+        "<spirit:name>m</spirit:name></spirit:component>\n")
+    (ip / "hdl" / "vhdl" / "m.vhd").write_text(
+        "entity m is\nport (\n  ap_clk : IN STD_LOGIC;\n  x : IN STD_LOGIC_VECTOR (31 downto 0);\n"
+        "  y_synth : OUT STD_LOGIC_VECTOR (7 downto 0)\n);\nend;\n")
+
+    result = _run(capsys, "infer", "m", "--contracts-from", str(tmp_path / "modules.yml"),
+                  "--predict", "--output", str(tmp_path / "m.yaml"))
+
+    assert result.returncode == 0, result.stderr
+    assert "Ports from the synthesised IP" in result.stdout
+    assert "confirm against the built IP" not in result.stdout
+    roles = yaml.safe_load((tmp_path / "m.yaml").read_text())["ip_interface"]["roles"]
+    assert roles["y_synth"]["width"] == 8

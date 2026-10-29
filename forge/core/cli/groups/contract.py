@@ -38,6 +38,7 @@ def cmd_infer(args) -> None:
         entry: dict
         source_type = "rtl"
         predict_warnings: list = []
+        synthesized_from = ""
 
         if args.ip_info:
             # Explicit port list: the only route for an HLS module before
@@ -91,20 +92,33 @@ def cmd_infer(args) -> None:
                     f"src entries is a .cpp/.cc/.cxx file")
 
             top = str(mod_entry.get("top") or module)
-            sig = parse_signature(cpp, top)
-            if not sig.args and sig.warnings:
-                raise ValueError("; ".join(sig.warnings))
-            prediction = predict_ports(
-                sig.args, block_protocol=sig.block_protocol,
-                returns_value=sig.returns_value, return_width=sig.return_width)
-            predict_warnings = sig.warnings + prediction.warnings
-            entry = {"ports": [
-                {"name": p.name,
-                 "direction": "IN" if p.direction == "input" else "OUT",
-                 "width": p.width}
-                for p in prediction.ports
-            ]}
             source_type = "hls"
+            # Once synthesised, the IP's own ports are the interface; the
+            # prediction is for before that.
+            from forge.contracts.parser import parse_component
+            from forge.project.hls_maturity import find_component_xml
+            component = find_component_xml(registry_path.parent, top)
+            synthesized = parse_component(component)["ports"] if component else []
+            if synthesized:
+                synthesized_from = str(component)
+                entry = {"ports": [
+                    {"name": p["name"], "direction": str(p["direction"]).upper(), "width": p["width"]}
+                    for p in synthesized
+                ]}
+            else:
+                sig = parse_signature(cpp, top)
+                if not sig.args and sig.warnings:
+                    raise ValueError("; ".join(sig.warnings))
+                prediction = predict_ports(
+                    sig.args, block_protocol=sig.block_protocol,
+                    returns_value=sig.returns_value, return_width=sig.return_width)
+                predict_warnings = sig.warnings + prediction.warnings
+                entry = {"ports": [
+                    {"name": p.name,
+                     "direction": "IN" if p.direction == "input" else "OUT",
+                     "width": p.width}
+                    for p in prediction.ports
+                ]}
         else:
             registry_path = Path(args.contracts_from).expanduser().resolve()
             if not registry_path.is_file():
@@ -149,6 +163,9 @@ def cmd_infer(args) -> None:
             artifacts.append(str(output))
 
         if not json_mode:
+            if synthesized_from:
+                print(f"Ports from the synthesised IP ({synthesized_from}), not predicted.")
+                print()
             if predict_warnings:
                 print("⚠️  predicted from source — confirm against the built IP:")
                 for w in predict_warnings:
@@ -168,7 +185,9 @@ def cmd_infer(args) -> None:
             status="pass",
             artifacts=artifacts,
             metrics={"module": module, "source_type": source_type,
-                     "roles": n_roles, "predicted": bool(args.predict)},
+                     "roles": n_roles, "predicted": bool(args.predict) and not synthesized_from,
+                     "interface_source": ("synthesized" if synthesized_from
+                                          else "predicted" if args.predict else source_type)},
             diagnostics=[{"severity": "warning", "message": w} for w in predict_warnings],
             next_actions=[
                 "Review the role names, add the wiring_kind/protocol/partition "
@@ -226,8 +245,8 @@ def register(sub) -> None:
     )
     infer.add_argument(
         "--predict", action="store_true", default=False,
-        help="Predict an HLS module's RTL ports from its C++ source instead of "
-             "scanning HDL — for a module whose IP has not been built yet",
+        help="An HLS module's RTL ports: those of its synthesised IP (component.xml) "
+             "when one exists, else predicted from its C++ source",
     )
     infer.add_argument("--output", "-o", default=None, help="Write the skeleton to this path")
     infer.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,

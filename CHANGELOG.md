@@ -210,6 +210,10 @@ for the versioning policy.
   (picked up by a bare `forge report`), and reports a flow whose simulator
   is not on `PATH` as skipped with status `warn`. `forge init` reports
   `warn` instead of `pass` when it could not simulate.
+- **A synthesised HLS interface wins over the prediction.** `forge contract
+  infer --predict` takes the ports of the module's built IP (`component.xml`)
+  when one exists and predicts from the C++ only before that; `forge explain`
+  lists the synthesised interface as the one FORGE uses.
 
 ### Added
 - **Floorplan reports.** `forge dev framework floorplan --report` writes the
