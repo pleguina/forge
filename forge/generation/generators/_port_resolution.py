@@ -121,6 +121,14 @@ def build_connection_maps(cfg: DesignConfig) -> Tuple[
                     delay_cycles_map[key] = tg.delay_cycles
                 if tg.boundary:
                     boundary_map[key] = tg.boundary
+    staged = sorted(k for k in cdc_map if k in reg_stages_map or k in delay_cycles_map)
+    if staged:
+        pairs = ", ".join(f"{a} -> {b}" for a, b in staged)
+        raise ValueError(
+            f"[ATG050] {pairs}: a cdc: crossing cannot also carry register_stages or "
+            "delay_cycles (from its connection or a topology group). Put the stages on a "
+            "connection inside one clock domain."
+        )
     return reg_stages_map, delay_cycles_map, boundary_map, cdc_map
 
 

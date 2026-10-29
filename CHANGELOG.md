@@ -767,6 +767,13 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **A `cdc:` crossing with `register_stages` or `delay_cycles` was emitted
+  with the stages unconnected** (the consumer reads the synchronizer, which
+  reads the source) while the latency model added them up. The combination
+  is refused at load and in the generators (ATG050), also when a topology
+  group puts the delay on the crossing's instance pair; a `waived` crossing
+  keeps its stages. A test checks that the predicted latency is the emitted
+  one for every allowed combination.
 - **`emit-payload` connected only `tdata` of CSP links.** The resolved I/O
   file dropped each endpoint's `protocol`, so a `csp_64b` link lost its
   `tlast`/`tfirst`/`tvalid` bits; the protocol is recorded, and

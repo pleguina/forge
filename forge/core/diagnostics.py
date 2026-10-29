@@ -52,6 +52,7 @@ ATG046  Generated artifacts older than their inputs
 ATG047  Module integrated as opaque (structure only, internals unmodelled)
 ATG048  HLS predicted interface differs from the built IP
 ATG049  A verification flow's simulator is not on PATH
+ATG050  A cdc: connection also declares register_stages or delay_cycles
 
 Public API
 ----------

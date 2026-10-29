@@ -829,6 +829,16 @@ class DesignConfig:
                     kind = "level_sync"
                     cdc = {**cdc, "kind": "level_sync"}
 
+                # The generator feeds the synchronizer from the source and the
+                # consumer from the synchronizer, so stages declared next to it
+                # would be emitted unconnected while the latency model counted them.
+                if kind != "waived" and (int(reg_stages or 0) > 0 or int(delay_cycles or 0) > 0 or delay_auto):
+                    raise ValueError(
+                        f"[ATG050] Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind={kind!r} "
+                        "cannot be combined with register_stages or delay_cycles on the same "
+                        "connection. Put the stages on a connection inside one clock domain."
+                    )
+
                 depth = cdc.get("depth")
                 if depth is not None and (not isinstance(depth, int) or isinstance(depth, bool) or depth <= 0):
                     raise ValueError(
