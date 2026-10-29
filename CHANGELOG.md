@@ -767,6 +767,12 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`forge check` judged a generated top level current by timestamps**, so a
+  fresh clone or a restored cache could hide a changed input, and a touched
+  but unchanged file looked stale. It compares content against the
+  generation's `provenance.json`, which also records the modules' source
+  files and the designs a variant is built on; timestamps decide only when
+  there is no provenance.
 - **`forge dev framework ipbb-component` deleted the component's whole
   `firmware/hdl`** before copying, and flattened sources so two files with
   one name collided. FORGE now writes `firmware/hdl/forge/<module>/` (`top`,

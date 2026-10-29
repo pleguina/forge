@@ -967,12 +967,30 @@ def _check_latency(status: ProjectStatus) -> _CheckOutput:
     )
 
 
+def _changed_by_content(top: Path) -> Optional[List[str]]:
+    """Inputs of *top*'s build whose content changed since, per its provenance; ``None`` without one."""
+    import json
+
+    from forge.ir.provenance import changed_sources
+
+    manifest, provenance = top.parent / "build_manifest.json", top.parent / "provenance.json"
+    if not (manifest.is_file() and provenance.is_file()):
+        return None
+    try:
+        design_dir = Path(json.loads(manifest.read_text())["design_file"]).parent
+    except (OSError, ValueError, KeyError):
+        return None
+    return changed_sources(provenance, design_dir)
+
+
 def _check_generated(status: ProjectStatus) -> _CheckOutput:
     """Has the design been generated, and is what was generated current?
 
-    Staleness is decided by comparing the newest source/config timestamp
-    against the generated top level: reporting a build as done when its
-    inputs have since changed is the failure mode this check exists for.
+    Staleness is decided by content: the provenance written with the top
+    level records a hash of every input, and an input whose content differs
+    makes the build stale whatever its timestamp says (a fresh clone or a
+    restored cache has misleading times). Without a provenance record the
+    newest input timestamp is compared with the top level's.
     """
     config, paths = status.config, status.paths
     assert config is not None and paths is not None
@@ -989,6 +1007,27 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
                 command="forge build",
             )],
         )
+
+    by_content = _changed_by_content(top)
+    if by_content is not None:
+        if by_content:
+            status.report.warn(
+                "ATG046",
+                f"{paths.relative(top)} was built from other contents of {len(by_content)} of its inputs "
+                f"({', '.join(by_content[:3])}{', …' if len(by_content) > 3 else ''})",
+                action="Re-run `forge build` to regenerate from the current sources",
+                path=top,
+            )
+            return _CheckOutput(
+                StatusSection("Generated artifacts", STALE, f"{len(by_content)} inputs changed", ("ATG046",)),
+                [Action(
+                    id="rebuild-design",
+                    description="Regenerate the top level — its inputs have changed since it was built",
+                    command="forge build",
+                    auto_fixable=True,
+                )],
+            )
+        return _CheckOutput(StatusSection("Generated artifacts", PASS, paths.relative(top)))
 
     generated_at = top.stat().st_mtime
     if config.authored:

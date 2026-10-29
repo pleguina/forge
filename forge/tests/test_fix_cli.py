@@ -186,7 +186,8 @@ def test_a_stale_top_level_is_offered_as_a_command_not_a_rewrite(
     monkeypatch.chdir(adopted)
     code, _out, err = _run(capsys, ["build"])
     assert code == 0, err
-    os.utime(adopted / ".forge/generated/algo_top.v", (0, 0))
+    source = next(adopted.rglob("decimator.v"))
+    source.write_text(source.read_text() + "// edited after the build\n")
 
     plan = plan_fixes(adopted, only=["regenerate-stale-artifacts"])
 
@@ -194,6 +195,20 @@ def test_a_stale_top_level_is_offered_as_a_command_not_a_rewrite(
     fix = plan.safe_fixes[0]
     assert fix.command == "forge build"
     assert fix.apply() is None
+
+
+def test_staleness_is_judged_by_content_not_timestamps(
+    adopted: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fresh clone or a restored cache gives misleading times; unchanged inputs are not stale."""
+    import os
+
+    monkeypatch.chdir(adopted)
+    code, _out, err = _run(capsys, ["build"])
+    assert code == 0, err
+    os.utime(adopted / ".forge/generated/algo_top.v", (0, 0))
+
+    assert plan_fixes(adopted, only=["regenerate-stale-artifacts"]).safe_fixes == []
 
 
 # ── Planning behaviour ────────────────────────────────────────────────────
@@ -322,3 +337,25 @@ def test_fix_never_runs_a_generator_on_the_users_behalf(
 
     assert code == 0
     assert not (adopted / ".forge/generated/algo_top.v").exists()
+
+
+def test_changed_sources_names_the_inputs_that_differ(
+    adopted: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from forge.ir.provenance import changed_sources
+
+    monkeypatch.chdir(adopted)
+    code, _out, err = _run(capsys, ["build"])
+    assert code == 0, err
+    gen = adopted / ".forge/generated"
+    design_dir = Path(json.loads((gen / "build_manifest.json").read_text())["design_file"]).parent
+    assert changed_sources(gen / "provenance.json", design_dir) == []
+
+    decimator = next(adopted.rglob("decimator.v"))
+    decimator.write_text(decimator.read_text() + "// edited\n")
+    next(adopted.rglob("packer.v")).unlink()
+    changed = changed_sources(gen / "provenance.json", design_dir)
+    assert {Path(k).name for k in changed} == {"decimator.v", "packer.v"}
+    assert changed_sources(gen / "missing.json", design_dir) is None
