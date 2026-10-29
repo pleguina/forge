@@ -131,6 +131,7 @@ nav:
       - Payload Control Policies: reference/payload-policies.md
       - Floorplan: reference/floorplan.md
       - Register Maps: reference/registers.md
+      - Link Map: reference/link-map.md
       - Interface Members: reference/interface-members.md
       - Transformations: reference/transformations.md
       - Diagnostic Catalogue: reference/diagnostics.md

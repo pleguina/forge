@@ -284,6 +284,12 @@ def _endpoint_to_dict(ep: Endpoint) -> dict:
         "link_function":  ep.link_function,
         "endpoint_role":  ep.endpoint_role,
         "abi_port_prefix": ep.abi_port_prefix,
+        "quad_type":      ep.quad_type,
+        "cage":           ep.cage,
+        "fiber":          ep.fiber,
+        "polarity":       ep.polarity,
+        "logical_id":     ep.logical_id,
+        "logical_name":   ep.logical_name,
     }
 
 

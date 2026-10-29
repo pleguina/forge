@@ -370,6 +370,31 @@ def cmd_registers(args):
         print(f"Written: {path}")
 
 
+def cmd_link_map(args):
+    """Write the link map and build identity of a payload."""
+    import yaml
+    from forge.integration.link_map import build_identity, link_map
+    from forge.integration.registers import RegisterMap
+
+    try:
+        files = {}
+        for item in args.file or []:
+            label, sep, path = item.partition("=")
+            if not sep:
+                raise ValueError(f"--file {item}: want label=path")
+            files[label] = Path(path)
+        files.setdefault("detector_io", Path(args.detector_io))
+        identity = build_identity(files, Path(args.repo) if args.repo else None)
+        regs = RegisterMap.from_dict(yaml.safe_load(Path(args.registers).read_text()) or {}) if args.registers else None
+        doc = link_map(json.loads(Path(args.detector_io).read_text()), identity, clock=args.clock, registers=regs)
+    except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
+    print(f"Written: {args.out} ({len(doc['links'])} links, build {identity['build_id32']})")
+
+
 def register(sub):
     """Register the 'framework' command group."""
     grp = sub.add_parser(
@@ -553,3 +578,17 @@ def register(sub):
     p_reg.add_argument("--slr", type=int, default=None, help="SLR whose words --blobfish uses")
     p_reg.add_argument("--doc", default=None, help="Markdown register table to write")
     p_reg.set_defaults(func=cmd_registers)
+
+    # ── framework link-map ────────────────────────────────────────────────
+    p_lm = grp_sub.add_parser(
+        "link-map",
+        help="JSON of every link, its algorithm port and the register layout, with the build's identity",
+    )
+    p_lm.add_argument("--detector-io", required=True, help="detector_io.resolved.json")
+    p_lm.add_argument("--file", action="append", metavar="LABEL=PATH",
+                      help="A file the build is made of (IR, payload, bitstream, dataset, mapping); repeatable")
+    p_lm.add_argument("--repo", default=None, help="Source repository whose commit identifies the build")
+    p_lm.add_argument("--registers", default=None, help="Register map YAML whose layout to include")
+    p_lm.add_argument("--clock", default=None, help="Clock the link words are handed over in")
+    p_lm.add_argument("--out", required=True, help="JSON to write")
+    p_lm.set_defaults(func=cmd_link_map)

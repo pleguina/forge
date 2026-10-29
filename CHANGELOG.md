@@ -216,6 +216,13 @@ for the versioning policy.
   lists the synthesised interface as the one FORGE uses.
 
 ### Added
+- **Link map and build identity.** `forge dev framework link-map` writes
+  every resolved link (fibre, cage, quad, lane, protocol, logical input,
+  algorithm port), the register layout, and a build identity: content hashes
+  of the files given, the source commit and whether it was modified, and a
+  `build_id` with a 32-bit form for a status register. The resolved I/O JSON
+  now carries each endpoint's quad type, cage, fibre, polarity and logical id
+  and name.
 - **Vitis HLS 2023.2 and 2025.2.1 in the port matrix.** The fixture corpus
   was synthesised under both; 2025.2.1 gives the 2024.1 port lists exactly,
   2023.2 also drops `ap_rst` from `m_structs` (a gap documented for that

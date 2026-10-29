@@ -435,6 +435,8 @@ positional arguments:
     emp-payload      emp_payload.vhd around the generated top, for an emp-fwk checkout
     registers        Export a register map: IPbus address table, Blobfish payload services,
                      Markdown
+    link-map         JSON of every link, its algorithm port and the register layout, with the
+                     build's identity
 
 options:
   -h, --help         show this help message and exit
@@ -572,6 +574,26 @@ options:
                         package:component holding the top-level dep file
   --dep DEP             Top-level dep file name
   --out OUT             Shell script to write
+```
+
+##### `forge dev framework link-map`
+
+```text
+usage: forge dev framework link-map [-h] --detector-io DETECTOR_IO [--file LABEL=PATH]
+                                    [--repo REPO] [--registers REGISTERS] [--clock CLOCK] --out
+                                    OUT
+
+options:
+  -h, --help            show this help message and exit
+  --detector-io DETECTOR_IO
+                        detector_io.resolved.json
+  --file LABEL=PATH     A file the build is made of (IR, payload, bitstream, dataset, mapping);
+                        repeatable
+  --repo REPO           Source repository whose commit identifies the build
+  --registers REGISTERS
+                        Register map YAML whose layout to include
+  --clock CLOCK         Clock the link words are handed over in
+  --out OUT             JSON to write
 ```
 
 ##### `forge dev framework registers`
