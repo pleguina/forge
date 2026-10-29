@@ -767,6 +767,14 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`forge dev framework ipbb-component` deleted the component's whole
+  `firmware/hdl`** before copying, and flattened sources so two files with
+  one name collided. FORGE now writes `firmware/hdl/forge/<module>/` (`top`,
+  one directory per module, `support`) through a staging directory,
+  records each file's hash in `.forge_component.json`, copies the headers
+  a source includes, replaces only that directory and a dep file it wrote,
+  and refuses a `forge/` directory or dep file it did not write. A source
+  type ipbb cannot take is an error.
 - **XSim and Verilator reused a `readmemh` build whenever its sentinel file
   existed**, so a changed RTL, testbench, header or flag could pass on the
   old build. The sentinel holds a content key (the compile list and its
