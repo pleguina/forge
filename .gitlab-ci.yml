@@ -82,7 +82,7 @@ forge:type-check:
   tags:
     - default-x86_64
   before_script:
-    - pip install --quiet --cache-dir .pip-cache -e "forge[dev]"
+    - pip install --quiet --cache-dir .pip-cache -e "forge[dev,plot]" numpy
   script:
     - mkdir -p ci-logs
     - |

@@ -40,7 +40,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
-      - run: pip install -e "forge[dev]"
+      # The optional plotting code imports matplotlib and numpy.
+      - run: pip install -e "forge[dev,plot]" numpy
       - run: mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen forge/project
 
   schema-validate:
