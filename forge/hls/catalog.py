@@ -6,7 +6,7 @@ Core HLS catalog loading and TCL generation logic.
 This module is the single implementation source for all HLS orchestration
 operations. It is consumed by:
   - topgen hls gen-tcl  (via cli/main.py)
-    - framework/hls/generate_hls_tcl.py  (compatibility entry point)
+    - forge/hls/generate_hls_tcl.py  (compatibility entry point)
 """
 
 from __future__ import annotations

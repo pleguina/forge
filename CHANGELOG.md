@@ -109,6 +109,20 @@ for the versioning policy.
   matplotlib it printed a skip per figure and exited 0; it now exits 1 and
   names the `plot` extra. A figure that fails to render also fails the
   command instead of being dropped from a passing run.
+- **Generated reference pages no longer depend on the Python version.**
+  `python -m forge.docsgen` wrote argparse's "optional arguments:" heading
+  under Python < 3.10 and "options:" from 3.10, and took an enum's
+  docstring from Python's placeholder or from `str`; the pages now read
+  "options:" and a class's own docstring under every version, so the
+  staleness check passes on CI's Python 3.11.
+- **`forge/hls/generate_hls_tcl.py` runs again.** It imported its logic
+  from `topgen.hls.catalog`, the package's old name, and exited on import;
+  it uses `forge.hls.catalog`.
+- **The vision tutorial's reference-asset check holds on other machines.**
+  `manifest.json` records the Graphviz, matplotlib and Pillow versions that
+  rendered the committed figures; `--check` compares files byte for byte
+  only where the renderer is the same version, and by source hash
+  otherwise.
 - **Undeclared dependencies.** New `plot` extra (matplotlib), also in
   `docs` (the tutorial's FIFO figure goes through `plot-results`) and
   `all`. CI's shared setup installs `forge[plot]` and numpy, which

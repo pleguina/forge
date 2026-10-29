@@ -985,7 +985,7 @@ A stage in a backend's execution pipeline.
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-An enumeration.
+What a node of the design-explorer graph stands for.
 
 | Member | Value |
 |---|---|
@@ -998,7 +998,7 @@ An enumeration.
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-An enumeration.
+How a module's connections are wired: by contract, by name matching, or both.
 
 | Member | Value |
 |---|---|

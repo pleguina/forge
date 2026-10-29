@@ -20,7 +20,7 @@ positional arguments:
               connect | migrate | doctor; and dev (topgen | contract | verify | hls | analyze |
               framework | core).
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
   --version   show program's version number and exit
   --debug     Print Python tracebacks for unexpected failures.
@@ -81,7 +81,7 @@ determine is filled in with a guess.
 positional arguments:
   path               Repository to adopt (default: the current directory)
 
-optional arguments:
+options:
   -h, --help         show this help message and exit
   --name NAME        Project name (default: the directory name)
   --part PART        Target device (default: the part already in forge.yml, else
@@ -109,7 +109,7 @@ positional arguments:
   design                Path to design.yml (default: the forge.yml project around the current
                         directory)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --mode {vhdl,verilog,bd}
                         Output mode: verilog (default), vhdl (a VHDL entity around the Verilog
@@ -159,7 +159,7 @@ the step that clears it. `forge doctor` checks the installation instead.
 positional arguments:
   path        Project directory (default: the current one; parents are searched for forge.yml)
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
   --json      Machine-readable JSON output
   --strict    Exit 1 on warnings as well as blockers
@@ -178,7 +178,7 @@ positional arguments:
   producer           Driving endpoint, as module.port
   consumer           Driven endpoint, as module.port
 
-optional arguments:
+options:
   -h, --help         show this help message and exit
   --project PROJECT  Project directory (default: search upwards from the cwd)
   --force            Replace an existing declaration for the same consumer
@@ -205,7 +205,7 @@ positional arguments:
               External framework import and detector I/O resolution
     core      Shared schema, CLI, and plugin utilities
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
 ```
 
@@ -232,7 +232,7 @@ positional arguments:
     plot-results   Render comparison figures from a plugin-defined config
     dashboard      Aggregate analysis artifacts into HTML dashboard + Markdown summary
 
-optional arguments:
+options:
   -h, --help       show this help message and exit
 
 Examples:
@@ -248,7 +248,7 @@ Examples:
 ```text
 usage: forge dev analyze dashboard [-h] [--input DIR] [--output DIR] [--json]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --input DIR, -i DIR   Reports directory (default: out/reports)
   --output DIR, -o DIR  Output directory (default: out/dashboard)
@@ -261,7 +261,7 @@ optional arguments:
 usage: forge dev analyze hls-report [-h] [--hls-build-root DIR] [--output DIR] [--solution NAME]
                                     [--json]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --hls-build-root DIR  HLS build directory (default: build_hls)
   --output DIR, -o DIR  Output directory (default: out/reports)
@@ -279,7 +279,7 @@ usage: forge dev analyze latency-check [-h] [--contracts-from MODULES_YML] [--hl
 positional arguments:
   DESIGN_YML            Path to design.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --contracts-from MODULES_YML
                         Explicit modules.yml path (default: registry: field in design.yml)
@@ -295,7 +295,7 @@ optional arguments:
 usage: forge dev analyze plot-results [-h] --config FILE --observed FILE [--reference FILE]
                                       [--output DIR] [--json]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --config FILE         plot_config.yml — defines plots, column names, and kinds
   --observed FILE       CSV of observed / simulated values
@@ -311,7 +311,7 @@ usage: forge dev analyze runtime-latency [-h] --probe-csv FILE [--probe-format {
                                          [--probe-pairs MODULE:IN_SIGNAL:OUT_SIGNAL [MODULE:IN_SIGNAL:OUT_SIGNAL ...]]
                                          [--hls-build-root DIR] [--output FILE] [--json]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --probe-csv FILE      CSV with columns: cycle, signal, value (written by forge dev verify run)
   --probe-format {long,wide}
@@ -338,7 +338,7 @@ positional arguments:
   COMMAND
     infer     Infer an interface contract skeleton from a module's real ports
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
 ```
 
@@ -357,7 +357,7 @@ HLS roles carry direction and width, since an HLS module has no HDL to scan unti
 positional arguments:
   module                Module name (as it appears in modules.yml)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --contracts-from CONTRACTS_FROM
                         Module registry to look the module up in (default: modules.yml)
@@ -384,7 +384,7 @@ positional arguments:
     verify-contract
                    Verify ip_interface.yaml contract(s) against ip_info.yaml
 
-optional arguments:
+options:
   -h, --help       show this help message and exit
 ```
 
@@ -393,7 +393,7 @@ optional arguments:
 ```text
 usage: forge dev core resources [-h] [--key KEY] [--format {text,json}] [--json]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --key KEY             Print only the value for a specific resource key
   --format {text,json}  Output format (default: text) — deprecated alias for --json
@@ -406,7 +406,7 @@ optional arguments:
 usage: forge dev core verify-contract [-h] --ip-info IP_INFO [--contract CONTRACT]
                                       [--all-contracts DIR [DIR ...]] [--verbose] [--json]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --ip-info IP_INFO     Path to ip_info.yaml (raw port metadata)
   --contract CONTRACT   Single ip_interface.yaml file to verify
@@ -428,7 +428,7 @@ positional arguments:
     emit-payload
                 Generate a Blobfish-compatible payload.v
 
-optional arguments:
+options:
   -h, --help    show this help message and exit
 ```
 
@@ -439,7 +439,7 @@ usage: forge dev framework emit-payload [-h] --framework FRAMEWORK [--detector-i
                                         [--algo-module ALGO_MODULE] [--policies POLICIES]
                                         [--out OUT]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --framework FRAMEWORK
                         Directory containing framework_import.json
@@ -457,7 +457,7 @@ optional arguments:
 usage: forge dev framework import [-h] --provider PROVIDER --abi ABI --endpoints ENDPOINTS --out
                                   OUT
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --provider PROVIDER   Framework provider name (e.g. blobfish)
   --abi ABI             Path to payload_abi.json
@@ -472,7 +472,7 @@ optional arguments:
 usage: forge dev framework io-resolve [-h] --framework FRAMEWORK --detector-io DETECTOR_IO
                                       [--plugin PLUGIN] --out OUT
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --framework FRAMEWORK
                         Directory containing framework_import.json (output of 'framework import')
@@ -492,7 +492,7 @@ positional arguments:
     gen-tcl   Generate Vitis HLS TCL scripts from a plugin catalog
     run       Run parallel Vitis HLS jobs (pure Python, no shell script)
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
 ```
 
@@ -507,7 +507,7 @@ usage: forge dev hls gen-tcl [-h] --hls-config HLS_CONFIG [--output-dir OUTPUT_D
 positional arguments:
   module                Module name or 'all' (default: all)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --hls-config HLS_CONFIG
                         Plugin HLS catalog YAML file
@@ -531,7 +531,7 @@ usage: forge dev hls run [-h] [--registry REGISTRY] [--stages STAGES]
                          [--vitis-hls VITIS_HLS] [--force] [--summary-json SUMMARY_JSON]
                          [--junit-xml JUNIT_XML]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --registry REGISTRY   Plugin HLS catalog YAML file (modules registry)
   --stages STAGES       Comma-separated HLS stages to run: csim,synth,cosim,export (default: all
@@ -577,7 +577,7 @@ positional arguments:
     migrate          Migration helpers: schema-version insertion, partition->coordinates, legacy
                      plugin layout, legacy verify-contract filename
 
-optional arguments:
+options:
   -h, --help         show this help message and exit
 ```
 
@@ -592,7 +592,7 @@ usage: forge dev topgen clean [-h] [--consumer-root CONSUMER_ROOT] [--output OUT
 positional arguments:
   design                design.yaml file
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
@@ -624,7 +624,7 @@ usage: forge dev topgen gen-top [-h] [--consumer-root CONSUMER_ROOT] --mode {vhd
 positional arguments:
   design                design.yaml file
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
@@ -679,7 +679,7 @@ usage: forge dev topgen init-plugin [-h] [--plugins-root PLUGINS_ROOT] [--algo-r
 positional arguments:
   plugin_id             Plugin identifier (e.g. 'my_algo')
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --plugins-root PLUGINS_ROOT
                         Root directory under which to create <plugin_id>/forge/ (default:
@@ -700,7 +700,7 @@ usage: forge dev topgen ip-summary [-h] [--consumer-root CONSUMER_ROOT] [--ip-ro
 positional arguments:
   design                design.yaml file
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
@@ -720,7 +720,7 @@ usage: forge dev topgen lint [-h] [--fix] [--std STD] [--ieee IEEE] files [files
 positional arguments:
   files        VHDL file(s) to lint
 
-optional arguments:
+options:
   -h, --help   show this help message and exit
   --fix        Placeholder for compatibility (GHDL doesn't auto-fix)
   --std STD    VHDL standard (87, 93, 02, 08, 19) — default: 08
@@ -736,7 +736,7 @@ usage: forge dev topgen lint-verilog [-h] [--top-module TOP_MODULE] [--no-warnin
 positional arguments:
   files                 Verilog file(s) to lint
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --top-module TOP_MODULE
                         Top module name (auto-detected if not provided)
@@ -754,7 +754,7 @@ usage: forge dev topgen match-ports [-h] [--consumer-root CONSUMER_ROOT] [--ip-i
 positional arguments:
   design                design.yaml file
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve relative defaults
@@ -772,7 +772,7 @@ usage: forge dev topgen migrate [-h] --kind
                                 [--contract CONTRACT] [--axis AXIS] [--role ROLE]
                                 [--plugin-root PLUGIN_ROOT] [--dry-run]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --kind {schema-version,partition-to-coordinates,legacy-plugin-layout,rename-verify-contract}
                         Which migration to run
@@ -801,7 +801,7 @@ usage: forge dev topgen unpack-ips [-h] [--consumer-root CONSUMER_ROOT] [--ip-ro
 positional arguments:
   src                   Directory containing IP archives (*.zip, *.tar.*)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Consumer workspace root used to resolve default output paths
@@ -819,7 +819,7 @@ usage: forge dev topgen validate [-h] [--strict] [--check-stale]
 positional arguments:
   design                design.yaml file to validate
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --strict              Treat warnings as errors
   --check-stale         Also verify that generated artifacts are not older than design.yml.
@@ -837,7 +837,7 @@ usage: forge dev topgen validate-registry [-h] [--strict] [--json] registry
 positional arguments:
   registry    modules.yml registry file to validate
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
   --strict    Treat warnings as errors
   --json      Machine-readable JSON output instead of the human report.
@@ -865,7 +865,7 @@ positional arguments:
     release-check       Run the release-readiness gate — all RC-01…RC-10 criteria in one command.
                         READ-ONLY — never writes any files.
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
 ```
 
@@ -878,7 +878,7 @@ usage: forge dev verify doctor [-h] [--consumer-root CONSUMER_ROOT] [--strict] [
 positional arguments:
   design_file           Path to design.verification.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
@@ -898,7 +898,7 @@ usage: forge dev verify generate [-h] [--flow FLOW] [--consumer-root CONSUMER_RO
 positional arguments:
   design_file           Path to design.verification.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --flow FLOW           Generate only this named flow (default: all flows)
   --consumer-root CONSUMER_ROOT
@@ -920,7 +920,7 @@ usage: forge dev verify init-plugin [-h] [--plugins-root PLUGINS_ROOT] [--dry-ru
 positional arguments:
   plugin_id             Plugin identifier (e.g. 'my_trigger')
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --plugins-root PLUGINS_ROOT
                         Root directory under which to create the plugin (default: plugins/)
@@ -935,7 +935,7 @@ usage: forge dev verify preflight [-h] [--consumer-root CONSUMER_ROOT] [--plugin
 positional arguments:
   flow_file             Path to verify.flow.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
@@ -953,7 +953,7 @@ usage: forge dev verify prepare [-h] [--flow FLOW] [--consumer-root CONSUMER_ROO
 positional arguments:
   design_file           Path to design.verification.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --flow FLOW           Prepare only this named flow (default: all flows)
   --consumer-root CONSUMER_ROOT
@@ -974,7 +974,7 @@ usage: forge dev verify release-check [-h] [--consumer-root CONSUMER_ROOT] [--st
 positional arguments:
   design_file           Path to design.verification.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
@@ -997,7 +997,7 @@ usage: forge dev verify run [-h] [--consumer-root CONSUMER_ROOT] [--plugin PLUGI
 positional arguments:
   flow_file             Path to verify.flow.yml
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --consumer-root CONSUMER_ROOT
                         Repo root for path resolution (default: VERIFY_CONSUMER_ROOT env var)
@@ -1027,7 +1027,7 @@ optional arguments:
 ```text
 usage: forge doctor [-h] [--json] [--strict]
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
   --json      Machine-readable JSON output instead of the human report.
   --strict    Exit 1 if any check is missing, including optional extras (see
@@ -1044,7 +1044,7 @@ Give a deterministic account of something FORGE decided: why two ports are conne
 positional arguments:
   target       What to explain (see the examples below)
 
-optional arguments:
+options:
   -h, --help   show this help message and exit
   --path PATH  Project directory (default: the current one; parents are searched for forge.yml)
   --json       Machine-readable JSON output
@@ -1077,7 +1077,7 @@ never made here, at any level of confidence. Previews by default.
 positional arguments:
   path         Project directory (default: the current one)
 
-optional arguments:
+options:
   -h, --help   show this help message and exit
   --apply      Write the fixes (default: preview them as a diff)
   --dry-run    Preview only — the default, accepted explicitly for scripts
@@ -1095,7 +1095,7 @@ usage: forge init [-h] [--plugins-root PLUGINS_ROOT] [--algo-root ALGO_ROOT]
 positional arguments:
   plugin_id             Plugin identifier (e.g. 'my_algo')
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --plugins-root PLUGINS_ROOT
                         Root directory under which to create <plugin_id>/forge/ (default:
@@ -1126,7 +1126,7 @@ positional arguments:
   design                Path to design.yml (default: the forge.yml project around the current
                         directory)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --contracts-from CONTRACTS_FROM
                         Path to modules.yml (interface_contract: entries); default: registry:
@@ -1170,7 +1170,7 @@ that performs them, never performed here.
 positional arguments:
   path         Project directory (default: the current one)
 
-optional arguments:
+options:
   -h, --help   show this help message and exit
   --apply      Write the migrations (default: preview them as a diff)
   --dry-run    Preview only — the default, accepted explicitly for scripts
@@ -1189,7 +1189,7 @@ narrowed to one recommendation so the workflow does not have to be memorised.
 positional arguments:
   path        Project directory (default: the current one)
 
-optional arguments:
+options:
   -h, --help  show this help message and exit
   --json      Machine-readable JSON output
 ```
@@ -1211,7 +1211,7 @@ positional arguments:
   design                Path to design.yml (default: the forge.yml project around the current
                         directory)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --contracts-from CONTRACTS_FROM
                         Path to modules.yml (interface_contract: entries)
@@ -1274,7 +1274,7 @@ positional arguments:
     run                 Run one flow's selected event(s), one simulation per event, with real per-
                         event results
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --flow FLOW           Run only this flow
   --event-id EVENT_ID   Run exactly this one event
@@ -1296,7 +1296,7 @@ positional arguments:
   design_file           Path to design.verification.yml (default: verification.config of the
                         forge.yml project around the current directory)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --flow FLOW           Restrict to one flow by name (default: all flows)
   --consumer-root CONSUMER_ROOT
@@ -1315,7 +1315,7 @@ positional arguments:
   design_file           Path to design.verification.yml (default: verification.config of the
                         forge.yml project around the current directory)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --flow FLOW           Restrict to one flow by name (default: all flows)
   --consumer-root CONSUMER_ROOT
@@ -1341,7 +1341,7 @@ positional arguments:
   design_file           Path to design.verification.yml (default: verification.config of the
                         forge.yml project around the current directory)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --flow FLOW           Flow name to run (required with a design file; default: every flow of the
                         project)

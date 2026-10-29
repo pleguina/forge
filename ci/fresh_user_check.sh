@@ -172,8 +172,10 @@ pass "forge dev verify prepare --dry-run (trigger_demo)"
 section "Stage 6: forge dev verify doctor on trigger_demo (canonical reference)"
 # ─────────────────────────────────────────────────────────────────────────
 # The flow files are not committed: write them into a copy first, as a user
-# does before running a flow.
-TRIGGER_VERIFY="${SCRATCH_DIR}/trigger_demo_verify"
+# does before running a flow. The copy keeps the plugin's place in a
+# repository: gen_stimulus.py finds the repository root four levels up.
+TRIGGER_VERIFY="${SCRATCH_DIR}/trigger_copy/plugins/trigger_demo/forge/verify"
+mkdir -p "$(dirname "${TRIGGER_VERIFY}")"
 cp -r "${TRIGGER_FORGE_ROOT}/verify" "${TRIGGER_VERIFY}"
 TRIGGER_DESIGN="${TRIGGER_VERIFY}/design.verification.yml"
 TRIGGER_JSON="${SCRATCH_DIR}/trigger_doctor.json"

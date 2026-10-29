@@ -95,7 +95,8 @@ def generate_cli_reference_page() -> str:
             lines.append(f"{_heading_level(path)} `{label}`")
             lines.append("")
             lines.append("```text")
-            lines.append(parser.format_help().rstrip())
+            # Python 3.10 renamed argparse's "optional arguments:" heading.
+            lines.append(parser.format_help().rstrip().replace("\noptional arguments:\n", "\noptions:\n"))
             lines.append("```")
             lines.append("")
         return "\n".join(lines).rstrip() + "\n"

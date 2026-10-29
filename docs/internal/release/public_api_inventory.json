@@ -133,13 +133,13 @@
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "GraphNodeKind",
-      "summary": "An enumeration."
+      "summary": "What a node of the design-explorer graph stands for."
     },
     {
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "MaturityStatus",
-      "summary": "An enumeration."
+      "summary": "How a module's connections are wired: by contract, by name matching, or both."
     },
     {
       "kind": "class",

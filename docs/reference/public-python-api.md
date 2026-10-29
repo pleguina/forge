@@ -29,8 +29,8 @@ path.
 | `forge.analysis.design_explorer` | `DesignGraph` | class | DesignGraph(schema: 'ArtifactSchema', source_ir_schema_version: 'str', source_ir_content_hash: 'str', overlay_hashes: 'Dict[str, str]', nodes: 'Tuple[GraphNode, ...]', edges: 'Tuple[GraphEdge, ...]', objects: 'Tuple[ObjectRecord, ...]', open_decisions: 'Tuple[OpenDecision, ...]' = ()) |
 | `forge.analysis.design_explorer` | `GraphEdge` | class | GraphEdge(id: 'str', source: 'str', target: 'str', wiring_method: 'Optional[str]', crosses_clock_domain: 'bool', crosses_reset_domain: 'bool', transformations: 'Tuple[Dict[str, Any], ...]', diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '') |
 | `forge.analysis.design_explorer` | `GraphNode` | class | GraphNode(id: 'str', kind: 'GraphNodeKind', label: 'str', parent: 'Optional[str]' = None, module: 'Optional[str]' = None, clock_domain: 'Optional[str]' = None, reset_domain: 'Optional[str]' = None, members: 'Tuple[str, ...]' = (), latency: 'Optional[Dict[str, Any]]' = None, maturity: 'Optional[MaturitySummary]' = None, diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), inherited_diagnostics: 'Tuple[ProjectionDiagnostic, ...]' = (), object_id: 'str' = '') |
-| `forge.analysis.design_explorer` | `GraphNodeKind` | class | An enumeration. |
-| `forge.analysis.design_explorer` | `MaturityStatus` | class | An enumeration. |
+| `forge.analysis.design_explorer` | `GraphNodeKind` | class | What a node of the design-explorer graph stands for. |
+| `forge.analysis.design_explorer` | `MaturityStatus` | class | How a module's connections are wired: by contract, by name matching, or both. |
 | `forge.analysis.design_explorer` | `MaturitySummary` | class | MaturitySummary(status: 'MaturityStatus', contract_edges: 'int', explicit_edges: 'int', topology_edges: 'int', compatibility_edges: 'int') |
 | `forge.analysis.design_explorer` | `ObjectRecord` | class | One entry in the typed registry backing the selected-object details |
 | `forge.analysis.design_explorer` | `ObjectReference` | class | A reference into one of the real IR object kinds — never |
