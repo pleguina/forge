@@ -181,7 +181,7 @@ def generate_performance_figures(output_dir: Path, manifest: dict) -> None:
             "    figsize: [8, 5]\n"
         )
         subprocess.run(
-            ["forge", "analyze", "plot-results", "--config", str(config_path),
+            ["forge", "dev", "analyze", "plot-results", "--config", str(config_path),
              "--observed", str(csv_path), "--output", str(figures_dir)],
             cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
         )

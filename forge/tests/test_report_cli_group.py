@@ -140,7 +140,7 @@ def test_report_registered_as_top_level_command() -> None:
 
 @skip_without_xsim
 def test_report_reuses_real_provenance_and_junit_artifacts(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, prepare_plugin_flows,
 ) -> None:
     """End-to-end: gen-top a real scratch copy, run `forge test run
     --junit-xml`, write a provenance manifest via `forge inspect
@@ -164,6 +164,7 @@ def test_report_reuses_real_provenance_and_junit_artifacts(
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert gen_top_result.returncode == 0, gen_top_result.stdout + gen_top_result.stderr
+    prepare_plugin_flows(design_verification_yml, tmp_path)
 
     junit_path = tmp_path / "junit.xml"
     test_run_result = _run(
@@ -206,7 +207,7 @@ def test_report_reuses_real_provenance_and_junit_artifacts(
 
 @skip_without_xsim
 def test_report_prefers_results_json_over_junit_xml(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, prepare_plugin_flows,
 ) -> None:
     """`forge report --results-json` reuses the richer
     versioned FlowResult (backend id, real duration, waveform path) rather
@@ -229,6 +230,7 @@ def test_report_prefers_results_json_over_junit_xml(
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert gen_top_result.returncode == 0, gen_top_result.stdout + gen_top_result.stderr
+    prepare_plugin_flows(design_verification_yml, tmp_path)
 
     junit_path = tmp_path / "junit.xml"
     results_json_path = tmp_path / "results.json"

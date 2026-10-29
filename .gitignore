@@ -39,5 +39,16 @@ out/
 gen-top/
 **/xsim_work/
 
+# Flow files `forge dev verify generate` and each plugin's gen_stimulus.py write.
+# trigger_demo's per-module port maps are hand-written inputs to generate.
+plugins/*/forge/verify/*/verify.flow.yml
+plugins/*/forge/verify/*/tb_*.sv
+plugins/*/forge/verify/*/wave.tcl
+plugins/*/forge/verify/*/stimulus_current.svh
+plugins/*/forge/verify/*/*.mem
+plugins/*/forge/verify/*/port_map.yaml
+!plugins/trigger_demo/forge/verify/*_xsim/port_map.yaml
+plugins/trigger_demo/forge/verify/trigger_pipeline_xsim/port_map.yaml
+
 instructions.md
 docs/plan/

@@ -104,6 +104,7 @@ plugins/trigger_demo/
 │       │   ├── bootstrap.py          ← authored: plugin registration with forge dev verify
 │       │   ├── gen_stimulus.py       ← authored: xsim stimulus generator
 │       │   └── tests/                ← authored: unit tests for verify tooling
+│       ├── <module>_xsim/port_map.yaml  ← authored: the module's ports, read by generate
 │       ├── <flow>/verify.flow.yml    ← generated: forge dev verify generate
 │       ├── <flow>/tb_*.sv            ← generated: forge dev verify generate
 │       ├── <flow>/wave.tcl           ← generated: forge dev verify generate
@@ -117,8 +118,9 @@ Sources in `algo/` are reached with `../algo/...`.
 See `docs/PLUGIN_AUTHOR_GUIDE.md` for the complete path model.
 
 > **What you author vs what the framework generates:**
-> Files under `forge/verify/<flow>/` are framework-generated or plugin-generated — do **not**
-> hand-edit them. Regenerate with `forge dev verify generate` and `gen_stimulus.py`.
+> Apart from the per-module `port_map.yaml`, files under `forge/verify/<flow>/` are
+> framework-generated or plugin-generated and are not committed. Write them with
+> `forge dev verify generate` and `gen_stimulus.py`; do **not** hand-edit them.
 
 ## End-to-end Workflow
 

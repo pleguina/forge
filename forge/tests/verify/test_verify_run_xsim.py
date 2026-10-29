@@ -35,7 +35,7 @@ skip_without_xsim = pytest.mark.skipif(
 
 
 @pytest.fixture
-def consumer_root(tmp_path: Path) -> Path:
+def consumer_root(tmp_path: Path, prepare_plugin_flows) -> Path:
     """An isolated copy of plugins/passthrough_demo, gen-top'd into place.
 
     Mirrors the real, documented workflow (see the header comment of
@@ -58,6 +58,7 @@ def consumer_root(tmp_path: Path) -> Path:
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     ])
     parsed.func(parsed)  # raises SystemExit only on failure; let it propagate
+    prepare_plugin_flows(tmp_path / "plugins/passthrough_demo/forge/verify/design.verification.yml", tmp_path)
 
     return tmp_path
 

@@ -171,20 +171,36 @@ pass "forge dev verify prepare --dry-run (trigger_demo)"
 # ─────────────────────────────────────────────────────────────────────────
 section "Stage 6: forge dev verify doctor on trigger_demo (canonical reference)"
 # ─────────────────────────────────────────────────────────────────────────
-TRIGGER_DESIGN="${TRIGGER_FORGE_ROOT}/verify/design.verification.yml"
+# The flow files are not committed: write them into a copy first, as a user
+# does before running a flow.
+TRIGGER_VERIFY="${SCRATCH_DIR}/trigger_demo_verify"
+cp -r "${TRIGGER_FORGE_ROOT}/verify" "${TRIGGER_VERIFY}"
+TRIGGER_DESIGN="${TRIGGER_VERIFY}/design.verification.yml"
 TRIGGER_JSON="${SCRATCH_DIR}/trigger_doctor.json"
 
 set +e
-forge dev verify doctor "${TRIGGER_DESIGN}" --json > "${TRIGGER_JSON}"
+forge dev verify generate "${TRIGGER_DESIGN}" --consumer-root "${REPO_ROOT}" > /dev/null 2>&1
+set -e
+python3 "${TRIGGER_VERIFY}/tools/gen_stimulus.py" --verify-root "${TRIGGER_VERIFY}" \
+    --xml "${TRIGGER_VERIFY}/schemas/data/trigger_demo_golden.xml" > /dev/null
+
+set +e
+forge dev verify doctor "${TRIGGER_DESIGN}" --consumer-root "${REPO_ROOT}" --json > "${TRIGGER_JSON}"
 set -e
 
 python3 - "${TRIGGER_JSON}" <<'EOF'
 import json, sys
 data = json.load(open(sys.argv[1]))
 # Zero-port and missing-tool findings are expected/acceptable without
-# Vivado in this job; anything else at error severity is a real problem.
+# Vivado in this job, and so is trigger_pipeline_xsim's testbench: it is
+# generated from the gen-top RTL, which needs an HLS build. Anything else at
+# error severity is a real problem.
 errors = [d for d in data["diagnostics"] if d["severity"] == "error"]
-hard_errors = [e for e in errors if e.get("code") not in ("FWV015", "FWV019")]
+hard_errors = [
+    e for e in errors
+    if e.get("code") not in ("FWV015", "FWV019")
+    and not (e.get("code") == "FWV004" and e.get("flow") == "trigger_pipeline_xsim")
+]
 if hard_errors:
     print(f"Unexpected hard errors: {hard_errors}", file=sys.stderr)
     sys.exit(1)

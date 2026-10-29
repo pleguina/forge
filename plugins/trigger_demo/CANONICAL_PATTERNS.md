@@ -168,7 +168,7 @@ modules:
 
 **Key rule:** `verify.flow.yml`, `tb_*.sv`, `wave.tcl` are **framework-generated**
 — do not hand-edit. `stimulus_current.svh` is **plugin-generated** via
-`gen_stimulus.py`. Both are committed to the repo as the CI baseline.
+`gen_stimulus.py`. Neither is committed; tests generate what they check.
 
 ---
 

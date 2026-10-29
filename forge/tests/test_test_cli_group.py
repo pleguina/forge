@@ -49,7 +49,9 @@ def _run(capsys: pytest.CaptureFixture[str], group: str, *args: str) -> Result:
 
 
 @pytest.fixture
-def consumer_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
+def consumer_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], prepare_plugin_flows,
+) -> Path:
     """An isolated, gen-top'd copy of plugins/passthrough_demo rooted at
     tmp_path — same fixture recipe as
     tests/verify/test_verify_run_xsim.py's own `consumer_root`."""
@@ -65,6 +67,7 @@ def consumer_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    prepare_plugin_flows(tmp_path / "plugins/passthrough_demo/forge/verify/design.verification.yml", tmp_path)
 
     return tmp_path
 

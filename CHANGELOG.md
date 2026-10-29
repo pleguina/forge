@@ -84,6 +84,16 @@ for the versioning policy.
   directly instead of re-entering the CLI for each flow, and both `forge
   test` and `forge dev verify run` use a plugin's `runtime_context.py`
   whether or not it also has a `flow_config.py`.
+- **The reference plugins' generated flow files are no longer committed.**
+  `verify.flow.yml`, `tb_*.sv`, `wave.tcl`, `stimulus_current.svh`, the
+  readmemh `.mem` files and the `port_map.yaml` copies under
+  `plugins/*/forge/verify/<flow>/` (88 files, some holding one machine's
+  absolute paths) are ignored; the tutorials already generate them before a
+  run. trigger_demo's per-module `port_map.yaml` stay: they are hand-written
+  inputs to `forge dev verify generate`. Tests prepare their own copies (the
+  `prepare_plugin_flows` fixture, trigger_demo's `generated_verify_root`).
+- The vision_pipeline_demo tutorial runner and reference-asset generator
+  call `forge dev …` instead of the old top-level group names.
 - **`--mode vhdl` writes a VHDL entity around the Verilog top.** The
   separate VHDL generator tied every module output to `'0'`, left out the
   design's external ports and did not compile; it is removed, with

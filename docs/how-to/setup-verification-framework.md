@@ -75,7 +75,7 @@ Downstream plugin test suites are run from the plugin repository. FORGE should n
 
 | Test file                      | Covers                                         |
 |-------------------------------|------------------------------------------------|
-| `test_gen_stimulus.py` (48 tests) | XML dataset parsing, per-module stimulus generation, dry-run behavior, committed `stimulus_current.svh` fixtures |
+| `test_gen_stimulus.py` (48 tests) | XML dataset parsing, per-module stimulus generation, dry-run behavior, generated `stimulus_current.svh` and testbenches |
 | `test_trigger_demo_verify.py` (62 tests) | Plugin bootstrap, csim/xsim backend registration, `verify.flow.yml` loading, `design.verification.yml` contract validation, full-chip synthetic-flow loading |
 
 ---

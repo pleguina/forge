@@ -34,7 +34,7 @@ tools/trigger_demo_verify_env.sh   ← shell PYTHONPATH helper
 tools/tests/                       ← unit tests for verify tooling
 ```
 
-## Framework-generated artifacts (committed as CI baseline)
+## Generated artifacts (not committed)
 
 ```
 <flow>/verify.flow.yml      ← forge dev verify generate design.verification.yml
