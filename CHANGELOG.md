@@ -216,6 +216,12 @@ for the versioning policy.
   lists the synthesised interface as the one FORGE uses.
 
 ### Added
+- **Register maps.** `forge dev framework registers` reads a typed register
+  map (config, status, counter, snapshot and latency-monitor registers with
+  fields, reset values, clock domains, clear-on-read and atomic reads) and
+  writes a uHAL address table, the Blobfish payload services that place it
+  in an SLR's config and readback words, and a Markdown table.
+  `forge.integration.registers.FakeBus` gives tests the map's bus semantics.
 - **Floorplan reports.** `forge dev framework floorplan --report` writes the
   proposal's per-SLR cells and resources, the nets crossing each SLR boundary
   against a budget, and the spec's errors (patterns matching nothing, a cell in

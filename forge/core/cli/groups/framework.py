@@ -341,6 +341,35 @@ def cmd_emp_payload(args):
     print(f"Written: {args.out} (emp-fwk {release.version or 'checkout without a release tag'})")
 
 
+def cmd_registers(args):
+    """Export a register map: IPbus address table, Blobfish payload services, Markdown."""
+    import yaml
+    from forge.integration.registers import RegisterMap, to_blobfish, to_ipbus_xml, to_markdown
+
+    try:
+        regs = RegisterMap.from_dict(yaml.safe_load(Path(args.map).read_text()) or {})
+        outputs = {}
+        if args.ipbus:
+            outputs[args.ipbus] = to_ipbus_xml(regs, top=args.top)
+        if args.blobfish:
+            if args.slr is None:
+                raise ValueError("--blobfish needs --slr")
+            outputs[args.blobfish] = ("# Written by forge dev framework registers; do not edit.\n"
+                                      + yaml.safe_dump(to_blobfish(regs, slr=args.slr), sort_keys=False))
+        if args.doc:
+            outputs[args.doc] = to_markdown(regs)
+    except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not outputs:
+        print("ERROR: nothing to write: give --ipbus, --blobfish or --doc", file=sys.stderr)
+        sys.exit(1)
+    for path, text in outputs.items():
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(text)
+        print(f"Written: {path}")
+
+
 def register(sub):
     """Register the 'framework' command group."""
     grp = sub.add_parser(
@@ -510,3 +539,17 @@ def register(sub):
     p_emp.add_argument("--ir", required=True, help="design.ir.json of the generated top")
     p_emp.add_argument("--out", required=True, help="VHDL file to write")
     p_emp.set_defaults(func=cmd_emp_payload)
+
+    # ── framework registers ───────────────────────────────────────────────
+    p_reg = grp_sub.add_parser(
+        "registers",
+        help="Export a register map: IPbus address table, Blobfish payload services, Markdown",
+    )
+    p_reg.add_argument("--map", required=True, help="YAML register map (see forge.integration.registers)")
+    p_reg.add_argument("--ipbus", default=None, help="uHAL address table XML to write")
+    p_reg.add_argument("--top", default="payload", help="Top node id of the address table")
+    p_reg.add_argument("--blobfish", default=None,
+                       help="YAML with the control_policies placing the map in an SLR's config/readback words")
+    p_reg.add_argument("--slr", type=int, default=None, help="SLR whose words --blobfish uses")
+    p_reg.add_argument("--doc", default=None, help="Markdown register table to write")
+    p_reg.set_defaults(func=cmd_registers)

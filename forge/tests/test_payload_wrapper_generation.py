@@ -453,3 +453,12 @@ class TestTypedServices:
         p = ControlPolicies.from_dict({"drive": {"x": "1'b0", "y": "z"}, "verilog": {"before_algo": ["a.v"]},
                                        "config_words": {"c": {"register": "r", "word": 0}}}, base=tmp_path)
         assert p.raw_entries() == {"drive": 2, "verilog": 1}
+
+    def test_a_register_maps_blobfish_export_is_a_payload_policy(self, wide):
+        from forge.integration.registers import RegisterMap, to_blobfish
+        regs = RegisterMap.from_dict({"registers": [
+            {"name": "ctrl", "kind": "config", "width": 64, "port": "cfg_ctrl"},
+            {"name": "lock", "kind": "status", "width": 16, "net": "lock_status"}]})
+        content = self._gen(wide, **to_blobfish(regs, slr=2)["control_policies"])
+        assert ".cfg_ctrl (slr2_config_registers_in[64*0 +: 64])" in content
+        assert "assign slr2_readback_registers_out = {48'b0, lock_status};" in content
