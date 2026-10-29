@@ -44,7 +44,7 @@ class DatasetService:
             return source.serialized
         if source.raw_path is not None:
             from forge.verification.dataset_format import get_format_loader
-            return get_format_loader(source.raw_path).load(source.raw_path)
+            return get_format_loader(source.raw_path, source.format).load(source.raw_path)
         raise ValueError("DatasetSource has neither `serialized` nor `raw_path` set")
 
     def list_events(self, dataset: CanonicalDataset) -> "list[str]":

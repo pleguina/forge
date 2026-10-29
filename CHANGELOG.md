@@ -212,6 +212,14 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **Datasets in any registered format, EMP pattern files among them.** A
+  flow's `dataset` takes `path` and `format` (`xml`, `json`, `empv2`);
+  `dataset.xml` still works. A `.txt` file is recognised as an EMP pattern
+  file by its header, never by its suffix. The `empv2` loader makes event
+  *k* the *k*-th packet of every link; event listing for `forge test`
+  follows the flow's format. `forge.integration.emp` reads and writes the
+  optional strobe bit (`LinkWord.strobe`) and keeps a file's ID and every
+  frame (`BoardData`), so a pattern file round-trips without loss.
 - **`forge dev framework floorplan`**: one `USER_SLR_ASSIGNMENT` per cell of
   a `--mode bd` top level (optionally its SLR pblock too). The link
   interfaces, and the decoders only one link feeds, go to the SLR of their
