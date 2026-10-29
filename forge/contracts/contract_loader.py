@@ -31,7 +31,7 @@ Policy: framework/IP_INTERFACE_POLICY.md
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, overload
 
 import yaml
 
@@ -645,10 +645,20 @@ def synthesize_ip_info_from_contract(contract: LoadedContract) -> dict:
     }
 
 
+@overload
+def synthesize_ip_info(
+    contracts: Dict[str, LoadedContract], module_names: None = None,
+) -> Dict[str, dict]: ...
+@overload
+def synthesize_ip_info(
+    contracts: Dict[str, LoadedContract], module_names: List[str],
+) -> Dict[str, Optional[dict]]: ...
+
+
 def synthesize_ip_info(
     contracts: Dict[str, LoadedContract],
     module_names: Optional[List[str]] = None,
-) -> Dict[str, dict]:
+) -> Dict[str, Any]:
     """
     Build a **projected** ip_info dict from loaded contracts.
 
@@ -672,7 +682,7 @@ def synthesize_ip_info(
     A dict compatible with ``load_ip_info()``'s return value.
     """
     keys = module_names if module_names is not None else list(contracts.keys())
-    result: Dict[str, dict] = {}
+    result: Dict[str, Any] = {}
     for key in keys:
         c = contracts.get(key)
         result[key] = synthesize_ip_info_from_contract(c) if c else None

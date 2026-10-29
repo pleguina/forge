@@ -523,6 +523,7 @@ def _build_graph_from_ir(
         lat_hint = timing.latency_hint if timing else None
         is_var = timing.variable_latency if timing else False
         declaration = timing.latency if timing else None
+        lat: Optional[LatencyValue]
         if declaration is not None:
             # A structured latency: {kind: ...} block is
             # explicit and authoritative — takes precedence over the flat

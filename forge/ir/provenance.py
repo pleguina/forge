@@ -36,7 +36,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from forge import __version__ as _forge_version
 from ..core.utils.content_hash import hash_file
@@ -162,7 +162,7 @@ def build_provenance(
     *,
     command_options: Optional[Dict[str, Any]] = None,
     plan_hash: Optional[str] = None,
-    output_paths: Optional[List["str | Path"]] = None,
+    output_paths: Optional[Sequence["str | Path"]] = None,
     project_identity: Optional[str] = None,
     toolchain_versions: Optional[Dict[str, str]] = None,
 ) -> ProvenanceManifest:

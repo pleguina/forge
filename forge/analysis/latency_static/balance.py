@@ -114,6 +114,7 @@ def resolve_auto_delays(graph: LatencyGraph) -> AutoDelayResult:
             # One data input, or inputs that need no cycle relation.
             extra = {e.src: 0 for e in auto_in}
         else:
+            arrival = {p.path[0]: p.total_cycles for p in report.paths if p.total_cycles is not None}
             unknown = [p.path[0] for p in report.paths if p.total_cycles is None]
             if unknown:
                 problems.append(
@@ -122,8 +123,7 @@ def resolve_auto_delays(graph: LatencyGraph) -> AutoDelayResult:
                     "or give the HLS build root)"
                 )
                 continue
-            target = max(p.range_hi if p.range_hi is not None else p.total_cycles for p in report.paths)
-            arrival = {p.path[0]: p.total_cycles for p in report.paths}
+            target = max(p.range_hi if p.range_hi is not None else arrival[p.path[0]] for p in report.paths)
             extra = {e.src: target - arrival[e.src] for e in auto_in}
 
         for e in auto_in:

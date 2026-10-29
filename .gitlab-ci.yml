@@ -75,24 +75,18 @@ forge:lint:
 # ---------------------------------------------------------------------------
 # forge:type-check
 #
-# mypy over forge/ core. Report-only (allow_failure: true) — the codebase
-# currently has a real, non-trivial baseline of pre-existing type errors
-# (see CHANGELOG.md) that hasn't been paid down yet. This job exists so that
-# baseline is visible and doesn't silently grow, without blocking merges on
-# work nobody has scoped yet. Tighten to blocking once the baseline is at
-# or near zero.
+# mypy over forge/. Blocking: the tree is clean, so any new error fails.
 # ---------------------------------------------------------------------------
 forge:type-check:
   stage: lint
   tags:
     - default-x86_64
-  allow_failure: true
   before_script:
     - pip install --quiet --cache-dir .pip-cache -e "forge[dev]"
   script:
     - mkdir -p ci-logs
     - |
-      mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen \
+      mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen forge/project \
         2>&1 | tee ci-logs/type-check.log
   artifacts:
     name: "forge-type-check-${CI_COMMIT_SHORT_SHA}"

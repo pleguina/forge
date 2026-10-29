@@ -104,6 +104,7 @@ class GenTopPlanContext:
     hls_build_root: Path
     src_root: Path
     xml_stimulus_tool: Optional[Path]
+    system_yml: Optional[Path]
     output_dir: Path
     ip_info_file: Path
     contracts_from: Optional[str]
@@ -176,6 +177,7 @@ def compute_gen_top_plan(
     xml_stimulus_tool = resolve_path(
         getattr(options, "xml_stimulus_tool", None), c_root
     )
+    system_yml = resolve_path(options.system, c_root)
 
     if options.output:
         output = resolve_path(options.output, c_root)
@@ -275,7 +277,7 @@ def compute_gen_top_plan(
             ip_info_generated_now = True
 
     conn_map, global_nets, match_report = auto_match_ports(
-        cfg, ip_info, system_yml=options.system, contracts=contracts,
+        cfg, ip_info, system_yml=system_yml, contracts=contracts,
     )
 
     if emit_progress:
@@ -328,7 +330,7 @@ def compute_gen_top_plan(
         cfg=cfg, design_path=design_path,
         c_root=c_root, ip_root=ip_root, build_root=build_root,
         hls_build_root=hls_build_root, src_root=src_root,
-        xml_stimulus_tool=xml_stimulus_tool,
+        xml_stimulus_tool=xml_stimulus_tool, system_yml=system_yml,
         output_dir=output_dir, ip_info_file=ip_info_file,
         contracts_from=_modules_yml, contracts_from_path=_modules_yml_path,
         contracts=contracts, ip_info=ip_info,
@@ -481,7 +483,7 @@ def generate_top(
             "design": str(ctx.design_path),
             "contracts_from": (
                 str(ctx.contracts_from_path)
-                if ctx.contracts_from and ctx.contracts_from_path.exists() else None
+                if ctx.contracts_from_path is not None and ctx.contracts_from_path.exists() else None
             ),
             "ip_info": str(ctx.ip_info_file) if ctx.ip_info_file.exists() else None,
             "build_dir": str(ctx.build_root),
@@ -499,7 +501,7 @@ def generate_top(
             bd_name=options.bd_name,
             src_root=ctx.design_path.parent,
             ip_root=ctx.ip_root,
-            system_yml=options.system,
+            system_yml=ctx.system_yml,
             contracts=ctx.contracts or {},
             match_report=ctx.match_report,
         )
@@ -513,7 +515,7 @@ def generate_top(
             ip_root=ctx.ip_root,
             out_path=output,
             top_name=top_name,
-            system_yml=options.system,
+            system_yml=ctx.system_yml,
             contracts=ctx.contracts,
             match_report=ctx.match_report,
         )
@@ -614,7 +616,7 @@ def _write_artifacts(
         cfg,
         params_output,
         algo_top_v_path=None if options.mode == "bd" else output,
-        hls_metrics_file=options.hls_metrics,
+        hls_metrics_file=resolve_path(options.hls_metrics, ctx.c_root),
         port_map_data=port_map_data,
     )
 

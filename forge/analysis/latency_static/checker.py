@@ -26,10 +26,10 @@ produces a real multi-predecessor merge point here.
 from __future__ import annotations
 
 import dataclasses
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from forge.analysis.latency_model import LatencyProvenance
-from forge.analysis.latency_static.graph import LatencyGraph
+from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +169,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
         if not (edges_by_pred.get(p) and (edges_by_pred[p].unknown_cdc or edges_by_pred[p].control_strobe))
     ]
 
-    if own_unknown or own_kind in ("bounded", "elastic"):
+    if own_unknown or own_cycles is None or own_kind in ("bounded", "elastic"):
         return (None if own_unknown else own_cycles, own_unknown)
 
     if len(real_preds) == 0:
@@ -181,7 +181,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
             p_edge = edges_by_pred.get(p)
             p_edge_cycles = p_edge.latency.cycles if (p_edge and p_edge.latency and p_edge.latency.cycles) else 0
             p_upstream, p_unknown = _branch_upstream(graph, p, p_edge)
-            if p_unknown:
+            if p_unknown or p_upstream is None:
                 return (own_cycles, False)  # can't confirm balance — stay conservative
             totals.append(p_upstream + p_edge_cycles)
         if len(set(totals)) == 1:
@@ -215,7 +215,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
 
     upstream_cycles, upstream_unknown = _branch_upstream(graph, pred, edge)
-    if upstream_unknown:
+    if upstream_unknown or upstream_cycles is None:
         return (None, True)
     return (upstream_cycles + edge_cycles + own_cycles, False)
 
@@ -272,7 +272,7 @@ def check_merge_points(
 def analyse_merge_point(
     graph: LatencyGraph,
     node_name: str,
-    edge_by_pair: Optional[Dict[tuple, object]] = None,
+    edge_by_pair: Optional[Dict[Tuple[str, str], LatencyEdge]] = None,
     consumer_protocols: Optional[Dict[str, str]] = None,
 ) -> Optional[MismatchReport]:
     """The :class:`MismatchReport` of one node, or None when it is not a merge
@@ -323,7 +323,7 @@ def analyse_merge_point(
             kinds.add(kind)
 
         offset = int(offsets.get(src_node.module, offsets.get(src_node.ref, 0)))
-        total = (node_cycles + edge_cycles - offset) if not unknown else None
+        total = None if unknown or node_cycles is None else node_cycles + edge_cycles - offset
 
         range_lo: Optional[int] = None
         range_hi: Optional[int] = None

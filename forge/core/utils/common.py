@@ -57,7 +57,7 @@ def format_duration(seconds: float) -> str:
         return f"{seconds/3600:.1f}h"
 
 
-def format_memory(bytes_val: int) -> str:
+def format_memory(bytes_val: float) -> str:
     """Format memory size in human-readable format."""
     for unit in ['B', 'KB', 'MB', 'GB']:
         if bytes_val < 1024:

@@ -28,7 +28,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Container, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -127,7 +127,7 @@ def build_connection_maps(cfg: DesignConfig) -> Tuple[
 def _reset_net_for_domain(
     domain_name: "str | None",
     reset_sync_domains: Dict[str, Dict[str, Any]],
-    own_nets: "Set[str] | Tuple[str, ...]" = (),
+    own_nets: Container[str] = (),
     *,
     ident_fn=lambda s: s,
 ) -> str:
@@ -396,7 +396,7 @@ def resolve_top_ports(
                     if ext_dir:
                         top_port_name = f"{ilabel}_{pname}"
 
-                if not ext_dir:
+                if not ext_dir or top_port_name is None:
                     continue
 
                 if ext_dir == "output":

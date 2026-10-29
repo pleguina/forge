@@ -45,6 +45,7 @@ from forge.project.evidence import (
     evidence_list,
     weakest_confidence,
 )
+from forge.project.discovery import DiscoveryResult
 from forge.project.status import ProjectStatus, evaluate
 
 #: Target kinds, as the prefix a user types (``clock:clk``) or the shape the
@@ -280,10 +281,17 @@ def _explain_diagnostic(
     return explanation
 
 
+def _discovery(status: ProjectStatus) -> DiscoveryResult:
+    # explain() has refused a project without discovered sources before
+    # dispatching to the per-target explainers.
+    assert status.discovery is not None
+    return status.discovery
+
+
 # ── Modules ───────────────────────────────────────────────────────────────
 
 def _explain_module(target: str, name: str, status: ProjectStatus) -> Explanation:
-    discovery = status.discovery
+    discovery = _discovery(status)
     unit = discovery.unit(name)
     if unit is None:
         candidates = ", ".join(sorted(u.name for u in discovery.units)[:8]) or "(none)"
@@ -343,7 +351,7 @@ def _explain_module(target: str, name: str, status: ProjectStatus) -> Explanatio
 
 def _explain_port(target: str, endpoint: str, status: ProjectStatus) -> Explanation:
     """The plan's worked example: why is this port wired where it is?"""
-    discovery = status.discovery
+    discovery = _discovery(status)
     module_name, _, port_name = endpoint.partition(".")
     unit = discovery.unit(module_name)
     if unit is None:
@@ -383,17 +391,17 @@ def _explain_port(target: str, endpoint: str, status: ProjectStatus) -> Explanat
             explanation.section("Resolved connection", evidence_lines)
         explanation.evidence.extend(ir_evidence)
     else:
-        for connection in discovery.connections:
-            if endpoint in (connection.producer, connection.consumer):
-                other = (connection.consumer if endpoint == connection.producer
-                         else connection.producer)
+        for inferred in discovery.connections:
+            if endpoint in (inferred.producer, inferred.consumer):
+                other = (inferred.consumer if endpoint == inferred.producer
+                         else inferred.producer)
                 explanation.section("Inferred connection", [
                     other,
                     "not yet resolved through the IR — this is what `forge adopt` "
                     "inferred from the sources",
                 ])
-                explanation.section("Why", [e.describe() for e in connection.evidence])
-                explanation.evidence.extend(connection.evidence)
+                explanation.section("Why", [e.describe() for e in inferred.evidence])
+                explanation.evidence.extend(inferred.evidence)
                 break
 
     # A refusal is a decision too, and the one most worth explaining.
@@ -635,7 +643,7 @@ def _build_ir(status: ProjectStatus):
 def _explain_clock_or_reset(
     target: str, name: str, status: ProjectStatus, kind: str,
 ) -> Explanation:
-    discovery = status.discovery
+    discovery = _discovery(status)
     pool = discovery.clocks if kind == KIND_CLOCK else discovery.resets
     candidate = next((c for c in pool if c.name == name), None)
     if candidate is None:
@@ -685,7 +693,7 @@ def _explain_hls(target: str, name: str, status: ProjectStatus) -> Explanation:
     reports the prediction *as* a prediction — including the predictor's own
     warnings, which are the honest record of what it could not resolve.
     """
-    discovery = status.discovery
+    discovery = _discovery(status)
     candidate = next(
         (c for c in discovery.hls_candidates if c.top == name or c.path.stem == name), None)
     if candidate is None:

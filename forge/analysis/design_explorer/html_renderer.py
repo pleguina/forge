@@ -130,8 +130,9 @@ def _read_vendored_cytoscape_js() -> str:
     # package (no __init__.py) — resolved via the real package's own
     # Traversable root instead, which works identically from the source
     # tree and from an installed package artifact.
-    resource = importlib.resources.files("forge.analysis.design_explorer").joinpath(
-        "vendor", "cytoscape.min.js",
+    resource = (
+        importlib.resources.files("forge.analysis.design_explorer")
+        .joinpath("vendor").joinpath("cytoscape.min.js")
     )
     return resource.read_text(encoding="utf-8")
 

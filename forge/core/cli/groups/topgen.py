@@ -112,7 +112,7 @@ def _validators_to_envelope(*validators_with_prefix, metrics: Optional[dict] = N
     )
 
 
-def _discover_verify_design(design_path: Path, args, consumer_root: Path | None) -> Path | None:
+def _discover_verify_design(design_path: Path, args, consumer_root: Path) -> Path | None:
     """The verification contract to resolve the IR's plan against.
 
     ``--verify-design`` wins; otherwise the conventional sibling location
@@ -130,7 +130,7 @@ def _discover_verify_design(design_path: Path, args, consumer_root: Path | None)
 
 
 def _attach_verification_plan(
-    project, design_path: Path, args, consumer_root: Path | None, dut_dir: Path,
+    project, design_path: Path, args, consumer_root: Path, dut_dir: Path,
 ) -> None:
     """Resolve this design's verification plan onto the IR it just
     generated from — Phase G3.

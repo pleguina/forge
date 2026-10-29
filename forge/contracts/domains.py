@@ -27,7 +27,7 @@ ip_info" case already produces a warning in ``MatchReport.warnings``
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Container, Dict, List, Optional, Set, Tuple
 
 from .config import DesignConfig
 from .contract_loader import LoadedContract
@@ -60,7 +60,7 @@ def is_standard_reset(name: str) -> bool:
     )
 
 
-def collapses_to_global(name: str, *, is_clock: bool, own_nets) -> bool:
+def collapses_to_global(name: str, *, is_clock: bool, own_nets: Container[str]) -> bool:
     """Whether this clock/reset pin is driven by the single global net.
 
     Three cases:
@@ -97,7 +97,7 @@ def reset_is_active_low(port: str, contract: Optional[LoadedContract] = None) ->
 
 
 def top_level_net(
-    domain_name: str, *, is_clock: bool, own_nets: "Set[str] | Tuple[str, ...]" = (),
+    domain_name: str, *, is_clock: bool, own_nets: Container[str] = (),
 ) -> str:
     """Translate a resolved clock/reset domain identity (a module's raw
     clock/reset port name) into the actual

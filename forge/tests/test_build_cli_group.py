@@ -76,6 +76,19 @@ def test_dry_run_writes_zero_files(capsys: pytest.CaptureFixture[str], tmp_path:
     assert before == after
 
 
+def test_system_yml_is_read(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    system_yml = tmp_path / "system.yml"
+    system_yml.write_text("connections: []\n")
+
+    result = _run_build(
+        capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
+        "--output", str(tmp_path / "out/algo_top.v"), "--system", str(system_yml),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "out/algo_top.v").is_file()
+
+
 def test_plan_human_output_sections(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     result = _run_build(
         capsys, str(TRIGGER_DESIGN), "--contracts-from", str(TRIGGER_MODULES),

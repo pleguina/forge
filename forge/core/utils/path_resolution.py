@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import overload
 
 
 def consumer_root(anchor_path: Path | None = None, explicit_root: Path | None = None) -> Path:
@@ -20,6 +21,14 @@ def consumer_root(anchor_path: Path | None = None, explicit_root: Path | None = 
         "TOPGEN_CONSUMER_ROOT, or provide an input path that can anchor "
         "relative defaults."
     )
+
+
+@overload
+def resolve_path(path_value: Path | str, base_root: Path, default: Path | str | None = None) -> Path: ...
+@overload
+def resolve_path(path_value: Path | str | None, base_root: Path, default: Path | str) -> Path: ...
+@overload
+def resolve_path(path_value: Path | str | None, base_root: Path, default: None = None) -> Path | None: ...
 
 
 def resolve_path(

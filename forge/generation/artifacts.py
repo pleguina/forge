@@ -13,7 +13,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from forge.generation.support_rtl import SUPPORT_RTL_BY_TRANSFORMATION, resolve_support_rtl
 from forge.ir.serialize import content_hash as ir_content_hash_of
@@ -543,7 +543,7 @@ def generate_port_map(
         return port[1] if port else default
 
     for name, (direction, width) in sorted(ports.items()):
-        entry = {
+        entry: dict[str, Any] = {
             "name": name,
             "direction": "input" if direction == "in" else "output",
             "width": width,

@@ -97,8 +97,9 @@ def _authored(config: ForgeConfig) -> ResolvedProject:
     design = (config.root / config.design).resolve()
     if not design.is_file():
         raise FileNotFoundError(f"{ROOT_CONFIG_NAME} names design {config.design}, which does not exist")
+    registry: Optional[Path]
     if config.registry:
-        registry: Optional[Path] = (config.root / config.registry).resolve()
+        registry = (config.root / config.registry).resolve()
         if not registry.is_file():
             raise FileNotFoundError(
                 f"{ROOT_CONFIG_NAME} names registry {config.registry}, which does not exist"

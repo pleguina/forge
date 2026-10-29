@@ -533,7 +533,9 @@ def write_bd_tcl(
     if reset_sync_domains:
         tcl.append("# -- reset synchronizers for reset_domains.*.sync: reset_sync --")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
-            derived_from = rel.get("derived_from")
+            # A synchronized reset domain must name the domain it derives from
+            # (DesignConfig validation).
+            derived_from = rel["derived_from"]
             async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
 
             # The synchronizer's own destination clock: whichever clock
@@ -931,7 +933,7 @@ if __name__ == "__main__":
     )
     cfg = DesignConfig.load(yd)
     info = load_ip_info(ns.ip_info)
-    conn, gnet = auto_match_ports(cfg, info)
+    conn, gnet, _report = auto_match_ports(cfg, info)
     write_bd_tcl(
         cfg,
         info,

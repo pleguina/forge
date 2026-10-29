@@ -202,7 +202,7 @@ def _build(annotation: Any, value: Any) -> Any:
         return [_build(item_type, v) for v in value]
     if origin in (dict, Dict):
         return dict(value)
-    if dataclasses.is_dataclass(annotation) and isinstance(value, dict):
+    if isinstance(annotation, type) and dataclasses.is_dataclass(annotation) and isinstance(value, dict):
         return _from_dataclass_dict(annotation, value)
     return value
 

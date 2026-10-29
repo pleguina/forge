@@ -436,7 +436,7 @@ def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
     from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
     from forge.verification.throughput_result import render_throughput_markdown
 
-    static_analyses = []
+    static_analyses: List[Any] = []
     bottleneck = None
     predicted_rate = None
     hls_build_root = getattr(args, "hls_build_root", None)
@@ -535,7 +535,7 @@ def _write_project_attachments(
         })
         return
 
-    all_attachments = []
+    all_attachments: List[Any] = []
     for provider in providers:
         attachments = provider.build_attachments(design_path, output_dir)
         all_attachments.extend(attachments)

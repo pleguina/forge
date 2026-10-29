@@ -194,6 +194,6 @@ def _remove_connections(
 
     missing = sorted(pairs - matched)
     if missing:
-        listed = ", ".join(f"{s} -> {d}" for s, d in missing)
-        raise ValueError(f"{path}: remove: no connection {listed} in the base design")
+        names = ", ".join(f"{s} -> {d}" for s, d in missing)
+        raise ValueError(f"{path}: remove: no connection {names} in the base design")
     return kept

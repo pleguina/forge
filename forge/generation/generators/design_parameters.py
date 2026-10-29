@@ -60,7 +60,7 @@ def parse_algo_top_ports(
     with open(algo_top_v_path, 'r') as f:
         content = f.read()
     
-    ports = {'inputs': [], 'outputs': []}
+    ports: Dict[str, List[Dict[str, Any]]] = {'inputs': [], 'outputs': []}
     
     # Extract module declaration section
     # module algo_top (
@@ -230,7 +230,7 @@ def _port_group_width(group: Any) -> int:
 
 
 def _summarize_output_widths(port_map_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    outputs = []
+    outputs: List[Any] = []
     if port_map_data:
         outputs = port_map_data.get('port_groups', {}).get('outputs', []) or []
 
@@ -305,7 +305,7 @@ def extract_design_parameters(
             continue
 
         entries = _port_group_entries(group)
-        group_summary = {
+        group_summary: Dict[str, Any] = {
             'count': int(group.get('count', len(entries))) if isinstance(group, dict) else len(entries),
             'width': _port_group_width(group),
         }
@@ -354,7 +354,7 @@ def extract_design_parameters(
     # ===========================================================================
     # 5. MODULE INFORMATION
     # ===========================================================================
-    modules_summary = []
+    modules_summary: List[Dict[str, Any]] = []
     for idx, module in enumerate(cfg.modules):
         mod_info = {
             'name': module.name,
@@ -409,7 +409,7 @@ def extract_design_parameters(
     # read-only analysis); see
     # test_design_parameters_latency_agreement.py for a real-design proof
     # that the two codepaths agree on trigger_demo's actual linear segment.
-    pipeline_info = {
+    pipeline_info: Dict[str, Any] = {
         'description': 'Pipeline latency information (from HLS synthesis reports)',
         'total_latency_cycles': None,
         'modules': {}
@@ -488,7 +488,7 @@ def extract_design_parameters(
     # ===========================================================================
     # 7. PORT MAPPING (from generated algo_top.v)
     # ===========================================================================
-    port_map = {'inputs': [], 'outputs': []}
+    port_map: Dict[str, List[Dict[str, Any]]] = {'inputs': [], 'outputs': []}
     if algo_top_v_path and algo_top_v_path.exists():
         system_signal_names = frozenset(
             {'ap_clk', 'ap_rst', 'ap_rst_n'} | set(cfg.control_signals.keys())
@@ -498,25 +498,25 @@ def extract_design_parameters(
     # ===========================================================================
     # Associate debug ports with modules
     # ===========================================================================
-    debug_port_counts = {}
+    debug_ports_by_module: Dict[str, List[str]] = {}
     for port in port_map['outputs']:
         if port['category'] == 'debug' and port['module']:
             module_name = port['module']
-            if module_name not in debug_port_counts:
-                debug_port_counts[module_name] = []
-            debug_port_counts[module_name].append(port['name'])
+            if module_name not in debug_ports_by_module:
+                debug_ports_by_module[module_name] = []
+            debug_ports_by_module[module_name].append(port['name'])
 
     # Add debug_ports list to each module that has debug ports
     for mod in modules_summary:
-        if mod['name'] in debug_port_counts:
-            mod['debug_ports'] = debug_port_counts[mod['name']]
+        if mod['name'] in debug_ports_by_module:
+            mod['debug_ports'] = debug_ports_by_module[mod['name']]
             if not mod.get('debug'):
                 # If module has debug ports but debug flag wasn't set, add it
                 mod['debug'] = True
 
-    if debug_port_counts:
-        print(f"  ℹ️  Found debug ports for {len(debug_port_counts)} modules:")
-        for module_name, ports in debug_port_counts.items():
+    if debug_ports_by_module:
+        print(f"  ℹ️  Found debug ports for {len(debug_ports_by_module)} modules:")
+        for module_name, ports in debug_ports_by_module.items():
             print(f"      - {module_name}: {len(ports)} debug ports")
 
     # ===========================================================================
@@ -527,7 +527,7 @@ def extract_design_parameters(
         'schema_version': '1.0',
         'generator': 'topgen/design_parameters.py',
         'timestamp': datetime.datetime.now().isoformat(),
-        'design_file': str(Path(cfg._source_file).resolve()) if hasattr(cfg, '_source_file') else 'unknown',
+        'design_file': str(Path(cfg._source_file).resolve()) if cfg._source_file else 'unknown',
         
         # Clock and Timing
         'timing': {

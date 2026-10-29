@@ -27,7 +27,7 @@ def _render_scan(result, root: Path) -> None:
     print()
 
     counts = result.counts()
-    rtl_by_language = {}
+    rtl_by_language: dict[str, int] = {}
     for unit in result.units:
         rtl_by_language[unit.language] = rtl_by_language.get(unit.language, 0) + 1
     if rtl_by_language:

@@ -53,7 +53,7 @@ def _reject_unknown_keys(cls: type, data: Dict[str, Any], source: Path) -> None:
     useless to the person who typed it. This names the file, the key, and
     the closest real field, which is almost always the actual typo.
     """
-    known = {f.name for f in dataclass_fields(cls)}
+    known = {f.name for f in dataclass_fields(cls) if f.init}
     unknown = [k for k in data if k not in known]
     if not unknown:
         return
@@ -640,6 +640,8 @@ class DesignConfig:
     # `cdc:` at all. See forge.contracts.cdc's module docstring.
     clock_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     reset_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # The design file load() read, for provenance; None for a config built in code.
+    _source_file: Optional[str] = field(default=None, init=False, repr=False, compare=False)
 
     # ────────────────────────────────────────────────────────
     # Loader (now with validate_sources switch)
@@ -896,7 +898,7 @@ class DesignConfig:
         # module pair (see design_cdc.yml's per-crossing-kind module split
         # for the pattern). A genuinely per-pin cdc_map is a larger,
         # separate refactor not attempted here.
-        _cdc_kind_by_pair: Dict[Tuple[str, str], str] = {}
+        _cdc_kind_by_pair: Dict[Tuple[str, str], Optional[str]] = {}
         for conn in connections:
             if not conn.cdc:
                 continue

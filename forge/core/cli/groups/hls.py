@@ -347,8 +347,9 @@ def cmd_hls_run(args):
         reinitialized.add(module)
         stage_stamp.clear_all_stamps(build_root / module)
         ok, log = _run_tcl(module, "project.tcl", "project.log")
-        if ok:
-            stage_stamp.write_stamp(build_root / module, "project", _project_hash(module), tool)
+        digest = _project_hash(module)
+        if ok and digest is not None:
+            stage_stamp.write_stamp(build_root / module, "project", digest, tool)
         return ok, log
 
     def _run_stamped(module: str, step: str, tcl_name: str, log_name: str) -> "tuple[bool, str]":

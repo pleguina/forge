@@ -209,8 +209,8 @@ def _array_ports(arg: Argument, pred: Prediction) -> List[PredictedPort]:
         base = f"{arg.name}{suffix}"
         if remaining:
             depth = 1
-            for d in remaining:
-                depth *= d
+            for size in remaining:
+                depth *= size
             if not any(w.startswith(f"{arg.name}: memory") for w in pred.warnings):
                 # HLS adds a second port set (_address1/_ce1/_q1/_d1/_we1) when
                 # the schedule needs two accesses per cycle. That is a

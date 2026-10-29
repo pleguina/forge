@@ -109,6 +109,20 @@ for the versioning policy.
   matplotlib it printed a skip per figure and exited 0; it now exits 1 and
   names the `plot` extra. A figure that fails to render also fails the
   command instead of being dropped from a passing run.
+- **mypy is clean and blocking.** The 181 errors over the checked packages
+  are fixed with annotations and narrowing (no `# type: ignore` except
+  networkx's missing stubs), `forge/project` is checked too, and the CI
+  type-check job fails on any new error. Under Python 3.9 and 3.11 alike.
+  Found along the way:
+  - `forge build --system` failed with "'str' object has no attribute
+    'read_text'": generation passed the option through as a string.
+    `--system` and `--hls-metrics` are resolved against the consumer root
+    like every other path option.
+  - `python -m forge.generation.generators.block_design` unpacked two values
+    from `auto_match_ports`, which returns three.
+  - The design explorer read its vendored script with a two-argument
+    `joinpath`, which Python 3.9's `Traversable` does not define; it
+    worked only because a package on disk resolves to a `pathlib.Path`.
 - **Generated reference pages no longer depend on the Python version.**
   `python -m forge.docsgen` wrote argparse's "optional arguments:" heading
   under Python < 3.10 and "options:" from 3.10, and took an enum's

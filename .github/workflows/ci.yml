@@ -36,13 +36,12 @@ jobs:
 
   type-check:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
       - run: pip install -e "forge[dev]"
-      - run: mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen
+      - run: mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen forge/project
 
   schema-validate:
     runs-on: ubuntu-latest

@@ -41,10 +41,14 @@ def project_to_conn_map(project: ResolvedProject) -> Tuple[ConnMap, GlobalNets]:
             # Informational only — a tied-to-zero port
             # has no real driver; never part of a real conn_map/global_nets.
             continue
+        # The builder names the net of an external producer and the ports of
+        # every other connection.
         if conn.producer.instance_id == _EXTERNAL:
             sig = conn.producer.interface_name
+            assert sig is not None and conn.consumer.port is not None
             global_nets.setdefault(sig, []).append((conn.consumer.instance_id, conn.consumer.port))
         else:
+            assert conn.producer.port is not None and conn.consumer.port is not None
             key = (conn.producer.instance_id, conn.consumer.instance_id)
             conn_map.setdefault(key, []).append((conn.producer.port, conn.consumer.port))
 

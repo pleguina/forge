@@ -24,7 +24,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
@@ -414,7 +414,7 @@ def infer_contract_skeleton(
         "",
     ]
 
-    def _emit(role: str, port_name: str, *, extra: List[str] = ()) -> None:
+    def _emit(role: str, port_name: str, *, extra: Sequence[str] = ()) -> None:
         p = port_by_name.get(port_name, {})
         if port_name == known_reset:
             extra = [f"      active_level: {reset_active_level}"]

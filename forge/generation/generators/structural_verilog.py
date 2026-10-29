@@ -662,8 +662,9 @@ def write_structural_verilog(
                         pm.append(f"    .{pname}()")  # leave unconnected
                         open_outputs.append((ilabel, pname, w))
                 else:  # input
-                    src_i = incoming.get(pname)
-                    if src_i:
+                    driver = incoming.get(pname)
+                    if driver:
+                        src_i = driver
                         src_mod = inst_to_mod[src_i]
                         src_pin = None
                         for (s_i, d_i), pairs in conn_map.items():
@@ -999,7 +1000,9 @@ def write_structural_verilog(
     if reset_sync_domains:
         emit("  // Reset synchronizers for reset_domains.*.sync: reset_sync declarations")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
-            derived_from = rel.get("derived_from")
+            # A synchronized reset domain must name the domain it derives from
+            # (DesignConfig validation).
+            derived_from = rel["derived_from"]
             async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
 
             # The synchronizer's own destination clock: whichever clock

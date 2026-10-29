@@ -120,7 +120,7 @@ def load_hls_catalog(config_path: Path | str | None = None) -> dict[str, Any]:
     modules: dict[str, dict[str, Any]] = {}
     aliases: dict[str, str] = {}
     design_aliases: dict[str, str] = {}
-    stage_modules = {stage: [] for stage in SUPPORTED_STAGES}
+    stage_modules: dict[str, list[str]] = {stage: [] for stage in SUPPORTED_STAGES}
     ordered_modules: list[str] = []
 
     for raw_module in raw_modules:

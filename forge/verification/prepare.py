@@ -129,10 +129,10 @@ def generate_flows(
 
         # Resolve timing (flow overrides contract defaults)
         defaults = contract.defaults
-        clk   = getattr(flow_decl, "clk_period_ns", None) or getattr(defaults, "clk_period_ns", 4.0)
-        rst   = flow_decl.reset_cycles               or getattr(defaults, "reset_cycles", 4)
-        idle  = flow_decl.idle_cycles_after_reset    or getattr(defaults, "idle_cycles_after_reset", 0)
-        drain = flow_decl.post_stimulus_drain_cycles or getattr(defaults, "post_stimulus_drain_cycles", 8)
+        clk   = flow_decl.clk_period_ns              or defaults.clk_period_ns
+        rst   = flow_decl.reset_cycles               or defaults.reset_cycles
+        idle  = flow_decl.idle_cycles_after_reset    or defaults.idle_cycles_after_reset
+        drain = flow_decl.post_stimulus_drain_cycles or defaults.post_stimulus_drain_cycles
         # Multi-clock-domain designs — empty dict for every pre-existing
         # single-clock flow.
         extra_clocks = getattr(flow_decl, "extra_clocks", None) or getattr(defaults, "extra_clocks", {}) or {}

@@ -101,7 +101,9 @@ class Severity(str, Enum):
     def sort_key(self) -> int:
         return {"note": 0, "warning": 1, "error": 2, "critical": 3}[self.value]
 
-    def __lt__(self, other: "Severity") -> bool:  # for sorting
+    def __lt__(self, other: object) -> bool:  # for sorting
+        if not isinstance(other, Severity):
+            return NotImplemented
         return self.sort_key < other.sort_key
 
 

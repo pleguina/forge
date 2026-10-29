@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from forge.verification.exceptions import DesignContractError
 from forge.core.schema_version import check_schema_version
@@ -385,7 +385,7 @@ def load_verify_design(path: Path) -> "VerifyDesignContract":
     Raises:
         DesignContractError: if the contract cannot be loaded or validated.
     """
-    def _raise_contract_error(message: str, *, action: str) -> None:
+    def _raise_contract_error(message: str, *, action: str) -> NoReturn:
         raise DesignContractError(
             message,
             action=action,

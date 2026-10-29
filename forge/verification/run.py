@@ -86,7 +86,7 @@ def bootstrap_for_flow(plugin_id: str | None, flow_file: str) -> bool:
     return True
 
 
-def resolve_consumer_root(arg: str | None) -> Path | None:
+def resolve_consumer_root(arg: "str | Path | None") -> Path | None:
     s = arg or os.environ.get("VERIFY_CONSUMER_ROOT")
     return Path(s).resolve() if s else None
 
@@ -179,13 +179,13 @@ def build_runtime_context(
     selection: XmlRunSelection,
     importlib_module,
     work_dir: Path | None = None,
-) -> object:
+) -> Any:
     """Build framework-generic or plugin-specific runtime context.
 
     Framework base context carries only generic execution state. Plugin-owned
     runtime_context.py modules may extend it with plugin-specific fields.
     """
-    extra_overrides = {}
+    extra_overrides: Dict[str, Any] = {}
     if selection.event_list:
         extra_overrides["event_list"] = selection.event_list
     if selection.all_events:
