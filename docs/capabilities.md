@@ -242,7 +242,9 @@ For ipbb projects such as EMP payloads, `forge dev framework
 ipbb-component` copies a build's sources into an ipbb component with its
 `.dep` file, so the project includes the generated top without installing
 FORGE, and `ipbb-xsim` compiles an ipbb dep tree in XSim.
-`forge.integration.emp` reads and writes EMP pattern files.
+`forge.integration.emp` reads and writes EMP pattern files, and
+`forge dev framework emp-payload` writes `emp_payload.vhd` for the emp-fwk
+release a project uses.
 `plugins/trigger_demo/emp/` runs trigger_demo in emp-fwk's testbench this way.
 
 ## Machine-readable output

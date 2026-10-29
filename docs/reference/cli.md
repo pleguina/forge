@@ -430,6 +430,7 @@ positional arguments:
                   Copy a build's sources into an ipbb component with its .dep file
     ipbb-xsim     Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
     floorplan     SLR assignment of a block-design top level from the links and a floorplan spec
+    emp-payload   emp_payload.vhd around the generated top, for an emp-fwk checkout
 
 options:
   -h, --help      show this help message and exit
@@ -452,6 +453,19 @@ options:
                         Algorithm top module name to instantiate
   --policies POLICIES   Path to YAML file with control_policies
   --out OUT             Output path for payload.v (default: build/generated/payload.v)
+```
+
+##### `forge dev framework emp-payload`
+
+```text
+usage: forge dev framework emp-payload [-h] --spec SPEC --emp-fwk EMP_FWK --ir IR --out OUT
+
+options:
+  -h, --help         show this help message and exit
+  --spec SPEC        YAML with an emp_payload mapping (see forge.integration.emp_payload)
+  --emp-fwk EMP_FWK  emp-fwk checkout whose payload entity is used
+  --ir IR            design.ir.json of the generated top
+  --out OUT          VHDL file to write
 ```
 
 ##### `forge dev framework floorplan`

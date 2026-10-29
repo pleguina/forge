@@ -130,16 +130,3 @@ def read_pattern_file(path: Path) -> Dict[int, List[LinkWord]]:
             sof, start, last, valid = (c == "1" for c in meta[-4:])
             out[link].append(LinkWord(int(data, 16), valid, start, last, sof, strobe))
     return out
-
-
-def entity_ports(vhdl: str, entity: str = "emp_payload") -> List[str]:
-    """The port declarations of *entity*, without comments, case or spacing,
-    to compare a payload against the emp-fwk release it is built with."""
-    text = re.sub(r"--[^\n]*", "", vhdl)
-    match = re.search(rf"entity\s+{entity}\s+is\s+port\s*\((.*?)\)\s*;\s*end", text, re.S | re.I)
-    if not match:
-        raise ValueError(f"no entity {entity} with a port clause")
-    return [
-        re.sub(r"\s*([:(),])\s*", r"\1", " ".join(decl.split())).lower()
-        for decl in match.group(1).split(";")
-    ]

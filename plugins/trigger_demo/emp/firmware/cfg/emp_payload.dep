@@ -1,11 +1,8 @@
 # The trigger_demo payload, for any EMP project:
 #   include -c forge:plugins/trigger_demo/emp emp_payload.dep
-# algo_top is the component `forge dev framework ipbb-component` writes from
-# a `forge build --mode vhdl` output, added to the work area as trigger_demo_gen:algo.
-src emp_payload.vhd
+# Both components are written by forge (run_emp_sim.sh): trigger_demo_gen:algo by
+# `forge dev framework ipbb-component`, trigger_demo_gen:payload by
+# `forge dev framework emp-payload` (emp_payload.yml) for the project's emp-fwk.
+# The EMP packages come from the board's packages dep file.
+src -c trigger_demo_gen:payload emp_payload.vhd
 include -c trigger_demo_gen:algo algo_top.dep
-
-src -c emp-fwk:components/datapath emp_data_types.vhd
-src -c emp-fwk:components/ttc emp_ttc_decl.vhd
-src -c emp-fwk:components/links/slink emp_slink_types.vhd
-src -c ipbus-firmware:components/ipbus_core ipbus_package.vhd

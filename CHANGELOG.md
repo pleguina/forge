@@ -212,6 +212,16 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **`forge dev framework emp-payload`**: `emp_payload.vhd` around the
+  generated top for the emp-fwk checkout a project uses. The entity and its
+  `use` clauses are copied from that release (`bc0` up to 0.9.x; `ttc2`,
+  `tts_busy`, `ext_lvds_*` from 0.10), the architecture comes from a typed
+  mapping of algorithm ports to link fields checked against the IR's
+  widths, and every other output is tied off by type or driven as the spec
+  says; an output type with no known tie-off is an error. trigger_demo's
+  EMP component uses it and passes in emp-fwk's testbench on v0.9.3 and
+  v0.10.3. `ipbb-xsim` orders VHDL files after the packages and entities
+  they use, as the simulators ipbb drives do.
 - **Datasets in any registered format, EMP pattern files among them.** A
   flow's `dataset` takes `path` and `format` (`xml`, `json`, `empv2`);
   `dataset.xml` still works. A `.txt` file is recognised as an EMP pattern
@@ -243,8 +253,7 @@ for the versioning policy.
   writes its `.dep` file, so an ipbb project (an EMP payload, say) includes
   the generated top without FORGE; `forge dev framework ipbb-xsim` compiles
   an ipbb dep tree in XSim, as ipbb's own sim flow needs Questa.
-  `forge.integration.emp` reads and writes EMP pattern files and compares a
-  payload's ports with an emp-fwk release's. `build_manifest.json` lists the
+  `forge.integration.emp` reads and writes EMP pattern files. `build_manifest.json` lists the
   `--mode vhdl` entity under `vhdl_files`.
 - **trigger_demo as an EMP payload** (`plugins/trigger_demo/emp/`): a
   hand-written `emp_payload.vhd` (emp-fwk v0.9.3) around the `--mode vhdl`

@@ -290,6 +290,18 @@ def cmd_floorplan(args):
           + ", ".join(f"SLR{s} {n}" for s, n in per_slr.items()) + ")")
 
 
+def cmd_emp_payload(args):
+    """Write emp_payload.vhd for an emp-fwk checkout from a spec."""
+    from forge.integration.emp_payload import write
+
+    try:
+        release = write(Path(args.spec), Path(args.emp_fwk), Path(args.ir), Path(args.out))
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Written: {args.out} (emp-fwk {release.version or 'checkout without a release tag'})")
+
+
 def register(sub):
     """Register the 'framework' command group."""
     grp = sub.add_parser(
@@ -432,3 +444,14 @@ def register(sub):
                       help="YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell patterns]}}")
     p_fp.add_argument("--out", required=True, help="XDC to write")
     p_fp.set_defaults(func=cmd_floorplan)
+
+    # ── framework emp-payload ─────────────────────────────────────────────
+    p_emp = grp_sub.add_parser(
+        "emp-payload",
+        help="emp_payload.vhd around the generated top, for an emp-fwk checkout",
+    )
+    p_emp.add_argument("--spec", required=True, help="YAML with an emp_payload mapping (see forge.integration.emp_payload)")
+    p_emp.add_argument("--emp-fwk", required=True, help="emp-fwk checkout whose payload entity is used")
+    p_emp.add_argument("--ir", required=True, help="design.ir.json of the generated top")
+    p_emp.add_argument("--out", required=True, help="VHDL file to write")
+    p_emp.set_defaults(func=cmd_emp_payload)

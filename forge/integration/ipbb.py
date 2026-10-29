@@ -128,11 +128,51 @@ def write_component(manifest_path: Path, component_dir: Path, dep_name: Optional
     return dep
 
 
+_VHDL_UNIT = re.compile(r"^\s*(?:package|entity)\s+(\w+)\s+is\b", re.I | re.M)
+_VHDL_USE = re.compile(r"^\s*use\s+(\w+)\.(\w+)", re.I | re.M)
+_VHDL_INST = re.compile(r"\bentity\s+(\w+)\.(\w+)", re.I)
+
+
+def _vhdl_order(files: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
+    """*files* (path, tool, library) with each VHDL file after the files declaring the
+    packages and entities it uses from its own library, ipbb's order kept otherwise.
+
+    ipbb reads .d3 files first to last and .dep files last to first, and the tools
+    ipbb drives order VHDL by dependency themselves; XSim compiles in the order given.
+    """
+    declares: Dict[Tuple[str, str], int] = {}
+    uses: List[set] = []
+    for i, (path, tool, lib) in enumerate(files):
+        if not tool.startswith("xvhdl"):
+            uses.append(set())
+            continue
+        try:
+            text = re.sub(r"--[^\n]*", "", Path(path).read_text(errors="replace"))
+        except OSError:
+            text = ""
+        for unit in _VHDL_UNIT.findall(text):
+            declares.setdefault((lib, unit.lower()), i)
+        refs = {(lib if ref.lower() == "work" else ref.lower(), unit.lower())
+                for ref, unit in _VHDL_USE.findall(text) + _VHDL_INST.findall(text)}
+        uses.append(refs)
+    deps = [{declares[r] for r in refs if r in declares and declares[r] != i} for i, refs in enumerate(uses)]
+    done: List[int] = []
+    placed: set = set()
+    while len(done) < len(files):
+        ready = next((i for i in range(len(files)) if i not in placed and deps[i] <= placed), None)
+        if ready is None:   # a cycle: keep ipbb's order for the rest
+            ready = next(i for i in range(len(files)) if i not in placed)
+        placed.add(ready)
+        done.append(ready)
+    return [files[i] for i in done]
+
+
 def xsim_compile_script(src_dir: Path, component: str, depfile: str, *, toolset: str = "sim") -> str:
     """xvhdl/xvlog commands for the dep tree rooted at *component* (``package:path``)'s *depfile*.
 
-    Files keep ipbb's order, library and VHDL-2008 flag; consecutive files
-    sharing all three are compiled in one call.
+    Files keep ipbb's library and VHDL-2008 flag, and its order except that a VHDL
+    file comes after the ones declaring what it uses; consecutive files sharing a
+    compiler, library and standard are compiled in one call.
     """
     try:
         from ipbb.depparser import DepFileParser, Pathmaker  # type: ignore[import]
@@ -145,16 +185,20 @@ def xsim_compile_script(src_dir: Path, component: str, depfile: str, *, toolset:
     if parser.unresolved:
         raise ValueError(f"unresolved dep entries: {parser.unresolved}")
 
-    calls: List[Tuple[str, List[str]]] = []
+    files: List[Tuple[str, str, str]] = []
     for src in parser.commands["src"]:
         tool = _HDL_SUFFIXES.get(Path(src.filepath).suffix)
         if not src.useInSim or tool is None:
             continue
         if tool == "xvhdl" and src.vhdl2008:
             tool = "xvhdl --2008"
-        head = f"{tool} -work {src.lib or 'xil_defaultlib'}"
+        files.append((src.filepath, tool, src.lib or "xil_defaultlib"))
+
+    calls: List[Tuple[str, List[str]]] = []
+    for filepath, tool, lib in _vhdl_order(files):
+        head = f"{tool} -work {lib}"
         if calls and calls[-1][0] == head:
-            calls[-1][1].append(src.filepath)
+            calls[-1][1].append(filepath)
         else:
-            calls.append((head, [src.filepath]))
+            calls.append((head, [filepath]))
     return "\n".join(["set -e"] + [f"{head} {' '.join(files)}" for head, files in calls]) + "\n"

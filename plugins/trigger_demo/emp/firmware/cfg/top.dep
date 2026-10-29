@@ -1,15 +1,10 @@
 # emp-fwk's testbench around the trigger_demo payload, laid out as emp-fwk's
-# projects/examples/serenity/dc_ku115 so1/testbench.dep:
+# projects/examples/serenity/dc_ku115 so1/testbench.dep (the same in 0.9 and 0.10):
 #   ipbb proj create sim <name> forge:plugins/trigger_demo/emp top.dep
-@device_generation = "UltraScalePlus"
-@device_name = "xcvu9p"
-@device_package = "-flga2104"
-@device_speed = "-2L-e"
-
 include -c emp-fwk:boards/testbench top.dep
 
 include emp_payload.dep
 src emp_project_decl.vhd
 src tb_decl.vhd
 
-include -c emp-fwk:boards/testbench packages.dep
+include -c emp-fwk:boards/serenity/dc_ku115 device.dep packages_so1.dep

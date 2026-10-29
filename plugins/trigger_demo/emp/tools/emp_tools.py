@@ -8,25 +8,19 @@
     emp_tools.py check --sink sink.txt
         Compare the valid words captured on output link 0 with the golden
         trigger words.
-
-    emp_tools.py check-entity --emp-fwk DIR
-        Fail if emp_payload's ports differ from those in DIR's
-        components/payload, which change between emp-fwk releases.
 """
 from __future__ import annotations
 
 import argparse
-import difflib
 import sys
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from forge.integration.emp import IDLE, entity_ports, packet, read_pattern_file, write_pattern_file
+from forge.integration.emp import IDLE, packet, read_pattern_file, write_pattern_file
 
 _HERE = Path(__file__).resolve().parent
 _VERIFY_TOOLS = _HERE.parents[1] / "forge" / "verify" / "tools"
 _GOLDEN_XML = _HERE.parents[1] / "forge" / "verify" / "schemas" / "data" / "trigger_demo_golden.xml"
-_PAYLOAD_VHD = _HERE.parent / "firmware" / "hdl" / "emp_payload.vhd"
 
 sys.path.insert(0, str(_VERIFY_TOOLS))
 from gen_stimulus import Event, parse_golden_xml  # noqa: E402
@@ -61,12 +55,6 @@ def check_sink(events: List[Event], sink: Path) -> List[str]:
     return errors
 
 
-def check_entity(emp_fwk: Path) -> List[str]:
-    reference = emp_fwk / "components" / "payload" / "firmware" / "hdl" / "emp_payload.vhd"
-    ours, theirs = entity_ports(_PAYLOAD_VHD.read_text()), entity_ports(reference.read_text())
-    return list(difflib.unified_diff(theirs, ours, str(reference), _PAYLOAD_VHD.name, lineterm=""))
-
-
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -77,14 +65,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     c.add_argument("--sink", type=Path, required=True)
     for each in (s, c):
         each.add_argument("--xml", type=Path, default=_GOLDEN_XML)
-    e = sub.add_parser("check-entity")
-    e.add_argument("--emp-fwk", type=Path, required=True)
     args = parser.parse_args(argv)
 
-    if args.cmd == "check-entity":
-        diff = check_entity(args.emp_fwk)
-        print("\n".join(diff) if diff else f"PASS emp_payload ports match {args.emp_fwk}")
-        return 1 if diff else 0
     events = parse_golden_xml(args.xml)
     if args.cmd == "source":
         print(write_source(events, args.out, args.gap))

@@ -1,4 +1,4 @@
-"""EMP pattern files and payload port lists."""
+"""EMP pattern files."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from forge.integration.emp import (
-    IDLE, BoardData, LinkWord, entity_ports, is_pattern_file, packet, read_board_data, read_pattern_file,
+    IDLE, BoardData, LinkWord, is_pattern_file, packet, read_board_data, read_pattern_file,
     write_board_data, write_pattern_file,
 )
 
@@ -57,20 +57,6 @@ def test_a_short_row_is_an_error(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="frame 0000 has 1 words, expected 2"):
         read_pattern_file(path)
-
-
-def test_port_lists_ignore_comments_case_and_spacing() -> None:
-    a = "entity emp_payload is\n port(\n  clk : in std_logic; -- ipbus\n  q : out ldata(3 downto 0)\n );\nend emp_payload;"
-    b = "ENTITY emp_payload IS PORT(clk: in  std_logic;q : out ldata(3 downto 0)); END;"
-
-    assert entity_ports(a) == entity_ports(b) == ["clk:in std_logic", "q:out ldata(3 downto 0)"]
-
-
-def test_a_changed_port_shows() -> None:
-    old = "entity emp_payload is port(clk : in std_logic; d : in ldata(3 downto 0)); end;"
-    new = "entity emp_payload is port(clk : in std_logic; d : in ldata(7 downto 0)); end;"
-
-    assert entity_ports(old) != entity_ports(new)
 
 
 def test_strobe_is_read_from_five_bits_and_written_only_when_needed(tmp_path: Path) -> None:

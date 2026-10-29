@@ -196,6 +196,39 @@ def test_compile_calls_follow_ipbb_order_library_and_standard(monkeypatch: pytes
     ]
 
 
+def test_a_vhdl_file_compiles_after_the_packages_it_uses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    files = {
+        "choice.vhd": "use work.speed_pkg.all;\npackage choice_pkg is\nend package;\n",
+        "other.v": "module other; endmodule\n",
+        "speed.vhd": "-- package speed_pkg is not this\npackage speed_pkg is\nend package;\n",
+        "top.vhd": "use work.choice_pkg.all;\nentity top is end;\narchitecture a of top is begin\n"
+                   "u : entity work.leaf; end;\n",
+        "leaf.vhd": "entity leaf is end;\n",
+    }
+    for name, text in files.items():
+        (tmp_path / name).write_text(text)
+    sources = [_Src(str(tmp_path / name)) for name in files]
+
+    class Parser:
+        def __init__(self, toolset: str, pathmaker: object) -> None:
+            self.commands = {"src": sources}
+            self.unresolved: list = []
+
+        def parse(self, *args: str) -> None:
+            pass
+
+    stub = types.ModuleType("ipbb.depparser")
+    stub.DepFileParser = Parser  # type: ignore[attr-defined]
+    stub.Pathmaker = lambda *a: None  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ipbb", types.ModuleType("ipbb"))
+    monkeypatch.setitem(sys.modules, "ipbb.depparser", stub)
+
+    order = [Path(f).name for f in xsim_compile_script(tmp_path, "p:c", "top.dep").split() if "." in Path(f).name]
+    assert order.index("speed.vhd") < order.index("choice.vhd") < order.index("top.vhd")
+    assert order.index("leaf.vhd") < order.index("top.vhd")
+    assert order.index("other.v") < order.index("speed.vhd")
+
+
 def test_ipbb_resolves_the_component_from_a_work_area(
     vhdl_build: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
