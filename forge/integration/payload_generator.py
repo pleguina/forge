@@ -57,8 +57,35 @@ class ControlPolicies:
     # readback: "zero" (initial milestone)
     readback: str = "zero"
 
+    # tx.register: every used TX lane's word leaves through a register of its
+    # own (DONT_TOUCH, so the placer can put it by the lane's quad)
+    tx_register: bool = False
+    # tx.orbit: algo output port driving tx_orbit of every used TX lane,
+    # registered per lane like the word when tx.register is set
+    tx_orbit: Optional[str] = None
+
+    # input_register: every link word the payload hands to the algorithm
+    # goes through one register, lin_q_<algo port>
+    input_register: bool = False
+
+    # The payload's own logic, for what the ABI and the resolved I/O do not
+    # describe (board control, status, test features):
+    #   connect: algo port -> payload net, or {net, register, width} to put it
+    #     through an input register like the links
+    #   drive: payload output (a port or a port slice) -> expression, or
+    #     {expr, comment}; FORGE emits no tie-off for it
+    #   rx_gate: RX endpoint -> mask net ANDed with each of its lane signals
+    #   verilog_header / verilog_before_algo: Verilog inserted after the port
+    #     list / before the algorithm instance
+    connect: Dict[str, Any] = field(default_factory=dict)
+    drive: Dict[str, Any] = field(default_factory=dict)
+    rx_gate: Dict[str, str] = field(default_factory=dict)
+    verilog_header: List[str] = field(default_factory=list)
+    verilog_before_algo: List[str] = field(default_factory=list)
+
     @classmethod
-    def from_dict(cls, d: dict) -> "ControlPolicies":
+    def from_dict(cls, d: dict, base: Optional[Path] = None) -> "ControlPolicies":
+        """*base* is the directory relative ``verilog`` file paths resolve against."""
         p = cls()
         if "algo_clk" in d:
             p.algo_clk = d["algo_clk"].get("default", "logic_clk")
@@ -74,6 +101,18 @@ class ControlPolicies:
             p.readback = d["readback"].get("default", "zero")
         if "port_aliases" in d:
             p.port_aliases = dict(d["port_aliases"])
+        if "tx" in d:
+            p.tx_register = bool(d["tx"].get("register", False))
+            p.tx_orbit = d["tx"].get("orbit")
+        p.input_register = bool(d.get("input_register", False))
+        p.connect = dict(d.get("connect") or {})
+        p.drive = {str(k): v for k, v in (d.get("drive") or {}).items()}
+        p.rx_gate = dict(d.get("rx_gate") or {})
+        for where, paths in (d.get("verilog") or {}).items():
+            if where not in ("header", "before_algo"):
+                raise ValueError(f"verilog.{where}: want header or before_algo")
+            texts = [(Path(base or ".") / f).read_text() for f in paths]
+            getattr(p, f"verilog_{where}").extend(texts)
         return p
 
 
@@ -179,12 +218,16 @@ class PayloadWrapperGenerator:
 
         lines += self._header(module_name)
         lines += self._port_list()
+        lines += self._verilog(self.policies.verilog_header)
         lines += [""];  lines += self._algo_clk_section()
         lines += [""];  lines += self._buffinc_buffdec_section()
         lines += [""];  lines += self._play_data_section()
         lines += [""];  lines += self._readback_section()
         lines += [""];  lines += self._rx_lane_slicing_section()
         lines += [""];  lines += self._tx_lane_assignment_section()
+        lines += self._verilog(self.policies.verilog_before_algo)
+        lines += self._input_register_section()
+        lines += self._drive_section()
         lines += [""];  lines += self._algo_instantiation()
         lines += [""];  lines += ["endmodule"]
 
@@ -252,7 +295,7 @@ class PayloadWrapperGenerator:
         ]
         p = self.policies
         for port in self.fw.ports:
-            if port.kind == "gt_play_data":
+            if port.kind == "gt_play_data" and port.name not in p.drive:
                 if p.play_data_source == "disabled_zero":
                     lines.append(_assign(port.name, "1'b0", "play_data disabled"))
                 elif p.play_data_source == "slr_config_bit":
@@ -274,7 +317,7 @@ class PayloadWrapperGenerator:
             "// --------------------------------------------------------------------------",
         ]
         for port in self.fw.ports:
-            if port.kind == "slr_readback_registers":
+            if port.kind == "slr_readback_registers" and port.name not in self.policies.drive:
                 rhs = f"{port.width}'b0"
                 lines.append(_assign(port.name, rhs, "diagnostics not implemented"))
         return lines
@@ -301,11 +344,13 @@ class PayloadWrapperGenerator:
             lines.append(f"wire           {ep_name}_tvalid;")
             lines.append(f"wire           {ep_name}_tfirst;")
             lines.append(f"wire           {ep_name}_tlast;")
+            mask = self.policies.rx_gate.get(ep_name)
+            tdata = f"{prefix}_rx_tdata[{lw}*{lane} +: {lw}]"
             lines.append(_assign(f"{ep_name}_tdata",
-                                 f"{prefix}_rx_tdata[{lw}*{lane} +: {lw}]"))
-            lines.append(_assign(f"{ep_name}_tvalid", self._lane_signal(f"{prefix}_rx_tvalid", lane)))
-            lines.append(_assign(f"{ep_name}_tfirst", self._lane_signal(f"{prefix}_rx_tfirst", lane)))
-            lines.append(_assign(f"{ep_name}_tlast",  self._lane_signal(f"{prefix}_rx_tlast", lane)))
+                                 f"{{{lw}{{{mask}}}}} & {tdata}" if mask else tdata))
+            for sig in ("tvalid", "tfirst", "tlast"):
+                rhs = self._lane_signal(f"{prefix}_rx_{sig}", lane)
+                lines.append(_assign(f"{ep_name}_{sig}", f"{mask} & {rhs}" if mask else rhs))
             lines.append("")
 
         return lines
@@ -324,6 +369,11 @@ class PayloadWrapperGenerator:
                 ep = ro.endpoint
                 active_tx[(ep.slr, ep.gt_site, ep.lane)] = ep.endpoint_id
 
+        orbit = self.policies.tx_orbit
+        if orbit and active_tx:
+            lines.append(f"wire {self._TX_ORBIT};  // algo_top {orbit}")
+            lines.append("")
+
         # For every TX port group, emit assignments
         for port in self.fw.ports:
             if port.kind != "gt_tx_tdata":
@@ -337,63 +387,135 @@ class PayloadWrapperGenerator:
             for lane in range(n):
                 ep_id = active_tx.get((slr, site, lane))
                 if ep_id:
+                    word = f"{ep_id}_csp"
                     lines.append(f"// TX lane {lane} <- {ep_id}")
                     lines.append(f"wire [66:0] {ep_id}_csp;")
+                    if self.policies.tx_register:
+                        lines += self._register(word, 67)
+                        word = f"{word}_q"
                     lines.append(f"wire [{lw-1}:0] {ep_id}_tdata;")
                     lines.append(f"wire           {ep_id}_tvalid;")
                     lines.append(f"wire           {ep_id}_tfirst;")
                     lines.append(f"wire           {ep_id}_tlast;")
-                    lines.append(_assign(f"{ep_id}_tdata",  f"{ep_id}_csp[66:3]"))
-                    lines.append(_assign(f"{ep_id}_tvalid", f"{ep_id}_csp[0]"))
-                    lines.append(_assign(f"{ep_id}_tfirst", f"{ep_id}_csp[1]"))
-                    lines.append(_assign(f"{ep_id}_tlast",  f"{ep_id}_csp[2]"))
+                    lines.append(_assign(f"{ep_id}_tdata",  f"{word}[66:3]"))
+                    lines.append(_assign(f"{ep_id}_tvalid", f"{word}[0]"))
+                    lines.append(_assign(f"{ep_id}_tfirst", f"{word}[1]"))
+                    lines.append(_assign(f"{ep_id}_tlast",  f"{word}[2]"))
                     lines.append(_assign(f"{pfx}_tx_tdata[{lw}*{lane} +: {lw}]",
                                          f"{ep_id}_tdata"))
                     lines.append(_assign(self._lane_signal(f"{pfx}_tx_tvalid", lane), f"{ep_id}_tvalid"))
                     lines.append(_assign(self._lane_signal(f"{pfx}_tx_tfirst", lane), f"{ep_id}_tfirst"))
                     lines.append(_assign(self._lane_signal(f"{pfx}_tx_tlast", lane),  f"{ep_id}_tlast"))
+                    if orbit:
+                        if f"{pfx}_tx_orbit" not in self._ports_by_name:
+                            raise ValueError(f"tx.orbit: the ABI has no {pfx}_tx_orbit port")
+                        marker = self._TX_ORBIT
+                        if self.policies.tx_register:
+                            lines += self._register(marker, 1, f"{ep_id}_orbit_q")
+                            marker = f"{ep_id}_orbit_q"
+                        lines.append(_assign(self._lane_signal(f"{pfx}_tx_orbit", lane), marker))
                 else:
                     lines.append(f"// TX lane {lane} (SLR{slr} gt{site}) unused")
-                    lines.append(_assign(f"{pfx}_tx_tdata[{lw}*{lane} +: {lw}]",
-                                         f"{lw}'b0"))
-                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tvalid", lane), "1'b0"))
-                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tfirst", lane), "1'b0"))
-                    lines.append(_assign(self._lane_signal(f"{pfx}_tx_tlast", lane),  "1'b0"))
+                    ties = [(f"{pfx}_tx_tdata[{lw}*{lane} +: {lw}]", f"{lw}'b0")] + [
+                        (self._lane_signal(f"{pfx}_tx_{sig}", lane), "1'b0")
+                        for sig in ("tvalid", "tfirst", "tlast")
+                    ]
+                    lines += [_assign(lhs, rhs) for lhs, rhs in ties if lhs not in self.policies.drive]
                 lines.append("")
 
         return lines
+
+    _TX_ORBIT = "algo_tx_orbit"
+
+    @staticmethod
+    def _register(src: str, width: int, name: Optional[str] = None) -> List[str]:
+        q = name or f"{src}_q"
+        decl = f"[{width - 1}:0] " if width > 1 else ""
+        return [
+            f'(* DONT_TOUCH = "true" *) reg {decl}{q} = {width}\'b0;',
+            f"always @(posedge logic_clk) {q} <= {src};",
+        ]
+
+    def _verilog(self, blocks: List[str]) -> List[str]:
+        lines: List[str] = []
+        for block in blocks:
+            lines += block.rstrip("\n").split("\n") + [""]
+        return lines
+
+    def _link_inputs(self) -> List[tuple]:
+        """(algo port, payload expression, width) of every resolved input."""
+        if self.resolved_io is None:
+            return []
+        out = []
+        for i, ri in enumerate(self.resolved_io.inputs):
+            ep = ri.endpoint
+            csp = bool(ep.protocol and ep.protocol.startswith("csp"))
+            out.append((self._algo_input_port(ri.output_wiring, i), self._algo_input_expr(ep),
+                        ep.lane_width + 3 if csp else ep.lane_width))
+        return out
+
+    def _connections(self) -> List[tuple]:
+        """(algo port, payload net, register width or None) of the connect policy."""
+        out = []
+        for port, spec in self.policies.connect.items():
+            if isinstance(spec, dict):
+                width = int(spec.get("width", 1)) if spec.get("register") else None
+                out.append((port, str(spec["net"]), width))
+            else:
+                out.append((port, str(spec), None))
+        return out
+
+    def _input_register_section(self) -> List[str]:
+        regs = [(port, expr, w) for port, expr, w in self._link_inputs()] if self.policies.input_register else []
+        regs += [(port, net, w) for port, net, w in self._connections() if w is not None]
+        if not regs:
+            return []
+        lines = [
+            "// --------------------------------------------------------------------------",
+            "// Algo input registers",
+            "// --------------------------------------------------------------------------",
+        ]
+        for port, expr, width in regs:
+            q = f"lin_q_{port}"
+            lines.append(f'(* shreg_extract = "no" *) reg {_vw(width)}{q} = {width}\'b0;')
+            lines.append(f"always @(posedge logic_clk) {q} <= {expr};")
+        return lines + [""]
+
+    def _drive_section(self) -> List[str]:
+        if not self.policies.drive:
+            return []
+        lines = [
+            "// --------------------------------------------------------------------------",
+            "// Payload outputs driven by the control policies",
+            "// --------------------------------------------------------------------------",
+        ]
+        for lhs, rhs in self.policies.drive.items():
+            if isinstance(rhs, dict):
+                lines.append(_assign(lhs, str(rhs["expr"]), str(rhs.get("comment", ""))))
+            else:
+                lines.append(_assign(lhs, str(rhs)))
+        return lines + [""]
 
     def _algo_instantiation(self) -> List[str]:
         lines = [
             "// --------------------------------------------------------------------------",
             "// Algorithm top instantiation",
             "// --------------------------------------------------------------------------",
+            f"{self.algo_module} u_algo_top (",
         ]
-        if self.resolved_io is None or not self.resolved_io.inputs:
-            lines += [
-                f"{self.algo_module} u_algo_top (",
-                "    .ap_clk  (logic_clk),",
-                "    .ap_rst  (1'b0)",
-                ");",
-            ]
-        else:
-            lines.append(f"{self.algo_module} u_algo_top (")
-            lines.append("    .ap_clk  (logic_clk),")
-            lines.append("    .ap_rst  (1'b0),")
-            for i, ri in enumerate(self.resolved_io.inputs):
-                ep   = ri.endpoint
-                port = self._algo_input_port(ri.output_wiring, i)
-                expr = self._algo_input_expr(ep)
-                sep  = "," if (i < len(self.resolved_io.inputs) - 1
-                               or self.resolved_io.outputs) else ""
-                lines.append(f"    .{port} ({expr}){sep}")
-            for j, ro in enumerate(self.resolved_io.outputs):
-                ep   = ro.endpoint
+        conns = ["    .ap_clk  (logic_clk)", "    .ap_rst  (1'b0)"]
+        if self.resolved_io is not None and self.resolved_io.inputs:
+            for port, expr, _ in self._link_inputs():
+                conns.append(f"    .{port} ({f'lin_q_{port}' if self.policies.input_register else expr})")
+            if self.policies.tx_orbit and self.resolved_io.outputs:
+                conns.append(f"    .{self.policies.tx_orbit} ({self._TX_ORBIT})")
+            for ro in self.resolved_io.outputs:
                 port = self._algo_output_port(ro.source_instance, ro.source_port)
-                expr = self._algo_output_expr(ep)
-                sep  = "," if j < len(self.resolved_io.outputs) - 1 else ""
-                lines.append(f"    .{port} ({expr}){sep}")
-            lines.append(");")
+                conns.append(f"    .{port} ({self._algo_output_expr(ro.endpoint)})")
+        for port, net, width in self._connections():
+            conns.append(f"    .{port} ({f'lin_q_{port}' if width is not None else net})")
+        lines.append(",\n".join(conns))
+        lines.append(");")
         return lines
 
 

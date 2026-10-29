@@ -159,6 +159,11 @@ def cmd_emit_payload(args):
 
         def _ep_from_dict(d):
             from forge.integration.importer import Endpoint
+            # The framework's own endpoint carries what a resolved file
+            # written before `protocol` was recorded does not.
+            known = fi.get_endpoint(d["endpoint_id"])
+            if known is not None:
+                return known
             return Endpoint(
                 endpoint_id          = d["endpoint_id"],
                 direction            = d["direction"],
@@ -166,7 +171,7 @@ def cmd_emit_payload(args):
                 gt_site              = d["gt_site"],
                 lane                 = d["lane"],
                 lane_width           = d["lane_width"],
-                protocol             = "",
+                protocol             = d.get("protocol", ""),
                 quad_type            = "",
                 cage                 = None,
                 fiber                = None,
@@ -211,18 +216,25 @@ def cmd_emit_payload(args):
             import yaml
             with open(args.policies) as fh:
                 pd = yaml.safe_load(fh)
-            policies = ControlPolicies.from_dict(pd.get("control_policies", {}))
+            policies = ControlPolicies.from_dict(
+                pd.get("control_policies", {}), base=Path(args.policies).parent,
+            )
         except Exception as exc:
-            print(f"WARNING: could not load policies file: {exc}", file=sys.stderr)
+            print(f"ERROR: could not load policies file {args.policies}: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     out_path = Path(args.out) if args.out else Path("build/generated/payload.v")
-    content = generate_payload_verilog(
-        framework   = fi,
-        resolved_io = resolved_io,
-        algo_module = args.algo_module,
-        policies    = policies,
-        output_path = out_path,
-    )
+    try:
+        content = generate_payload_verilog(
+            framework   = fi,
+            resolved_io = resolved_io,
+            algo_module = args.algo_module,
+            policies    = policies,
+            output_path = out_path,
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
     print(f"Generated payload wrapper: {out_path}")
     print(f"  ports: {len(fi.ports)}")
 

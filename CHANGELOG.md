@@ -212,6 +212,17 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **Payload control policies for the consumer's own logic.** `emit-payload
+  --policies` takes `tx` (a register per used TX lane, an orbit marker on
+  every `tx_orbit`), `input_register` (one register per link word),
+  `connect` (extra algorithm ports, optionally registered), `drive` (payload
+  outputs FORGE would tie off), `rx_gate` (a mask on an RX lane) and
+  `verilog` (blocks after the port list or before the algorithm), so a
+  generated `payload.v` needs no patching afterwards
+  (`docs/reference/payload-policies.md`). OMTF's six regex steps that patched
+  `payload.v` become one policies file; the generated file has the same
+  statements as before and, unlike the patched one, compiles without
+  `xvlog --relax`.
 - **ipbb components and EMP pattern files.** `forge dev framework
   ipbb-component` copies a build's compile list into an ipbb component and
   writes its `.dep` file, so an ipbb project (an EMP payload, say) includes
@@ -749,6 +760,12 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`emit-payload` connected only `tdata` of CSP links.** The resolved I/O
+  file dropped each endpoint's `protocol`, so a `csp_64b` link lost its
+  `tlast`/`tfirst`/`tvalid` bits; the protocol is recorded, and
+  `emit-payload` takes endpoints from the framework import. A policies file
+  that cannot be loaded, or a policy the ABI cannot satisfy, is an error
+  instead of a warning followed by a payload without the policies.
 - **`--build-dir` alone left HLS RTL out of `build_manifest.json`.**
   `gen-top`/`build` read HLS metadata from `--build-dir` but looked for the
   HLS Verilog (for the manifest and `delay_cycles: auto`) under

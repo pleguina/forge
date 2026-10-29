@@ -190,3 +190,46 @@ def test_emit_payload_missing_detector_io_file_is_guided(
 
     assert result.returncode == 1
     assert "detector_io.resolved.json not found" in result.stderr
+
+
+def _resolved(capsys: pytest.CaptureFixture[str], tmp_path: Path, imported_framework: Path) -> Path:
+    detector_io = tmp_path / "detector_io.yml"
+    detector_io.write_text(_DETECTOR_IO_YAML)
+    out = tmp_path / "resolve_out"
+    _run_framework(capsys, "io-resolve", "--framework", str(imported_framework),
+                   "--detector-io", str(detector_io), "--out", str(out))
+    return out / "detector_io.resolved.json"
+
+
+def test_emit_payload_takes_the_protocol_from_the_framework(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, imported_framework: Path
+) -> None:
+    resolved = _resolved(capsys, tmp_path, imported_framework)
+    data = json.loads(resolved.read_text())
+    protocols = {e["endpoint"]["protocol"] for e in data["detector_inputs"] + data["trigger_outputs"]}
+    assert protocols == {ep["protocol"] for ep in _EPS["endpoints"] if ep.get("include_in_framework")}
+    # a resolved file written before the protocol was recorded
+    for e in data["detector_inputs"] + data["trigger_outputs"]:
+        del e["endpoint"]["protocol"]
+    resolved.write_text(json.dumps(data))
+
+    payload_out = tmp_path / "payload.v"
+    result = _run_framework(capsys, "emit-payload", "--framework", str(imported_framework),
+                            "--detector-io", str(resolved), "--out", str(payload_out))
+
+    assert result.returncode == 0, result.stderr
+    assert protocols == {"csp_64b"}
+    assert "_tlast, rx_slr2_gt0_lane0_tfirst, rx_slr2_gt0_lane0_tvalid})" in payload_out.read_text()
+
+
+def test_emit_payload_with_a_broken_policies_file_fails(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, imported_framework: Path
+) -> None:
+    policies = tmp_path / "policies.yml"
+    policies.write_text("control_policies:\n  verilog:\n    header: [missing.v]\n")
+    result = _run_framework(capsys, "emit-payload", "--framework", str(imported_framework),
+                            "--policies", str(policies), "--out", str(tmp_path / "payload.v"))
+
+    assert result.returncode == 1
+    assert "could not load policies file" in result.stderr
+    assert not (tmp_path / "payload.v").exists()

@@ -230,7 +230,10 @@ rules taken from real synthesis, and still a prediction.
 
 `forge dev framework import|io-resolve|emit-payload` loads an external
 framework's ABI and endpoint manifest and resolves a design's I/O against
-it, for dropping a generated top level into a larger platform.
+it, for dropping a generated top level into a larger platform. The
+[payload control policies](reference/payload-policies.md) register the link
+words and add the payload's own logic (board control, status, test
+features), so the generated `payload.v` needs no patching.
 
 For ipbb projects such as EMP payloads, `forge dev framework
 ipbb-component` copies a build's sources into an ipbb component with its
