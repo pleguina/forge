@@ -109,6 +109,7 @@ plugins/trigger_demo/
 │       ├── <flow>/tb_*.sv            ← generated: forge dev verify generate
 │       ├── <flow>/wave.tcl           ← generated: forge dev verify generate
 │       └── <flow>/stimulus_current.svh  ← plugin-generated: gen_stimulus.py
+├── emp/                              ← the generated top in an EMP payload (emp/README.md)
 ├── CANONICAL_PATTERNS.md
 └── README.md
 ```

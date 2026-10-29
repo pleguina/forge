@@ -112,6 +112,8 @@ jobs:
           python3 ci/check_coverage_floors.py ci-logs/coverage.json
       - name: trigger_demo verify tests
         run: python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests --tb=short -q --junitxml=ci-logs/trigger-demo-junit.xml
+      - name: trigger_demo EMP tools tests
+        run: python3 -m pytest plugins/trigger_demo/emp/tools/tests --tb=short -q --junitxml=ci-logs/trigger-demo-emp-junit.xml
       - name: passthrough_demo verify tests
         run: python3 -m pytest plugins/passthrough_demo/forge/verify/tests --tb=short -q --junitxml=ci-logs/passthrough-demo-junit.xml
       - name: vision_pipeline_demo verify tests

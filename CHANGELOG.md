@@ -220,6 +220,10 @@ for the versioning policy.
   `forge.integration.emp` reads and writes EMP pattern files and compares a
   payload's ports with an emp-fwk release's. `build_manifest.json` lists the
   `--mode vhdl` entity under `vhdl_files`.
+- **trigger_demo as an EMP payload** (`plugins/trigger_demo/emp/`): a
+  hand-written `emp_payload.vhd` (emp-fwk v0.9.3) around the `--mode vhdl`
+  top, its dep files, and `run_emp_sim.sh`, which plays the golden events
+  through emp-fwk's testbench in XSim and checks the trigger words.
 - **`forge dev hls run --registry` writes missing Tcl scripts** the way
   `gen-tcl` does, instead of failing until `gen-tcl` has been run.
 - **`delay_cycles: auto`** on connections and topology groups: `gen-top` /

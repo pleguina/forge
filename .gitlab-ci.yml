@@ -316,6 +316,12 @@ forge:python-unit-tests:
         --junitxml=ci-logs/trigger-demo-junit.xml \
         2>&1 | tee -a ci-logs/unit-tests.log
     - |
+      echo "--- trigger_demo EMP tools tests ---" | tee -a ci-logs/unit-tests.log
+      python3 -m pytest plugins/trigger_demo/emp/tools/tests \
+        --tb=short -q \
+        --junitxml=ci-logs/trigger-demo-emp-junit.xml \
+        2>&1 | tee -a ci-logs/unit-tests.log
+    - |
       echo "--- passthrough_demo verify tests ---" | tee -a ci-logs/unit-tests.log
       python3 -m pytest plugins/passthrough_demo/forge/verify/tests \
         --tb=short -q \
