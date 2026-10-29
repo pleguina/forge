@@ -8,6 +8,7 @@ payload output is tied off. A file that cannot be loaded is an error.
 ```yaml
 control_policies:
   algo_clk: {default: logic_clk}
+  reset: {source: slr1_usr_rst_in, active: high, sync_stages: 2}
   tx: {register: true, orbit: gmt_orbit_dly_dout}
   input_register: true
   connect:
@@ -22,6 +23,16 @@ control_policies:
     header: [payload_header.v]
     before_algo: [payload_before_algo.v]
 ```
+
+## Algorithm reset
+
+A payload with links must say what drives the algorithm's `ap_rst`; there is
+no silent default.
+
+| `reset:` | Effect |
+|-----|--------|
+| `{source: <port>, active: high\|low, sync_stages: N}` | The 1-bit ABI input `<port>` (inverted when `active: low`) through `N` registers in `logic_clk` (default 2). The registers start at 1, so the algorithm is held in reset from power-up until the first synchronized deassertion |
+| `disabled` | `ap_rst` tied low: the algorithm has no reset, by decision |
 
 ## Links
 

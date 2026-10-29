@@ -767,6 +767,11 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **The Blobfish payload tied the algorithm's `ap_rst` to 0 with no
+  decision behind it.** A payload with links now needs `reset:` in its
+  control policies: an ABI input port, its polarity and a synchronizer
+  depth (the algorithm held in reset from power-up until the first
+  synchronized deassertion), or `disabled`.
 - **A `cdc:` crossing with `register_stages` or `delay_cycles` was emitted
   with the stages unconnected** (the consumer reads the synchronizer, which
   reads the source) while the latency model added them up. The combination

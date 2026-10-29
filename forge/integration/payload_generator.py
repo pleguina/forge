@@ -68,6 +68,12 @@ class ControlPolicies:
     # goes through one register, lin_q_<algo port>
     input_register: bool = False
 
+    # reset: the algorithm's ap_rst. {source: <ABI input port>, active: high|low,
+    # sync_stages: N} drives it from that port through N registers in logic_clk,
+    # held in reset from power-up until the first synchronized deassertion;
+    # "disabled" ties it low. A payload with links needs one or the other.
+    reset: Any = None
+
     # The payload's own logic, for what the ABI and the resolved I/O do not
     # describe (board control, status, test features):
     #   connect: algo port -> payload net, or {net, register, width} to put it
@@ -105,6 +111,7 @@ class ControlPolicies:
             p.tx_register = bool(d["tx"].get("register", False))
             p.tx_orbit = d["tx"].get("orbit")
         p.input_register = bool(d.get("input_register", False))
+        p.reset = d.get("reset")
         p.connect = dict(d.get("connect") or {})
         p.drive = {str(k): v for k, v in (d.get("drive") or {}).items()}
         p.rx_gate = dict(d.get("rx_gate") or {})
@@ -225,6 +232,7 @@ class PayloadWrapperGenerator:
         lines += [""];  lines += self._readback_section()
         lines += [""];  lines += self._rx_lane_slicing_section()
         lines += [""];  lines += self._tx_lane_assignment_section()
+        lines += self._reset_section()
         lines += self._verilog(self.policies.verilog_before_algo)
         lines += self._input_register_section()
         lines += self._drive_section()
@@ -465,6 +473,46 @@ class PayloadWrapperGenerator:
                 out.append((port, str(spec), None))
         return out
 
+    def _reset_net(self) -> str:
+        reset = self.policies.reset
+        if reset is None:
+            if self.resolved_io is not None and self.resolved_io.inputs:
+                raise ValueError(
+                    "control_policies.reset is required for a payload with links: "
+                    "{source: <ABI input port>, active: high|low, sync_stages: N}, or 'disabled'")
+            return "1'b0"
+        if reset == "disabled":
+            return "1'b0"
+        if not isinstance(reset, dict) or "source" not in reset:
+            raise ValueError(f"reset: want 'disabled' or a mapping with 'source', got {reset!r}")
+        port = self._ports_by_name.get(reset["source"])
+        if port is None or port.direction != "input" or port.width != 1:
+            raise ValueError(f"reset.source: {reset['source']!r} is not a 1-bit input port of the ABI")
+        if reset.get("active", "high") not in ("high", "low"):
+            raise ValueError(f"reset.active: want high or low, got {reset.get('active')!r}")
+        stages = reset.get("sync_stages", 2)
+        if not isinstance(stages, int) or isinstance(stages, bool) or stages < 1:
+            raise ValueError(f"reset.sync_stages: want a positive integer, got {stages!r}")
+        return "algo_rst"
+
+    def _reset_section(self) -> List[str]:
+        if self._reset_net() != "algo_rst":
+            return []
+        reset = self.policies.reset
+        n = reset.get("sync_stages", 2)
+        src = reset["source"] if reset.get("active", "high") == "high" else f"~{reset['source']}"
+        shift = f"{{algo_rst_q[{n - 2}:0], {src}}}" if n > 1 else src
+        return [
+            "",
+            "// --------------------------------------------------------------------------",
+            f"// Algorithm reset: {reset['source']} (active {reset.get('active', 'high')}), "
+            f"{n} register(s) in logic_clk",
+            "// --------------------------------------------------------------------------",
+            f'(* ASYNC_REG = "TRUE" *) reg [{n - 1}:0] algo_rst_q = {{{n}{{1\'b1}}}};',
+            f"always @(posedge logic_clk) algo_rst_q <= {shift};",
+            f"wire algo_rst = algo_rst_q[{n - 1}];",
+        ]
+
     def _input_register_section(self) -> List[str]:
         regs = [(port, expr, w) for port, expr, w in self._link_inputs()] if self.policies.input_register else []
         regs += [(port, net, w) for port, net, w in self._connections() if w is not None]
@@ -503,7 +551,7 @@ class PayloadWrapperGenerator:
             "// --------------------------------------------------------------------------",
             f"{self.algo_module} u_algo_top (",
         ]
-        conns = ["    .ap_clk  (logic_clk)", "    .ap_rst  (1'b0)"]
+        conns = ["    .ap_clk  (logic_clk)", f"    .ap_rst  ({self._reset_net()})"]
         if self.resolved_io is not None and self.resolved_io.inputs:
             for port, expr, _ in self._link_inputs():
                 conns.append(f"    .{port} ({f'lin_q_{port}' if self.policies.input_register else expr})")
