@@ -43,7 +43,7 @@ been removed, and GitHub is the only source.
 
 ```bash
 # Lint
-flake8 forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/project
+flake8 forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen forge/project
 yamllint -d relaxed plugins/trigger_demo/forge/designs/design.yml plugins/trigger_demo/forge/modules.yml
 
 # Agnosticism guard — forge/ core must not hardcode detector/algorithm assumptions
@@ -53,6 +53,10 @@ bash ci/agnosticism_check.sh
 python3 -m pytest forge/tests -q
 python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests -q
 
+# Every reference plugin's flows generated and checked by doctor
+# (writes gen-top/ and the flow files, all git-ignored)
+bash ci/verify_smoke.sh
+
 # Full fresh-user onboarding path (install, CLI smoke, init-plugin scaffold,
 # trigger_demo doctor, both test suites)
 bash ci/fresh_user_check.sh
@@ -61,9 +65,12 @@ bash ci/fresh_user_check.sh
 ./run_trigger_demo.sh
 ```
 
-These are exactly the checks CI runs — see `.gitlab-ci.yml`,
-`ci/framework-base.yml`, and `ci/framework-release.yml`. If it doesn't pass
-locally, it won't pass in CI either.
+CI runs these on GitHub (`.github/workflows/ci.yml`) for pull requests and
+pushes to `main` and `forge_devel`, with the docs build, schema validation
+and the other guards in `ci/`. `.gitlab-ci.yml` and `ci/framework-*.yml`
+define the same jobs for GitLab runners, plus the Vivado release gate
+(`run_trigger_demo.sh`), which needs a machine with the tools. If it doesn't
+pass locally, it won't pass in CI either.
 
 ## Adding a plugin
 

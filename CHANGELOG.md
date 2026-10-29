@@ -94,6 +94,17 @@ for the versioning policy.
   `prepare_plugin_flows` fixture, trigger_demo's `generated_verify_root`).
 - The vision_pipeline_demo tutorial runner and reference-asset generator
   call `forge dev …` instead of the old top-level group names.
+- **CI runs on GitHub.** `.github/workflows/ci.yml` runs the jobs
+  `.gitlab-ci.yml` defines (lint, type check, schema validation, the `ci/`
+  guards, docs build, unit and plugin tests, verify smoke, fresh-user check,
+  versioned docs on `main` and tags) for pull requests and pushes to `main`
+  and `forge_devel`; the Vivado release gate stays GitLab-only. flake8 also
+  covers `forge/project`.
+- **`ci/verify_smoke.sh`** generates every reference plugin's tops, flow
+  files and stimulus from a clean checkout and runs `forge dev verify
+  doctor` on each, without HLS or a simulator; the verify-smoke job runs it
+  in place of `generate --dry-run` plus a doctor that only passed on the
+  committed flow files.
 - **`forge dev analyze plot-results` fails when it draws nothing.** Without
   matplotlib it printed a skip per figure and exited 0; it now exits 1 and
   names the `plot` extra. A figure that fails to render also fails the
