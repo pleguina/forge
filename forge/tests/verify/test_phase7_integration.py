@@ -168,7 +168,7 @@ def test_full_chain_json_dataset_through_report_on_xsim(
     )
     assert run_result.returncode == 0, run_result.stdout + run_result.stderr
     assert run_result.stdout.count("[xsim 1/3] Compiling") == 1
-    assert run_result.stdout.count("[xsim 1-2/3] Reusing existing compile+elaborate") == 1
+    assert run_result.stdout.count("[xsim 1-2/3] Reusing the compile+elaborate of identical inputs") == 1
 
     # ── Versioned, schema-checked results.json ──────────────
     flow_result = json.loads(results_path.read_text())
@@ -283,7 +283,7 @@ def test_full_chain_same_readmemh_flow_on_verilator(
     )
     assert run_result.returncode == 0, run_result.stdout + run_result.stderr
     assert run_result.stdout.count("[verilator 1/2] Compiling+Elaborating") == 1
-    assert run_result.stdout.count("[verilator 1/2] Reusing existing build") == 1
+    assert run_result.stdout.count("[verilator 1/2] Reusing the build of identical inputs") == 1
 
     flow_result = json.loads(results_path.read_text())
     assert flow_result["schema"] == {"name": "forge.verification_results", "version": "1.0"}
@@ -296,3 +296,23 @@ def test_full_chain_same_readmemh_flow_on_verilator(
     checks_1 = {c["label"]: c for c in events[1]["checks"]}
     assert checks_0["data_out_check"]["observed"] == "0x3a"
     assert checks_1["data_out_check"]["observed"] == "0x00"
+
+
+@skip_without_verilator
+def test_a_changed_rtl_is_rebuilt_not_reused(
+    capsys: pytest.CaptureFixture[str], consumer_root: Path,
+) -> None:
+    """The build is reused only for identical inputs: after the DUT's RTL
+    changes, the next run compiles again and sees the new behaviour."""
+    design_yml = consumer_root / "plugins/passthrough_demo/forge/verify/design.verification.yml"
+    args = ("test", "run", str(design_yml), "--flow", "passthrough_readmemh_verilator",
+            "--plugin", "passthrough_demo", "--consumer-root", str(consumer_root), "--all-events")
+    first = _run(capsys, *args)
+    assert first.returncode == 0, first.stdout + first.stderr
+
+    rtl = consumer_root / "plugins/passthrough_demo/algo/rtl/passthrough.v"
+    rtl.write_text(rtl.read_text().replace("data_out       <= data_in;", "data_out       <= ~data_in;"))
+    second = _run(capsys, *args)
+
+    assert second.stdout.count("[verilator 1/2] Compiling+Elaborating") == 1
+    assert second.returncode != 0, "the inverted DUT must fail against the golden data"

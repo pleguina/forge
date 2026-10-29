@@ -767,6 +767,12 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **XSim and Verilator reused a `readmemh` build whenever its sentinel file
+  existed**, so a changed RTL, testbench, header or flag could pass on the
+  old build. The sentinel holds a content key (the compile list and its
+  sources, the include directories' headers, the commands and the
+  simulator version) and is removed before every build; run-time stimulus
+  data is not part of it, so changing events still reuses the build.
 - **The Blobfish payload tied the algorithm's `ap_rst` to 0 with no
   decision behind it.** A payload with links now needs `reset:` in its
   control policies: an ABI input port, its polarity and a synchronizer

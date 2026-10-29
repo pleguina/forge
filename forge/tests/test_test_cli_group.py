@@ -418,12 +418,12 @@ def test_run_readmemh_mode_compiles_once_across_two_events(
     xvlog/xelab exactly once, not twice — confirmed via the real
     stdout narration (the "[xsim 1/3] Compiling" progress line, which only
     ever prints on a real xvlog invocation, vs. the real
-    "[xsim 1-2/3] Reusing existing compile+elaborate" skip line) — and
+    "[xsim 1-2/3] Reusing the compile+elaborate of identical inputs" skip line) — and
     both real events must still produce correct, distinct results."""
     results_path = consumer_root / "results.json"
 
     # No --json: json_mode swallows all narrative print()s (including the
-    # real "[xsim 1/3] Compiling" / "Reusing existing compile+elaborate"
+    # real "[xsim 1/3] Compiling" / "Reusing the compile+elaborate"
     # progress lines this test needs to observe) into a StringIO — human
     # mode is required to see them on real stdout. --results-json still
     # writes the structured file regardless of --json.
@@ -439,7 +439,7 @@ def test_run_readmemh_mode_compiles_once_across_two_events(
     # The real, observable compile-count reduction: exactly one real
     # compile, one real reuse — not two compiles, and not zero.
     assert result.stdout.count("[xsim 1/3] Compiling") == 1
-    assert result.stdout.count("[xsim 1-2/3] Reusing existing compile+elaborate") == 1
+    assert result.stdout.count("[xsim 1-2/3] Reusing the compile+elaborate of identical inputs") == 1
     assert result.stdout.count("[xsim 3/3] Simulating") == 2  # both events still really run
 
     flow_result = json.loads(results_path.read_text())
@@ -492,7 +492,7 @@ def test_run_svh_include_flows_unaffected_by_readmemh_mechanism(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.count("[xsim 1/3] Compiling") == 2  # real recompile, both events
-    assert "Reusing existing compile+elaborate" not in result.stdout
+    assert "Reusing the compile+elaborate" not in result.stdout
 
     per_event = (
         consumer_root

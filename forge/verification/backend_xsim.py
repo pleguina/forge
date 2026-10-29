@@ -49,6 +49,7 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from forge.verification.compile_key import build_key, reusable
 from forge.verification import backend_checker
 from forge.verification.backend_base import (
     ArtifactRequirement,
@@ -396,22 +397,33 @@ class XsimBackend(BackendAdapter):
         readmemh_mode = getattr(cfg, "stimulus_mode", "svh_include") == "readmemh"
         build_sentinel = work_dir / ".compile_elaborate_complete"
 
-        if readmemh_mode and build_sentinel.exists():
-            print(f"[xsim 1-2/3] Reusing existing compile+elaborate (stimulus_mode=readmemh)")
+        xvlog_cmd = ["xvlog", "--incr", "--relax"]
+        if self.xvlog_use_sv_flag(cfg):
+            xvlog_cmd.append("--sv")
+        xvlog_cmd += ["--include", str(flow_dir)]
+        for inc_dir in self.extra_include_dirs(cfg):
+            xvlog_cmd += ["--include", str(inc_dir)]
+        xvlog_cmd += self.extra_compile_flags(cfg)
+        if getattr(ctx, "probe_log", False):
+            xvlog_cmd += ["-d", "PROBE_LOG=1"]
+        xvlog_cmd += ["-prj", str(prj_file)]
+        xelab_cmd = [
+            "xelab", "--incr", "--debug", "typical", "--relax",
+            "-L", "xil_defaultlib",
+        ]
+        xelab_cmd += self.extra_elab_lib_flags(cfg)
+        xelab_cmd += self.extra_elab_flags(cfg)
+        xelab_cmd.append(self.qualify_top_name(cfg))
+        xelab_cmd += self.extra_top_modules(cfg)
+        xelab_cmd += ["-s", snapshot]
+        key = build_key(prj_file, [xvlog_cmd, xelab_cmd], ["xvlog"]) if readmemh_mode else None
+
+        if key is not None and reusable(build_sentinel, key):
+            print(f"[xsim 1-2/3] Reusing the compile+elaborate of identical inputs (stimulus_mode=readmemh)")
         else:
+            build_sentinel.unlink(missing_ok=True)
             # ── xvlog ──────────────────────────────────────────────────────
             print(f"[xsim 1/3] Compiling  ({cfg.tb_module})")
-            xvlog_cmd = ["xvlog", "--incr", "--relax"]
-            if self.xvlog_use_sv_flag(cfg):
-                xvlog_cmd.append("--sv")
-            xvlog_cmd += ["--include", str(flow_dir)]
-            for inc_dir in self.extra_include_dirs(cfg):
-                xvlog_cmd += ["--include", str(inc_dir)]
-            xvlog_cmd += self.extra_compile_flags(cfg)
-            if getattr(ctx, "probe_log", False):
-                xvlog_cmd += ["-d", "PROBE_LOG=1"]
-            xvlog_cmd += ["-prj", str(prj_file)]
-
             run = _run_logged(xvlog_cmd, xvlog_log, cwd=work_dir)
             if run.exit_code != 0:
                 return ExecutionResult(
@@ -423,15 +435,6 @@ class XsimBackend(BackendAdapter):
 
             # ── xelab ──────────────────────────────────────────────────────
             print(f"[xsim 2/3] Elaborating (snapshot={snapshot})")
-            xelab_cmd = [
-                "xelab", "--incr", "--debug", "typical", "--relax",
-                "-L", "xil_defaultlib",
-            ]
-            xelab_cmd += self.extra_elab_lib_flags(cfg)
-            xelab_cmd += self.extra_elab_flags(cfg)
-            xelab_cmd.append(self.qualify_top_name(cfg))
-            xelab_cmd += self.extra_top_modules(cfg)
-            xelab_cmd += ["-s", snapshot]
             run = _run_logged(xelab_cmd, xelab_log, cwd=work_dir)
             if run.exit_code != 0:
                 return ExecutionResult(
@@ -441,8 +444,8 @@ class XsimBackend(BackendAdapter):
                     backend_metadata={"step": "xelab"},
                 )
 
-            if readmemh_mode:
-                build_sentinel.write_text("1")
+            if key is not None:
+                build_sentinel.write_text(key + "\n")
 
         # ── xsim ───────────────────────────────────────────────────────────
         print("[xsim 3/3] Simulating")
