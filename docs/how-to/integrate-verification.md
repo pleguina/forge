@@ -43,7 +43,7 @@ See [How to Author Topology Contracts](author-topology-contracts.md) for the ful
 
 For the current v1.0 framework verification surface:
 
-- a dataset is a file in a registered format: `xml`, `json` or `empv2` (EMP pattern files)
+- a dataset is a file in a registered format: `xml`, `json`, `empv2` (EMP pattern files) or `apx`
 - the authored verification contract is `design.verification.yml`
 - the framework generates per-flow `verify.flow.yml`, `tb_<module>.sv`, and `wave.tcl`
 - the plugin generates `stimulus_current.svh`
@@ -252,18 +252,32 @@ its format:
 ```yaml
 dataset:
   path: schemas/data/source.txt
-  format: empv2          # xml | json | empv2
+  format: empv2          # xml | json | empv2 | apx | apx-2021
 ```
 
 `dataset.xml: <file>` is the older spelling of an XML dataset and keeps
 working. `.xml` and `.json` files are recognised by suffix; a `.txt` file only
-when its header is an EMP pattern file's, never by the suffix alone.
+when its header is an EMP or APx pattern file's, never by the suffix alone.
 
 An `empv2` dataset reads emp-fwk and CMSSW EMP pattern files: event *k* is the
 *k*-th packet (start to last valid word) of every link, each word with its
 data, valid, start, last, start-of-orbit and strobe bits.
 `forge.integration.emp.read_board_data` / `write_board_data` keep the file
 itself, idle frames included, without loss.
+
+An `apx` dataset reads APx pattern files the way CMSSW's DemonstratorTools
+writes them (`#LinkLabel`, `#BeginData`, a sideband byte and a 64-bit word per
+link and frame), into the same events. CMSSW's APx reader and writer use
+different sideband bit orders; `apx` is the writer's (bit 0 first frame of
+orbit, 1 start, 2 end, 3 valid), `apx-2021` the reader's (bit 0 valid, 1
+start, 2 first frame of orbit, 3 end). A word with CRC or throttle bits set is
+refused. `forge.integration.apx.read_apx` / `write_apx` keep the file.
+
+There is no `x2o` format. CMSSW names an X2O file format, but its reader and
+writer only throw "not yet implemented"; without a reference file and
+specification from the X2O/Blobfish side, FORGE does not define one under that
+name. Blobfish link words convert to and from EMP's with
+`forge.integration.csp`.
 
 A format the framework does not read yet is registered with
 `forge.verification.dataset_format.register_named_format(name, loader)`, a

@@ -216,6 +216,11 @@ for the versioning policy.
   lists the synthesised interface as the one FORGE uses.
 
 ### Added
+- **APx pattern files.** `forge.integration.apx` reads and writes them as
+  CMSSW's DemonstratorTools does, and datasets name them `apx` (the sideband
+  bit order CMSSW writes) or `apx-2021` (the one its reader expects). There is
+  no `x2o` format: CMSSW's X2O codec is unimplemented and FORGE does not invent
+  one.
 - **Link map and build identity.** `forge dev framework link-map` writes
   every resolved link (fibre, cage, quad, lane, protocol, logical input,
   algorithm port), the register layout, and a build identity: content hashes

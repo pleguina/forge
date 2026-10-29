@@ -27,8 +27,9 @@ def test_formats_are_named_and_txt_is_known_by_content(tmp_path):
     plain.write_text("hello\n")
     with pytest.raises(ValueError, match="name the format"):
         get_format_loader(plain)
-    with pytest.raises(ValueError, match="unknown dataset format 'apx'"):
-        get_format_loader(emp, "apx")
+    # CMSSW's X2O codec is unimplemented; there is no format to read.
+    with pytest.raises(ValueError, match="unknown dataset format 'x2o'"):
+        get_format_loader(emp, "x2o")
 
 
 def test_an_emp_event_is_the_kth_packet_of_every_link(tmp_path):
@@ -73,7 +74,7 @@ def test_a_flow_names_its_dataset_in_any_format(tmp_path, dataset, fmt):
 
 
 @pytest.mark.parametrize("dataset, message", [
-    ("{path: patterns.txt, format: apx}", "dataset.format 'apx'"),
+    ("{path: patterns.txt, format: x2o}", "dataset.format 'x2o'"),
     ("{default_event_id: 1}", "dataset.path"),
 ])
 def test_a_flow_with_an_unusable_dataset_is_refused(tmp_path, dataset, message):

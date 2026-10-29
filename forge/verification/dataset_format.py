@@ -187,9 +187,12 @@ def get_format_loader(path: "str | Path", fmt: "str | None" = None) -> DatasetFo
     loader = _FORMAT_LOADERS.get(suffix)
     if loader is not None:
         return loader
+    from forge.integration.apx import is_apx_file
     from forge.integration.emp import is_pattern_file
     if is_pattern_file(Path(path)):
         return _NAMED_LOADERS["empv2"]
+    if is_apx_file(Path(path)):
+        return _NAMED_LOADERS["apx"]
     known = ", ".join(sorted(_FORMAT_LOADERS)) or "(none registered)"
     raise ValueError(
         f"No dataset format loader registered for suffix {suffix!r} "
@@ -329,11 +332,15 @@ class EmpPatternDatasetLoader:
     (``forge.integration.emp.read_board_data``).
     """
 
-    def load(self, path: Path) -> SerializedDataset:
-        from forge.integration.emp import read_board_data
+    adapter_id = "empv2"
 
+    def read(self, path: Path) -> Any:
+        from forge.integration.emp import read_board_data
+        return read_board_data(path)
+
+    def load(self, path: Path) -> SerializedDataset:
         path = Path(path)
-        board = read_board_data(path)
+        board = self.read(path)
         per_link = {link: board.packets(link) for link in board.links}
         n = max((len(p) for p in per_link.values()), default=0)
         events: "list[dict[str, Any]]" = []
@@ -352,7 +359,7 @@ class EmpPatternDatasetLoader:
             event_ids=[e["id"] for e in events],
             semantic=SemanticMetadata(
                 source_content_hash=compute_events_content_hash(events),
-                adapter_id="empv2",
+                adapter_id=self.adapter_id,
             ),
             environment=EnvironmentMetadata(
                 source_path=str(path),
@@ -362,8 +369,26 @@ class EmpPatternDatasetLoader:
         return SerializedDataset(events=events, metadata=metadata)
 
 
+class ApxPatternDatasetLoader(EmpPatternDatasetLoader):
+    """APx pattern files (``forge.integration.apx``), events as for ``empv2``.
+
+    ``apx`` reads the sideband as CMSSW writes it today, ``apx-2021`` as
+    CMSSW's reader does.
+    """
+
+    def __init__(self, encoding: str = "2025") -> None:
+        self.encoding = encoding
+        self.adapter_id = "apx" if encoding == "2025" else f"apx-{encoding}"
+
+    def read(self, path: Path) -> Any:
+        from forge.integration.apx import read_apx
+        return read_apx(path, self.encoding)
+
+
 register_format_loader(".xml", XmlDatasetLoader())
 register_format_loader(".json", JsonDatasetLoader())
 register_named_format("xml", XmlDatasetLoader())
 register_named_format("json", JsonDatasetLoader())
 register_named_format("empv2", EmpPatternDatasetLoader())
+register_named_format("apx", ApxPatternDatasetLoader())
+register_named_format("apx-2021", ApxPatternDatasetLoader("2021"))
