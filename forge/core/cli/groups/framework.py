@@ -1,4 +1,4 @@
-"""forge framework — external framework import, detector I/O resolution and ipbb."""
+"""forge framework — external framework import, detector I/O resolution, floorplan and ipbb."""
 
 from __future__ import annotations
 
@@ -268,11 +268,33 @@ def cmd_ipbb_xsim(args):
     print(f"Written: {args.out}")
 
 
+def cmd_floorplan(args):
+    """Write the SLR assignment of a block-design top level."""
+    import yaml
+    from forge.integration.floorplan import floorplan, write_xdc
+
+    try:
+        spec = (yaml.safe_load(Path(args.spec).read_text()) or {}).get("floorplan") or {}
+        if "root" not in spec:
+            raise ValueError(f"{args.spec}: floorplan.root (the block-design instance in the netlist) is required")
+        res, cells = floorplan(Path(args.block_design), Path(args.ir), Path(args.detector_io), spec,
+                               Path(args.crossings) if args.crossings else None)
+    except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(write_xdc(res, root=spec["root"], pblock=spec.get("pblock")))
+    per_slr = {s: sum(1 for v in res.values() if v == s) for s in sorted(set(res.values()))}
+    print(f"Written: {out} ({len(res)} of {len(cells)} cells: "
+          + ", ".join(f"SLR{s} {n}" for s, n in per_slr.items()) + ")")
+
+
 def register(sub):
     """Register the 'framework' command group."""
     grp = sub.add_parser(
         "framework",
-        help="External frameworks: ABI import, detector I/O, payloads, ipbb components",
+        help="External frameworks: ABI import, detector I/O, payloads, floorplan, ipbb components",
     )
     grp_sub = grp.add_subparsers(
         dest="framework_cmd",
@@ -395,3 +417,18 @@ def register(sub):
         help="Shell script to write",
     )
     p_xsim.set_defaults(func=cmd_ipbb_xsim)
+
+    # ── framework floorplan ───────────────────────────────────────────────
+    p_fp = grp_sub.add_parser(
+        "floorplan",
+        help="SLR assignment of a block-design top level from the links and a floorplan spec",
+    )
+    p_fp.add_argument("--block-design", required=True, help="block_design.tcl from forge build --mode bd")
+    p_fp.add_argument("--ir", required=True, help="design.ir.json written next to it")
+    p_fp.add_argument("--crossings", default=None,
+                      help="block_design.crossings.json; its crossings are left to the placer")
+    p_fp.add_argument("--detector-io", required=True, help="detector_io.resolved.json")
+    p_fp.add_argument("--spec", required=True,
+                      help="YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell patterns]}}")
+    p_fp.add_argument("--out", required=True, help="XDC to write")
+    p_fp.set_defaults(func=cmd_floorplan)

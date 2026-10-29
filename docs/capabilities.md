@@ -234,6 +234,9 @@ it, for dropping a generated top level into a larger platform. The
 [payload control policies](reference/payload-policies.md) register the link
 words and add the payload's own logic (board control, status, test
 features), so the generated `payload.v` needs no patching.
+`forge dev framework floorplan` assigns every cell of a block-design top
+level to an SLR: the link interfaces to the SLR of their quad from the
+resolved I/O, the rest from a [declared floorplan](reference/floorplan.md).
 
 For ipbb projects such as EMP payloads, `forge dev framework
 ipbb-component` copies a build's sources into an ipbb component with its

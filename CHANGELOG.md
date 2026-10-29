@@ -212,6 +212,13 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **`forge dev framework floorplan`**: one `USER_SLR_ASSIGNMENT` per cell of
+  a `--mode bd` top level (optionally its SLR pblock too). The link
+  interfaces, and the decoders only one link feeds, go to the SLR of their
+  endpoint in the resolved I/O; declared cell patterns place the rest, and
+  other cells follow their neighbours (`docs/reference/floorplan.md`). On
+  OMTF's board image it writes the same constraints as the hand-kept tables
+  it replaces.
 - **Payload control policies for the consumer's own logic.** `emit-payload
   --policies` takes `tx` (a register per used TX lane, an orbit marker on
   every `tx_orbit`), `input_register` (one register per link word),

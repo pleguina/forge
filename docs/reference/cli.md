@@ -202,7 +202,7 @@ positional arguments:
     hls       Build HLS modules and IPs
     analyze   Performance analysis, latency checks, and reporting
     framework
-              External frameworks: ABI import, detector I/O, payloads, ipbb components
+              External frameworks: ABI import, detector I/O, payloads, floorplan, ipbb components
     core      Shared schema, CLI, and plugin utilities
 
 options:
@@ -429,6 +429,7 @@ positional arguments:
     ipbb-component
                   Copy a build's sources into an ipbb component with its .dep file
     ipbb-xsim     Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
+    floorplan     SLR assignment of a block-design top level from the links and a floorplan spec
 
 options:
   -h, --help      show this help message and exit
@@ -451,6 +452,27 @@ options:
                         Algorithm top module name to instantiate
   --policies POLICIES   Path to YAML file with control_policies
   --out OUT             Output path for payload.v (default: build/generated/payload.v)
+```
+
+##### `forge dev framework floorplan`
+
+```text
+usage: forge dev framework floorplan [-h] --block-design BLOCK_DESIGN --ir IR
+                                     [--crossings CROSSINGS] --detector-io DETECTOR_IO --spec SPEC
+                                     --out OUT
+
+options:
+  -h, --help            show this help message and exit
+  --block-design BLOCK_DESIGN
+                        block_design.tcl from forge build --mode bd
+  --ir IR               design.ir.json written next to it
+  --crossings CROSSINGS
+                        block_design.crossings.json; its crossings are left to the placer
+  --detector-io DETECTOR_IO
+                        detector_io.resolved.json
+  --spec SPEC           YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell
+                        patterns]}}
+  --out OUT             XDC to write
 ```
 
 ##### `forge dev framework import`

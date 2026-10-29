@@ -129,6 +129,7 @@ nav:
       - Canonical Roles: reference/canonical-roles.md
       - Protocols: reference/protocols.md
       - Payload Control Policies: reference/payload-policies.md
+      - Floorplan: reference/floorplan.md
       - Interface Members: reference/interface-members.md
       - Transformations: reference/transformations.md
       - Diagnostic Catalogue: reference/diagnostics.md
