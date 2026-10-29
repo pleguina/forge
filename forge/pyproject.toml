@@ -92,6 +92,7 @@ packages = [
     "forge.hls",
     "forge.project",
     "forge.verification",
+    "forge.verification.protocols",
     "forge.analysis",
     "forge.analysis.hls_reports",
     "forge.analysis.latency_static",

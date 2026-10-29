@@ -1394,7 +1394,11 @@ options:
 
 ```text
 usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_LIST]
-                  [--all-events] [--plugin PLUGIN] [--json]
+                  [--all-events] [--plugin PLUGIN] [--input INPUT] [--input-format INPUT_FORMAT]
+                  [--expected EXPECTED] [--expected-format EXPECTED_FORMAT]
+                  [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
+                  [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
+                  [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE] [--plan] [--json]
                   MODE ...
 
 positional arguments:
@@ -1415,6 +1419,26 @@ options:
   --all-events          Run every event in the dataset
   --plugin PLUGIN       Plugin ID to bootstrap (when flow.plugin is absent from YAML)
   --json                Machine-readable JSON output
+
+without a verification config:
+  The design's interfaces are found from its ports and driven by a generated testbench
+
+  --input INPUT         Input transactions (JSON, EMP or APx pattern file)
+  --input-format INPUT_FORMAT
+                        json | empv2 | apx | apx-2021 (default: from the file)
+  --expected EXPECTED   Expected output transactions
+  --expected-format EXPECTED_FORMAT
+  --compare-mode {transaction,exact_cycle,fixed_latency,latency_window}
+  --latency LATENCY     Cycles, or MIN:MAX, for the latency modes
+  --backend {xsim,verilator}
+                        Only this simulator
+  --level {design,modules}
+                        Only this level
+  --seed SEED           Seed of the stall and backpressure patterns
+  --stall STALL         Percent of cycles a ready_valid input withholds a word
+  --backpressure BACKPRESSURE
+                        Percent of cycles a ready_valid output's ready is low
+  --plan                Print what would be verified, and what was inferred, without simulating
 ```
 
 #### `forge test check-only`

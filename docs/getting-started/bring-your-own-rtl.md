@@ -238,6 +238,18 @@ module algo_top (
 
 Then `forge check` again and watch the completion figure move.
 
+To simulate it, give `forge test` an input and the output you expect of it,
+as JSON keyed by the top level's interfaces:
+
+```bash
+forge test --input input.json --expected expected.json
+```
+
+FORGE finds a `valid` stream in, `decimator_sample_in`, and one out,
+`packer_packet_out`, generates the testbench, and compares; each module is
+also simulated alone and reported `NOT_VERIFIED_NO_ORACLE` until it has an
+expected output of its own. See [Verify from the design](../how-to/verify-from-the-design.md).
+
 ## Ask why
 
 Nothing above should be a black box. Point `forge explain` at any decision

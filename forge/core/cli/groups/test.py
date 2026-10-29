@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -129,6 +130,96 @@ def _flow_build_argv(project, verification: Path, flow) -> List[str]:
     return argv
 
 
+_STATUS_ICON = {"VERIFIED": "✅", "FAILED": "❌", "PARTIAL": "⚠️ ", "NOT_VERIFIED_NO_ORACLE": "⚠️ ",
+                "BLOCKED_MISSING_TOOL": "⏭️ ", "SKIPPED": "⏭️ "}
+
+
+def cmd_auto_test(args, project) -> None:
+    """`forge test` without a verification config: plan from the design and
+    forge.yml's verification keys, simulate every level, record evidence."""
+    from forge.core.cli._shared import run_forge_command
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.verification import auto
+    from forge.verification.junit_xml import write_junit_xml
+
+    json_mode = getattr(args, "json", False)
+    spec = dict(project.config.verification_spec)
+    for key in ("backend", "level"):
+        value = getattr(args, key, None)
+        if value:
+            spec[f"{key}s"] = [value]
+    if getattr(args, "compare_mode", None):
+        spec["compare"] = {**(spec.get("compare") or {}), "mode": args.compare_mode}
+    if getattr(args, "latency", None):
+        lo, _, hi = args.latency.partition(":")
+        spec["compare"] = {**(spec.get("compare") or {}),
+                           "latency": {"min": int(lo), "max": int(hi or lo)}}
+
+    def ref(value, fmt):
+        if not value:
+            return None
+        return {"path": str(Path(value).resolve()), **({"format": fmt} if fmt else {})}
+
+    code, output = run_forge_command(["build"], quiet=True)
+    if code != 0:
+        if output:
+            print(output, file=sys.stderr)
+        sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
+    try:
+        plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
+                         expected_override=ref(args.expected, args.expected_format))
+    except (OSError, ValueError, KeyError) as exc:
+        sys.exit(_guided_run_failure(str(exc), json_mode=json_mode,
+                                     action="Declare the interfaces under verification.protocols in forge.yml"))
+    if getattr(args, "plan", False):
+        if json_mode:
+            print(json.dumps(plan.to_dict(), indent=2))
+        else:
+            import yaml
+            print(yaml.safe_dump(plan.to_dict(), sort_keys=False))
+        sys.exit(0)
+
+    out_dir = project.paths.report_root / "test" / "auto"
+    try:
+        evidence = auto.run_plan(plan, project.paths.state_root / "verify", seed=args.seed,
+                                 stall=args.stall, backpressure=args.backpressure)
+    except (OSError, ValueError, KeyError) as exc:
+        sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
+    artifacts, diagnostics, results = [], [], []
+    for e in evidence:
+        path = out_dir / f"{e.level.replace(':', '_')}.{e.backend}.evidence.json"
+        e.write(path)
+        artifacts.append(str(path))
+        reason = e.doc.get("reason", "")
+        detail = reason or ", ".join(
+            f"{r['interface']} {r['matched']}/{r['expected']}" if r["expected"] else f"{r['interface']} {r['observed']} words"
+            for r in e.doc.get("interfaces", []))
+        if not json_mode:
+            print(f"  {_STATUS_ICON[e.status]} {e.level} [{e.backend}]: {e.status}" + (f" ({detail})" if detail else ""))
+        if e.status == "FAILED":
+            diagnostics.append({"severity": "error", "message": f"{e.level} [{e.backend}]: {detail}"})
+        elif e.status != "VERIFIED":
+            diagnostics.append({"severity": "warning", "message": f"{e.level} [{e.backend}]: {e.status}"
+                                + (f", {reason}" if reason else "")})
+        results.append({"name": f"{e.level}[{e.backend}]", "success": e.status != "FAILED",
+                        "skipped": e.status not in ("VERIFIED", "FAILED"), "message": detail})
+    junit = out_dir / "junit.xml"
+    write_junit_xml(junit, suite_name=project.config.project, results=results)
+    artifacts.append(str(junit))
+    overall = auto.summary(evidence)
+    envelope = CommandEnvelope(
+        status={"VERIFIED": "pass", "FAILED": "fail"}.get(overall, "warn"),
+        diagnostics=diagnostics,
+        artifacts=artifacts,
+        metrics={"verification": overall,
+                 "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence}},
+        next_actions=([] if overall == "VERIFIED" else
+                      ["Give an expected output (--expected, or verification.expected / "
+                       "verification.modules.<name>.expected in forge.yml) for each level to verify"]),
+    )
+    sys.exit(emit(envelope, json_mode=json_mode))
+
+
 def cmd_project_test(args) -> None:
     """`forge test` with no design file: build the project, then prepare and
     run each flow of its verification config, one line per step."""
@@ -140,6 +231,9 @@ def cmd_project_test(args) -> None:
 
     json_mode = getattr(args, "json", False)
     project = _project_or_exit(json_mode)
+    if project.verification is None or getattr(args, "input", None) or getattr(args, "plan", False):
+        cmd_auto_test(args, project)
+        return
     design = _verification_or_exit(project, json_mode)
     try:
         contract = load_verify_design(design)
@@ -420,6 +514,26 @@ def register(sub) -> None:
         help="Run every event in the dataset",
     )
     p_test.add_argument("--plugin", help="Plugin ID to bootstrap (when flow.plugin is absent from YAML)")
+    auto = p_test.add_argument_group(
+        "without a verification config",
+        "The design's interfaces are found from its ports and driven by a generated testbench",
+    )
+    auto.add_argument("--input", default=None, help="Input transactions (JSON, EMP or APx pattern file)")
+    auto.add_argument("--input-format", dest="input_format", default=None,
+                      help="json | empv2 | apx | apx-2021 (default: from the file)")
+    auto.add_argument("--expected", default=None, help="Expected output transactions")
+    auto.add_argument("--expected-format", dest="expected_format", default=None)
+    auto.add_argument("--compare-mode", dest="compare_mode", default=None,
+                      choices=("transaction", "exact_cycle", "fixed_latency", "latency_window"))
+    auto.add_argument("--latency", default=None, help="Cycles, or MIN:MAX, for the latency modes")
+    auto.add_argument("--backend", default=None, choices=("xsim", "verilator"), help="Only this simulator")
+    auto.add_argument("--level", default=None, choices=("design", "modules"), help="Only this level")
+    auto.add_argument("--seed", type=int, default=1, help="Seed of the stall and backpressure patterns")
+    auto.add_argument("--stall", type=int, default=0, help="Percent of cycles a ready_valid input withholds a word")
+    auto.add_argument("--backpressure", type=int, default=0,
+                      help="Percent of cycles a ready_valid output's ready is low")
+    auto.add_argument("--plan", action="store_true", default=False,
+                      help="Print what would be verified, and what was inferred, without simulating")
     p_test.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p_test.set_defaults(func=cmd_project_test)
     test_sub = p_test.add_subparsers(dest="test_command", metavar="MODE")

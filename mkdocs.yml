@@ -110,6 +110,7 @@ nav:
       - Vision Pipeline Full Design (redirect): tutorials/vision-pipeline-full-design.md
   - How-To Guides:
       - Author Topology Contracts: how-to/author-topology-contracts.md
+      - Verify from the Design: how-to/verify-from-the-design.md
       - Integrate Verification: how-to/integrate-verification.md
       - Set Up the Verification Framework: how-to/setup-verification-framework.md
       - Analyze Performance: how-to/analyze-performance.md

@@ -215,7 +215,25 @@ for the versioning policy.
   when one exists and predicts from the C++ only before that; `forge explain`
   lists the synthesised interface as the one FORGE uses.
 
+- **`forge init`'s plugin test checks something.** The scaffolded test was a
+  `pass`; it now loads the verification contract and checks every flow's
+  dataset exists, and says the simulation is `forge test`'s.
 ### Added
+- **Verification from the design, without a plugin.** `forge test --input
+  --expected` (or `verification.input`/`expected` in `forge.yml`) finds the
+  top level's interfaces from its ports (`valid`, `ready_valid`, AXI4-Stream,
+  `emp_lword`, `scalar`; others declared under `verification.protocols`),
+  generates one testbench, compiles it once per simulator (XSim, Verilator)
+  and compile key, runs every transaction in one simulation, and compares in
+  a shared scoreboard (`transaction`, `exact_cycle`, `fixed_latency`,
+  `latency_window`; missing, extra, duplicate, out-of-order, latency and X
+  rows). Inputs and expected outputs are JSON, EMP or APx pattern files.
+  Each RTL module is simulated on its own as well. Results are `VERIFIED`,
+  `FAILED`, `NOT_VERIFIED_NO_ORACLE`, `BLOCKED_MISSING_TOOL`, `SKIPPED` or
+  `PARTIAL`, never a pass without an expected output, and each comes with an
+  evidence file (sources, compile key, tool, input and expected hashes,
+  protocol and checker versions, rows). `--plan` prints what was inferred;
+  `--stall` and `--backpressure` exercise flow control.
 - **APx pattern files.** `forge.integration.apx` reads and writes them as
   CMSSW's DemonstratorTools does, and datasets name them `apx` (the sideband
   bit order CMSSW writes) or `apx-2021` (the one its reader expects). There is

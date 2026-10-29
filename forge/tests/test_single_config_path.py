@@ -193,12 +193,18 @@ def test_bare_inspect_and_report_use_the_project(
 
 
 def test_bare_test_without_a_verification_config_says_what_to_set(
-    project: Path, capsys: pytest.CaptureFixture[str],
+    project: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    code, _out, err = _run(capsys, ["test"])
+    import forge.verification.auto as auto
 
-    assert code == 1
-    assert "verification.config" in err
+    monkeypatch.setattr(auto.shutil, "which", lambda name: None)
+    code, out, err = _run(capsys, ["test", "--json"])
+
+    assert code == 0, err
+    payload = json.loads(out)
+    assert payload["status"] == "warn"
+    assert payload["metrics"]["verification"] == "BLOCKED_MISSING_TOOL"
+    assert "--expected" in payload["next_actions"][0]
 
 
 def test_a_flow_without_its_simulator_is_skipped_not_passed(

@@ -296,6 +296,10 @@ class ForgeConfig:
     part: str = DEFAULT_PART
     dataset: Optional[str] = None
     verification_config: Optional[str] = None
+    #: The rest of ``verification:`` (input, expected, links, compare,
+    #: protocols, backends, levels, modules), read by
+    #: ``forge.verification.auto``.
+    verification_spec: Dict[str, Any] = field(default_factory=dict)
     design: Optional[str] = None
     registry: Optional[str] = None
     build: Dict[str, str] = field(default_factory=dict)
@@ -423,6 +427,7 @@ class ForgeConfig:
             verification_config=(
                 str(verification_raw["config"]) if verification_raw.get("config") else None
             ),
+            verification_spec={str(k): v for k, v in verification_raw.items() if k not in ("dataset", "config")},
             design=str(raw["design"]) if raw.get("design") else None,
             registry=str(raw["registry"]) if raw.get("registry") else None,
             build={str(k): str(v) for k, v in build_raw.items() if v is not None},
@@ -468,6 +473,7 @@ class ForgeConfig:
             verification["dataset"] = self.dataset
         if self.verification_config:
             verification["config"] = self.verification_config
+        verification.update(self.verification_spec)
         if verification:
             out["verification"] = verification
         if self.modules:

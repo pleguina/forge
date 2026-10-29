@@ -1,8 +1,10 @@
 # How to Integrate Verification
 
-This guide defines the current supported plugin interface for framework verification.
-
-It is the canonical verification-integration guide for new plugins.
+This guide defines the plugin interface for framework verification: the
+route for a design whose stimulus or checking FORGE's generated testbench
+cannot express. A design whose interfaces FORGE can drive (`valid`,
+`ready_valid`, AXI4-Stream, EMP link words) needs no plugin: see
+[Verify from the design](verify-from-the-design.md).
 
 Use it together with:
 

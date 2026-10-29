@@ -29,6 +29,12 @@ with no EDA tools installed still passes.
 
 ## 3. Scaffold and run a plugin
 
+`forge init` installs an example plugin, a pass-through design with its
+verification files, to show the whole chain working. For your own algorithm,
+use `forge adopt` on its sources instead
+([Bring your own RTL](bring-your-own-rtl.md)): nothing is scaffolded, and
+`forge test --input --expected` verifies it.
+
 ```bash
 forge init my_plugin
 ```
