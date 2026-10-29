@@ -7,7 +7,7 @@ Validates that:
   * Assertion checks reference correct expected values from algorithm
   * dry_run flag skips file writing
   * Unknown module raises ValueError
-  * Generated stimulus_current.svh files already exist in repo (committed)
+  * The stimulus and testbench generated for each flow fit together
 """
 from __future__ import annotations
 
