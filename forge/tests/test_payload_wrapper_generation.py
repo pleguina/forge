@@ -255,3 +255,75 @@ class TestControlPolicies:
         content = generate_payload_verilog(fw, resolved_io, policies=policies)
         assert ".renamed_output_port (tx_slr2_gt0_lane0_csp)" in content
         assert ".out_csp_nn_csp_out" not in content
+
+
+class TestPayloadPolicies:
+    """The payload's own logic: link registers, extra connections, driven outputs, gates, Verilog blocks."""
+
+    def test_tx_register_and_orbit(self, tmp_path):
+        abi = dict(_ABI, ports=_ABI["ports"] + [
+            {"name": "slr2_gt_0_tx_orbit", "direction": "output", "width": 1,
+             "kind": "gt_tx_orbit", "slr": 2, "gt_site": 0, "lanes": 1}])
+        (tmp_path / "abi.json").write_text(json.dumps(abi))
+        (tmp_path / "ep.json").write_text(json.dumps(_EPS))
+        fw = load("blobfish", tmp_path / "abi.json", tmp_path / "ep.json")
+        (tmp_path / "detector_io.yml").write_text(_DET_IO)
+        resolved_io = resolve(tmp_path / "detector_io.yml", fw)
+        policies = ControlPolicies.from_dict({"tx": {"register": True, "orbit": "orbit_out"}})
+        content = generate_payload_verilog(fw, resolved_io, policies=policies)
+        assert "always @(posedge logic_clk) tx_slr2_gt0_lane0_csp_q <= tx_slr2_gt0_lane0_csp;" in content
+        assert "assign tx_slr2_gt0_lane0_tdata = tx_slr2_gt0_lane0_csp_q[66:3];" in content
+        assert "always @(posedge logic_clk) tx_slr2_gt0_lane0_orbit_q <= algo_tx_orbit;" in content
+        assert "assign slr2_gt_0_tx_orbit = tx_slr2_gt0_lane0_orbit_q;" in content
+        assert ".orbit_out (algo_tx_orbit)" in content
+        assert content.index("wire algo_tx_orbit;") < content.index("u_algo_top (")
+
+    def test_tx_orbit_without_an_orbit_port_is_refused(self, fw, resolved_io):
+        policies = ControlPolicies.from_dict({"tx": {"orbit": "orbit_out"}})
+        with pytest.raises(ValueError, match="no slr2_gt_0_tx_orbit port"):
+            generate_payload_verilog(fw, resolved_io, policies=policies)
+
+    def test_input_register_and_registered_connection(self, fw, resolved_io):
+        policies = ControlPolicies.from_dict({
+            "input_register": True,
+            "connect": {"bx0_in": {"net": "bx0", "register": True}, "mon_out": "mon_wire"},
+        })
+        content = generate_payload_verilog(fw, resolved_io, policies=policies)
+        assert ('(* shreg_extract = "no" *) reg [66:0] lin_q_dt_0_csp_in = 67\'b0;') in content
+        assert ("always @(posedge logic_clk) lin_q_dt_0_csp_in <= {rx_slr2_gt0_lane0_tdata, "
+                "rx_slr2_gt0_lane0_tlast, rx_slr2_gt0_lane0_tfirst, rx_slr2_gt0_lane0_tvalid};") in content
+        assert ".dt_0_csp_in (lin_q_dt_0_csp_in)" in content
+        assert "always @(posedge logic_clk) lin_q_bx0_in <= bx0;" in content
+        assert ".bx0_in (lin_q_bx0_in)" in content
+        assert ".mon_out (mon_wire)\n);" in content
+
+    def test_driven_outputs_replace_the_tie_offs(self, fw, resolved_io):
+        policies = ControlPolicies.from_dict({"drive": {
+            "slr2_readback_registers_out": "status",
+            "slr2_gt_0_buffinc_out": {"expr": "inc", "comment": "why"},
+        }})
+        content = generate_payload_verilog(fw, resolved_io, policies=policies)
+        assert "64'b0" not in content.split("slr2_readback_registers_out =")[-1].split(";")[0]
+        assert content.count("assign slr2_readback_registers_out =") == 1
+        assert "assign slr2_readback_registers_out = status;" in content
+        assert "assign slr2_gt_0_buffinc_out = inc;  // why" in content
+        assert content.index("assign slr2_readback_registers_out = status;") < content.index("u_algo_top (")
+
+    def test_rx_gate_masks_every_lane_signal(self, fw, resolved_io):
+        policies = ControlPolicies.from_dict({"rx_gate": {"rx_slr2_gt0_lane0": "mk"}})
+        content = generate_payload_verilog(fw, resolved_io, policies=policies)
+        assert "assign rx_slr2_gt0_lane0_tdata = {64{mk}} & slr2_gt_0_rx_tdata[64*0 +: 64];" in content
+        assert "assign rx_slr2_gt0_lane0_tvalid = mk & slr2_gt_0_rx_tvalid;" in content
+
+    def test_verilog_blocks_after_the_ports_and_before_the_algorithm(self, fw, resolved_io, tmp_path):
+        (tmp_path / "head.v").write_text("wire early;\n")
+        (tmp_path / "late.v").write_text("wire late;\n")
+        policies = ControlPolicies.from_dict(
+            {"verilog": {"header": ["head.v"], "before_algo": ["late.v"]}}, base=tmp_path)
+        content = generate_payload_verilog(fw, resolved_io, policies=policies)
+        assert content.index(");") < content.index("wire early;") < content.index("// Algo clocks")
+        assert content.index("// TX lane assignments") < content.index("wire late;") < content.index("u_algo_top (")
+
+    def test_unknown_verilog_place_is_refused(self):
+        with pytest.raises(ValueError, match="verilog.middle"):
+            ControlPolicies.from_dict({"verilog": {"middle": []}})

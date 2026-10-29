@@ -1,7 +1,7 @@
 # ============================================================================
 # ci/framework-base.yml
 #
-# Shared foundation for all arc-framework pipeline jobs.
+# Shared foundation for all forge pipeline jobs.
 # Provides:
 #   - canonical stage order
 #   - default image and runner tag
@@ -55,9 +55,11 @@ default:
 # without this (T8 productization audit) hit a hard ModuleNotFoundError
 # collecting those test files -- it had only ever worked locally because
 # Pillow happened to already be installed in every dev environment tried.
+# numpy is there for the same suite (its image dataset adapter tests), and
+# the plot extra for plot-results, which the tutorial's FIFO figure uses.
 # ---------------------------------------------------------------------------
 .forge_python_setup:
   before_script:
     - pip install --quiet --cache-dir .pip-cache
-        -e forge
-        pytest pytest-cov pyyaml yamllint flake8 "Pillow>=10.0"
+        -e "forge[plot]"
+        pytest pytest-cov pyyaml yamllint flake8 "Pillow>=10.0" numpy

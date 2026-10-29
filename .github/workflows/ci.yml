@@ -1,0 +1,164 @@
+# FORGE's checks on GitHub: the jobs .gitlab-ci.yml defines, minus the ones
+# that need a Vivado runner (forge:framework-release-gate). Each job's script
+# is the same command or ci/*.sh script the GitLab job runs.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, forge_devel]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  # What ci/framework-base.yml's .forge_python_setup installs; expanded by the
+  # shell (pip install $FORGE_SETUP), so ">=" is not a redirect.
+  FORGE_SETUP: >-
+    -e forge[plot] pytest pytest-cov pyyaml yamllint flake8 Pillow>=10.0 numpy
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: pip install $FORGE_SETUP
+      - name: flake8
+        run: flake8 forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen forge/project
+      - name: yamllint
+        run: yamllint -d relaxed plugins/trigger_demo/forge/designs/design.yml plugins/trigger_demo/forge/modules.yml
+
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      # The optional plotting code imports matplotlib and numpy.
+      - run: pip install -e "forge[dev,plot]" numpy
+      - run: mypy forge/core forge/contracts forge/generation forge/hls forge/verification forge/integration forge/analysis forge/docsgen forge/project
+
+  schema-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: pip install $FORGE_SETUP
+      - name: designs and registries validate
+        run: |
+          forge dev topgen validate plugins/trigger_demo/forge/designs/design.yml
+          forge dev topgen validate-registry plugins/trigger_demo/forge/modules.yml
+          forge dev topgen validate plugins/passthrough_demo/forge/designs/design.yml
+          forge dev topgen validate-registry plugins/passthrough_demo/forge/modules.yml
+          forge dev topgen validate-registry plugins/vision_pipeline_demo/forge/modules.yml
+          for d in design design_pixel_result design_tile_stats design_cdc \
+                   design_packetizer design_full_functional design_platform_wrapper; do
+            forge dev topgen validate "plugins/vision_pipeline_demo/forge/designs/${d}.yml"
+          done
+
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/agnosticism_check.sh
+      - run: bash ci/stale_reference_check.sh
+      - run: bash ci/vision_pipeline_demo_reference_check.sh
+      - run: bash ci/import_direction_check.sh
+
+  docs-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends graphviz
+      - run: pip install -e "forge[docs]" pytest
+      - name: tutorial reference assets are fresh
+        run: python3 plugins/vision_pipeline_demo/tutorial/generate_reference_assets.py --check
+      - run: mkdocs build --strict
+      - name: site tests
+        run: |
+          python3 -m pytest -o addopts="" --tb=short -q \
+            forge/tests/test_docs_site_build.py \
+            forge/tests/test_docs_site_links.py \
+            forge/tests/test_docs_site_offline.py \
+            forge/tests/test_docs_staleness.py \
+            forge/tests/test_docs_visual_language.py
+      - uses: actions/upload-artifact@v4
+        with: {name: docs-site, path: site/, retention-days: 7}
+
+  python-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      # Verilator runs the verilator backend's tests; xsim and Vitis HLS are
+      # not available on hosted runners.
+      - run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends graphviz verilator
+      - run: pip install $FORGE_SETUP
+      - name: forge unit tests
+        run: python3 -m pytest forge/tests --tb=short -q --junitxml=ci-logs/forge-junit.xml
+      - name: subsystem coverage floors
+        run: |
+          coverage json -o ci-logs/coverage.json
+          python3 ci/check_coverage_floors.py ci-logs/coverage.json
+      - name: trigger_demo verify tests
+        run: python3 -m pytest plugins/trigger_demo/forge/verify/tools/tests --tb=short -q --junitxml=ci-logs/trigger-demo-junit.xml
+      - name: trigger_demo EMP tools tests
+        run: python3 -m pytest plugins/trigger_demo/emp/tools/tests --tb=short -q --junitxml=ci-logs/trigger-demo-emp-junit.xml
+      - name: passthrough_demo verify tests
+        run: python3 -m pytest plugins/passthrough_demo/forge/verify/tests --tb=short -q --junitxml=ci-logs/passthrough-demo-junit.xml
+      - name: vision_pipeline_demo verify tests
+        run: python3 -m pytest plugins/vision_pipeline_demo/forge/verify/tools/tests --tb=short -q --junitxml=ci-logs/vision-pipeline-demo-junit.xml
+      # ipbb is not on PyPI, and its vunit-hdl dependency still imports
+      # pkg_resources. Last, so the setuptools pin touches nothing above.
+      - name: ipbb dep-tree tests
+        run: |
+          pip install "setuptools<70" wheel
+          pip install --no-build-isolation "git+https://github.com/ipbus/ipbb.git@dev/2024b"
+          python3 -m pytest forge/tests/test_integration_ipbb.py --tb=short -q -o addopts="" --junitxml=ci-logs/ipbb-junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: unit-tests, path: ci-logs/, retention-days: 14}
+
+  verify-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: pip install $FORGE_SETUP
+      - run: bash ci/verify_smoke.sh
+
+  fresh-user-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}"}
+      - run: bash ci/fresh_user_check.sh
+
+  docs-versioned-artifact:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: docs-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: pip install -e "forge[docs]"
+      - run: |
+          git config user.email "ci@forge.local"
+          git config user.name "forge-ci"
+      - run: bash ci/docs_publish.sh --output-dir docs-site-artifact
+      - uses: actions/upload-artifact@v4
+        with: {name: docs-site-versioned, path: docs-site-artifact/, retention-days: 30}

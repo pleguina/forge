@@ -20,7 +20,7 @@ never actually emitted).
 | `FWV001` | error | Unsupported (kind, backend) combination. | Use a supported kind/backend pair from the support matrix. |
 | `FWV002` | error | Experimental flow declared without explicit opt-in. | Set `experimental: true` on the flow in design.verification.yml to acknowledge the risk. |
 | `FWV003` | error | Invalid or non-canonical layout (kind-subdir, missing directory). | — |
-| `FWV004` | warning or error (call-site dependent) | Missing required framework-generated artifact (TB, verify.flow.yml, port_map.yaml, …). | Run `forge verify generate <design.verification.yml> --flow <flow>` to (re)generate the missing artifact. |
+| `FWV004` | warning or error (call-site dependent) | Missing required framework-generated artifact (TB, verify.flow.yml, port_map.yaml, …). | Run `forge dev verify generate <design.verification.yml> --flow <flow>` to (re)generate the missing artifact. |
 | `FWV005` | warning | RTL Verilog file not found. | — |
 | `FWV006` | warning | Parser dependency (pyverilog) not installed — regex fallback used. | pip install -e 'forge[parser]' |
 | `FWV007` | error | Parser mode failed on the given RTL. | — |
@@ -35,7 +35,7 @@ never actually emitted).
 | `FWV016` | warning | Stale generated artifact (older than its source contract/RTL). | — |
 | `FWV017` | warning | Missing stimulus file — the user generates this later. | Run `python <tools/gen_stimulus.py> --flow <flow>`. |
 | `FWV018` | error | Missing csim testbench binary. | — |
-| `FWV019` | error | bootstrap.py not found. | Re-run `forge verify init-plugin` or restore tools/bootstrap.py. |
+| `FWV019` | error | bootstrap.py not found. | Re-run `forge dev verify init-plugin` or restore tools/bootstrap.py. |
 | `FWV020` | warning | gen_stimulus.py not found (warning for xsim flows). | — |
 | `FWV021` | error | An event's compile or elaborate stage failed (real ExecutionStage tagged). | — |
 | `FWV022` | error | Checker rejected the result even though the simulator itself exited 0. | — |
@@ -50,7 +50,7 @@ never actually emitted).
 | `ATG004` | error | Missing partition, or no contract for a module. | — |
 | `ATG005` | warning | Open output port — no connection described. | — |
 | `ATG006` | warning | Stale ip_info.yaml (older than design.yml or its IP sources). | — |
-| `ATG007` | warning | Stale generated artifacts (algo_top.v older than design.yml). | Re-run `forge topgen gen-top` to rebuild. |
+| `ATG007` | warning | Stale generated artifacts (algo_top.v older than design.yml). | Re-run `forge dev topgen gen-top` to rebuild. |
 | `ATG008` | error | Registry / modules.yml not found or invalid. | — |
 | `ATG009` | warning | Non-strict topology in use (compat_mode or auto-match). | — |
 | `ATG010` | warning | Port-range wiring in use (non-canonical). | — |
@@ -75,18 +75,19 @@ never actually emitted).
 | `ATG031` | error | No source files match the project's source globs. | Correct sources.rtl/sources.hls in forge.yml, or re-run `forge adopt`. |
 | `ATG032` | error | Duplicate module definition — one module name declared in two files. | Remove or rename the duplicate declaration. |
 | `ATG033` | error | A discovered module's source file no longer exists. | Restore the file, or re-run `forge adopt`. |
-| `ATG034` | error | No interface contract for a managed module. | Run `forge adopt` to generate one, or write it by hand. |
-| `ATG035` | warning | Interface contract is still a draft — the semantics that cannot be inferred have not been reviewed. | Review the contract and set normalization_status: ready. |
-| `ATG036` | error | Contract/source drift — the contract binds a role to a port the module does not have, or states a width its source contradicts. | Correct the contract, or re-run `forge adopt` to regenerate it. |
+| `ATG034` | error | forge.yml names an interface contract for a module, and the file does not exist. | Correct modules.<name>.contract in forge.yml, or remove it to use the contract inferred from the ports. |
+| `ATG035` | warning | Retired: contracts inferred from a module's ports are rewritten on every command and need no review. | Nothing to do. |
+| `ATG036` | error | Contract/source drift — a contract named in forge.yml binds a role to a port the module does not have, or states a width its source contradicts. | Correct the contract; `forge fix` corrects a width the source proves. |
 | `ATG037` | error | Ambiguous interface consumer — more than one consumer satisfies width and direction, and no semantic family separates them. | Declare the intended pair in connections:, or give producer and intended consumer the same family. |
 | `ATG038` | warning | No connection resolved between any two managed modules — every port is exposed at the top level. | Add the intended producer/consumer pairs to connections: in design.yml. |
 | `ATG039` | error | No clock port found on any module, or forge.yml declares a clock port that does not exist. | Set clock.port in forge.yml to a port the modules actually have. |
 | `ATG040` | warning | Several clock candidates found — which one is the functional clock needs confirming. | Confirm clock.port in forge.yml; import modules on other clocks as opaque. |
-| `ATG041` | warning | Reset is active-low, and generation wires every module reset to one active-high ap_rst net without inverting it. | Drive ap_rst with the expected polarity above the generated top. |
+| `ATG041` | warning | Retired: generation drives an active-low module reset with the active-high ap_rst inverted. | Nothing to do. |
 | `ATG042` | warning | Module is outside FORGE's supported envelope (e.g. several functional clock domains) and was left out of the generated project. | Import it as opaque, wrap one module per clock domain, or exclude it. |
-| `ATG043` | warning | HLS interfaces are predicted from C++ and not yet reconciled against synthesis. | Run `forge hls run --stages csim,synth` and re-check. |
-| `ATG044` | warning or error | Verification is not configured, or the configured dataset does not exist. | Add verification.dataset to forge.yml, then run `forge test prepare`. |
-| `ATG045` | warning | Managed modules declare no latency, so the static latency check cannot align the pipeline. | Add `latency: {kind: fixed, cycles: N}` to each module in the registry. |
+| `ATG043` | warning | HLS interfaces are predicted from C++ and not yet reconciled against synthesis. | Run `forge dev hls run --stages csim,synth` and re-check. |
+| `ATG044` | warning or error | Verification is not configured, or the configured verification config or dataset does not exist. | Set verification.config in forge.yml to a design.verification.yml, then run `forge test`. |
+| `ATG045` | warning | Managed modules declare no latency, so the static latency check cannot align the pipeline. | Add `latency: <cycles>` under modules.<name> in forge.yml. |
 | `ATG046` | warning | Generated artifacts are older than the sources or configuration they were built from. | Re-run `forge build` to regenerate. |
 | `ATG047` | note | Module is integrated as an opaque module — wired structurally, with its internals deliberately not modelled. | Drive its clock/reset pins other than the design's own from the level above the generated top. |
 | `ATG048` | warning | An HLS module's predicted RTL interface differs from the interface the built IP actually exposes. | Run `forge explain hls:<module>` for the full reconciliation, then correct the contract to match the built IP. |
+| `ATG049` | warning | A verification flow's simulator is not on PATH, so `forge test` would skip it. | Put the simulator on PATH, or run `forge test` where it is installed. |

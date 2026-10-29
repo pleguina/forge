@@ -3,7 +3,7 @@
 This is a thin wrapper, not new rendering logic: every section reuses a
 renderer that already exists elsewhere in the codebase —
 
-- maturity/compatibility: `topgen._compute_maturity_summary`/
+- maturity/compatibility: `forge.generation.artifacts.compute_maturity_summary`/
   `render_maturity_markdown` (shared helper).
 - latency check: `forge.analysis.latency_static` (graph/checker/reporter).
 - HLS summary: `forge.analysis.hls_reports` (extractor/formatter) — only
@@ -41,8 +41,25 @@ def cmd_report(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
 
     json_mode = getattr(args, "json", False)
+    output = args.output
+    if args.design is None:
+        from forge.core.cli._shared import resolve_project_args
+
+        try:
+            project = resolve_project_args(args)
+        except (FileNotFoundError, ValueError) as exc:
+            envelope = CommandEnvelope(
+                status="fail", diagnostics=[{"severity": "error", "message": str(exc)}],
+            )
+            sys.exit(emit(envelope, json_mode=json_mode))
+        output = output or str(project.paths.report_root)
+        if getattr(args, "verify_design", None) is None and project.verification is not None:
+            args.verify_design = str(project.verification)
+        project_results = sorted((project.paths.report_root / "test").glob("*.results.json"))
+    else:
+        project_results = []
     design_path = Path(args.design).expanduser().resolve()
-    output_dir = Path(args.output).expanduser().resolve()
+    output_dir = Path(output or "report").expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not design_path.exists():
@@ -184,14 +201,23 @@ def cmd_report(args) -> None:
             render_junit_markdown(Path(junit_xml_path))
         )
         artifacts.append(str(output_dir / "verification_results.md"))
+    elif project_results:
+        import json
+
+        from forge.verification.results import render_results_markdown
+
+        (output_dir / "verification_results.md").write_text("\n".join(
+            render_results_markdown(json.loads(p.read_text())) for p in project_results
+        ))
+        artifacts.append(str(output_dir / "verification_results.md"))
     else:
         (output_dir / "verification_results.md").write_text(
             "# Verification results\n\n"
-            "No verification results yet — run `forge test run --results-json <path>` "
-            "(or `--junit-xml <path>`) and pass that path here.\n"
+            "No verification results yet — run `forge test`, or pass the "
+            "--results-json/--junit-xml of an earlier `forge test run` here.\n"
         )
         artifacts.append(str(output_dir / "verification_results.md"))
-        next_actions.append("No verification results yet — run `forge test run`")
+        next_actions.append("No verification results yet — run `forge test`")
 
     # ── Throughput ────────────────────────────────────────────────────────
     try:
@@ -223,7 +249,7 @@ def cmd_report(args) -> None:
         diagnostics.append({
             "severity": "note",
             "message": "no --cdc-result-json given (or it doesn't exist) — CDC verification "
-                       "report omitted (see forge topgen validate --cdc-result-json)",
+                       "report omitted (see forge dev topgen validate --cdc-result-json)",
         })
 
     # ── Golden-model comparison ─────────────────────────────────────────────
@@ -313,7 +339,7 @@ def _write_topology_report(design_path: Path, args, output_dir: Path) -> int:
 
 
 def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[str, Any]:
-    from forge.core.cli.groups.topgen import _compute_maturity_summary, render_maturity_markdown
+    from forge.generation.artifacts import compute_maturity_summary, render_maturity_markdown
     from forge.ir import build_project_ir_with_match_report
 
     from forge.ir import content_hash
@@ -324,7 +350,7 @@ def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[st
         ip_info=getattr(args, "ip_info", None),
         build_dir=getattr(args, "build_dir", None),
     )
-    maturity = _compute_maturity_summary(
+    maturity = compute_maturity_summary(
         cfg, match_report, ir_content_hash=content_hash(project),
     )
     (output_dir / "maturity.md").write_text(render_maturity_markdown(maturity))
@@ -334,12 +360,16 @@ def _write_maturity_report(design_path: Path, args, output_dir: Path) -> Dict[st
 def _write_latency_check(design_path: Path, args, output_dir: Path) -> int:
     from forge.analysis.latency_static.balance import resolve_auto_delays
     from forge.analysis.latency_static.checker import check_merge_points
-    from forge.analysis.latency_static.graph import build_graph
+    from forge.analysis.latency_static.graph import build_resolved_graph
     from forge.analysis.latency_static.reporter import render_markdown
 
     contracts_from = getattr(args, "contracts_from", None)
-    modules_yml = Path(contracts_from) if contracts_from else None
-    graph = build_graph(design_path, modules_yml_path=modules_yml)
+    hls_build_root = getattr(args, "hls_build_root", None)
+    graph = build_resolved_graph(
+        design_path,
+        modules_yml_path=Path(contracts_from) if contracts_from else None,
+        hls_build_root=Path(hls_build_root) if hls_build_root else None,
+    )
     auto_delays = resolve_auto_delays(graph)
     mismatch_reports = check_merge_points(graph)
     render_markdown(graph, mismatch_reports, output_dir / "latency_check.md", auto_delays=auto_delays)
@@ -406,7 +436,7 @@ def _write_throughput_report(design_path: Path, args, output_dir: Path) -> int:
     from forge.verification.throughput_result import THROUGHPUT_RESULT_SCHEMA, ThroughputResult
     from forge.verification.throughput_result import render_throughput_markdown
 
-    static_analyses = []
+    static_analyses: List[Any] = []
     bottleneck = None
     predicted_rate = None
     hls_build_root = getattr(args, "hls_build_root", None)
@@ -464,7 +494,7 @@ def _write_project_attachments(
     plugin_id: str, design_path: Path, output_dir: Path,
     artifacts: List[str], diagnostics: List[Dict[str, Any]],
 ) -> None:
-    """Bootstrap *plugin_id* (same mechanism `forge verify run --plugin`
+    """Bootstrap *plugin_id* (same mechanism `forge dev verify run --plugin`
     uses) and collect whatever ReportAttachmentProvider it has registered.
 
     The plugin's own tools/ directory is derived from *design_path*'s
@@ -505,7 +535,7 @@ def _write_project_attachments(
         })
         return
 
-    all_attachments = []
+    all_attachments: List[Any] = []
     for provider in providers:
         attachments = provider.build_attachments(design_path, output_dir)
         all_attachments.extend(attachments)
@@ -525,11 +555,17 @@ def register(sub) -> None:
         help="Generate a self-contained report bundle (maturity, latency, "
              "verification, provenance, dashboard)",
     )
-    p.add_argument("design", help="Path to design.yml")
+    p.add_argument(
+        "design", nargs="?", default=None,
+        help="Path to design.yml (default: the forge.yml project around the current directory)",
+    )
     p.add_argument("--contracts-from", help="Path to modules.yml (interface_contract: entries)")
     p.add_argument("--ip-info", help="Path to a pre-built ip_info.yaml (optional)")
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
-    p.add_argument("--output", "-o", default="report", help="Report output directory (default: ./report)")
+    p.add_argument(
+        "--output", "-o", default=None,
+        help="Report output directory (default: .forge/reports in a forge.yml project, else ./report)",
+    )
     p.add_argument("--hls-build-root", help="build_hls root for the HLS summary section (optional)")
     p.add_argument("--solution", default="solution1", help="HLS solution name (default: solution1)")
     p.add_argument("--probe-csv", help="Probe CSV for the runtime-latency section (optional)")
@@ -562,8 +598,8 @@ def register(sub) -> None:
     )
     p.add_argument(
         "--cdc-result-json",
-        help="Existing forge.cdc_verification_result.v1 JSON (from a prior "
-             "forge topgen validate --cdc-result-json)",
+        help="Existing forge.cdc_verification_result.v1 JSON, as `forge dev topgen validate "
+             "--cdc-result-json` writes it",
     )
     p.add_argument(
         "--golden-comparison-json",
@@ -572,7 +608,7 @@ def register(sub) -> None:
     )
     p.add_argument(
         "--plugin",
-        help="Bootstrap this plugin (same mechanism as `forge verify run --plugin`) and "
+        help="Bootstrap this plugin (same mechanism as `forge dev verify run --plugin`) and "
              "collect any report attachments it has registered via "
              "forge.analysis.dashboards.attachments.register_report_attachment_provider "
              "— e.g. project-owned image panels or ownership annotations",

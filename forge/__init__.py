@@ -20,7 +20,8 @@ Usage:
 __version__ = "2.0.0"
 
 from .contracts.config import DesignConfig, Module, Connection
-from .generation.generators.structural_vhdl import write_structural_vhdl
+from .generation.generators.structural_verilog import write_structural_verilog
+from .generation.generators.vhdl_wrapper import write_vhdl_wrapper
 from .generation.generators.block_design import write_bd_tcl
 from .contracts.parser import collect_all, write_summary, parse_component
 from .contracts.matcher import auto_match_ports, load_ip_info
@@ -32,7 +33,8 @@ __all__ = [
     "Module", 
     "Connection",
     # Generators
-    "write_structural_vhdl",
+    "write_structural_verilog",
+    "write_vhdl_wrapper",
     "write_bd_tcl",
     # IP tools
     "collect_all",

@@ -31,7 +31,7 @@
 #   - requires the vivado shell runner (Vitis HLS + Vivado xsim on PATH)
 #   - produces a structured log artifact for post-run inspection
 #
-# Consumed by: arc-framework/.gitlab-ci.yml (via include)
+# Consumed by: .gitlab-ci.yml (via include)
 # ============================================================================
 
 forge:framework-release-gate:

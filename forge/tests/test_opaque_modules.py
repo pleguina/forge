@@ -27,6 +27,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from forge.core.cli.main import build_parser
 from forge.project.adopt import plan_adoption
@@ -82,7 +83,7 @@ def test_the_declaration_round_trips_through_forge_yml(tmp_path: Path) -> None:
 def test_a_project_that_declares_nothing_has_nothing_opaque(tmp_path: Path) -> None:
     ForgeConfig(project="p", root=tmp_path).save()
 
-    assert "modules" not in (tmp_path / "forge.yml").read_text()
+    assert "modules" not in yaml.safe_load((tmp_path / "forge.yml").read_text())
     assert ForgeConfig.load(tmp_path).opaque_modules == frozenset()
 
 
@@ -255,9 +256,10 @@ def test_the_generated_top_keeps_the_domains_separate(
         assert f".{clock}(axi_bridge_{clock})" in generated
         assert f".{clock}(ap_clk)" not in generated
 
-    # The modules FORGE *does* model still take the global nets.
+    # The modules FORGE *does* model still take the global nets; presetn
+    # asserts low, so it reads ap_rst inverted.
     assert ".pclk(ap_clk)" in generated
-    assert ".presetn(ap_rst)" in generated
+    assert ".presetn(~ap_rst)" in generated
 
 
 def test_an_explicit_external_declaration_beats_the_clock_auto_map(

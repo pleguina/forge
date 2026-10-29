@@ -2,7 +2,7 @@
 
 A connection or topology group declared with ``delay_cycles: auto`` gets the
 delay that lines its data up at the merge point it feeds, computed from the
-same latency graph and merge semantics as ``forge analyze latency-check``:
+same latency graph and merge semantics as ``forge dev analyze latency-check``:
 module latencies (``latency_cycles``, then the HLS synthesis reports, then
 ``latency_hint``), the register stages and delays already on the edges, and the
 merge node's ``input_alignment`` (per-source offsets, ``window``, ``framed``).
@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple
 
 from forge.analysis.latency_model import LatencyProvenance, LatencyValue
 from forge.analysis.latency_static.checker import analyse_merge_point
-from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph, build_graph
+from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph, build_resolved_graph
 
 Ref = Tuple[str, int]  # ("connection" | "topology_group", index in DesignConfig)
 
@@ -114,6 +114,7 @@ def resolve_auto_delays(graph: LatencyGraph) -> AutoDelayResult:
             # One data input, or inputs that need no cycle relation.
             extra = {e.src: 0 for e in auto_in}
         else:
+            arrival = {p.path[0]: p.total_cycles for p in report.paths if p.total_cycles is not None}
             unknown = [p.path[0] for p in report.paths if p.total_cycles is None]
             if unknown:
                 problems.append(
@@ -122,8 +123,7 @@ def resolve_auto_delays(graph: LatencyGraph) -> AutoDelayResult:
                     "or give the HLS build root)"
                 )
                 continue
-            target = max(p.range_hi if p.range_hi is not None else p.total_cycles for p in report.paths)
-            arrival = {p.path[0]: p.total_cycles for p in report.paths}
+            target = max(p.range_hi if p.range_hi is not None else arrival[p.path[0]] for p in report.paths)
             extra = {e.src: target - arrival[e.src] for e in auto_in}
 
         for e in auto_in:
@@ -152,11 +152,7 @@ def resolve_design_auto_delays(
 ) -> AutoDelayResult:
     """Build the latency graph of *design_path* (HLS report latencies from
     *hls_build_root* when it exists) and resolve its auto delays."""
-    hls_reports = None
-    if hls_build_root is not None and Path(hls_build_root).is_dir():
-        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
-        hls_reports = latency_map_from_reports(collect_reports(Path(hls_build_root)))
-    graph = build_graph(Path(design_path), hls_reports=hls_reports, conn_map=conn_map)
+    graph = build_resolved_graph(Path(design_path), hls_build_root=hls_build_root, conn_map=conn_map)
     return resolve_auto_delays(graph)
 
 

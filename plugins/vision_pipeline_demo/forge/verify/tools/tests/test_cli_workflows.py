@@ -95,7 +95,7 @@ def test_build_plan_hash_is_deterministic_for_full_functional_design(
     # tspack->pktz) resolve with zero inferred connections — every one of
     # this design's 116 connections is an explicit port_map, proven here
     # through forge build's own plan computation rather than assumed from
-    # forge analyze latency-check.
+    # forge dev analyze latency-check.
     counts = p1["metrics"]["counts"]
     assert counts["explicit_connections"] == 116
     assert counts["inferred_connections"] == 0
@@ -134,13 +134,12 @@ def test_build_accept_plan_hash_matching_and_mismatching_for_platform_wrapper_de
 def test_build_plan_only_never_writes_for_full_functional_design(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """The same read-only-by-default guarantee test_build_cli_group.py
-    already proves for passthrough_demo, re-checked against this plugin's
-    own real multi-CDC design for the first time."""
+    """`forge build --dry-run` writes nothing, checked against this plugin's
+    multi-CDC design."""
     before = _tree_snapshot(tmp_path)
     result = _run_build(
         capsys, str(FULL_FUNCTIONAL_DESIGN), "--contracts-from", str(MODULES_YML),
-        "--output", str(tmp_path / "algo_top.v"),
+        "--output", str(tmp_path / "algo_top.v"), "--dry-run",
     )
     after = _tree_snapshot(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr

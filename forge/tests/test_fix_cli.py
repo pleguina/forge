@@ -47,6 +47,21 @@ def adopted(tmp_path: Path) -> Path:
     return destination
 
 
+@pytest.fixture
+def own_contract(adopted: Path) -> Path:
+    """shaper's contract, kept by the user and named in forge.yml — the only
+    kind of contract that can drift from its source."""
+    from forge.project.config import ForgeConfig, ModulePolicy
+
+    contract = adopted / "contracts" / "shaper.interface.yaml"
+    contract.parent.mkdir()
+    shutil.copy(adopted / ".forge/contracts/shaper.interface.yaml", contract)
+    config = ForgeConfig.load(adopted)
+    config.modules["shaper"] = ModulePolicy(contract="contracts/shaper.interface.yaml")
+    config.save()
+    return contract
+
+
 # ── The safety line ───────────────────────────────────────────────────────
 
 def test_only_a_fix_the_sources_prove_counts_as_safe() -> None:
@@ -88,10 +103,10 @@ def test_an_unsafe_fix_is_never_even_offered(adopted: Path) -> None:
 
 # ── Contract drift ────────────────────────────────────────────────────────
 
-def test_a_width_the_rtl_contradicts_is_corrected(adopted: Path) -> None:
+def test_a_width_the_rtl_contradicts_is_corrected(adopted: Path, own_contract: Path) -> None:
     """The plan's worked example of a safe fix: the source holds the one
     right answer, so FORGE transcribes rather than chooses."""
-    contract = adopted / ".forge/contracts/shaper.interface.yaml"
+    contract = own_contract
     contract.write_text(contract.read_text().replace(
         "    shaped:\n", "    shaped:\n      width: 31\n"))
 
@@ -104,11 +119,11 @@ def test_a_width_the_rtl_contradicts_is_corrected(adopted: Path) -> None:
 
 
 def test_correcting_a_width_keeps_the_rest_of_the_file_intact(
-    adopted: Path,
+    adopted: Path, own_contract: Path,
 ) -> None:
     """A YAML round-trip would discard every comment in a file whose
     comments are most of its value to whoever maintains it."""
-    contract = adopted / ".forge/contracts/shaper.interface.yaml"
+    contract = own_contract
     original = contract.read_text()
     contract.write_text(original.replace("    shaped:\n", "    shaped:\n      width: 31\n"))
 
@@ -122,11 +137,11 @@ def test_correcting_a_width_keeps_the_rest_of_the_file_intact(
 
 
 def test_a_role_bound_to_a_port_that_does_not_exist_is_left_alone(
-    adopted: Path,
+    adopted: Path, own_contract: Path,
 ) -> None:
     """Either the port was renamed or the role was mis-bound, and choosing
     between those is a decision, not a transcription."""
-    contract = adopted / ".forge/contracts/shaper.interface.yaml"
+    contract = own_contract
     contract.write_text(
         contract.read_text() + "\n    ghost:\n      raw_port: not_a_port\n")
 
@@ -136,24 +151,17 @@ def test_a_role_bound_to_a_port_that_does_not_exist_is_left_alone(
     assert "not_a_port" in contract.read_text()
 
 
-# ── Missing contracts ─────────────────────────────────────────────────────
+# ── Inferred contracts ────────────────────────────────────────────────────
 
-def test_a_missing_contract_is_regenerated_from_the_modules_own_ports(
-    adopted: Path,
-) -> None:
-    contract = adopted / ".forge/contracts/packer.interface.yaml"
-    contract.unlink()
+def test_an_inferred_contract_is_never_the_users_to_repair(adopted: Path) -> None:
+    """Every command writes it again from the module's ports, so a deleted or
+    edited one is nothing to fix."""
+    (adopted / ".forge/contracts/packer.interface.yaml").unlink()
 
-    plan_fixes(adopted, only=["generate-missing-contract"]).apply()
+    plan = plan_fixes(adopted)
 
-    assert contract.is_file()
-    text = contract.read_text()
-    assert "module_name: packer" in text
-    # Emitted as a draft, so nothing in it claims to have been reviewed.
-    assert "normalization_status: draft" in text
-    # And the semantics FORGE cannot infer stay absent rather than invented.
-    assert "wiring_kind:" not in text
-    assert "family:" not in text
+    assert plan.safe_fixes == []
+    assert not any("contract" in a.id for a in plan.manual)
 
 
 # ── Generated state ───────────────────────────────────────────────────────
@@ -169,18 +177,14 @@ def test_a_missing_state_gitignore_is_restored(adopted: Path) -> None:
 
 
 def test_a_stale_top_level_is_offered_as_a_command_not_a_rewrite(
-    adopted: Path, capsys: pytest.CaptureFixture[str],
+    adopted: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regeneration is `forge build`'s job; reimplementing it here would
     create a second generator that could disagree with the real one."""
     import os
 
-    code, _out, err = _run(capsys, [
-        "build", str(adopted / ".forge/project/design.yml"),
-        "--contracts-from", str(adopted / ".forge/project/modules.yml"),
-        "--consumer-root", str(adopted),
-        "--output", str(adopted / ".forge/generated/algo_top.v"), "--apply",
-    ])
+    monkeypatch.chdir(adopted)
+    code, _out, err = _run(capsys, ["build"])
     assert code == 0, err
     os.utime(adopted / ".forge/generated/algo_top.v", (0, 0))
 
@@ -188,7 +192,7 @@ def test_a_stale_top_level_is_offered_as_a_command_not_a_rewrite(
 
     assert len(plan.safe_fixes) == 1
     fix = plan.safe_fixes[0]
-    assert fix.command is not None and fix.command.startswith("forge build ")
+    assert fix.command == "forge build"
     assert fix.apply() is None
 
 
@@ -198,9 +202,10 @@ def test_a_clean_project_has_nothing_to_fix(adopted: Path) -> None:
     assert plan_fixes(adopted).safe_fixes == []
 
 
-def test_fixing_is_idempotent(adopted: Path) -> None:
+def test_fixing_is_idempotent(adopted: Path, own_contract: Path) -> None:
     (adopted / ".forge/.gitignore").unlink()
-    (adopted / ".forge/contracts/packer.interface.yaml").unlink()
+    own_contract.write_text(own_contract.read_text().replace(
+        "    shaped:\n", "    shaped:\n      width: 31\n"))
 
     first = plan_fixes(adopted)
     first.apply()
@@ -210,24 +215,22 @@ def test_fixing_is_idempotent(adopted: Path) -> None:
 
 
 def test_an_action_a_fix_discharges_drops_off_the_manual_list(
-    adopted: Path,
+    adopted: Path, own_contract: Path,
 ) -> None:
-    (adopted / ".forge/contracts/packer.interface.yaml").unlink()
+    own_contract.write_text(own_contract.read_text().replace(
+        "    shaped:\n", "    shaped:\n      width: 31\n"))
 
     plan = plan_fixes(adopted)
 
-    assert any(f.id == "generate-missing-contract" for f in plan.safe_fixes)
-    assert not any(a.id == "generate-missing-contracts" for a in plan.manual)
+    assert any(f.id == "correct-contract-drift" for f in plan.safe_fixes)
+    assert not any(a.id == "resolve-contract-drift" for a in plan.manual)
 
 
 def test_decisions_stay_on_the_manual_list(adopted: Path) -> None:
-    """Reviewing a draft contract, confirming a reset polarity and declaring
-    a latency are all judgement calls, and no fix may claim them."""
+    """Declaring a latency is a judgement call, and no fix may claim it."""
     plan = plan_fixes(adopted)
     manual = {a.id for a in plan.manual}
 
-    assert "review-draft-contracts" in manual
-    assert "confirm-reset-polarity" in manual
     assert "declare-latency" in manual
 
 
@@ -268,9 +271,9 @@ def test_fix_apply_writes_and_reports_what_it_wrote(
 
 
 def test_fix_shows_a_diff_and_the_evidence_behind_every_repair(
-    capsys: pytest.CaptureFixture[str], adopted: Path,
+    capsys: pytest.CaptureFixture[str], adopted: Path, own_contract: Path,
 ) -> None:
-    contract = adopted / ".forge/contracts/shaper.interface.yaml"
+    contract = own_contract
     contract.write_text(contract.read_text().replace(
         "    shaped:\n", "    shaped:\n      width: 31\n"))
 

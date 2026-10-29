@@ -1,14 +1,14 @@
 # How to Analyze Performance
 
-`forge analyze` provides five sub-commands for measuring, checking, visualising, and
+`forge dev analyze` provides five sub-commands for measuring, checking, visualising, and
 reporting on your plugin's performance after it has been built and simulated.
 
 ```
-forge analyze hls-report       # HLS synthesis metrics table (CSV / MD / HTML)
-forge analyze latency-check    # Static per-path latency mismatch detector
-forge analyze runtime-latency  # HLS-predicted vs simulation-observed latency
-forge analyze plot-results     # Render comparison PNG figures
-forge analyze dashboard        # Aggregate all artifacts into one HTML page
+forge dev analyze hls-report       # HLS synthesis metrics table (CSV / MD / HTML)
+forge dev analyze latency-check    # Static per-path latency mismatch detector
+forge dev analyze runtime-latency  # HLS-predicted vs simulation-observed latency
+forge dev analyze plot-results     # Render comparison PNG figures
+forge dev analyze dashboard        # Aggregate all artifacts into one HTML page
 ```
 
 ---
@@ -19,10 +19,10 @@ forge analyze dashboard        # Aggregate all artifacts into one HTML page
 
 | Input | Source |
 |-------|--------|
-| `build_hls/` tree with `csynth.xml` per module | Produced by `forge hls run --stages synth` |
+| `build_hls/` tree with `csynth.xml` per module | Produced by `forge dev hls run --stages synth` |
 
 ```bash
-forge analyze hls-report \
+forge dev analyze hls-report \
   --hls-build-root build_hls_<plugin> \
   --output out/reports
 ```
@@ -52,7 +52,7 @@ accumulated latency is equal on every incoming path.  A mismatch means data
 from two branches arrives at different cycles, which is almost always a bug.
 
 ```bash
-forge analyze latency-check plugins/<plugin>/forge/designs/design.yml \
+forge dev analyze latency-check plugins/<plugin>/forge/designs/design.yml \
   --contracts-from plugins/<plugin>/forge/modules.yml \
   --hls-build-root build_hls_<plugin> \
   --output out/reports/latency_check.md
@@ -103,7 +103,7 @@ Compares the HLS-predicted latency for a named module against the
 **simulation-observed** end-to-end latency measured from a probe CSV.
 
 ```bash
-forge analyze runtime-latency \
+forge dev analyze runtime-latency \
   --probe-csv out/reports/pipeline_probe.csv \
   --probe-pairs "trigger_logic:dec_0_raw_valid:tout_out_valid" \
   --hls-build-root build_hls_<plugin> \
@@ -136,7 +136,7 @@ approaches work:
 *Option A — write it manually from simulation output:*
 
 ```python
-# post-process algo_top_outputs.csv after forge verify run
+# post-process algo_top_outputs.csv after forge dev verify run
 import csv
 
 input_events  = [0, 8, 16]   # cycles where dec_0_raw_valid was driven high
@@ -167,7 +167,7 @@ with open("out/reports/pipeline_probe.csv", "w") as f:
 `endif
 ```
 
-Enable with `forge verify run --probe-log` (passes `-d PROBE_LOG=1` to xvlog).
+Enable with `forge dev verify run --probe-log` (passes `-d PROBE_LOG=1` to xvlog).
 
 ---
 
@@ -177,7 +177,7 @@ Renders PNG comparison figures from an observed CSV and an optional reference
 CSV.  The plot definitions live in a **plugin-owned** `plot_config.yml`.
 
 ```bash
-forge analyze plot-results \
+forge dev analyze plot-results \
   --config plugins/<plugin>/forge/verify/plot_config.yml \
   --observed out/reports/observed.csv \
   --reference out/reports/reference.csv \
@@ -219,7 +219,7 @@ cycle,tout_out_valid,trigger_quality,trigger_accept
 ```
 
 The framework does not dictate what columns exist — those are fully
-plugin-defined.  `matplotlib` must be installed (`pip install matplotlib`).
+plugin-defined.  It needs matplotlib (`pip install "forge[plot]"`) and fails without it.
 
 ---
 
@@ -229,7 +229,7 @@ Aggregates the outputs of the four commands above into a single
 self-contained HTML file (plots embedded as base64).
 
 ```bash
-forge analyze dashboard \
+forge dev analyze dashboard \
   --input out/reports \
   --output out/dashboard
 ```
@@ -238,10 +238,10 @@ The aggregator looks for these files inside `--input`:
 
 | File | Produced by |
 |------|-------------|
-| `hls_summary.md` | `forge analyze hls-report` |
-| `latency_check.md` | `forge analyze latency-check` |
-| `runtime_latency.md` | `forge analyze runtime-latency` |
-| `plots/*.png` | `forge analyze plot-results` |
+| `hls_summary.md` | `forge dev analyze hls-report` |
+| `latency_check.md` | `forge dev analyze latency-check` |
+| `runtime_latency.md` | `forge dev analyze runtime-latency` |
+| `plots/*.png` | `forge dev analyze plot-results` |
 
 Any missing file is silently skipped and its section shows "not available".
 
@@ -251,7 +251,7 @@ Any missing file is silently skipped and its section shows "not available".
 
 ```bash
 # 1. Build HLS (synth stage required for latency numbers)
-forge hls run \
+forge dev hls run \
   --registry plugins/trigger_demo/forge/modules.yml \
   --hls-build-root build_hls_trigger_demo \
   --stages synth
@@ -263,32 +263,32 @@ forge hls run \
 python3 scripts/build_analyze_inputs.py   # plugin-provided script
 
 # 4. HLS synthesis report
-forge analyze hls-report \
+forge dev analyze hls-report \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports
 
 # 5. Static latency check
-forge analyze latency-check plugins/trigger_demo/forge/designs/design.yml \
+forge dev analyze latency-check plugins/trigger_demo/forge/designs/design.yml \
   --contracts-from plugins/trigger_demo/forge/modules.yml \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports/latency_check.md
 
 # 6. Runtime latency (end-to-end pipeline measurement)
-forge analyze runtime-latency \
+forge dev analyze runtime-latency \
   --probe-csv out/reports/pipeline_probe.csv \
   --probe-pairs "trigger_logic:dec_0_raw_valid:tout_out_valid" \
   --hls-build-root build_hls_trigger_demo \
   --output out/reports/runtime_latency.md
 
 # 7. Result plots
-forge analyze plot-results \
+forge dev analyze plot-results \
   --config plugins/trigger_demo/forge/verify/plot_config.yml \
   --observed out/reports/observed_pipeline.csv \
   --reference out/reports/reference_pipeline.csv \
   --output out/reports/plots
 
 # 8. HTML dashboard
-forge analyze dashboard \
+forge dev analyze dashboard \
   --input out/reports \
   --output out/dashboard
 # → open out/dashboard/dashboard.html

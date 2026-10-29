@@ -14,7 +14,7 @@ latency_static/
 
 latency_runtime/
     Compare HLS-predicted latency against simulation-observed latency. Reads
-    probe CSV files written during forge verify runs and produces a side-by-side
+    probe CSV files written during forge dev verify runs and produces a side-by-side
     comparison table.
 
 result_plots/

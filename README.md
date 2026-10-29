@@ -22,9 +22,8 @@ PyPI publish — a closed decision, not a placeholder pending one).
 Repository:
 
 - Canonical public host: [`https://github.com/pleguina/forge`](https://github.com/pleguina/forge).
-  The project originated on a CERN GitLab instance
-  (`gitlab.cern.ch/p2u-omtf-ops/arc-framework`); that origin is retained
-  for its history but is no longer the primary source.
+  The project began on CERN GitLab as `arc-framework`; that repository
+  has been removed, and GitHub is the only source.
 
 ## Current scope
 
@@ -36,7 +35,7 @@ FORGE's public identity for this release is deliberately narrower than
 | Toolchains | Vivado (structural Verilog/VHDL, Block Design TCL), Vitis HLS, XSim |
 | Simulation backends | `xsim`, `csim`; Verilator is available as a lint tool only, not a simulation backend |
 | Verification datasets | XML and JSON, behind a registered-loader protocol (`forge.verification.dataset_format.DatasetFormatLoader`) — a further format is a loader registration, not a change to verification. A project-owned adapter protocol (`ProjectDatasetAdapter`) covers interpreting arbitrary external data; adapters for specific formats (HDF5, ROOT, NumPy, binary captures) are the project's to write, not built in |
-| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect. Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist, gated behind `gen-top --strict` (see [Clock and Reset Domains](docs/concepts/clock-and-reset-domains.md)) |
+| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect. Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist: an undeclared crossing stops generation (see [Clock and Reset Domains](docs/concepts/clock-and-reset-domains.md)) |
 | Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see [Contracts and Protocols](docs/concepts/contracts-and-protocols.md)) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
 
@@ -72,7 +71,7 @@ flowchart TD
     Matching --> IR["forge.ir.assemble_project_ir\n(ResolvedProject — schema-versioned, hashable, JSON-exportable)"]
     IR --> Inspect["forge inspect --json / --emit-ir / --diff"]
     IR --> Project["forge.ir.project_to_conn_map\n(reproduces original iteration order via emission_order)"]
-    Project --> Generators["Verilog / VHDL / Block-Design generators\n(write_structural_verilog / write_structural_vhdl / write_bd_tcl)"]
+    Project --> Generators["Verilog / Block-Design generators, VHDL entity around the Verilog top\n(write_structural_verilog / write_bd_tcl / write_vhdl_wrapper)"]
     Generators --> Manifests[build_manifest.json / port_map.yaml / design_parameters.json / design.ir.json]
 
     VerifyContract --> VerifyRun[verify generate / prepare / run]

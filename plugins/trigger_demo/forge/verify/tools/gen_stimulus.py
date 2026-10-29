@@ -50,7 +50,7 @@ from typing import Any
 _HERE         = Path(__file__).resolve().parent
 _PLUGIN_ROOT  = _HERE.parent           # plugins/trigger_demo/forge/verify/
 _PLUGIN_VERIFY = _PLUGIN_ROOT           # alias
-_REPO_ROOT    = _HERE.parents[4]       # arc-framework/
+_REPO_ROOT    = _HERE.parents[4]       # forge repository root
 
 _DEFAULT_XML = (
     _REPO_ROOT

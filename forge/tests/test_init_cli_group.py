@@ -1,6 +1,6 @@
 """Real end-to-end coverage for `forge init`
 — the command that unifies the topgen-side and verify-side scaffolders
-and chains validate -> build --apply -> test -> report, all with zero
+and chains validate -> build -> test -> report, all with zero
 manual edits.
 
 The acceptance bar is literal: run `forge
@@ -100,7 +100,7 @@ def test_init_runs_full_chain_with_zero_manual_edits(
     assert "event_0" in (report_dir / "verification_results.md").read_text()
     assert "PASS" in (report_dir / "verification_results.md").read_text()
 
-    # Real, generated build artifacts (not stubs) from the build --apply step.
+    # Real, generated build artifacts (not stubs) from the build step.
     gen_top_dir = tmp_path / "gen-top" / "design_throwaway_plugin"
     assert (gen_top_dir / "algo_top.v").exists()
     assert (gen_top_dir / "build_manifest.json").exists()
@@ -128,3 +128,42 @@ def test_init_registered_as_top_level_command() -> None:
     parser = build_parser()
     parsed = parser.parse_args(["init", "some_plugin"])
     assert parsed.func.__name__ == "cmd_init"
+
+
+def test_init_writes_a_forge_yml_the_bare_commands_use(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import forge.core.toolchain_versions as toolchain
+    from forge.project.status import PASS, WARN, evaluate
+
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: False)
+    result = _run(
+        capsys, "throwaway_plugin",
+        "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path), "--json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    forge_yml = tmp_path / "forge.yml"
+    assert "design: plugins/throwaway_plugin/forge/designs/design.yml" in forge_yml.read_text()
+    status = evaluate(tmp_path)
+    assert status.section("Design").state == PASS
+    # Configured, but with no simulator on PATH its flow cannot run here.
+    assert status.section("Verification").state == WARN
+    assert "ATG049" in [d.code for d in status.warnings]
+
+
+def test_init_leaves_an_existing_forge_yml_alone(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import forge.core.toolchain_versions as toolchain
+
+    monkeypatch.setattr(toolchain, "tool_present", lambda name: False)
+    (tmp_path / "forge.yml").write_text("project: other\n")
+
+    result = _run(
+        capsys, "throwaway_plugin",
+        "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path), "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "forge.yml").read_text() == "project: other\n"

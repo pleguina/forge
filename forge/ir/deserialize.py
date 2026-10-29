@@ -97,7 +97,7 @@ def check_ir_schema_version(value: str) -> Optional[str]:
         raise IrSchemaError(
             f"IR schema version {value} is incompatible with this FORGE build "
             f"(supports {cur_major}.x, currently {IR_SCHEMA_VERSION}). "
-            "Regenerate the IR with `forge topgen gen-top`, or use the FORGE "
+            "Regenerate the IR with `forge dev topgen gen-top`, or use the FORGE "
             "version that wrote it."
         )
     if minor > cur_minor:
@@ -202,7 +202,7 @@ def _build(annotation: Any, value: Any) -> Any:
         return [_build(item_type, v) for v in value]
     if origin in (dict, Dict):
         return dict(value)
-    if dataclasses.is_dataclass(annotation) and isinstance(value, dict):
+    if isinstance(annotation, type) and dataclasses.is_dataclass(annotation) and isinstance(value, dict):
         return _from_dataclass_dict(annotation, value)
     return value
 

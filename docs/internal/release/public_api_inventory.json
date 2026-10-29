@@ -90,14 +90,20 @@
     {
       "kind": "function",
       "module": "forge",
-      "name": "write_structural_vhdl",
-      "summary": "Generate a structural RTL top that wires algorithm modules together."
+      "name": "write_structural_verilog",
+      "summary": "Generate a structural Verilog top that wires algorithm modules together."
     },
     {
       "kind": "function",
       "module": "forge",
       "name": "write_summary",
       "summary": "Write the summary dict out in either JSON or YAML form."
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "write_vhdl_wrapper",
+      "summary": "Write entity *entity_name* instantiating Verilog module *core_name*."
     },
     {
       "kind": "value",
@@ -127,13 +133,13 @@
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "GraphNodeKind",
-      "summary": "An enumeration."
+      "summary": "What a node of the design-explorer graph stands for."
     },
     {
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "MaturityStatus",
-      "summary": "An enumeration."
+      "summary": "How a module's connections are wired: by contract, by name matching, or both."
     },
     {
       "kind": "class",
@@ -222,8 +228,8 @@
     {
       "kind": "function",
       "module": "forge.generation.generators",
-      "name": "write_structural_vhdl",
-      "summary": "Generate a structural RTL top that wires algorithm modules together."
+      "name": "write_vhdl_wrapper",
+      "summary": "Write entity *entity_name* instantiating Verilog module *core_name*."
     },
     {
       "kind": "class",

@@ -1,4 +1,4 @@
-"""forge framework — external framework import and detector I/O resolution."""
+"""forge framework — external framework import, detector I/O resolution, floorplan and ipbb."""
 
 from __future__ import annotations
 
@@ -159,6 +159,11 @@ def cmd_emit_payload(args):
 
         def _ep_from_dict(d):
             from forge.integration.importer import Endpoint
+            # The framework's own endpoint carries what a resolved file
+            # written before `protocol` was recorded does not.
+            known = fi.get_endpoint(d["endpoint_id"])
+            if known is not None:
+                return known
             return Endpoint(
                 endpoint_id          = d["endpoint_id"],
                 direction            = d["direction"],
@@ -166,7 +171,7 @@ def cmd_emit_payload(args):
                 gt_site              = d["gt_site"],
                 lane                 = d["lane"],
                 lane_width           = d["lane_width"],
-                protocol             = "",
+                protocol             = d.get("protocol", ""),
                 quad_type            = "",
                 cage                 = None,
                 fiber                = None,
@@ -211,18 +216,25 @@ def cmd_emit_payload(args):
             import yaml
             with open(args.policies) as fh:
                 pd = yaml.safe_load(fh)
-            policies = ControlPolicies.from_dict(pd.get("control_policies", {}))
+            policies = ControlPolicies.from_dict(
+                pd.get("control_policies", {}), base=Path(args.policies).parent,
+            )
         except Exception as exc:
-            print(f"WARNING: could not load policies file: {exc}", file=sys.stderr)
+            print(f"ERROR: could not load policies file {args.policies}: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     out_path = Path(args.out) if args.out else Path("build/generated/payload.v")
-    content = generate_payload_verilog(
-        framework   = fi,
-        resolved_io = resolved_io,
-        algo_module = args.algo_module,
-        policies    = policies,
-        output_path = out_path,
-    )
+    try:
+        content = generate_payload_verilog(
+            framework   = fi,
+            resolved_io = resolved_io,
+            algo_module = args.algo_module,
+            policies    = policies,
+            output_path = out_path,
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
     print(f"Generated payload wrapper: {out_path}")
     print(f"  ports: {len(fi.ports)}")
 
@@ -231,11 +243,58 @@ def cmd_emit_payload(args):
 # Registration
 # ---------------------------------------------------------------------------
 
+def cmd_ipbb_component(args):
+    """Write a build's compile list as an ipbb component."""
+    from forge.integration.ipbb import write_component
+
+    try:
+        dep = write_component(Path(args.manifest), Path(args.out), args.dep)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Written: {dep}")
+
+
+def cmd_ipbb_xsim(args):
+    """Write the XSim compile commands for an ipbb dep tree."""
+    from forge.integration.ipbb import xsim_compile_script
+
+    try:
+        script = xsim_compile_script(Path(args.src_dir), args.component, args.dep)
+    except (ImportError, OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    Path(args.out).write_text(script)
+    print(f"Written: {args.out}")
+
+
+def cmd_floorplan(args):
+    """Write the SLR assignment of a block-design top level."""
+    import yaml
+    from forge.integration.floorplan import floorplan, write_xdc
+
+    try:
+        spec = (yaml.safe_load(Path(args.spec).read_text()) or {}).get("floorplan") or {}
+        if "root" not in spec:
+            raise ValueError(f"{args.spec}: floorplan.root (the block-design instance in the netlist) is required")
+        res, cells = floorplan(Path(args.block_design), Path(args.ir), Path(args.detector_io), spec,
+                               Path(args.crossings) if args.crossings else None)
+    except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(write_xdc(res, root=spec["root"], pblock=spec.get("pblock")))
+    per_slr = {s: sum(1 for v in res.values() if v == s) for s in sorted(set(res.values()))}
+    print(f"Written: {out} ({len(res)} of {len(cells)} cells: "
+          + ", ".join(f"SLR{s} {n}" for s, n in per_slr.items()) + ")")
+
+
 def register(sub):
     """Register the 'framework' command group."""
     grp = sub.add_parser(
         "framework",
-        help="External framework import and detector I/O resolution",
+        help="External frameworks: ABI import, detector I/O, payloads, floorplan, ipbb components",
     )
     grp_sub = grp.add_subparsers(
         dest="framework_cmd",
@@ -316,3 +375,60 @@ def register(sub):
         help="Output path for payload.v (default: build/generated/payload.v)",
     )
     p_emit.set_defaults(func=cmd_emit_payload)
+
+    # ── framework ipbb-component ──────────────────────────────────────────
+    p_ipbb = grp_sub.add_parser(
+        "ipbb-component",
+        help="Copy a build's sources into an ipbb component with its .dep file",
+    )
+    p_ipbb.add_argument(
+        "--manifest", required=True,
+        help="build_manifest.json written next to the generated top",
+    )
+    p_ipbb.add_argument(
+        "--out", required=True,
+        help="Component directory (gets firmware/hdl and firmware/cfg)",
+    )
+    p_ipbb.add_argument(
+        "--dep", default=None,
+        help="Dep file name (default: <top>.dep)",
+    )
+    p_ipbb.set_defaults(func=cmd_ipbb_component)
+
+    # ── framework ipbb-xsim ───────────────────────────────────────────────
+    p_xsim = grp_sub.add_parser(
+        "ipbb-xsim",
+        help="Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)",
+    )
+    p_xsim.add_argument(
+        "--src-dir", required=True,
+        help="The ipbb work area's src/ directory",
+    )
+    p_xsim.add_argument(
+        "--component", required=True,
+        help="package:component holding the top-level dep file",
+    )
+    p_xsim.add_argument(
+        "--dep", required=True,
+        help="Top-level dep file name",
+    )
+    p_xsim.add_argument(
+        "--out", required=True,
+        help="Shell script to write",
+    )
+    p_xsim.set_defaults(func=cmd_ipbb_xsim)
+
+    # ── framework floorplan ───────────────────────────────────────────────
+    p_fp = grp_sub.add_parser(
+        "floorplan",
+        help="SLR assignment of a block-design top level from the links and a floorplan spec",
+    )
+    p_fp.add_argument("--block-design", required=True, help="block_design.tcl from forge build --mode bd")
+    p_fp.add_argument("--ir", required=True, help="design.ir.json written next to it")
+    p_fp.add_argument("--crossings", default=None,
+                      help="block_design.crossings.json; its crossings are left to the placer")
+    p_fp.add_argument("--detector-io", required=True, help="detector_io.resolved.json")
+    p_fp.add_argument("--spec", required=True,
+                      help="YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell patterns]}}")
+    p_fp.add_argument("--out", required=True, help="XDC to write")
+    p_fp.set_defaults(func=cmd_floorplan)

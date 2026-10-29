@@ -67,14 +67,14 @@ def _external_port_node_dot(node: GraphNode) -> str:
     return f'  {dot_id(node.id)} [shape=cds, style=filled, fillcolor="#fff8e1", label={label}];'
 
 
-def _module_cluster_open(node: GraphNode) -> List[str]:
+def _module_cluster_open(node: GraphNode, module: str) -> List[str]:
     border = _node_diagnostic_border(node)
     color = border or "#90a4ae"
     header = dot_html_label_text(f"module: {node.label}")
     if node.maturity is not None:
         header += dot_html_label_text(f"  [{node.maturity.status.value}]")
     return [
-        f"  subgraph {_cluster_id(node.module)} {{",
+        f"  subgraph {_cluster_id(module)} {{",
         f'    label=<{header}>;',
         f'    color="{color}";',
         "    style=rounded;",
@@ -142,8 +142,10 @@ def render_dot(graph: DesignGraph) -> str:
             instances_by_module.setdefault(n.module, []).append(n)
 
     for mg in module_groups:
-        lines.extend(_module_cluster_open(mg))
-        for inst in sorted(instances_by_module.get(mg.module, []), key=lambda n: n.id):
+        module = mg.module
+        assert module is not None  # a MODULE_GROUP node always names its module
+        lines.extend(_module_cluster_open(mg, module))
+        for inst in sorted(instances_by_module.get(module, []), key=lambda n: n.id):
             lines.append(_instance_node_dot(inst))
         lines.append("  }")
 

@@ -65,7 +65,7 @@ A ``{"name", "version"}`` tag carried by every structured artifact
 The resolved cardinality bound an endpoint's interface declared,
     checked against how many connections actually exist. Descriptive only
     — ``forge.contracts.cardinality.verify_cardinality`` is what actually
-    enforces this design-wide under ``--strict``.
+    enforces this design-wide.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -442,7 +442,7 @@ A losing producer for a connection's consumer pin, sourced read-only
 
 A named clock domain — one per distinct resolved clock net.
 
-    ``name`` is the resolved net's raw port name (e.g.
+    ``name`` is the top-level net the clock ports are wired to (e.g.
     ``"ap_clk"``), not a hardcoded literal. ``instances`` is *derived* from
     each ``ResolvedInstance.clock_domain`` (the per-instance scalar is the
     source of truth — this list is a grouping view of it, not maintained
@@ -493,7 +493,7 @@ A resolved wire between two endpoints.
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
     ``forge.contracts.cdc.verify_cdc`` is what actually rejects an
-    undeclared crossing under ``--strict``.
+    undeclared crossing.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -985,7 +985,7 @@ A stage in a backend's execution pipeline.
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-An enumeration.
+What a node of the design-explorer graph stands for.
 
 | Member | Value |
 |---|---|
@@ -998,7 +998,7 @@ An enumeration.
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-An enumeration.
+How a module's connections are wired: by contract, by name matching, or both.
 
 | Member | Value |
 |---|---|

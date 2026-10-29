@@ -19,27 +19,27 @@ These tools are supported, but a consumer should still treat them as tooling sur
 
 The supported Layer 2 tooling surface is:
 
-- `forge topgen validate`
-- `forge topgen gen-top`
-- `forge topgen ip-summary`
-- `forge topgen match-ports`
-- `forge topgen unpack-ips`
-- `forge core verify-contract`
-- `forge core resources`
-- `forge hls gen-tcl`
-- `forge hls run`
+- `forge dev topgen validate`
+- `forge dev topgen gen-top`
+- `forge dev topgen ip-summary`
+- `forge dev topgen match-ports`
+- `forge dev topgen unpack-ips`
+- `forge dev core verify-contract`
+- `forge dev core resources`
+- `forge dev hls gen-tcl`
+- `forge dev hls run`
 - `forge/hls/generate_hls_tcl.py`
 - `forge/hls/extract_hls_metrics.py`
-- `forge analyze hls-report`
-- `forge analyze latency-check`
-- `forge analyze runtime-latency`
-- `forge analyze plot-results`
-- `forge analyze dashboard`
+- `forge dev analyze hls-report`
+- `forge dev analyze latency-check`
+- `forge dev analyze runtime-latency`
+- `forge dev analyze plot-results`
+- `forge dev analyze dashboard`
 
 For HLS flows, the preferred public interface is the installed CLI:
 
-- `forge hls gen-tcl`
-- `forge hls run`
+- `forge dev hls gen-tcl`
+- `forge dev hls run`
 
 `forge/hls/generate_hls_tcl.py` and `forge/hls/extract_hls_metrics.py` are the implementations behind those commands. They are framework tooling, but they are not the primary first-class interface a new consumer should build around.
 
@@ -74,7 +74,7 @@ compatibility and migration policy.
 
 ## Analysis contract owned by Layer 2
 
-Layer 2 standardizes a post-verification analysis surface via `forge analyze`.
+Layer 2 standardizes a post-verification analysis surface via `forge dev analyze`.
 
 Plugin-authored inputs:
 
@@ -101,7 +101,7 @@ The following are public Layer 2 behavior for the current release line:
 - strict-mode enforcement semantics as described in the author guide
 - documented generated artifact set
 - documented default error-handling behavior and `--debug` traceback opt-in
-- `forge analyze` sub-commands and their plugin-owned input contracts
+- `forge dev analyze` sub-commands and their plugin-owned input contracts
 - dashboard HTML structure and report file naming conventions
 
 The following are not public Layer 2 API:

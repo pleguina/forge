@@ -158,7 +158,7 @@ class VerilatorBackend(BackendAdapter):
         if not tb_sv.exists():
             errors.append(
                 f"SV testbench not found: {tb_sv}\n"
-                f"  → Regenerate with: forge verify generate design.verification.yml"
+                f"  → Regenerate with: forge dev verify generate design.verification.yml"
                 f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
             )
 
@@ -170,7 +170,7 @@ class VerilatorBackend(BackendAdapter):
                 errors.append(
                     f"DUT RTL file not found: {dut_rtl_path}\n"
                     f"  → Run HLS synthesis first:\n"
-                    f"      forge verify generate uses dut_rtl_source from design.verification.yml\n"
+                    f"      forge dev verify generate uses dut_rtl_source from design.verification.yml\n"
                     f"  RTL expected at: {dut_rtl_path}"
                 )
 

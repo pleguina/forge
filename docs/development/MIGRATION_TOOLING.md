@@ -6,7 +6,7 @@ insertion, old project layout, deprecated command/configuration names,
 each supporting dry-run and a
 readable diff.
 
-All five are implemented as one CLI command, `forge topgen migrate --kind <kind>`,
+All five are implemented as one CLI command, `forge dev topgen migrate --kind <kind>`,
 backed by pure functions in `forge/generation/migrate.py`. Every kind:
 
 - computes its change fully in memory first;
@@ -29,7 +29,7 @@ byte-for-byte unchanged.
 ## `--kind schema-version`
 
 ```bash
-forge topgen migrate --kind schema-version --file design.yml [--schema-kind design|registry|interface|verify_contract] [--dry-run]
+forge dev topgen migrate --kind schema-version --file design.yml [--schema-kind design|registry|interface|verify_contract] [--dry-run]
 ```
 
 Inserts the current supported schema version (release-plan §2.7 —
@@ -43,7 +43,7 @@ declared") is not an error.
 ## `--kind partition-to-coordinates`
 
 ```bash
-forge topgen migrate --kind partition-to-coordinates --contract m.interface.yaml --axis label [--role ROLE] [--dry-run]
+forge dev topgen migrate --kind partition-to-coordinates --contract m.interface.yaml --axis label [--role ROLE] [--dry-run]
 ```
 
 Wraps a role's `partition: X` as a single-axis `coordinates: {<axis>: X}`.
@@ -62,7 +62,7 @@ exist or already has `coordinates`.
 ## `--kind legacy-plugin-layout`
 
 ```bash
-forge topgen migrate --kind legacy-plugin-layout --plugin-root plugins/my_plugin [--dry-run]
+forge dev topgen migrate --kind legacy-plugin-layout --plugin-root plugins/my_plugin [--dry-run]
 ```
 
 Fixes the one documented "old project layout" case (`MIGRATION.md`):
@@ -85,7 +85,7 @@ this repo to apply it to.
 ## `--kind rename-verify-contract`
 
 ```bash
-forge topgen migrate --kind rename-verify-contract --plugin-root plugins/my_plugin [--dry-run]
+forge dev topgen migrate --kind rename-verify-contract --plugin-root plugins/my_plugin [--dry-run]
 ```
 
 Renames the deprecated `verify.design.yml` filename to the current
@@ -96,18 +96,18 @@ A pure filesystem rename, so there's no comment-loss risk here at all.
 ## Contract inference has moved
 
 Contract inference used to live here as
-`forge topgen migrate --kind infer-contract`. Writing an interface
+`forge dev topgen migrate --kind infer-contract`. Writing an interface
 contract is the most common *authoring* task in a FORGE project, not a
 migration, so it now has its own command:
 
 ```bash
-forge contract infer NAME --contracts-from modules.yml -o NAME.interface.yaml
+forge dev contract infer NAME --contracts-from modules.yml -o NAME.interface.yaml
 ```
 
 It no longer needs a pre-generated `ip_info.yaml`: for an RTL module it
 scans the module's own source directly. Pass `--ip-info` instead for an
 HLS module, whose ports don't exist until its IP is built. See
-`forge contract infer --help`.
+`forge dev contract infer --help`.
 
 ## Not automated (and why)
 

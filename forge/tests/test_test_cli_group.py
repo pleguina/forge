@@ -49,7 +49,9 @@ def _run(capsys: pytest.CaptureFixture[str], group: str, *args: str) -> Result:
 
 
 @pytest.fixture
-def consumer_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
+def consumer_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], prepare_plugin_flows,
+) -> Path:
     """An isolated, gen-top'd copy of plugins/passthrough_demo rooted at
     tmp_path — same fixture recipe as
     tests/verify/test_verify_run_xsim.py's own `consumer_root`."""
@@ -65,6 +67,7 @@ def consumer_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    prepare_plugin_flows(tmp_path / "plugins/passthrough_demo/forge/verify/design.verification.yml", tmp_path)
 
     return tmp_path
 
@@ -181,7 +184,7 @@ def test_run_all_events_produces_two_distinct_per_event_results(
         assert float(tc.get("time")) > 0
 
     # Regression guard for a real bug found while building this slice:
-    # `forge verify prepare`'s own stimulus check never *generates*
+    # `forge dev verify prepare`'s own stimulus check never *generates*
     # stimulus_current.svh (that's a separate, plugin-owned step) — so
     # without `forge test run` regenerating it per event, a second event
     # would silently re-simulate the first event's stale golden data and
@@ -499,10 +502,15 @@ def test_run_svh_include_flows_unaffected_by_readmemh_mechanism(
     assert (per_event / "1" / "simulate.log").exists()
 
 
-def test_run_requires_flow_argument(capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_requires_flow_argument_with_a_design_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     parser = build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["test", "run", "design.verification.yml"])
+    parsed = parser.parse_args(["test", "run", "design.verification.yml"])
+    with pytest.raises(SystemExit) as exc:
+        parsed.func(parsed)
+    assert exc.value.code == 1
+    assert "--flow is required" in capsys.readouterr().err
 
 
 def test_registered_as_top_level_command() -> None:

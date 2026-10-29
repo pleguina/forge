@@ -1,6 +1,6 @@
-"""`forge contract infer` — the interface-contract authoring command.
+"""`forge dev contract infer` — the interface-contract authoring command.
 
-Previously reachable only as `forge topgen migrate --kind infer-contract`:
+Previously reachable only as `forge dev topgen migrate --kind infer-contract`:
 a verb meaning "convert an old project", for what is actually the most
 common authoring task in a FORGE project. These are the same invariants
 that command was held to, plus the registry-scanning route that removes

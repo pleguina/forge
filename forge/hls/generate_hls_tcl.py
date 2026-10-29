@@ -6,13 +6,11 @@ generate_hls_tcl.py
 Compatibility entry point: generates Vitis HLS TCL scripts from a plugin-owned
 HLS catalog.
 
-The core logic now lives in topgen.hls.catalog.
-This script is kept as a standalone convenience wrapper so that parallel_hls.sh
-and legacy Makefile recipes can call it directly via ``python3 generate_hls_tcl.py``
-without installing the full Python package.
+The logic lives in forge.hls.catalog; this script calls it so that
+parallel_hls.sh and Makefile recipes can run ``python3 generate_hls_tcl.py``.
 
-Preferred interface (requires installed topgen):
-    topgen hls gen-tcl --module <name> --hls-config <path>
+Preferred interface:
+    forge dev hls gen-tcl --module <name> --hls-config <path>
 """
 
 from __future__ import annotations
@@ -21,30 +19,16 @@ import argparse
 import sys
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Import core logic from the topgen package when available; fall back to
-# a local copy of the functions so the script still works without the package.
-# ---------------------------------------------------------------------------
-try:
-    from topgen.hls.catalog import (  # type: ignore[import]
-        SUPPORTED_STAGES,
-        load_hls_catalog,
-        resolve_module_name,
-        module_field,
-        modules_for_stage,
-        modules_from_design,
-        generate_tcl,
-        print_value as _print_value,
-    )
-except ImportError as _import_error:
-    print(
-        f"ERROR: topgen package is not installed.\n"
-        f"  {_import_error}\n"
-        f"Install it with:  pip install -e framework/topgen/\n"
-        f"Then retry:       python3 generate_hls_tcl.py ...",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+from forge.hls.catalog import (
+    SUPPORTED_STAGES,
+    load_hls_catalog,
+    resolve_module_name,
+    module_field,
+    modules_for_stage,
+    modules_from_design,
+    generate_tcl,
+    print_value as _print_value,
+)
 
 import yaml  # needed for --config YAML loading in main()
 

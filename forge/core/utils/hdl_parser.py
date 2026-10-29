@@ -6,7 +6,7 @@ import ast
 import operator
 import re
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple, Type
+from typing import Callable, Dict, List, Optional, Tuple, Type
 
 
 _ARITH_BINOPS: Dict[Type[ast.AST], Callable[[float, float], float]] = {
@@ -363,7 +363,7 @@ def _scan_verilog_ports_text(source: str) -> Dict[str, Tuple[str, int]]:
     # Parse header port list - handle ANSI-style declarations
     # Split by comma, but be careful with nested brackets
     port_entries = []
-    current_entry = []
+    current_entry: List[str] = []
     paren_depth = 0
     bracket_depth = 0
     
@@ -402,12 +402,12 @@ def _scan_verilog_ports_text(source: str) -> Dict[str, Tuple[str, int]]:
         
         # Try to match ANSI-style: input/output [width] name
         trial = entry + ';'
-        dm = _VLOG_DECL_PARAM_RE.match(trial)
-        if dm:
-            base_w = _width_from_slice(dm.group('w0'), params)
-            direction = dm.group('dir').lower()
+        decl = _VLOG_DECL_PARAM_RE.match(trial)
+        if decl:
+            base_w = _width_from_slice(decl.group('w0'), params)
+            direction = decl.group('dir').lower()
             direction = {'input': 'in', 'output': 'out'}.get(direction, 'inout')
-            names_blob = dm.group('names')
+            names_blob = decl.group('names')
             for raw in names_blob.split(','):
                 nm = raw.strip()
                 nm_m = _VLOG_NAME_PARAM_RE.match(nm)

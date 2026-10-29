@@ -472,7 +472,7 @@ _KNOWN_MODULE_KEYS: Set[str] = {
     'name', 'kind', 'top', 'src', 'includes', 'rtl_lang', 'vhdl_library',
     'vhdl_version', 'rtl_include_dirs', 'verilog_defines', 'rtl_packages',
     'cflags', 'stages', 'build', 'verify', 'description',
-    # Contract-driven topology extension fields (used by forge topgen gen-top)
+    # Contract-driven topology extension fields (used by forge dev topgen gen-top)
     'interface_contract',
     # Latency annotation fields (used by forge analyze / the canonical IR
     # via Module.timing — see topgen/config.py::ModuleTiming)
@@ -548,7 +548,7 @@ class RegistryValidator:
     def _validate_contract_status(self, mod: Dict[str, Any], name: str, loc: str) -> None:
         """Flag an interface contract still marked ``normalization_status: draft``.
 
-        `forge contract infer` emits draft skeletons: every port becomes a
+        `forge dev contract infer` emits draft skeletons: every port becomes a
         role, but the integration semantics that cannot be inferred from a
         port name (wiring_kind, protocol, partition, coordinates) still need
         a human. Without this check a generated skeleton could be committed

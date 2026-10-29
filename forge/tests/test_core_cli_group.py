@@ -1,4 +1,4 @@
-"""End-to-end coverage for `forge core` (core/cli/groups/core.py, ~24%).
+"""End-to-end coverage for `forge dev core` (core/cli/groups/core.py, ~24%).
 
 Same recipe as test_topgen_cli_commands.py: drive the real argparse entry
 point in-process (via build_parser()) so pytest-cov credits the executed

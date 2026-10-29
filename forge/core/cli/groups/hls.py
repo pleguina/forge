@@ -78,6 +78,9 @@ def _write_run_reports(
 # Command implementations
 # ---------------------------------------------------------------------------
 
+DEFAULT_EXPORT_FLOW = "impl"
+
+
 def cmd_hls_gen_tcl(args):
     """Generate Vitis HLS TCL scripts for one or all catalog modules."""
     from forge.hls.catalog import (
@@ -143,7 +146,7 @@ def cmd_hls_run(args):
 
     from forge.core.utils.content_hash import hash_bytes
     from forge.hls import stage_stamp
-    from forge.hls.catalog import load_hls_catalog
+    from forge.hls.catalog import generate_tcl, load_hls_catalog
 
     # ── Resolve inputs ────────────────────────────────────────────────────
     registry_path = (
@@ -227,6 +230,17 @@ def cmd_hls_run(args):
     except OSError as exc:
         print(f"ERROR: cannot create build directories: {exc}", file=sys.stderr)
         sys.exit(1)
+
+    if catalog is not None:
+        for module in module_list:
+            if (build_root / module / "project.tcl").exists():
+                continue
+            print(f"Generating TCL for {module} (none in {build_root})")
+            if not generate_tcl(
+                catalog, module, None, build_root, ip_pack_dir,
+                {"flow": DEFAULT_EXPORT_FLOW},
+            ):
+                sys.exit(1)
 
     tool = stage_stamp.resolve_tool(vitis_hls)
     output_roots = (build_root, ip_pack_dir)
@@ -313,7 +327,9 @@ def cmd_hls_run(args):
         if not tcl_path.exists():
             with open(log_path, "w") as f:
                 f.write(f"ERROR: TCL script not found: {tcl_path}\n")
-                f.write("Generate TCL scripts first: forge hls gen-tcl ...\n")
+                f.write(
+                    "Pass --registry to generate it, or run forge dev hls gen-tcl first.\n"
+                )
             return False, log_path
 
         try:
@@ -347,8 +363,9 @@ def cmd_hls_run(args):
         reinitialized.add(module)
         stage_stamp.clear_all_stamps(build_root / module)
         ok, log = _run_tcl(module, "project.tcl", "project.log")
-        if ok:
-            stage_stamp.write_stamp(build_root / module, "project", _project_hash(module), tool)
+        digest = _project_hash(module)
+        if ok and digest is not None:
+            stage_stamp.write_stamp(build_root / module, "project", digest, tool)
         return ok, log
 
     def _run_stamped(module: str, step: str, tcl_name: str, log_name: str) -> "tuple[bool, str]":
@@ -399,7 +416,7 @@ def cmd_hls_run(args):
     # ── Driver ────────────────────────────────────────────────────────────
     sep = "=" * 50
     print(f"\n{sep}")
-    print(f"  forge hls run")
+    print(f"  forge dev hls run")
     print(f"{sep}")
     print(f"  Modules : {', '.join(module_list)}")
     print(f"  Stages  : {', '.join(stage_list)}")
@@ -469,9 +486,9 @@ def cmd_hls_run(args):
         )
 
     if overall_ok:
-        print("forge hls run: all stages completed successfully.")
+        print("forge dev hls run: all stages completed successfully.")
     else:
-        print("forge hls run: completed with failures.", file=sys.stderr)
+        print("forge dev hls run: completed with failures.", file=sys.stderr)
         sys.exit(1)
 
 
@@ -480,11 +497,11 @@ def cmd_hls_run(args):
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge hls`` subparser and its commands."""
+    """Register the ``forge dev hls`` subparser and its commands."""
     p_hls = sub.add_parser("hls", help="Build HLS modules and IPs")
     hls_sub = p_hls.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    # forge hls gen-tcl
+    # forge dev hls gen-tcl
     p_hls_gen = hls_sub.add_parser(
         "gen-tcl", help="Generate Vitis HLS TCL scripts from a plugin catalog",
     )
@@ -509,12 +526,12 @@ def register(sub) -> None:
         help="Override .tcl.j2 template directory",
     )
     p_hls_gen.add_argument(
-        "--flow", choices=["export", "syn", "impl"], default="impl",
+        "--flow", choices=["export", "syn", "impl"], default=DEFAULT_EXPORT_FLOW,
         help="IP export flow: export (no synth), syn (RTL only), impl (synth+P&R) (default: impl)",
     )
     p_hls_gen.set_defaults(func=cmd_hls_gen_tcl)
 
-    # forge hls run
+    # forge dev hls run
     p_hls_run = hls_sub.add_parser(
         "run", help="Run parallel Vitis HLS jobs (pure Python, no shell script)",
     )

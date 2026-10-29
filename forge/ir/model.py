@@ -158,7 +158,7 @@ class ResolvedModuleDefinition:
     # The stored list is sorted by ``name`` for reproducible
     # hashing/diffing; this travels with each object so a consumer that
     # must reproduce declaration order (the build manifest's compile-file
-    # ordering — see ``forge.core.cli.groups.topgen.generate_build_manifest``)
+    # ordering — see ``forge.generation.artifacts.generate_build_manifest``)
     # can, without the IR having to give up its own stable sort. Exactly
     # the role ``ResolvedConnection.emission_order`` already plays for
     # connections.
@@ -276,7 +276,7 @@ class CardinalityCheckResult:
     """The resolved cardinality bound an endpoint's interface declared,
     checked against how many connections actually exist. Descriptive only
     — ``forge.contracts.cardinality.verify_cardinality`` is what actually
-    enforces this design-wide under ``--strict``."""
+    enforces this design-wide."""
     bound: Dict[str, Any]  # {"min": ..., "max": ...}, same shape as ResolvedLogicalInterface.cardinality
     actual_count: int
     satisfied: bool
@@ -344,7 +344,7 @@ class ResolvedConnection:
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
     ``forge.contracts.cdc.verify_cdc`` is what actually rejects an
-    undeclared crossing under ``--strict``.
+    undeclared crossing.
     """
     id: str
     producer: ResolvedEndpoint
@@ -361,7 +361,7 @@ class ResolvedConnection:
 class ResolvedClockDomain:
     """A named clock domain — one per distinct resolved clock net.
 
-    ``name`` is the resolved net's raw port name (e.g.
+    ``name`` is the top-level net the clock ports are wired to (e.g.
     ``"ap_clk"``), not a hardcoded literal. ``instances`` is *derived* from
     each ``ResolvedInstance.clock_domain`` (the per-instance scalar is the
     source of truth — this list is a grouping view of it, not maintained

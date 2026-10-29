@@ -1,4 +1,4 @@
-"""`forge hls run` stage stamps: a stage is skipped only when nothing it reads
+"""`forge dev hls run` stage stamps: a stage is skipped only when nothing it reads
 has changed since its last successful run.
 
 A fake `vitis_hls` stands in for the real tool: it leaves the outputs each
@@ -311,3 +311,34 @@ def test_build_outputs_are_not_hashed(ws):
     assert all(ws.build not in p.parents for p in inputs if p.name not in {"project.tcl", "csim.tcl"})
     assert (ws.root / "data/events.xml").resolve() in inputs
     assert (ws.root / "include/common.h").resolve() in inputs
+
+
+def test_run_generates_missing_tcl_from_the_registry(capsys, ws, tmp_path):
+    expected = {p.name: p.read_text() for p in (ws.build / "adder").glob("*.tcl")}
+    fresh = tmp_path / "fresh_build"
+    result = _cli(
+        capsys, "run",
+        "--registry", str(ws.registry), "--modules", "adder", "--stages", "csim",
+        "--hls-build-root", str(fresh), "--ip-packages-dir", str(ws.ips),
+        "--vitis-hls", str(ws.vitis_hls),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Generating TCL for adder" in result.stdout
+    generated = {p.name: p.read_text() for p in (fresh / "adder").glob("*.tcl")}
+    assert generated.keys() == expected.keys()
+    assert generated["csim.tcl"] == expected["csim.tcl"].replace(str(ws.build), str(fresh))
+
+
+def test_run_without_registry_names_the_missing_tcl(capsys, ws, tmp_path):
+    fresh = tmp_path / "fresh_build"
+    result = _cli(
+        capsys, "run",
+        "--modules", "adder", "--stages", "csim",
+        "--hls-build-root", str(fresh), "--ip-packages-dir", str(ws.ips),
+        "--vitis-hls", str(ws.vitis_hls),
+    )
+
+    assert result.returncode != 0
+    log = (fresh / "adder/logs/project.log").read_text()
+    assert "Pass --registry to generate it" in log

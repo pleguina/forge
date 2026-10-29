@@ -222,7 +222,7 @@ def test_full_chain_fail_case_json_driven_readmemh_stimulus_on_xsim(
     declared `checker:` section) and reported with a genuinely mismatched
     FORGE_CHECK record, not a false pass.
 
-    Uses `forge verify run` directly (not `forge test run`) so the
+    Uses `forge dev verify run` directly (not `forge test run`) so the
     JSON-driven stimulus this test just generated is the one actually
     simulated — `forge test run`'s readmemh wiring always regenerates
     from the plugin's own default dataset path first, which would

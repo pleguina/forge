@@ -98,11 +98,18 @@ def _anchor(name: str) -> str:
     return name.lower()
 
 
+def own_doc(cls: type) -> str:
+    """*cls*'s own docstring. Python fills in or inherits one for an enum that
+    has none, differently across versions, so that one is ignored."""
+    doc = cls.__dict__.get("__doc__") or ""
+    return "" if doc.strip() == "An enumeration." else doc.strip()
+
+
 def _render_dataclass_section(cls: type) -> str:
     lines = [f"### `{cls.__name__}`", ""]
     lines.append(f"*Defined in `{cls.__module__}`.*")
     lines.append("")
-    doc = (cls.__doc__ or "").strip()
+    doc = own_doc(cls)
     if doc:
         lines.append(doc)
         lines.append("")
@@ -126,7 +133,7 @@ def _render_enum_section(cls: type) -> str:
     lines = [f"### `{cls.__name__}`", ""]
     lines.append(f"*Defined in `{cls.__module__}`.*")
     lines.append("")
-    doc = (cls.__doc__ or "").strip()
+    doc = own_doc(cls)
     if doc:
         lines.append(doc.splitlines()[0])
         lines.append("")

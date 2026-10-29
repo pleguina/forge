@@ -1,6 +1,6 @@
 """
 Tests for forge.generation.migrate — the pure migration functions behind
-`forge topgen migrate`. CLI-level tests live in
+`forge dev topgen migrate`. CLI-level tests live in
 test_topgen_migrate_cli.py.
 """
 

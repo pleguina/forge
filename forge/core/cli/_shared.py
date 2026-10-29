@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import copy
+import contextlib
+import io
 import os
 import shutil
 import sys
 import traceback
 from pathlib import Path
+from typing import List, Tuple
 
 from forge.core.cli.envelope import status_for_exception
+from forge.core.utils.path_resolution import consumer_root, resolve_path  # noqa: F401 — CLI modules import them from here
 
 
 # ---------------------------------------------------------------------------
@@ -46,37 +49,73 @@ def print_cli_error(prefix: str, exc: Exception, *, hint: str | None = None) -> 
 
 
 # ---------------------------------------------------------------------------
-# Path resolution helpers
+# Running commands, project paths
 # ---------------------------------------------------------------------------
 
-def consumer_root(anchor_path: Path | None = None, explicit_root: Path | None = None) -> Path:
-    if explicit_root is not None:
-        return Path(explicit_root).expanduser().resolve()
-    env_root = os.environ.get("TOPGEN_CONSUMER_ROOT")
-    if env_root:
-        return Path(env_root).expanduser().resolve()
-    if anchor_path is not None:
-        resolved_anchor = Path(anchor_path).expanduser().resolve()
-        return resolved_anchor if resolved_anchor.is_dir() else resolved_anchor.parent
-    raise ValueError(
-        "Cannot determine consumer root. Pass --consumer-root, set "
-        "TOPGEN_CONSUMER_ROOT, or provide an input path that can anchor "
-        "relative defaults."
+def report_command_error(exc: Exception) -> int:
+    """Report an exception a command raised and return its exit code: 1 when
+    it describes the user's input (``status_for_exception``), 2 otherwise."""
+    if status_for_exception(exc) == "fail":
+        print_cli_error("Error", exc)
+        return 1
+    print_cli_error(
+        "Unexpected error", exc,
+        hint=(
+            "Check the command arguments and input files, "
+            "or re-run with --debug to capture traceback details."
+        ),
     )
+    return 2
 
 
-def resolve_path(
-    path_value: Path | str | None,
-    base_root: Path,
-    default: Path | str | None = None,
-) -> Path | None:
-    candidate = path_value if path_value is not None else default
-    if candidate is None:
-        return None
-    path = Path(candidate).expanduser()
-    if path.is_absolute():
-        return path.resolve()
-    return (base_root / path).resolve()
+def run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
+    """Run a real `forge <argv>` invocation in-process through the full
+    parser — the same argv a user would type, so every step here is a
+    real command, not a hand-built call into internals.
+
+    Returns ``(exit_code, captured_stdout)``. When *quiet*, the step's own
+    output is captured rather than printed, so a command that chains others
+    (`forge init`, `forge test`) can report one line per stage — and can
+    still show the captured text if that stage fails.
+    """
+    from forge.core.cli.main import build_parser
+
+    parser = build_parser()
+    parsed = parser.parse_args(argv)
+    buffer = io.StringIO()
+    ctx = contextlib.redirect_stdout(buffer) if quiet else contextlib.nullcontext()
+    with ctx:
+        try:
+            result = parsed.func(parsed)
+        except SystemExit as exc:
+            return (0 if exc.code is None else int(exc.code)), buffer.getvalue()
+        except Exception as exc:  # noqa: BLE001 — reported as `forge` itself would
+            return report_command_error(exc), buffer.getvalue()
+    return (0 if result is None else int(result)), buffer.getvalue()
+
+
+def resolve_project_args(args):
+    """Point a design-taking command at the ``forge.yml`` project around the
+    working directory.
+
+    Fills ``args.design`` and, where the command has them and the user left
+    them unset, ``args.contracts_from``, ``args.consumer_root`` and the
+    options ``forge.yml``'s ``build:`` sets. Returns the
+    :class:`forge.project.resolve.ResolvedProject`; raises what
+    :func:`forge.project.resolve.resolve_project` raises.
+    """
+    from forge.project.resolve import resolve_project
+
+    project = resolve_project(Path.cwd())
+    args.design = str(project.design)
+    if getattr(args, "contracts_from", None) is None and project.registry is not None:
+        args.contracts_from = str(project.registry)
+    if hasattr(args, "consumer_root") and args.consumer_root is None:
+        args.consumer_root = str(project.root)
+    for name, value in project.build_options().items():
+        if hasattr(args, name) and getattr(args, name) is None:
+            setattr(args, name, value)
+    return project
 
 
 def remove_path(path: Path, removed: list[Path]) -> None:
@@ -87,31 +126,6 @@ def remove_path(path: Path, removed: list[Path]) -> None:
     else:
         path.unlink()
     removed.append(path)
-
-
-# ---------------------------------------------------------------------------
-# Pattern helpers (used by topgen port filtering and port-map)
-# ---------------------------------------------------------------------------
-
-def match_patterns(name: str, patterns: list[str]) -> bool:
-    import re as _re
-    return any(_re.search(pattern, name) for pattern in patterns or [])
-
-
-def numeric_suffix_key(name: str) -> tuple[int, str]:
-    import re as _re
-    match = _re.search(r'_(\d+)(?:_|$)', name)
-    return (int(match.group(1)), name) if match else (0, name)
-
-
-def sort_entries(entries: list[dict], sort_mode: str | None) -> list[dict]:
-    if sort_mode == "numeric_suffix":
-        return sorted(entries, key=lambda e: numeric_suffix_key(e["name"]))
-    return sorted(entries, key=lambda e: e["name"])
-
-
-def resolve_interface_metadata(interface_metadata: dict | None) -> dict:
-    return copy.deepcopy(interface_metadata or {})
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ It does not cover optional HLS convenience tooling or implementation details ins
 
 The current public Layer 1 surface is:
 
-- `forge verify` installed CLI sub-commands
+- `forge dev verify` installed CLI sub-commands
 - `python -m forge.verification` module entrypoint
 - `plugins/<plugin>/forge/verify/include/` and `.../src/` — plugin-owned verification headers and runtime implementation, built via the plugin's own CMake target
 - [How to Integrate Verification](../how-to/integrate-verification.md)
@@ -54,7 +54,7 @@ The plugin does not need to author framework-generated artifacts such as `verify
 The following are considered public Layer 1 behavior for the current release line:
 
 - framework-owned verification file layout and generation model
-- `forge verify` CLI subcommands and documented flags
+- `forge dev verify` CLI subcommands and documented flags
 - documented plugin bootstrap lifecycle
 - documented verification contract fields
 - documented default error-handling behavior and `--debug` traceback opt-in

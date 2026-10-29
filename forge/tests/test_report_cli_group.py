@@ -140,7 +140,7 @@ def test_report_registered_as_top_level_command() -> None:
 
 @skip_without_xsim
 def test_report_reuses_real_provenance_and_junit_artifacts(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, prepare_plugin_flows,
 ) -> None:
     """End-to-end: gen-top a real scratch copy, run `forge test run
     --junit-xml`, write a provenance manifest via `forge inspect
@@ -164,6 +164,7 @@ def test_report_reuses_real_provenance_and_junit_artifacts(
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert gen_top_result.returncode == 0, gen_top_result.stdout + gen_top_result.stderr
+    prepare_plugin_flows(design_verification_yml, tmp_path)
 
     junit_path = tmp_path / "junit.xml"
     test_run_result = _run(
@@ -206,7 +207,7 @@ def test_report_reuses_real_provenance_and_junit_artifacts(
 
 @skip_without_xsim
 def test_report_prefers_results_json_over_junit_xml(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, prepare_plugin_flows,
 ) -> None:
     """`forge report --results-json` reuses the richer
     versioned FlowResult (backend id, real duration, waveform path) rather
@@ -229,6 +230,7 @@ def test_report_prefers_results_json_over_junit_xml(
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert gen_top_result.returncode == 0, gen_top_result.stdout + gen_top_result.stderr
+    prepare_plugin_flows(design_verification_yml, tmp_path)
 
     junit_path = tmp_path / "junit.xml"
     results_json_path = tmp_path / "results.json"
@@ -265,7 +267,7 @@ def test_report_throughput_cdc_and_golden_comparison_sections(
 ) -> None:
     """End-to-end against
     vision_pipeline_demo's already-validated quickstart flow (reusing its
-    cached HLS build, no fresh synthesis) — forge topgen validate
+    cached HLS build, no fresh synthesis) — forge dev topgen validate
     --cdc-result-json, forge test run --golden-comparison-json, and
     forge report's three new sections, all together."""
     cdc_result_path = tmp_path / "cdc_result.json"
@@ -321,7 +323,7 @@ def test_report_throughput_cdc_and_golden_comparison_sections(
 @pytest.mark.skipif(not VPD_HLS_BUILD_ROOT.exists(), reason="no cached vision_pipeline_demo HLS build")
 @pytest.mark.skipif(
     not VPD_FULL_FUNCTIONAL_PROBE_CSV.exists(),
-    reason="no cached full_functional_xsim probe CSV (run `forge verify run "
+    reason="no cached full_functional_xsim probe CSV (run `forge dev verify run "
     ".../full_functional_xsim/verify.flow.yml --probe-log` first)",
 )
 def test_report_release_acceptance_for_full_functional_design(
@@ -331,7 +333,7 @@ def test_report_release_acceptance_for_full_functional_design(
     full-functional design (16x16/2x2-tile, single shared normalizer, both CDC
     crossings) -- real CDC verification (2 real async_fifo crossings)
     plus real runtime throughput (real probe CSV from a prior
-    ``forge verify run --probe-log`` against full_functional_xsim).
+    ``forge dev verify run --probe-log`` against full_functional_xsim).
 
     Deliberately does NOT pass --golden-comparison-json: this design's
     own real content-checked, dual-clock-domain scoreboard (see
@@ -462,3 +464,61 @@ def test_report_topology_carries_real_latency_and_verification_overlays(
 
     explorer_html = (output_dir / "topology_explorer.html").read_text()
     assert '"verification_flow_entry_points":["hit_decoder_xsim"]' in explorer_html
+
+
+_CSYNTH_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<profile>
+  <PerformanceEstimates>
+    <SummaryOfOverallLatency>
+      <Best-caseLatency>{cycles}</Best-caseLatency>
+      <Worst-caseLatency>{cycles}</Worst-caseLatency>
+      <PipelineInitiationInterval>1</PipelineInitiationInterval>
+    </SummaryOfOverallLatency>
+  </PerformanceEstimates>
+</profile>
+"""
+
+
+def test_report_reads_hls_latencies_like_latency_check(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """`fast` is only hinted at 4 cycles; its HLS report says 9, which
+    balances the merge against `slow`."""
+    (tmp_path / "modules.yml").write_text(
+        "modules:\n"
+        "  - {name: slow, kind: hls, top: slow_top, src: [slow.cpp], latency_cycles: 9}\n"
+        "  - {name: fast, kind: hls, top: fast_top, src: [fast.cpp], latency_hint: 4}\n"
+        "  - {name: merge, kind: hls, top: merge_top, src: [merge.cpp], latency_cycles: 1}\n"
+    )
+    design = tmp_path / "design.yml"
+    design.write_text(
+        "part: xcvu13p\n"
+        "clock_period: 4.0\n"
+        "registry: modules.yml\n"
+        "modules:\n"
+        "  - {name: slow, ref: slow}\n"
+        "  - {name: fast, ref: fast}\n"
+        "  - {name: merge, ref: merge}\n"
+        "connections:\n"
+        "  - {from: slow, to: merge, port_map: [[dout, in_slow]]}\n"
+        "  - {from: fast, to: merge, port_map: [[dout, in_fast]]}\n"
+    )
+    report_dir = tmp_path / "build_hls" / "fast" / "solution1" / "syn" / "report"
+    report_dir.mkdir(parents=True)
+    (report_dir / "csynth.xml").write_text(_CSYNTH_XML.format(cycles=9))
+
+    def mismatches(*hls: str) -> tuple:
+        report = _run(
+            capsys, "report", str(design), "--output", str(tmp_path / "report"), "--json", *hls,
+        )
+        check = _run(
+            capsys, "analyze", "latency-check", str(design),
+            "--output", str(tmp_path / "latency_check.md"), "--json", *hls,
+        )
+        return (
+            json.loads(report.stdout)["metrics"]["latency_mismatches"],
+            json.loads(check.stdout)["metrics"]["mismatches"],
+        )
+
+    assert mismatches() == (1, 1)
+    assert mismatches("--hls-build-root", str(tmp_path / "build_hls")) == (0, 0)

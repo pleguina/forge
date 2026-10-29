@@ -49,9 +49,10 @@ _EXTRA_CLOCKS = ("refclk", "sysclk", "usrclk", "txclk", "rxclk", "coreclk")
 _EXTRA_RESETS = ("sysrst", "corerst", "gsr")
 
 #: A trailing ``n`` directly after a reset word means active-low
-#: (``rst_n``, ``resetn``, ``aresetn``, ``presetn``, ``s_axi_aresetn``); a
-#: leading ``n_`` is the other spelling.
-_ACTIVE_LOW_RE = re.compile(r"(?:^n_)|(?:_n$)|(?:(?:rst|reset)n$)", re.I)
+#: (``rst_n``, ``resetn``, ``aresetn``, ``presetn``, ``s_axi_aresetn``), as
+#: do the ``_b``/``_l`` (bar, low) suffixes; a leading ``n_`` is the other
+#: spelling.
+_ACTIVE_LOW_RE = re.compile(r"(?:^n_)|(?:_[nbl]$)|(?:(?:rst|reset)n$)", re.I)
 
 
 def _parts(name: str) -> Tuple[str, ...]:

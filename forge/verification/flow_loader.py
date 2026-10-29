@@ -305,7 +305,7 @@ def parse_generic_flow_fields(
         except RuntimeError as exc:
             raise PluginBootstrapError(
                 str(exc),
-                action="Bootstrap the plugin before loading the flow, or pass --plugin to forge verify commands.",
+                action="Bootstrap the plugin before loading the flow, or pass --plugin to forge dev verify commands.",
                 context={"plugin": _plugin_id, "flow_path": str(flow_path)},
             ) from exc
 
@@ -515,7 +515,7 @@ def load_generic_flow(
     if not flow_path.exists():
         raise MissingArtifactError(
             f"verify.flow.yml not found: {flow_path}",
-            action="Check the flow path or re-run forge verify generate to create verify.flow.yml.",
+            action="Check the flow path or re-run forge dev verify generate to create verify.flow.yml.",
             context={"flow_path": str(flow_path)},
         )
 

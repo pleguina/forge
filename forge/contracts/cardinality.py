@@ -76,7 +76,7 @@ class Bound:
     def satisfied(self, count: int) -> bool:
         if count < self.min:
             return False
-        if self.max != MANY and count > self.max:
+        if isinstance(self.max, int) and count > self.max:
             return False
         return True
 

@@ -1,4 +1,4 @@
-"""End-to-end coverage for the `forge topgen` CLI commands.
+"""End-to-end coverage for the `forge dev topgen` CLI commands.
 
 core/cli/groups/topgen.py is a ~900-line, essentially-0%-covered CLI
 surface — everything in it was only exercised indirectly through
@@ -550,30 +550,42 @@ def test_gen_top_writes_provenance_manifest_alongside_design_ir(
     # plan_hash matches forge build's own (pre-generation) plan for the
     # identical design/contracts — same content, computed via the same
     # build_generation_plan/plan_hash machinery.
-    from forge.core.cli.groups import topgen as topgen_mod
-    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
-    from forge.core.cli.groups.build import _planned_output_artifacts
-    import argparse
-
     from forge.contracts.config import DesignConfig
-    cfg = DesignConfig.load_relaxed(DESIGN_YML)
-    build_args = argparse.Namespace(
-        design=str(DESIGN_YML), mode="verilog", output=str(output),
-        top_name="algo_top", build_dir=str(tmp_path / "build"),
-        ip_root=None, hls_build_root=None, src_root=None,
-        xml_stimulus_tool=None, ip_info=None, system=None, consumer_root=None,
-        contracts_from=str(MODULES_YML),
+    from forge.generation.pipeline import (
+        GenTopOptions, compute_gen_top_plan, planned_output_artifacts,
     )
-    ctx = topgen_mod.compute_gen_top_plan(cfg, DESIGN_YML, build_args, read_only=True)
+    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
+
+    cfg = DesignConfig.load_relaxed(DESIGN_YML)
+    options = GenTopOptions(
+        mode="verilog", output=str(output), top_name="algo_top",
+        build_dir=str(tmp_path / "build"), contracts_from=str(MODULES_YML),
+    )
+    ctx = compute_gen_top_plan(cfg, DESIGN_YML, options, read_only=True)
     plan = build_generation_plan(
         ctx.project, ctx.match_report,
         topology_group_issues=ctx.topology_group_issues,
         cardinality_issues=ctx.cardinality_issues,
         cdc_issues=ctx.cdc_issues,
         compat_mode_modules=ctx.match_report.compat_mode_modules,
-        output_artifacts=_planned_output_artifacts(ctx, build_args),
+        output_artifacts=planned_output_artifacts(ctx, options),
     )
     assert manifest.plan_hash == _plan_hash_of(plan)
+
+
+@pytest.mark.parametrize("given", ["build_dir", "hls_build_root"])
+def test_one_hls_build_flag_names_both_roots(tmp_path: Path, given: str) -> None:
+    from forge.contracts.config import DesignConfig
+    from forge.generation.pipeline import GenTopOptions, compute_gen_top_plan
+
+    hls = tmp_path / "hls_out"
+    options = GenTopOptions(
+        mode="verilog", output=str(tmp_path / "algo_top.v"), top_name="algo_top",
+        contracts_from=str(MODULES_YML), **{given: str(hls)},
+    )
+    ctx = compute_gen_top_plan(DesignConfig.load_relaxed(DESIGN_YML), DESIGN_YML, options, read_only=True)
+    assert ctx.build_root == hls
+    assert ctx.hls_build_root == hls
 
 
 def _copy_passthrough_demo_forge_tree(dest_root: Path) -> Path:
@@ -590,7 +602,7 @@ def test_check_stale_reports_fresh_after_real_gen_top_run(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
     """Real-design end-to-end proof: a real `gen-top` run followed
-    immediately by `forge topgen validate --check-stale` on the same
+    immediately by `forge dev topgen validate --check-stale` on the same
     design/output directory reports fresh — the content-hash-aware path
     confirms freshness via the provenance.json `gen-top` just wrote, not
     just a lucky mtime ordering."""
@@ -791,7 +803,10 @@ def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tu
     return design_yml, modules_yml
 
 
-def test_gen_top_strict_fails_on_undeclared_clock_crossing(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+@pytest.mark.parametrize("flags", [[], ["--strict"]])
+def test_gen_top_fails_on_undeclared_clock_crossing(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, flags: list,
+) -> None:
     design_yml, modules_yml = _write_two_clock_domain_design(tmp_path)
 
     result = _run_topgen(
@@ -799,12 +814,13 @@ def test_gen_top_strict_fails_on_undeclared_clock_crossing(capsys: pytest.Captur
         "--mode", "verilog",
         "--output", str(tmp_path / "algo_top.v"),
         "--contracts-from", str(modules_yml),
-        "--strict",
+        *flags,
     )
 
     assert result.returncode == 1
     assert "undeclared clock/reset domain crossing" in result.stdout
     assert "clk_a" in result.stdout and "clk_b" in result.stdout
+    assert not (tmp_path / "algo_top.v").exists()
 
 
 def test_gen_top_strict_passes_with_declared_cdc_adapter(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

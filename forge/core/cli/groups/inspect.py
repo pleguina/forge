@@ -43,13 +43,20 @@ def _guided_failure(msg: str, *, json_mode: bool) -> "int":
 
 def cmd_inspect(args):
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.core.cli.groups.topgen import _compute_maturity_summary
+    from forge.generation.artifacts import compute_maturity_summary
     from forge.ir import (
         build_project_ir_with_match_report, content_hash, diff_projects, to_json_dict,
     )
 
-    design_path = Path(args.design).expanduser().resolve()
     json_mode = getattr(args, "json", False)
+    if args.design is None:
+        from forge.core.cli._shared import resolve_project_args
+
+        try:
+            resolve_project_args(args)
+        except (FileNotFoundError, ValueError) as e:
+            sys.exit(_guided_failure(str(e), json_mode=json_mode))
+    design_path = Path(args.design).expanduser().resolve()
 
     if not design_path.exists():
         sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
@@ -75,7 +82,7 @@ def cmd_inspect(args):
     # honestly absent (None) rather than fabricated. Module/connection/
     # wiring-method counts are knowable pre-generation and always populate.
     ir_hash = content_hash(project)
-    maturity = _compute_maturity_summary(
+    maturity = compute_maturity_summary(
         cfg, match_report, ir_content_hash=ir_hash,
     )
 
@@ -231,11 +238,11 @@ def cmd_inspect(args):
 def _design_registry(design_path: Path) -> Optional[str]:
     """The modules.yml named by design.yml's own ``registry:`` field, so a
     plain ``forge inspect design.yml`` sees the same contracts that
-    ``forge analyze latency-check`` and generation do."""
-    import yaml
+    ``forge dev analyze latency-check`` and generation do."""
+    from forge.contracts.design_variant import load_design_document
 
     try:
-        design = yaml.safe_load(design_path.read_text()) or {}
+        design = load_design_document(design_path)
     except Exception:  # noqa: BLE001 — resolution reports a broken design itself
         return None
     registry = design.get("registry") if isinstance(design, dict) else None
@@ -364,7 +371,10 @@ def register(sub) -> None:
         "inspect",
         help="Resolve a design into the canonical IR and inspect it (read-only)",
     )
-    p.add_argument("design", help="Path to design.yml")
+    p.add_argument(
+        "design", nargs="?", default=None,
+        help="Path to design.yml (default: the forge.yml project around the current directory)",
+    )
     p.add_argument(
         "--contracts-from",
         help="Path to modules.yml (interface_contract: entries); default: registry: field in design.yml",

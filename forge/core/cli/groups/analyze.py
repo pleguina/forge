@@ -11,7 +11,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 def _emit_analyze_envelope(*, status: str, json_mode: bool, **kwargs) -> None:
-    """Shared tail for every `forge analyze` subcommand (a lighter-touch
+    """Shared tail for every `forge dev analyze` subcommand (a lighter-touch
     pass than the pass/fail-gate commands: `metrics`/`artifacts` matter
     more than `diagnostics` here,
     since these are report-generation commands, not verification gates).
@@ -89,7 +89,7 @@ def cmd_hls_report(args) -> None:
 
 def cmd_latency_check(args) -> None:
     """Static latency mismatch checker from design.yml topology."""
-    from forge.analysis.latency_static.graph import build_graph, resolve_conn_map
+    from forge.analysis.latency_static.graph import build_resolved_graph
     from forge.analysis.latency_static.balance import resolve_auto_delays
     from forge.analysis.latency_static.checker import check_merge_points
     from forge.analysis.latency_static.reporter import render_markdown
@@ -99,31 +99,13 @@ def cmd_latency_check(args) -> None:
     output_path = Path(args.output)
     modules_yml = Path(args.contracts_from) if getattr(args, "contracts_from", None) else None
 
-    # Optionally load HLS latency data
-    hls_reports: "dict | None" = None
     hls_root = getattr(args, "hls_build_root", None)
-    if hls_root:
-        hls_root_path = Path(hls_root)
-        if hls_root_path.exists():
-            from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
-            try:
-                raw_reports = collect_reports(hls_root_path)
-                hls_reports = latency_map_from_reports(raw_reports)
-            except Exception as exc:
-                print(f"WARNING: could not load HLS reports: {exc}", file=sys.stderr)
-
-    # Best-effort real per-instance connection map, via the same contract
-    # resolution forge.ir.build uses (see resolve_conn_map's docstring) —
-    # resolves exact instance pairing for topology_groups (partition/
-    # instance_assign wiring) and any port_map_ranges/port_map/
-    # contract_wiring connection alike, superseding the graph builder's
-    # own contract-free heuristics wherever it succeeds. None (silently)
-    # when contracts aren't available or don't resolve — same behavior as
-    # before this existed.
-    conn_map = resolve_conn_map(design_path, modules_yml_path=modules_yml) if modules_yml else None
 
     try:
-        graph = build_graph(design_path, modules_yml_path=modules_yml, hls_reports=hls_reports, conn_map=conn_map)
+        graph = build_resolved_graph(
+            design_path, modules_yml_path=modules_yml,
+            hls_build_root=Path(hls_root) if hls_root else None,
+        )
     except Exception as exc:
         _emit_analyze_envelope(
             status="error", json_mode=json_mode,
@@ -312,6 +294,13 @@ def cmd_plot_results(args) -> None:
             output_dir=output_dir,
             reference_csv=reference_csv,
         )
+    except ImportError as exc:
+        _emit_analyze_envelope(
+            status="fail", json_mode=json_mode,
+            diagnostics=[{"severity": "error", "message": str(exc)}],
+        )
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
     except Exception as exc:
         _emit_analyze_envelope(
             status="error", json_mode=json_mode,
@@ -320,12 +309,19 @@ def cmd_plot_results(args) -> None:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    missing = [spec.name for spec in specs if output_dir / f"{spec.name}.png" not in written]
     _emit_analyze_envelope(
-        status="pass", json_mode=json_mode,
+        status="fail" if missing else "pass", json_mode=json_mode,
         artifacts=[str(p) for p in written],
         metrics={"figures": len(written)},
+        diagnostics=[
+            {"severity": "error", "message": f"figure {name!r} was not written"} for name in missing
+        ],
     )
     print(f"Wrote {len(written)} figure(s) to {output_dir}/")
+    if missing:
+        print(f"ERROR: not written: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +363,7 @@ def cmd_dashboard(args) -> None:
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge analyze`` sub-parser and all its commands."""
+    """Register the ``forge dev analyze`` sub-parser and all its commands."""
     import argparse
 
     p_analyze = sub.add_parser(
@@ -385,22 +381,22 @@ def register(sub) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  forge analyze hls-report --hls-build-root build_hls"
+            "  forge dev analyze hls-report --hls-build-root build_hls"
             " --output out/reports/hls_summary\n"
-            "  forge analyze latency-check plugins/myplugin/designs/design.yml"
+            "  forge dev analyze latency-check plugins/myplugin/designs/design.yml"
             " --contracts-from plugins/myplugin/modules.yml"
             " --hls-build-root build_hls"
             " --output out/reports/latency_check.md\n"
-            "  forge analyze runtime-latency"
+            "  forge dev analyze runtime-latency"
             " --probe-csv out/probes/probes.csv"
             " --probe-pairs 'mymod:in_valid:out_valid'"
             " --output out/reports/runtime_latency.md\n"
-            "  forge analyze plot-results"
+            "  forge dev analyze plot-results"
             " --config plot_config.yml"
             " --observed observed.csv"
             " --reference expected.csv"
             " --output out/plots\n"
-            "  forge analyze dashboard"
+            "  forge dev analyze dashboard"
             " --input out/reports"
             " --output out/dashboard\n"
         ),
@@ -456,7 +452,7 @@ def register(sub) -> None:
     )
     p_rt.add_argument(
         "--probe-csv", required=True, metavar="FILE",
-        help="CSV with columns: cycle, signal, value (written by forge verify run)",
+        help="CSV with columns: cycle, signal, value (written by forge dev verify run)",
     )
     p_rt.add_argument(
         "--probe-format", choices=["long", "wide"], default="long",

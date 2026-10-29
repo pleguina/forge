@@ -33,7 +33,7 @@ def resolve_framework_resources() -> "dict[str, dict[str, object]]":
     """Return ``{key: {"path": str, "exists": bool}}`` for known framework
     resource files/directories.
 
-    Shared by ``forge core resources`` and ``forge doctor``.
+    Shared by ``forge dev core resources`` and ``forge doctor``.
     """
     import forge.hls as _hls
     import forge.contracts as _contracts
@@ -237,13 +237,13 @@ def cmd_verify_contract(args):
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge core`` subparser and its commands."""
+    """Register the ``forge dev core`` subparser and its commands."""
     import argparse
 
     p_core = sub.add_parser("core", help="Shared schema, CLI, and plugin utilities")
     core_sub = p_core.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    # forge core resources
+    # forge dev core resources
     p_resources = core_sub.add_parser(
         "resources", help="Print installed framework resource paths",
     )
@@ -257,7 +257,7 @@ def register(sub) -> None:
     )
     p_resources.set_defaults(func=cmd_resources)
 
-    # forge core verify-contract
+    # forge dev core verify-contract
     p_vc = core_sub.add_parser(
         "verify-contract",
         help="Verify ip_interface.yaml contract(s) against ip_info.yaml",

@@ -130,7 +130,13 @@ def generate_plots(
 
     Returns
     -------
-    List of paths of successfully written PNG files.
+    List of paths of successfully written PNG files; a figure that fails to
+    render is reported on stderr and left out.
+
+    Raises
+    ------
+    ImportError
+        matplotlib is not installed.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -138,17 +144,14 @@ def generate_plots(
     reference = _load_csv(reference_csv) if reference_csv else None
 
     _mpl, plt = _try_import_matplotlib()
+    if plt is None:
+        raise ImportError(
+            'matplotlib is not installed; install it with: pip install "forge[plot]"'
+        )
     written: List[Path] = []
 
     for spec in specs:
         out_path = output_dir / f"{spec.name}.png"
-        if plt is None:
-            print(
-                f"  [skip] {spec.name}: matplotlib not installed "
-                "(pip install matplotlib)",
-                file=sys.stderr,
-            )
-            continue
         try:
             _render_figure(plt, spec, observed, reference, out_path)
             written.append(out_path)

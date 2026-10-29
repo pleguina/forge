@@ -108,30 +108,30 @@ instances, 1 clock, 2 flows):
 ```bash
 pip install -e forge/
 
-forge topgen validate           plugins/vision_pipeline_demo/forge/designs/design.yml
-forge topgen validate-registry  plugins/vision_pipeline_demo/forge/modules.yml
+forge dev topgen validate           plugins/vision_pipeline_demo/forge/designs/design.yml
+forge dev topgen validate-registry  plugins/vision_pipeline_demo/forge/modules.yml
 
 # Requires Vitis HLS on PATH:
-forge hls gen-tcl --hls-config plugins/vision_pipeline_demo/forge/modules.yml \
+forge dev hls gen-tcl --hls-config plugins/vision_pipeline_demo/forge/modules.yml \
   --output-dir build_hls_vision_pipeline_demo
-forge hls run --registry plugins/vision_pipeline_demo/forge/modules.yml \
+forge dev hls run --registry plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo --stages csim,synth \
   --modules pixel_normalizer
 
-forge topgen gen-top plugins/vision_pipeline_demo/forge/designs/design.yml \
+forge dev topgen gen-top plugins/vision_pipeline_demo/forge/designs/design.yml \
   --mode verilog \
   --consumer-root . \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo \
   --output gen-top/design_vision_pipeline_quickstart/algo_top.v
 
-forge verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+forge dev verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml
 python3 plugins/vision_pipeline_demo/forge/verify/tools/gen_stimulus.py \
   --flow quickstart_pipeline_xsim --event-id 0
-forge verify doctor plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+forge dev verify doctor plugins/vision_pipeline_demo/forge/verify/design.verification.yml
 
 # Requires Vivado xsim on PATH:
-forge verify run plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml \
+forge dev verify run plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml \
   --plugin vision_pipeline_demo --consumer-root .
 ```
 
@@ -146,7 +146,7 @@ fixtures — use the real shortcut script from the repo root:
 
 It builds all 3 HLS modules, gen-tops all 8 designs, regenerates every
 verification flow, drives each flow's own `gen_stimulus_*.py`, runs
-`forge verify doctor`, then runs all 9 flows — checking the two negative
+`forge dev verify doctor`, then runs all 9 flows — checking the two negative
 fixtures for their *expected* failure rather than treating it as a bug.
 See `docs/tutorials/vision-pipeline-full-design.md` for the full
 walkthrough, including how to run any one design/flow manually.

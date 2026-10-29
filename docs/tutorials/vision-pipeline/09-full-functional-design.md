@@ -88,7 +88,7 @@ Zero dropped, zero duplicated, zero full events on either FIFO — real
 conservation confirmed at a scale 4× chapter 07's own 8×8 test.
 
 ```bash
-forge analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_full_functional.yml \
+forge dev analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_full_functional.yml \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo
 ```

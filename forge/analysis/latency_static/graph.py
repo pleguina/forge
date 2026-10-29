@@ -54,6 +54,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from forge.analysis.latency_model import LatencyProvenance, LatencyValue
+from forge.contracts.design_variant import load_design_document
 from forge.ir.identifiers import resolved_instance_id
 
 
@@ -355,7 +356,7 @@ def _resolved_registry_path(design_path: Path) -> Optional[Path]:
     """The registry path design.yml's own `registry:` field resolves to,
     or None if it doesn't declare one — used to decide whether a caller's
     `modules_yml_path` override actually differs (see build_graph)."""
-    design = _load_yaml(design_path)
+    design = load_design_document(design_path)
     reg_field = design.get("registry")
     if not reg_field:
         return None
@@ -459,6 +460,33 @@ def build_graph(
     return _build_graph_from_ir(design_path, hls_reports, conn_map=conn_map)
 
 
+def build_resolved_graph(
+    design_path: Path,
+    modules_yml_path: Optional[Path] = None,
+    hls_build_root: Optional[Path] = None,
+    conn_map: "Optional[Dict[tuple, list]]" = None,
+) -> LatencyGraph:
+    """The latency graph of *design_path* as generation sees it.
+
+    HLS modules take their latency from the reports under *hls_build_root*
+    when it exists, and instance pairing comes from *conn_map*, or from
+    :func:`resolve_conn_map` when none is given. ``forge dev analyze
+    latency-check``, ``forge report``, ``forge check`` and
+    ``delay_cycles: auto`` all build the graph here, so they agree on the
+    same design.
+    """
+    hls_reports = None
+    if hls_build_root is not None and Path(hls_build_root).is_dir():
+        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
+
+        hls_reports = latency_map_from_reports(collect_reports(Path(hls_build_root)))
+    if conn_map is None:
+        conn_map = resolve_conn_map(design_path, modules_yml_path=modules_yml_path)
+    return build_graph(
+        design_path, modules_yml_path=modules_yml_path, hls_reports=hls_reports, conn_map=conn_map,
+    )
+
+
 def _build_graph_from_ir(
     design_path: Path,
     hls_reports: Optional[Dict[str, int]] = None,
@@ -495,6 +523,7 @@ def _build_graph_from_ir(
         lat_hint = timing.latency_hint if timing else None
         is_var = timing.variable_latency if timing else False
         declaration = timing.latency if timing else None
+        lat: Optional[LatencyValue]
         if declaration is not None:
             # A structured latency: {kind: ...} block is
             # explicit and authoritative — takes precedence over the flat
@@ -644,7 +673,7 @@ def _build_graph_legacy(
     `modules_yml_path` override that genuinely differs from design.yml's
     own `registry:` field — never observed in real/documented usage, but
     the public `build_graph` signature has always allowed it."""
-    design = _load_yaml(design_path)
+    design = load_design_document(design_path)
 
     if modules_yml_path is not None:
         registry = _load_yaml(modules_yml_path)

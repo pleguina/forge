@@ -45,6 +45,7 @@ from forge.project.evidence import (
     evidence_list,
     weakest_confidence,
 )
+from forge.project.discovery import DiscoveryResult
 from forge.project.status import ProjectStatus, evaluate
 
 #: Target kinds, as the prefix a user types (``clock:clk``) or the shape the
@@ -174,6 +175,12 @@ def explain(target: str, root: "Path | str" = ".", *,
         return _explain_diagnostic(target, subject, status or _try_evaluate(root))
 
     resolved = status or evaluate(root)
+    if resolved.config is not None and resolved.config.authored:
+        raise UnknownTarget(
+            f"cannot explain {target!r}: modules, ports and connections are explained "
+            f"from source discovery, and this project names its own design. "
+            f"`forge inspect` shows how that design resolves."
+        )
     if resolved.discovery is None:
         raise UnknownTarget(
             f"cannot explain {target!r}: there is no FORGE project at {root}. "
@@ -274,10 +281,17 @@ def _explain_diagnostic(
     return explanation
 
 
+def _discovery(status: ProjectStatus) -> DiscoveryResult:
+    # explain() has refused a project without discovered sources before
+    # dispatching to the per-target explainers.
+    assert status.discovery is not None
+    return status.discovery
+
+
 # ── Modules ───────────────────────────────────────────────────────────────
 
 def _explain_module(target: str, name: str, status: ProjectStatus) -> Explanation:
-    discovery = status.discovery
+    discovery = _discovery(status)
     unit = discovery.unit(name)
     if unit is None:
         candidates = ", ".join(sorted(u.name for u in discovery.units)[:8]) or "(none)"
@@ -337,7 +351,7 @@ def _explain_module(target: str, name: str, status: ProjectStatus) -> Explanatio
 
 def _explain_port(target: str, endpoint: str, status: ProjectStatus) -> Explanation:
     """The plan's worked example: why is this port wired where it is?"""
-    discovery = status.discovery
+    discovery = _discovery(status)
     module_name, _, port_name = endpoint.partition(".")
     unit = discovery.unit(module_name)
     if unit is None:
@@ -377,17 +391,17 @@ def _explain_port(target: str, endpoint: str, status: ProjectStatus) -> Explanat
             explanation.section("Resolved connection", evidence_lines)
         explanation.evidence.extend(ir_evidence)
     else:
-        for connection in discovery.connections:
-            if endpoint in (connection.producer, connection.consumer):
-                other = (connection.consumer if endpoint == connection.producer
-                         else connection.producer)
+        for inferred in discovery.connections:
+            if endpoint in (inferred.producer, inferred.consumer):
+                other = (inferred.consumer if endpoint == inferred.producer
+                         else inferred.producer)
                 explanation.section("Inferred connection", [
                     other,
                     "not yet resolved through the IR — this is what `forge adopt` "
                     "inferred from the sources",
                 ])
-                explanation.section("Why", [e.describe() for e in connection.evidence])
-                explanation.evidence.extend(connection.evidence)
+                explanation.section("Why", [e.describe() for e in inferred.evidence])
+                explanation.evidence.extend(inferred.evidence)
                 break
 
     # A refusal is a decision too, and the one most worth explaining.
@@ -629,7 +643,7 @@ def _build_ir(status: ProjectStatus):
 def _explain_clock_or_reset(
     target: str, name: str, status: ProjectStatus, kind: str,
 ) -> Explanation:
-    discovery = status.discovery
+    discovery = _discovery(status)
     pool = discovery.clocks if kind == KIND_CLOCK else discovery.resets
     candidate = next((c for c in pool if c.name == name), None)
     if candidate is None:
@@ -659,10 +673,9 @@ def _explain_clock_or_reset(
         level = "low" if candidate.active_low else "high"
         explanation.section("Active level", [
             f"active {level}, read from the port name",
-            "FORGE's generators wire every module reset to one top-level "
-            "active-high ap_rst net and do not invert it"
+            "the generated top level drives it with its active-high ap_rst inverted"
             if candidate.active_low else
-            "matches the polarity the generated top level drives",
+            "the generated top level drives it with its active-high ap_rst",
         ])
 
     others = [c.name for c in pool if c.name != candidate.name]
@@ -680,7 +693,7 @@ def _explain_hls(target: str, name: str, status: ProjectStatus) -> Explanation:
     reports the prediction *as* a prediction — including the predictor's own
     warnings, which are the honest record of what it could not resolve.
     """
-    discovery = status.discovery
+    discovery = _discovery(status)
     candidate = next(
         (c for c in discovery.hls_candidates if c.top == name or c.path.stem == name), None)
     if candidate is None:
@@ -759,7 +772,7 @@ def _add_hls_maturity(explanation: Explanation, candidate, status: ProjectStatus
 
     if not is_at_least(assessment.level, RECONCILED) or assessment.reconciliation is None:
         explanation.section("Next", [
-            "run `forge hls run --stages csim,synth` so the real RTL ports are known, "
+            "run `forge dev hls run --stages csim,synth` so the real RTL ports are known, "
             "then re-run this command to see them reconciled against the prediction",
         ])
         return
@@ -841,7 +854,7 @@ def _producing_command(path: Path, status: ProjectStatus) -> str:
     if status.paths.generated_root in parents or path.parent == status.paths.generated_root:
         return "forge build"
     if status.paths.contract_root in parents or path.parent == status.paths.contract_root:
-        return "forge adopt (or `forge contract infer`)"
+        return "forge adopt (or `forge dev contract infer`)"
     if status.paths.project_config_root in parents or path.parent == status.paths.project_config_root:
         return "forge adopt"
     if status.paths.report_root in parents or path.parent == status.paths.report_root:

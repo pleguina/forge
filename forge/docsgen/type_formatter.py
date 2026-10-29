@@ -62,7 +62,9 @@ def format_type(tp: Any) -> str:
 def _format_union(args: "tuple[Any, ...]") -> str:
     non_none = [a for a in args if a is not _NoneType]
     is_optional = len(non_none) != len(args)
-    rendered = [format_type(a) for a in non_none]
+    # Sorted: equal unions share one cached object whose member order is
+    # whichever spelling was created first, anywhere in the process.
+    rendered = sorted(format_type(a) for a in non_none)
 
     if is_optional and len(rendered) == 1:
         return f"Optional[{rendered[0]}]"

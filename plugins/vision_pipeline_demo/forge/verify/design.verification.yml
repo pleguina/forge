@@ -2,10 +2,10 @@
 # Vision Pipeline Demo — Verification Design Contract
 # ═══════════════════════════════════════════════════════════════════════
 #
-#   forge topgen gen-top   plugins/vision_pipeline_demo/forge/designs/design.yml --mode verilog ...
-#   forge verify generate  plugins/vision_pipeline_demo/forge/verify/design.verification.yml
-#   forge verify doctor    plugins/vision_pipeline_demo/forge/verify/design.verification.yml
-#   forge verify run       plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml --plugin vision_pipeline_demo
+#   forge dev topgen gen-top   plugins/vision_pipeline_demo/forge/designs/design.yml --mode verilog ...
+#   forge dev verify generate  plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+#   forge dev verify doctor    plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+#   forge dev verify run       plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml --plugin vision_pipeline_demo
 #
 # pixel_normalizer is never verified through a standalone `single_module_rtl`
 # flow: that flow kind's generated testbench drives the raw

@@ -1,4 +1,4 @@
-"""Real end-to-end xsim coverage for `forge verify run` / `prepare`.
+"""Real end-to-end xsim coverage for `forge dev verify run` / `prepare`.
 
 test_verify_cli_commands.py deliberately stayed away from `run`/`generate`/
 `prepare` because they need a full gen-top'd canonical layout and a real
@@ -21,6 +21,7 @@ import pytest
 
 from forge.core.cli.main import build_parser
 import forge.verification.__main__ as verify_cli
+from forge.verification.run import bootstrap_for_flow
 
 pytestmark = pytest.mark.integration
 
@@ -34,13 +35,13 @@ skip_without_xsim = pytest.mark.skipif(
 
 
 @pytest.fixture
-def consumer_root(tmp_path: Path) -> Path:
+def consumer_root(tmp_path: Path, prepare_plugin_flows) -> Path:
     """An isolated copy of plugins/passthrough_demo, gen-top'd into place.
 
     Mirrors the real, documented workflow (see the header comment of
     plugins/passthrough_demo/forge/verify/design.verification.yml) but
-    rooted at tmp_path instead of the repo, so `forge topgen gen-top` and
-    `forge verify generate/run` write only into scratch space.
+    rooted at tmp_path instead of the repo, so `forge dev topgen gen-top` and
+    `forge dev verify generate/run` write only into scratch space.
     """
     dest_plugin = tmp_path / "plugins" / "passthrough_demo"
     shutil.copytree(
@@ -57,6 +58,7 @@ def consumer_root(tmp_path: Path) -> Path:
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     ])
     parsed.func(parsed)  # raises SystemExit only on failure; let it propagate
+    prepare_plugin_flows(tmp_path / "plugins/passthrough_demo/forge/verify/design.verification.yml", tmp_path)
 
     return tmp_path
 
@@ -167,7 +169,7 @@ def test_run_backend_populates_enriched_execution_result_fields(
     from forge.verification.flow_loader import load_generic_flow
     from forge.verification.runtime_context import RuntimeContext
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
     adapter = get_adapter(cfg.backend)
     ctx = RuntimeContext(work_dir=flow_yml.parent / "xsim_work")
@@ -210,7 +212,7 @@ def test_run_backend_compile_failure_reports_compile_stage(
     from forge.verification.flow_loader import load_generic_flow
     from forge.verification.runtime_context import RuntimeContext
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
     adapter = get_adapter(cfg.backend)
     ctx = RuntimeContext(work_dir=flow_yml.parent / "xsim_work")
@@ -325,7 +327,7 @@ def test_identity_dataset_adapter_drives_a_real_passing_run(
         / "plugins/passthrough_demo/forge/verify/schemas/data/passthrough_demo_golden.xml"
     )
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_dir / "verify.flow.yml"))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_dir / "verify.flow.yml"))
 
     from forge.verification.dataset_adapter import DatasetSource, get_dataset_adapter
     from forge.verification.dataset_format import XmlDatasetLoader

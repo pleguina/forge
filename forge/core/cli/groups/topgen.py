@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import copy
 import dataclasses
-import json
 import os
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,21 +13,19 @@ from forge.contracts.unpacker import unpack_ip_archives
 from forge.contracts.parser import collect_all, write_summary
 from forge.contracts.matcher import load_ip_info, auto_match_ports
 from forge.contracts.contract_loader import (
-    drain_contract_conflicts,
     load_contracts_for_design,
     synthesize_ip_info,
 )
-from forge.generation.generators.structural_vhdl import write_structural_vhdl
-from forge.generation.generators.structural_verilog import write_structural_verilog
-from forge.generation.generators.block_design import write_bd_tcl
 from forge.generation.generators.sv_testbench_generator import generate_sv_testbench
-from forge.generation.generators.design_parameters import write_design_parameters
+from forge.generation.pipeline import (
+    GenerationRefused,
+    GenTopOptions,
+    compute_gen_top_plan,
+    gate_failure,
+    generate_top,
+    planned_output_artifacts,
+)
 from forge.generation.validation import validate_design, validate_registry
-from forge.generation.support_rtl import SUPPORT_RTL_BY_TRANSFORMATION, resolve_support_rtl
-from forge.ir.build import assemble_project_ir, build_tie_off_connections
-from forge.ir.model import ResolvedTopLevelPort
-from forge.ir.project import project_to_conn_map
-from forge.ir.serialize import content_hash as ir_content_hash_of, to_json_dict
 from forge.core.diagnostics import ATGDiagnosticReport
 from forge.core.stale_detection import (
     check_top_gen_staleness,
@@ -42,9 +37,6 @@ from forge.core.cli._shared import (
     consumer_root as _consumer_root,
     resolve_path as _resolve_path,
     remove_path as _remove_path,
-    match_patterns as _match_patterns,
-    sort_entries as _sort_entries,
-    resolve_interface_metadata as _resolve_interface_metadata,
     load_verify_flow_entries as _load_verify_flow_entries,
 )
 
@@ -120,248 +112,12 @@ def _validators_to_envelope(*validators_with_prefix, metrics: Optional[dict] = N
     )
 
 
-def _filter_unaccounted(port_list, patterns):
-    """Return entries from *port_list* not matched by any fnmatch *pattern*.
-
-    *port_list* is a list of ``(instance, port, width)`` tuples.
-    *patterns* is a list of ``instance.port`` glob patterns.
-    Returns the subset of *port_list* that no pattern covers.
-    """
-    from fnmatch import fnmatch
-    unaccounted = []
-    for inst, port, width in port_list:
-        key = f"{inst}.{port}"
-        if not any(fnmatch(key, pat) for pat in patterns):
-            unaccounted.append((inst, port, width))
-    return unaccounted
-
-
-def _compute_maturity_summary(
-    cfg, match_report, report: Optional[dict] = None, *, ir_content_hash: Optional[str] = None,
-) -> dict:
-    """Module/connection/port maturity summary — factored out of
-    ``cmd_gen_top``'s inline ``maturity`` dict
-    so ``forge inspect`` can share it without running the generator.
-
-    ``report`` is the generator's own open/tied-port accounting
-    (``cmd_gen_top`` always has it). ``forge inspect`` never runs the
-    generator, so it always passes ``report=None`` — the port-accounting
-    fields and ``strict_pass`` then stay honestly absent (``None``) rather
-    than fabricated, since they cannot be known without the generator's
-    own port report. Module/connection/wiring-method counts are knowable
-    from *cfg*/*match_report* alone and always populate.
-
-    *ir_content_hash* is the canonical IR this summary describes — every
-    generated report records which resolved design it was built from
-    (Phase G4), so a report found on disk months later can be tied back to
-    an exact design rather than to a filename and a timestamp. Optional
-    because a caller without a ``ResolvedProject`` in hand must be able to
-    leave it honestly absent rather than invent one.
-    """
-    summary: dict = {
-        "modules": {
-            "total": len(cfg.modules),
-            "contract_driven": len(match_report.contract_driven_modules),
-            "compat_mode": len(match_report.compat_mode_modules),
-            # The per-module name lists, not just their counts, so `forge
-            # report`'s Markdown section and the design explorer's
-            # per-module maturity overlay both source from the same lists
-            # instead of recomputing them differently.
-            "contract_driven_names": sorted(match_report.contract_driven_modules),
-            "compat_mode_names": sorted(match_report.compat_mode_modules),
-        },
-        "connections": dict(match_report.wiring_method_counts),
-        "ir_content_hash": ir_content_hash,
-    }
-
-    if report is None:
-        summary["ports"] = None
-        summary["strict_pass"] = None
-        return summary
-
-    open_outputs = report.get("open_outputs", [])
-    tied_inputs = report.get("tied_to_zero", [])
-    unaccounted_open = _filter_unaccounted(open_outputs, cfg.allowed_unconnected.open_outputs)
-    unaccounted_tied = _filter_unaccounted(tied_inputs, cfg.allowed_unconnected.tied_inputs)
-
-    summary["ports"] = {
-        "open_outputs": len(open_outputs),
-        "tied_inputs": len(tied_inputs),
-        "open_accounted": len(open_outputs) - len(unaccounted_open),
-        "tied_accounted": len(tied_inputs) - len(unaccounted_tied),
-    }
-    summary["strict_pass"] = (
-        not match_report.has_compat_modules()
-        and match_report.wiring_method_counts.get("auto_match", 0) == 0
-        and len(unaccounted_open) == 0
-        and len(unaccounted_tied) == 0
-    )
-    return summary
-
-
-def render_maturity_markdown(maturity: dict) -> str:
-    """Render a `_compute_maturity_summary` dict as Markdown — pure
-    presentation over an already-computed summary, no new maturity logic
-    (`forge report`'s maturity/compatibility
-    report section, shared with `forge inspect` rather than duplicated)."""
-    modules = maturity["modules"]
-    lines = [
-        "# Contract maturity",
-        "",
-        f"- **modules**: {modules['total']} total, "
-        f"{modules['contract_driven']} contract-driven, "
-        f"{modules['compat_mode']} compat-mode",
-    ]
-    connections = maturity.get("connections") or {}
-    if connections:
-        conn_str = ", ".join(f"{k}={v}" for k, v in connections.items())
-        lines.append(f"- **connections**: {conn_str}")
-
-    ir_hash = maturity.get("ir_content_hash")
-    if ir_hash:
-        lines.append(f"- **resolved design (IR content hash)**: `{ir_hash}`")
-
-    ports = maturity.get("ports")
-    if ports is None:
-        lines.append(
-            "- **ports**: not available (no generator run — see `forge build --apply`"
-            " or `topgen gen-top`)"
-        )
-    else:
-        lines.append(
-            f"- **ports**: {ports['open_outputs']} open output(s) "
-            f"({ports['open_accounted']} accounted), "
-            f"{ports['tied_inputs']} tied input(s) ({ports['tied_accounted']} accounted)"
-        )
-
-    strict_pass = maturity.get("strict_pass")
-    if strict_pass is None:
-        lines.append("- **strict mode**: unknown (no generator run)")
-    else:
-        lines.append(f"- **strict mode**: {'PASS' if strict_pass else 'FAIL'}")
-
-    return "\n".join(lines) + "\n"
-
-
-def validate_generated_contracts(
-    port_map: dict,
-    probe_map: dict,
-    tb_bindings_path: Path,
-    design_parameters_path: Path,
-) -> None:
-    """Validate that generated contract artifacts are aligned with the same DUT shape."""
-    if not port_map:
-        raise ValueError("port_map.yaml was not generated; cannot validate generated contracts")
-    if not probe_map:
-        raise ValueError("probe_map.yaml was not generated; cannot validate generated contracts")
-    if not tb_bindings_path.exists():
-        raise FileNotFoundError(f"tb_bindings.svh not found at {tb_bindings_path}")
-    if not design_parameters_path.exists():
-        raise FileNotFoundError(f"design_parameters.json not found at {design_parameters_path}")
-
-    port_groups = port_map.get("port_groups", {})
-    port_sig_hash = port_map.get("port_signature_hash")
-    if not port_sig_hash:
-        raise ValueError("port_map.yaml is missing port_signature_hash")
-
-    probe_sig_hash = probe_map.get("port_signature_hash")
-    if probe_sig_hash != port_sig_hash:
-        raise ValueError(
-            f"probe_map.yaml hash {probe_sig_hash!r} does not match "
-            f"port_map.yaml hash {port_sig_hash!r}"
-        )
-
-    tb_bindings_text = tb_bindings_path.read_text()
-    if f"// Port sig hash: {port_sig_hash}" not in tb_bindings_text:
-        raise ValueError(
-            f"tb_bindings.svh at {tb_bindings_path} does not match "
-            f"port_map.yaml hash {port_sig_hash}"
-        )
-
-    for group_name, group_data in port_groups.items():
-        if group_name in {"clock_reset", "bx0", "outputs", "unclassified"}:
-            entries = group_data if isinstance(group_data, list) else []
-        elif isinstance(group_data, dict) and "channels" in group_data:
-            entries = group_data.get("channels", [])
-        elif isinstance(group_data, dict) and "ports" in group_data:
-            entries = list(group_data.get("ports", []))
-            for sub_grp in group_data.get("groups", []):
-                entries = entries + sub_grp.get("ports", [])
-        else:
-            continue
-
-        for entry in entries:
-            name = entry.get("name")
-            if name and name not in tb_bindings_text:
-                raise ValueError(
-                    f"tb_bindings.svh is missing the generated declaration for port {name}"
-                )
-
-    design_params = json.loads(design_parameters_path.read_text())
-    interfaces = design_params.get("interfaces", {})
-    interface_groups_params = interfaces.get("input_groups") or interfaces.get("groups", {})
-    for group_name, group_data in port_groups.items():
-        if group_name in ("clock_reset", "bx0", "outputs", "unclassified"):
-            continue
-        if not isinstance(group_data, dict):
-            continue
-        port_map_count = group_data.get("count", 0)
-        observed_count = interface_groups_params.get(group_name, {}).get("count")
-        if observed_count is not None and observed_count != port_map_count:
-            raise ValueError(
-                f"design_parameters.json interfaces.groups.{group_name}.count="
-                f"{observed_count!r} does not match generated port_map count {port_map_count}"
-            )
-
-    print("  ✓ Generated contracts validated")
-    print(f"    - Port signature hash: {port_sig_hash}")
-    print(
-        "    - port_map.yaml / probe_map.yaml / "
-        "tb_bindings.svh / design_parameters.json are aligned"
-    )
-
-
-def _support_rtl_needed(project) -> "list[str]":
-    """The framework support-RTL filenames this design's *resolved*
-    transformations require, in ``SUPPORT_RTL_BY_TRANSFORMATION``'s
-    declaration order (stable regardless of connection ordering).
-
-    Read from the canonical IR rather than re-scanned out of
-    ``cfg.connections``/``cfg.reset_domains``, which is what this function
-    replaced: the generator emits a RegisterStage/signal_delay/cdc_*
-    instance per *resolved* connection, so a declared ``register_stages:``
-    on a module pair whose ports never matched produces no instance — and
-    used to produce a manifest entry anyway. The IR states the
-    transformations that were actually generated, so the compile list now
-    matches the RTL.
-
-    Reset synchronizers are domain-keyed, not connection-keyed
-    (``ResolvedResetDomain.transformations``) — a reset crossing has no
-    connection to attach to.
-    """
-    kinds = {
-        xform.kind
-        for conn in project.design.connections
-        for xform in conn.transformations
-    }
-    kinds.update(
-        xform.kind
-        for domain in project.design.reset_domains
-        for xform in domain.transformations
-    )
-    return [
-        filename
-        for kind, filename in SUPPORT_RTL_BY_TRANSFORMATION.items()
-        if kind in kinds
-    ]
-
-
-def _discover_verify_design(design_path: Path, args, consumer_root: Path | None) -> Path | None:
+def _discover_verify_design(design_path: Path, args, consumer_root: Path) -> Path | None:
     """The verification contract to resolve the IR's plan against.
 
     ``--verify-design`` wins; otherwise the conventional sibling location
     (``<plugin>/forge/verify/design.verification.yml``) is used when it
-    exists — the same discovery ``forge topgen clean`` already performs, so
+    exists — the same discovery ``forge dev topgen clean`` already performs, so
     a project doesn't have to name the file twice. ``--no-verify`` skips it.
     """
     if getattr(args, "no_verify", False):
@@ -374,7 +130,7 @@ def _discover_verify_design(design_path: Path, args, consumer_root: Path | None)
 
 
 def _attach_verification_plan(
-    project, design_path: Path, args, consumer_root: Path | None, dut_dir: Path,
+    project, design_path: Path, args, consumer_root: Path, dut_dir: Path,
 ) -> None:
     """Resolve this design's verification plan onto the IR it just
     generated from — Phase G3.
@@ -388,7 +144,7 @@ def _attach_verification_plan(
     A contract that fails to load is reported and skipped rather than
     failing the build: verification planning is a description of what was
     generated, and a broken verification contract must not stop the RTL
-    from being written. Whoever runs `forge verify` gets the same load
+    from being written. Whoever runs `forge dev verify` gets the same load
     error from the loader that owns it.
     """
     from forge.ir.verification_plan import build_verification_plan
@@ -419,558 +175,6 @@ def _attach_verification_plan(
                 print(f"    ⚠️  flow '{fl.name}': {fl.unresolved_reason}")
 
 
-def generate_build_manifest(
-    project,
-    ip_info,
-    ip_root,
-    algo_top,
-    design_file,
-    manifest_output,
-    *,
-    project_root: Path | None = None,
-    hls_build_root: Path | None = None,
-    auto_delays=None,
-):
-    """Generate the simulation build manifest with all Verilog source paths.
-
-    *project* is the canonical IR (``forge.ir.model.ResolvedProject``) this
-    build was generated from — the manifest's whole design-side content
-    (which modules exist, their compile files, which framework support RTL
-    the generated top level instantiates) is read from it, so the manifest
-    can never disagree with the RTL that was emitted from the same IR
-    object. Nothing here re-runs matching or re-resolves a declared path.
-
-    Everything else the manifest carries is *build context* the IR
-    deliberately does not model: where an HLS module's generated Verilog
-    landed (*ip_info*/*ip_root*/*hls_build_root* — an artifact of running
-    the tool, not a fact about the design). The framework support RTL is
-    the copy shipped with forge (``forge.generation.support_rtl``);
-    *project_root* is only recorded in the manifest.
-
-    The IR's schema version and content hash are recorded in the manifest
-    so a consumer can tell which resolved design a compile list belongs to
-    — the same identity ``design.ir.json`` and ``provenance.json`` carry.
-    *auto_delays* (an ``AutoDelayResult``) records the depth each
-    ``delay_cycles: auto`` was resolved to, which the design file does not.
-    """
-    import datetime
-
-    def find_ip_verilog_dir(top_name):
-        top_file_matches = sorted(ip_root.rglob(f"{top_name}.v"))
-        for top_file in top_file_matches:
-            if top_file.parent.is_dir():
-                return top_file.parent, top_file.parent.parent.parent
-        return None, None
-
-    manifest = {
-        "project_root": str((project_root or algo_top.parent).resolve()),
-        "design_file": str(design_file.resolve()),
-        "algorithm_top": str(algo_top.resolve()),
-        "top_module": algo_top.stem,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "ir_schema_version": project.schema_version,
-        "ir_content_hash": ir_content_hash_of(project),
-        "verilog_files": [],
-        "include_dirs": [],
-        "modules": {},
-    }
-
-    manifest["verilog_files"].append(str(algo_top.resolve()))
-    manifest["include_dirs"].append(str(algo_top.parent.resolve()))
-
-    if hls_build_root is not None:
-        manifest["hls_build_root"] = str(hls_build_root.resolve())
-
-    if auto_delays is not None:
-        manifest["resolved_auto_delays"] = [
-            {"kind": d.kind, "index": d.index, "src": d.src, "dst": d.dst, "cycles": d.cycles}
-            for d in auto_delays.delays
-        ]
-
-    # Declaration order, not the IR's own name-sorted storage order: the
-    # manifest is a compile list, and its file order is the order the
-    # design file lists its modules in — see
-    # ResolvedModuleDefinition.declaration_order.
-    for module in sorted(project.design.modules, key=lambda m: m.declaration_order):
-        module_name = module.name
-        module_info = {
-            "name": module_name,
-            "top": module.top,
-            "kind": module.kind,
-            "ip_info_key": module.ip_info_key,
-            "verilog_files": [],
-            "include_dirs": [],
-        }
-
-        verilog_dir = None
-
-        # RTL modules — `rtl_sources` is the IR's already-resolved compile
-        # set (declared `src` then `rtl_packages`, absolute), so no
-        # declared path is resolved a second time here.
-        if module.rtl_sources:
-            rtl_files = []
-            for src_path in (Path(p) for p in module.rtl_sources):
-                if src_path.exists():
-                    rtl_files.append(str(src_path.resolve()))
-                    if src_path.parent not in [Path(d) for d in module_info["include_dirs"]]:
-                        module_info["include_dirs"].append(str(src_path.parent.resolve()))
-
-            if rtl_files:
-                module_info["verilog_files"] = rtl_files
-                module_info["rtl_sources"] = rtl_files
-                manifest["verilog_files"].extend(rtl_files)
-                manifest["include_dirs"].extend(module_info["include_dirs"])
-
-        # HLS modules
-        elif module_name in ip_info:
-            verilog_dir, ip_dir = find_ip_verilog_dir(module.top)
-            if verilog_dir and ip_dir:
-                module_info["ip_dir"] = str(ip_dir.resolve())
-
-            ip_dir = ip_root / f"{module.top}_ip"
-
-            if not verilog_dir and ip_dir.exists() and ip_dir.is_dir():
-                verilog_candidates = [
-                    ip_dir / "hdl" / "verilog",
-                    ip_dir / "hdl",
-                    ip_dir / "src",
-                    ip_dir / "verilog",
-                ]
-                for vdir in verilog_candidates:
-                    if vdir.exists() and vdir.is_dir():
-                        verilog_dir = vdir
-                        module_info["ip_dir"] = str(ip_dir.resolve())
-                        break
-
-            if not verilog_dir and hls_build_root is not None:
-                # The on-disk HLS solution directory is named after the
-                # module's *ip_info_key* (the shared IP/registry name an
-                # HLS run is keyed on), not its design.yml instance name —
-                # e.g. instance `dt` synthesizes under `build_hls/dt_interface/`,
-                # not `build_hls/dt/`. Try ip_info_key first; module_name
-                # stays as a fallback for the (common) case where the two
-                # already coincide, and for older build trees keyed by
-                # instance name directly.
-                build_dir_names = list(dict.fromkeys(
-                    name for name in (module.ip_info_key, module_name) if name
-                ))
-                build_candidates = [
-                    hls_build_root / "build_hls" / name / "solution1" / stage / "verilog"
-                    for name in build_dir_names
-                    for stage in ("syn", "sim")
-                ] + [
-                    hls_build_root / name / "solution1" / stage / "verilog"
-                    for name in build_dir_names
-                    for stage in ("syn", "sim")
-                ]
-                for candidate in build_candidates:
-                    if candidate.exists() and candidate.is_dir():
-                        verilog_dir = candidate
-                        module_info["hls_solution_dir"] = str(
-                            candidate.parent.parent.resolve()
-                        )
-                        break
-
-            if verilog_dir:
-                verilog_dirs = [verilog_dir]
-                ip_wrapper_dir = verilog_dir.parent / "ip"
-                if ip_wrapper_dir.exists() and ip_wrapper_dir.is_dir():
-                    verilog_dirs.append(ip_wrapper_dir)
-
-                v_files = []
-                include_dirs = []
-                for source_dir in verilog_dirs:
-                    source_files = [
-                        f
-                        for f in source_dir.glob("*.v")
-                        if "autotb" not in f.name and f.name != "glbl.v"
-                    ]
-                    v_files.extend(source_files)
-                    include_dirs.append(str(source_dir.resolve()))
-
-                module_info["verilog_files"] = [str(f.resolve()) for f in v_files]
-                module_info["include_dirs"] = include_dirs
-                module_info["verilog_dir"] = str(verilog_dir.resolve())
-
-                manifest["verilog_files"].extend(module_info["verilog_files"])
-                manifest["include_dirs"].extend(include_dirs)
-
-        manifest["modules"][module_name] = module_info
-
-    # ── Framework support RTL ──
-    # RegisterStage, signal_delay, slr_crossing_delay and the CDC primitive
-    # family are instantiated in the generated top level, so they have to be
-    # in the compile list for simulation and synthesis. Which of them the
-    # design needs is the IR's answer (_support_rtl_needed); the files are
-    # the ones shipped with forge (forge/rtl/support/), unless the design
-    # already compiles its own file of the same name — see
-    # forge.generation.support_rtl.
-    for found in resolve_support_rtl(_support_rtl_needed(project), manifest["verilog_files"]):
-        manifest["verilog_files"].append(str(found))
-        if str(found.parent) not in manifest["include_dirs"]:
-            manifest["include_dirs"].append(str(found.parent))
-
-    manifest["verilog_files"] = list(dict.fromkeys(manifest["verilog_files"]))
-    manifest["include_dirs"] = list(dict.fromkeys(manifest["include_dirs"]))
-
-    manifest["statistics"] = {
-        "total_verilog_files": len(manifest["verilog_files"]),
-        "total_include_dirs": len(manifest["include_dirs"]),
-        "total_modules": len(manifest["modules"]),
-        "hls_modules": sum(1 for m in manifest["modules"].values() if m["kind"] == "hls"),
-        "rtl_modules": sum(1 for m in manifest["modules"].values() if m["kind"] == "rtl"),
-    }
-
-    with open(manifest_output, "w") as f:
-        json.dump(manifest, f, indent=2)
-
-    print(f"  ✓ Build manifest: {manifest_output}")
-    print(f"    - {manifest['statistics']['total_verilog_files']} Verilog files")
-    print(
-        f"    - {manifest['statistics']['total_modules']} modules "
-        f"({manifest['statistics']['hls_modules']} HLS + "
-        f"{manifest['statistics']['rtl_modules']} RTL)"
-    )
-
-
-def generate_port_map(
-    verilog_path: Path,
-    output_path: Path,
-    interface_metadata: dict | None = None,
-    *,
-    ports: dict[str, tuple[str, int]] | None = None,
-):
-    """Write port_map.yaml from the top-level port list.
-
-    When *ports*
-    is given (``{name: (direction, width)}``, the same shape
-    ``forge.core.utils.hdl_parser._scan_verilog_ports`` returns), it is
-    used directly — this is ``write_structural_verilog``'s own
-    ``report["top_ports"]``, so the resolved top-level port list no longer
-    needs to be independently re-derived by re-parsing the file it just
-    wrote. When *ports* is omitted (the default), behavior is unchanged
-    from before: ``verilog_path`` is scanned via ``_scan_verilog_ports``.
-    """
-    import yaml as _yaml
-    from forge.core.utils.hdl_parser import _scan_verilog_ports
-    from forge.core.utils import port_signature as _sig
-
-    if ports is None:
-        ports = _scan_verilog_ports(verilog_path)
-    if not ports:
-        print(f"  ⚠  Could not parse ports from {verilog_path} — port_map.yaml not written")
-        return None, None
-
-    metadata = _resolve_interface_metadata(interface_metadata)
-    clock_reset, bx0 = [], []
-    outputs, unclassified = [], []
-
-    input_groups = metadata.get("input_groups", {})
-    grouped_inputs: dict[str, list[dict]] = {
-        group_name: []
-        for group_name in input_groups.keys()
-        if not input_groups.get(group_name, {}).get("groups")
-    }
-    grouped_style_cfg: dict[str, list] = {
-        name: cfg["groups"]
-        for name, cfg in input_groups.items()
-        if cfg.get("groups")
-    }
-    grouped_input_defs = [gd for sub_defs in grouped_style_cfg.values() for gd in sub_defs]
-    grouped_style_list = [
-        {
-            "name": group_def["name"],
-            "stimulus_prefix": group_def.get("stimulus_prefix"),
-            "sort": group_def.get("sort", "numeric_suffix"),
-            "ports": [],
-        }
-        for group_def in grouped_input_defs
-    ]
-
-    def _port_width(name: str, default: int = 0) -> int:
-        port = ports.get(name)
-        return port[1] if port else default
-
-    for name, (direction, width) in sorted(ports.items()):
-        entry = {
-            "name": name,
-            "direction": "input" if direction == "in" else "output",
-            "width": width,
-        }
-        if name in metadata.get("clock_reset_ports", []):
-            clock_reset.append(entry)
-        elif name in metadata.get("bx0_ports", []):
-            bx0.append(entry)
-        elif direction == "out":
-            outputs.append(entry)
-        else:
-            assigned = False
-            for grouped_input, group_def in zip(grouped_style_list, grouped_input_defs):
-                if _match_patterns(name, group_def.get("match", [])):
-                    grouped_input["ports"].append(entry)
-                    assigned = True
-                    break
-            if assigned:
-                continue
-            for group_name, group_cfg in input_groups.items():
-                if group_cfg.get("groups"):
-                    continue
-                if _match_patterns(name, group_cfg.get("match", [])):
-                    grouped_inputs[group_name].append(entry)
-                    assigned = True
-                    break
-            if not assigned:
-                unclassified.append(entry)
-
-    for group_name, group_entries in grouped_inputs.items():
-        grouped_inputs[group_name] = _sort_entries(
-            group_entries, input_groups[group_name].get("sort")
-        )
-
-    for grouped_input, group_def in zip(grouped_style_list, grouped_input_defs):
-        grouped_input["ports"] = _sort_entries(grouped_input["ports"], group_def.get("sort"))
-        grouped_input["count"] = len(grouped_input["ports"])
-        grouped_input["width"] = grouped_input["ports"][0]["width"] if grouped_input["ports"] else 0
-
-    for e in outputs:
-        e["group"] = "other"
-        for group_name, group_cfg in metadata.get("output_groups", {}).items():
-            if _match_patterns(e["name"], group_cfg.get("match", [])):
-                e["group"] = group_name
-                break
-
-    port_sig_hash = _sig.compute(ports)
-
-    tier2_probes = copy.deepcopy(metadata.get("tier2_probes", []))
-    for probe in tier2_probes:
-        if probe.get("name") == "mem_ref_hit" and probe.get("width") == 46:
-            probe["width"] = _port_width("mem_out_ref_hit", 46)
-
-    dynamic_port_groups: dict = {}
-    for group_name, group_entries in grouped_inputs.items():
-        group_cfg = input_groups.get(group_name, {})
-        if group_cfg.get("stimulus_groups"):
-            config_like: dict = {
-                "count": len(group_entries),
-                "width": group_entries[0]["width"] if group_entries else 0,
-                "note": group_cfg.get("note", ""),
-                "ports": [{"index": i, **entry} for i, entry in enumerate(group_entries)],
-                "stimulus_groups": [],
-            }
-            cursor = 0
-            for subgroup in group_cfg.get("stimulus_groups", []):
-                sg_count = subgroup.get("count")
-                if sg_count is None and subgroup.get("count_from"):
-                    source_group = grouped_inputs.get(subgroup["count_from"], [])
-                    sg_count = len(source_group)
-                sg_count = int(sg_count or 0)
-                subgroup_ports = group_entries[cursor:cursor + sg_count]
-                config_like["stimulus_groups"].append({
-                    "name": subgroup["name"],
-                    "stimulus_prefix": subgroup.get("stimulus_prefix"),
-                    "ports": [{"index": i, **entry} for i, entry in enumerate(subgroup_ports)],
-                })
-                cursor += sg_count
-            dynamic_port_groups[group_name] = config_like
-        else:
-            dynamic_port_groups[group_name] = {
-                "count": len(group_entries),
-                "channel_width": group_entries[0]["width"] if group_entries else 0,
-                "field_map": group_cfg.get("field_map", {}),
-                "stimulus_prefix": group_cfg.get("stimulus_prefix"),
-                "channels": [{"index": i, **e} for i, e in enumerate(group_entries)],
-            }
-
-    for parent_name, sub_defs in grouped_style_cfg.items():
-        parent_grouped_inputs = [
-            g for g in grouped_style_list
-            if any(g["name"] == gd["name"] for gd in sub_defs)
-        ]
-        all_ports: list = []
-        for rg in parent_grouped_inputs:
-            all_ports.extend(rg["ports"])
-        dynamic_port_groups[parent_name] = {
-            "count": len(all_ports),
-            "ports": all_ports,
-            "groups": parent_grouped_inputs,
-        }
-
-    port_map = {
-        "format_version": "1",
-        "generated_by": "forge gen-top --mode verilog",
-        "source_file": str(verilog_path.resolve()),
-        "top_module": "algo_top",
-        "port_signature_hash": port_sig_hash,
-        "port_groups": {
-            "clock_reset": clock_reset,
-            "bx0": bx0,
-            **dynamic_port_groups,
-            "outputs": outputs,
-            "unclassified": unclassified,
-        },
-        "tier2_probes": tier2_probes,
-    }
-
-    num_nonempty_groups = sum(
-        1
-        for k, v in port_map["port_groups"].items()
-        if k not in ("unclassified",)
-        and (
-            (isinstance(v, list) and v)
-            or (isinstance(v, dict) and v.get("count", 0) > 0)
-        )
-    )
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(_yaml.dump(port_map, default_flow_style=False, sort_keys=False))
-    print(f"  ✓ Port map:  {output_path}")
-    print(f"    - {len(ports)} ports in {num_nonempty_groups} functional groups")
-    print(f"    - Port signature hash: {port_sig_hash}")
-
-    return port_map, port_sig_hash
-
-
-def generate_probe_map(port_map: dict, output_path: Path) -> None:
-    """Generate probe_map.yaml from the already-generated port_map data."""
-    import yaml as _yaml
-
-    port_groups = port_map.get("port_groups", {})
-    output_ports = port_groups.get("outputs", [])
-    tier1 = [
-        {
-            "name": port["name"],
-            "direction": port["direction"],
-            "width": port["width"],
-            "group": port.get("group", "other"),
-            "tier": 1,
-        }
-        for port in output_ports
-    ]
-
-    probe_map = {
-        "format_version": "1",
-        "generated_by": port_map.get("generated_by", "forge gen-top --mode verilog"),
-        "source_file": port_map.get("source_file"),
-        "top_module": port_map.get("top_module", "algo_top"),
-        "port_signature_hash": port_map.get("port_signature_hash"),
-        "probe_tiers": {
-            "tier1": tier1,
-            "tier2": port_map.get("tier2_probes", []),
-        },
-    }
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(_yaml.dump(probe_map, default_flow_style=False, sort_keys=False))
-    print(f"  ✓ Probe map: {output_path}")
-    print(
-        f"    - {len(tier1)} Tier 1 probes, "
-        f"{len(probe_map['probe_tiers']['tier2'])} Tier 2 probes"
-    )
-
-
-def generate_tb_bindings(port_map: dict, output_path: Path) -> None:
-    """Generate tb_bindings.svh from a port_map dict."""
-    lines = []
-    sig_hash = port_map.get("port_signature_hash", "unknown")
-    top_module = port_map.get("top_module", "algo_top")
-    groups = port_map.get("port_groups", {})
-
-    lines.append("// ============================================================")
-    lines.append("// tb_bindings.svh — Generated by forge gen-top")
-    lines.append(f"// Top module   : {top_module}")
-    lines.append(f"// Port sig hash: {sig_hash}")
-    lines.append("// DO NOT EDIT — regenerate: forge gen-top ...")
-    lines.append("// ============================================================")
-    lines.append("")
-
-    def _decl(entry: dict) -> str:
-        w = entry.get("width", 1)
-        name = entry["name"]
-        direction = entry.get("direction", "input")
-        sv_type = "wire" if direction == "output" else "logic"
-        if w == 1:
-            return f"{sv_type} {name};"
-        return f"{sv_type} [{w-1}:0] {name};"
-
-    cr = groups.get("clock_reset", [])
-    if cr:
-        lines.append("// -- clock / reset --")
-        for e in cr:
-            lines.append(_decl(e))
-        lines.append("")
-
-    bx0 = groups.get("bx0", [])
-    if bx0:
-        lines.append("// -- BX0 pulse --")
-        for e in bx0:
-            lines.append(_decl(e))
-        lines.append("")
-
-    SPECIAL_GROUPS = {"clock_reset", "bx0", "outputs", "unclassified"}
-    for group_name, group_data in groups.items():
-        if group_name in SPECIAL_GROUPS:
-            continue
-        if not group_data:
-            continue
-        if isinstance(group_data, dict) and "channels" in group_data:
-            channels = group_data.get("channels", [])
-            w = group_data.get("channel_width", 1)
-            lines.append(f"// -- {group_name} ({len(channels)} × {w}-bit) --")
-            for ch in channels:
-                lines.append(f"logic [{w-1}:0] {ch['name']};")
-            lines.append("")
-        elif isinstance(group_data, dict) and "stimulus_groups" in group_data:
-            ports = group_data.get("ports", [])
-            w = group_data.get("width", 64)
-            lines.append(f"// -- {group_name} ({len(ports)} × {w}-bit) --")
-            for p in ports:
-                lines.append(f"logic [{w-1}:0] {p['name']};")
-            lines.append("")
-        elif isinstance(group_data, dict) and "groups" in group_data:
-            grouped_ports_flat = group_data.get("ports", [])
-            if grouped_ports_flat:
-                lines.append(f"// -- {group_name} --")
-                for e in grouped_ports_flat:
-                    lines.append(_decl(e))
-                lines.append("")
-        elif isinstance(group_data, dict) and "ports" in group_data:
-            ports = group_data.get("ports", [])
-            w = group_data.get("width", 1)
-            lines.append(f"// -- {group_name} ({len(ports)} × {w}-bit) --")
-            for p in ports:
-                lines.append(f"logic [{w-1}:0] {p['name']};")
-            lines.append("")
-
-    outs = groups.get("outputs", [])
-    if outs:
-        lines.append("// -- Outputs (wire — driven by DUT) --")
-        prev_group = None
-        for e in outs:
-            g = e.get("group", "other")
-            if g != prev_group:
-                lines.append(f"// {g}")
-                prev_group = g
-            lines.append(_decl(e))
-        lines.append("")
-
-    unclassified = groups.get("unclassified", [])
-    if unclassified:
-        lines.append("// -- Unclassified DUT ports --")
-        for e in unclassified:
-            lines.append(_decl(e))
-        lines.append("")
-
-    lines.append("// -- Simulation helpers (not DUT ports) --")
-    lines.append("integer cycle_count;")
-    lines.append("integer out_csv_fd;")
-    lines.append("integer probe_csv_fd;")
-    lines.append("")
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\n".join(lines) + "\n")
-    print(f"  ✓ TB bindings: {output_path}")
-
-
 # ---------------------------------------------------------------------------
 # Command implementations
 # ---------------------------------------------------------------------------
@@ -981,7 +185,7 @@ def cmd_clean(args):
         design_path = Path(args.design).expanduser().resolve()
         if not design_path.exists():
             print(f"❌ Design file not found: {design_path}", file=sys.stderr)
-            print("   → Check the design.yml path and re-run forge topgen clean.", file=sys.stderr)
+            print("   → Check the design.yml path and re-run forge dev topgen clean.", file=sys.stderr)
             sys.exit(1)
 
         c_root = _consumer_root(design_path, getattr(args, "consumer_root", None))
@@ -1252,9 +456,9 @@ def cmd_validate(args):
         if not design_path.exists():
             _fail_early(f"Design file not found: {design_path}")
 
-        import yaml as _yaml
+        from forge.contracts.design_variant import load_design_document
 
-        _raw_design = _yaml.safe_load(design_path.read_text()) or {}
+        _raw_design = load_design_document(design_path)
         _registry_ref = _raw_design.get("registry")
         validators: List[Any] = []
 
@@ -1334,9 +538,9 @@ def cmd_validate(args):
                     _cdc_issues = verify_cdc(cfg, _cdc_contracts, _match_report, _conn_map, _global_nets)
                     cdc_diagnostics = [
                         {
-                            "severity": "warning", "code": issue.code or "ATG023",
+                            "severity": "error", "code": issue.code or "ATG023",
                             "category": "cdc", "message": f"[{issue.connection}] {issue.message}",
-                            "action": "Add a matching 'cdc:' block, or run gen-top --strict for a hard failure.",
+                            "action": "Add a matching 'cdc:' block to the connection.",
                         }
                         for issue in _cdc_issues
                     ]
@@ -1368,13 +572,11 @@ def cmd_validate(args):
             if not json_mode:
                 print("\n🔌 CDC crossing check:")
                 for d in cdc_diagnostics:
-                    print(f"  ⚠️  [{d['code']}] {d['message']}")
-            if strict:
-                if not json_mode:
-                    print(f"\n⛔ Strict mode: treating {len(cdc_diagnostics)} CDC warning(s) as errors")
-                envelope = _validators_to_envelope(*validators)
-                envelope.diagnostics.extend(cdc_diagnostics)
-                sys.exit(emit(envelope, json_mode=json_mode, strict=True))
+                    print(f"  ❌ [{d['code']}] {d['message']}")
+            envelope = _validators_to_envelope(*validators)
+            envelope.diagnostics.extend(cdc_diagnostics)
+            envelope.status = "fail"
+            sys.exit(emit(envelope, json_mode=json_mode, strict=strict))
 
         stale_diagnostic: Optional[dict] = None
         if getattr(args, "check_stale", False):
@@ -1505,275 +707,8 @@ def cmd_validate_registry(args):
         sys.exit(envelope.exit_code())
 
 
-@dataclass
-class GenTopPlanContext:
-    """Everything ``cmd_gen_top`` computes before its dry-run/real-write
-    fork (design/path/contract/ip_info resolution, matching, the 3
-    structured strict-check issue lists, and the pre-generation IR) —
-    bundled so ``forge build`` can reuse the exact
-    same computation without cmd_gen_top's sys.exit-based control flow.
-    Adding a field here must never change any existing print/exit
-    behavior in ``cmd_gen_top`` — this is pure extraction, not a behavior
-    change (see ``compute_gen_top_plan``'s docstring)."""
-    cfg: DesignConfig
-    design_path: Path
-    c_root: Path
-    ip_root: Path
-    build_root: Path
-    hls_build_root: Path
-    src_root: Path
-    xml_stimulus_tool: Optional[Path]
-    output_dir: Path
-    ip_info_file: Path
-    contracts_from: Optional[str]
-    contracts_from_path: Optional[Path]
-    contracts: Optional[Dict[str, Any]]
-    ip_info: Dict[str, Any]
-    ip_info_generated_now: bool
-    conn_map: Any
-    global_nets: Any
-    match_report: Any
-    project: Any  # forge.ir.model.ResolvedProject — pre-generation IR, no tie_off/top_ports yet
-    topology_group_issues: List[Any]
-    cardinality_issues: List[Any]
-    cdc_issues: List[Any]
-    contract_conflicts: List[str] = dataclasses.field(default_factory=list)
-    # delay_cycles: auto, resolved from the module latencies (None: the design
-    # has no auto delay). Already applied to cfg when it has no problems.
-    auto_delays: Any = None
-
-
-def compute_gen_top_plan(
-    cfg: DesignConfig,
-    design_path: Path,
-    args,
-    *,
-    read_only: bool,
-    emit_progress: bool = True,
-) -> GenTopPlanContext:
-    """Behavior-preserving extraction of ``cmd_gen_top``'s compute phase
-    (path/contract/ip_info resolution, matching, and the 3 structured
-    strict-check issue lists), used both by ``cmd_gen_top`` itself and by
-    ``forge build``.
-
-    Callers must have already loaded and validated *cfg* — the two
-    "can't even start" failure modes (missing design file, validation
-    errors) keep their existing custom print+exit messages in
-    ``cmd_gen_top`` rather than being folded into this function, which
-    raises ordinary exceptions (same as every call in this range already
-    did before extraction — they were always inside ``cmd_gen_top``'s own
-    ``try/except``, and remain so via the caller's identical `try` block).
-
-    ``read_only=True`` never writes ``ip_info.yaml`` — the exact same
-    in-memory-only path ``--dry-run`` already used, generalized so
-    ``forge build`` (which must never write) can reuse it unconditionally.
-    ``read_only=False`` preserves ``gen-top``'s real-write behavior
-    exactly. ``emit_progress=False`` suppresses this function's narrative
-    ``print()`` calls (used by ``forge build --json`` so stdout carries
-    only the JSON payload); it does not change what's computed.
-
-    The 3 structured issue lists (topology-group/cardinality/CDC) are
-    always computed here, unlike ``cmd_gen_top``'s own strict-gated calls
-    to the same verify_* functions — those functions are pure, non-raising,
-    side-effect-free (return a plain issue list, same convention as
-    ``contract_verifier``'s other checks), so always computing them costs
-    a little extra CPU but changes no observable behavior for ``gen-top``
-    itself; only ``cmd_gen_top``'s own (unchanged) ``if args.strict:``
-    blocks decide whether to act on them.
-    """
-    c_root = _consumer_root(design_path, getattr(args, "consumer_root", None))
-    ip_root = _resolve_path(args.ip_root, c_root, Path("ips"))
-    build_root = _resolve_path(args.build_dir, c_root, Path("build"))
-    hls_build_root = _resolve_path(
-        getattr(args, "hls_build_root", None), c_root, Path("build_hls")
-    )
-    src_root = (
-        _resolve_path(args.src_root, c_root)
-        if hasattr(args, "src_root") and args.src_root
-        else design_path.parent
-    )
-    xml_stimulus_tool = _resolve_path(
-        getattr(args, "xml_stimulus_tool", None), c_root
-    )
-
-    if args.output:
-        output = _resolve_path(args.output, c_root)
-        output_dir = output.parent
-        if output_dir != Path(".") and not read_only:
-            output_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        output_dir = c_root
-
-    ip_info_file = (
-        _resolve_path(args.ip_info, c_root)
-        if args.ip_info
-        else output_dir / "ip_info.yaml"
-    )
-
-    _modules_yml = getattr(args, "contracts_from", None)
-    _modules_yml_path: Optional[Path] = None
-    contracts = None
-    contract_conflicts: List[str] = []
-    if _modules_yml:
-        _modules_yml_path = _resolve_path(_modules_yml, c_root)
-        if _modules_yml_path.exists():
-            try:
-                drain_contract_conflicts()  # only this load's conflicts count below
-                contracts = load_contracts_for_design(_modules_yml_path, c_root)
-                if emit_progress:
-                    print(f"📜 Contracts loaded: {len(contracts)} module(s) covered")
-                # Contracts whose omitted port facts couldn't be resolved, or
-                # that contradict their real ports. Silence here shows up much
-                # later as a role mysteriously absent from contract wiring.
-                contract_conflicts = drain_contract_conflicts()
-                for _conflict in contract_conflicts:
-                    print(f"⚠️  {_conflict}")
-            except Exception as _ce:
-                if emit_progress:
-                    print(f"⚠️  Contract loading failed (falling back to heuristics): {_ce}")
-        else:
-            if emit_progress:
-                print(f"⚠️  --contracts-from file not found: {_modules_yml_path}")
-
-    ip_info_generated_now = False
-    if ip_info_file.exists():
-        ip_info = load_ip_info(ip_info_file)
-    elif contracts:
-        if emit_progress:
-            print("📋 Projecting ip_info from contracts (not from built IP) …")
-        _mapped = {}
-        for m in cfg.modules:
-            c = contracts.get(m.name) or (
-                m.ip_info_key and contracts.get(m.ip_info_key)
-            )
-            if c:
-                _mapped[m.name] = c
-        ip_info = synthesize_ip_info(_mapped)
-        if args.mode == "bd" and emit_progress:
-            # synthesize_ip_info's projected metadata is a placeholder
-            # (vendor/version literally "contract") -- fine for --mode
-            # verilog (VLNV is never used there), but --mode bd's
-            # create_bd_cell needs a real, catalog-resolvable VLNV or Vivado
-            # fails deep inside a batch build with no indication why.
-            _placeholder_mods = [
-                name for name, meta in ip_info.items()
-                if meta.get("kind") != "hdl" and meta.get("vendor") == "contract"
-            ]
-            if _placeholder_mods:
-                print(
-                    f"⚠️  --mode bd: {len(_placeholder_mods)} packaged-IP module(s) "
-                    f"have placeholder vendor/version from --contracts-from "
-                    f"(e.g. {_placeholder_mods[0]!r}) -- Vivado's create_bd_cell will "
-                    f"fail to resolve them. Generate real IP metadata with "
-                    f"`forge topgen ip-summary --ip-root <built-IP dir>` and pass it "
-                    f"via --ip-info alongside --contracts-from."
-                )
-    else:
-        if emit_progress:
-            print("📋 Generating IP summary from build artefacts …")
-        summary = collect_all(
-            build_root=build_root,
-            modules=cfg.modules,
-            ip_root=ip_root,
-            src_root=src_root,
-        )
-        if read_only:
-            # --dry-run / forge build must never create, modify, or delete
-            # project files. Use the in-memory summary directly instead of
-            # writing ip_info.yaml to disk and reading it back.
-            if emit_progress:
-                print(
-                    f"📋 [dry-run] IP summary computed in memory "
-                    f"(would be written to {ip_info_file} on a real run)"
-                )
-            ip_info = summary
-        else:
-            ip_info_file.parent.mkdir(parents=True, exist_ok=True)
-            write_summary(summary, ip_info_file, format="yaml")
-            ip_info = load_ip_info(ip_info_file)
-            ip_info_generated_now = True
-
-    conn_map, global_nets, match_report = auto_match_ports(
-        cfg, ip_info, system_yml=args.system, contracts=contracts,
-    )
-
-    if emit_progress:
-        if match_report.contract_driven_modules:
-            print(f"  Contract-driven : {', '.join(match_report.contract_driven_modules)}")
-        if match_report.compat_mode_modules:
-            print(f"  Compat-mode     : {', '.join(match_report.compat_mode_modules)}")
-        wmc = match_report.wiring_method_counts
-        total_conn = sum(wmc.values())
-        if total_conn:
-            print(
-                f"  Wiring methods  : {total_conn} connections — "
-                f"{wmc['contract_wiring']} contract, "
-                f"{wmc['port_map_ranges']} ranges, "
-                f"{wmc['port_map']} port_map, "
-                f"{wmc['auto_match']} auto"
-            )
-        for _w in match_report.warnings:
-            print(f"  ⚠️  {_w}")
-
-    topology_group_issues: List[Any] = []
-    if contracts and cfg.topology_groups:
-        from forge.contracts.contract_verifier import verify_topology_groups
-        topology_group_issues = verify_topology_groups(cfg, contracts)
-
-    cardinality_issues: List[Any] = []
-    if contracts:
-        from forge.contracts.cardinality import verify_cardinality
-        cardinality_issues = verify_cardinality(cfg, contracts, match_report)
-
-    from forge.contracts.cdc import verify_cdc
-    cdc_issues = verify_cdc(cfg, contracts or {}, match_report, conn_map, global_nets)
-
-    auto_delays = None
-    if any(c.delay_auto for c in cfg.connections) or any(t.delay_auto for t in cfg.topology_groups):
-        from forge.analysis.latency_static.balance import apply_auto_delays, resolve_design_auto_delays
-        auto_delays = resolve_design_auto_delays(design_path, hls_build_root, conn_map)
-        if not auto_delays.problems:
-            apply_auto_delays(cfg, auto_delays)
-        if emit_progress:
-            _print_auto_delays(cfg, auto_delays)
-
-    project = assemble_project_ir(
-        cfg, design_path,
-        contracts=contracts or {}, ip_info_data=ip_info,
-        conn_map=conn_map, global_nets=global_nets, match_report=match_report,
-    )
-
-    return GenTopPlanContext(
-        cfg=cfg, design_path=design_path,
-        c_root=c_root, ip_root=ip_root, build_root=build_root,
-        hls_build_root=hls_build_root, src_root=src_root,
-        xml_stimulus_tool=xml_stimulus_tool,
-        output_dir=output_dir, ip_info_file=ip_info_file,
-        contracts_from=_modules_yml, contracts_from_path=_modules_yml_path,
-        contracts=contracts, ip_info=ip_info,
-        ip_info_generated_now=ip_info_generated_now,
-        conn_map=conn_map, global_nets=global_nets, match_report=match_report,
-        project=project,
-        topology_group_issues=topology_group_issues,
-        cardinality_issues=cardinality_issues,
-        cdc_issues=cdc_issues,
-        contract_conflicts=contract_conflicts,
-        auto_delays=auto_delays,
-    )
-
-
-def _print_auto_delays(cfg: DesignConfig, result) -> None:
-    print(f"\n⏱️  delay_cycles: auto ({len(result.delays)} resolved from the module latencies)")
-    for d in result.delays:
-        owner = cfg.connections[d.index] if d.kind == "connection" else cfg.topology_groups[d.index]
-        label = getattr(owner, "name", None) or f"{owner.from_} -> {owner.to}"
-        print(f"  {label}: {d.cycles}")
-    for problem in result.problems:
-        print(f"  ❌ {problem}")
-
-
 def cmd_gen_top(args):
-    """Generate algorithm top (VHDL or Block Design TCL)."""
+    """Generate algorithm top (Verilog, VHDL or Block Design TCL)."""
     try:
         design_path = Path(args.design).expanduser().resolve()
 
@@ -1798,111 +733,20 @@ def cmd_gen_top(args):
 
         print("✅ Validation passed!\n")
 
-        # compute_gen_top_plan is the shared, sys.exit-free compute phase
-        # also used by `forge build`. Unpacked back into the same local
-        # names the rest of this function (dry-run preview, all 3 mode
-        # branches, unchanged below) already expects — pure code motion.
+        options = GenTopOptions.from_namespace(args)
         ctx = compute_gen_top_plan(
-            cfg, design_path, args, read_only=getattr(args, "dry_run", False),
+            cfg, design_path, options, read_only=getattr(args, "dry_run", False),
         )
-        c_root = ctx.c_root
-        ip_root = ctx.ip_root
-        build_root = ctx.build_root
-        hls_build_root = ctx.hls_build_root
-        src_root = ctx.src_root
-        xml_stimulus_tool = ctx.xml_stimulus_tool
-        output_dir = ctx.output_dir
-        ip_info_file = ctx.ip_info_file
-        _modules_yml = ctx.contracts_from
-        _modules_yml_path = ctx.contracts_from_path
-        _contracts = ctx.contracts
-        ip_info = ctx.ip_info
-        _ip_info_generated_now = ctx.ip_info_generated_now
-        conn_map = ctx.conn_map
-        global_nets = ctx.global_nets
-        match_report = ctx.match_report
-        wmc = match_report.wiring_method_counts
 
-        if ctx.auto_delays is not None and ctx.auto_delays.problems:
-            print(f"\n❌ {len(ctx.auto_delays.problems)} delay_cycles: auto could not be resolved (listed above).")
+        failure = gate_failure(ctx, options)
+        if failure:
+            print(failure)
             sys.exit(1)
-
-        if getattr(args, "strict", False) and ctx.contract_conflicts:
-            print(
-                f"\n❌ Strict mode: {len(ctx.contract_conflicts)} interface contract "
-                "conflict(s) with the module source (listed above)."
-            )
-            print("   Correct the contract or the source, or remove --strict.")
-            sys.exit(1)
-
-        if getattr(args, "strict", False) and match_report.has_compat_modules():
-            print(
-                "\n❌ Strict mode failure: the following modules have no interface"
-                " contract and were wired via heuristics:"
-            )
-            for _m in match_report.compat_mode_modules:
-                print(f"   • {_m}")
-            print("   Add interface contracts or remove --strict to proceed.")
-            sys.exit(1)
-
-        if getattr(args, "strict", False) and wmc["auto_match"] > 0:
-            print(
-                f"\n❌ Strict mode: {wmc['auto_match']} connection(s) used auto-match heuristics."
-            )
-            print(
-                "   Add explicit port_map, contract_wiring, or topology_groups "
-                "to each connection."
-            )
-            sys.exit(1)
-
-        if getattr(args, "strict", False) and wmc.get("port_map_ranges", 0) > 0:
-            print(
-                f"\n❌ Strict mode: {wmc['port_map_ranges']} connection(s) still use "
-                "port_map_ranges."
-            )
-            print("   Migrate to topology_groups (contract-driven) or remove --strict.")
-            sys.exit(1)
-
-        if getattr(args, "strict", False) and _contracts and cfg.topology_groups:
-            tg_errors = [i for i in ctx.topology_group_issues if i.severity == "error"]
-            if tg_errors:
-                print(
-                    f"\n❌ Strict mode: {len(tg_errors)} topology group "
-                    "verification error(s):"
-                )
-                for _i in tg_errors:
-                    print(str(_i))
-                sys.exit(1)
-
-        if getattr(args, "strict", False) and _contracts:
-            card_errors = [i for i in ctx.cardinality_issues if i.severity == "error"]
-            if card_errors:
-                print(
-                    f"\n❌ Strict mode: {len(card_errors)} declarative "
-                    "cardinality violation(s):"
-                )
-                for _i in card_errors:
-                    print(str(_i))
-                sys.exit(1)
-
-        if getattr(args, "strict", False):
-            cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
-            if cdc_errors:
-                print(
-                    f"\n❌ Strict mode: {len(cdc_errors)} undeclared clock/reset "
-                    "domain crossing(s):"
-                )
-                for _i in cdc_errors:
-                    print(str(_i))
-                sys.exit(1)
 
         if args.mode == "bd":
-            # --gen-testbench and --lint are Verilog/VHDL-specific (a real
-            # RTL file to simulate/lint) — --mode bd's output is a Tcl
-            # script, not RTL, so there's no equivalent. Reject explicitly
-            # rather than silently accepting the flag and doing nothing —
-            # a user expecting a testbench/lint result and getting none
-            # silently is worse than an upfront error.
+            # A block design's output is a Tcl script, not RTL: there is
+            # nothing to testbench or lint, so asking for it is an error
+            # rather than a flag silently ignored.
             if args.gen_testbench or (cfg.testbench and cfg.testbench.generate):
                 print_cli_error(
                     "--gen-testbench is not supported with --mode bd",
@@ -1920,594 +764,95 @@ def cmd_gen_top(args):
                 sys.exit(1)
 
         if getattr(args, "dry_run", False):
-            if args.mode == "vhdl":
-                _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
-            elif args.mode == "verilog":
-                _preview_output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
-            else:
-                _preview_output = _resolve_path(args.output, c_root, Path("block_design.tcl"))
-
-            print(f"\n[dry-run] Would write:")
-            print(f"  {_preview_output}")
-            if args.mode in ("vhdl", "verilog"):
-                for _artifact in (
-                    "build_manifest.json", "port_map.yaml", "port_signature.json",
-                    "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
-                    "maturity_report.json",
-                ):
-                    print(f"  {_preview_output.parent / _artifact}")
-                # design.ir.json (canonical IR snapshot) is emitted for both
-                # verilog and vhdl modes; provenance.json is written as its
-                # sibling.
-                print(f"  {_preview_output.parent / 'design.ir.json'}")
-                print(f"  {_preview_output.parent / 'provenance.json'}")
-                _should_gen_tb = args.mode == "verilog" and (
-                    args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
-                )
-                if _should_gen_tb:
-                    print(f"  {_preview_output.parent}/  (SystemVerilog testbench — exact name set by generate_sv_testbench)")
-            elif args.mode == "bd":
-                # --mode bd now produces the same manifest/contract
-                # artifact set --mode verilog does (see the bd branch
-                # below) — design_parameters.json is the one exception,
-                # generated with algo_top_v_path=None since there's no
-                # flat Verilog file to associate debug ports from.
-                for _artifact in (
-                    "build_manifest.json", "port_map.yaml", "port_signature.json",
-                    "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
-                    "maturity_report.json",
-                ):
-                    print(f"  {_preview_output.parent / _artifact}")
-                print(f"  {_preview_output.parent / 'design.ir.json'}")
-                print(f"  {_preview_output.parent / 'provenance.json'}")
-
-            assert not _ip_info_generated_now, (
-                "dry-run must never persist ip_info.yaml to disk"
-            )
-            print("\n[dry-run] No files written.")
+            _print_dry_run(ctx, options, cfg, args)
             sys.exit(0)
 
-        if args.mode == "vhdl":
-            output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.vhd"))
-            print(f"🔨 Generating structural VHDL: {output}")
-
-            # Extended to vhdl mode (same pattern as verilog): proven
-            # byte-identical to the original direct conn_map/global_nets on
-            # both reference designs (test_generation_ir_equivalence.py)
-            # before this switch was made.
-            project = assemble_project_ir(
-                cfg,
-                design_path,
-                contracts=_contracts or {},
-                ip_info_data=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
-                match_report=match_report,
-                generated_from={
-                    "design": str(design_path),
-                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
-                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
-                    "build_dir": str(build_root),
-                },
+        try:
+            generated = generate_top(
+                ctx, options,
+                attach_verification=lambda project, dut_dir: _attach_verification_plan(
+                    project, design_path, args, ctx.c_root, dut_dir=dut_dir,
+                ),
             )
-            conn_map_ir, global_nets_ir = project_to_conn_map(project)
+        except GenerationRefused as refused:
+            print(refused)
+            sys.exit(1)
 
-            report = write_structural_vhdl(
-                cfg=cfg,
-                ip_info=ip_info,
-                conn_map=conn_map_ir,
-                global_nets=global_nets_ir,
-                ip_root=ip_root,
-                out_path=output,
-                top_name=args.top_name,
-                system_yml=args.system,
-            )
-
-            print(f"✓ VHDL top generated: {output}")
-            _print_gen_report(report)
-
-            # Attach tie_off connections — see the
-            # verilog branch's identical comment above.
-            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
-            project.design.connections.sort(key=lambda c: c.id)
-
-            if getattr(args, "strict", False):
-                _strict_port_gate(report, cfg)
-
+        if args.mode in ("verilog", "vhdl"):
+            if args.gen_testbench or (cfg.testbench and cfg.testbench.generate):
+                _generate_testbench(generated.output, cfg, design_path, args, ctx.xml_stimulus_tool)
             if args.lint:
-                _run_vhdl_lint(output)
-
-            ir_output = output.parent / "design.ir.json"
-            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
-            print(f"  ✓ Canonical IR snapshot: {ir_output}")
-            _write_gen_top_provenance(project, ctx, args, ir_output)
-
-        elif args.mode == "verilog":
-            output = _resolve_path(args.output, c_root, Path(f"{args.top_name}.v"))
-            print(f"🔨 Generating structural Verilog: {output}")
-
-            # Generation is driven by the canonical IR rather than
-            # directly by auto_match_ports's conn_map/global_nets. Proven
-            # byte-for-byte equivalent to the original direct conn_map on
-            # both reference designs (test_generation_ir_equivalence.py)
-            # before this switch was made — project_to_conn_map reproduces
-            # the exact original iteration order via
-            # ResolvedConnection.emission_order, so reg_stage_N/delay_N
-            # instance naming and wire-declaration order are unchanged.
-            project = assemble_project_ir(
-                cfg,
-                design_path,
-                contracts=_contracts or {},
-                ip_info_data=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
-                match_report=match_report,
-                generated_from={
-                    "design": str(design_path),
-                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
-                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
-                    "build_dir": str(build_root),
-                },
-            )
-            conn_map_ir, global_nets_ir = project_to_conn_map(project)
-
-            report = write_structural_verilog(
-                cfg=cfg,
-                ip_info=ip_info,
-                conn_map=conn_map_ir,
-                global_nets=global_nets_ir,
-                ip_root=ip_root,
-                out_path=output,
-                top_name=args.top_name,
-                system_yml=args.system,
-                contracts=_contracts,
-                match_report=match_report,
-            )
-
-            print(f"✓ Verilog top generated: {output}")
-            _print_gen_report(report)
-
-            # Attach the generator's resolved top-level port list to the IR
-            # object built above — this is the one place
-            # both pieces of information exist together; `project` is
-            # serialized to design.ir.json further below.
-            project.design.top_ports = [
-                ResolvedTopLevelPort(
-                    name=p["name"], direction=p["direction"], width=p["width"],
-                    origin=p.get("origin"),
-                    instance_id=p.get("instance"),
-                    instance_port=p.get("port"),
-                )
-                for p in report.get("top_ports", [])
-            ]
-
-            # Attach tie_off connections — same timing/
-            # asymmetry as top_ports: only known after generation runs, so
-            # absent from forge inspect's pre-generation IR.
-            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
-            project.design.connections.sort(key=lambda c: c.id)
-
-            if getattr(args, "strict", False):
-                _strict_port_gate(report, cfg)
-
-            # Before the manifest: the manifest records the IR's content
-            # hash, and both of these are part of the IR's content.
-            project.design.top_module = args.top_name
-            _attach_verification_plan(
-                project, design_path, args, c_root, dut_dir=output.parent,
-            )
-
-            manifest_output = output.parent / "build_manifest.json"
-            print(f"📦 Generating build manifest: {manifest_output}")
-            generate_build_manifest(
-                project=project,
-                ip_info=ip_info,
-                ip_root=ip_root,
-                algo_top=output,
-                design_file=design_path,
-                manifest_output=manifest_output,
-                project_root=c_root,
-                hls_build_root=hls_build_root,
-                auto_delays=ctx.auto_delays,
-            )
-
-            port_map_output = output.parent / "port_map.yaml"
-            print(f"\n🗺  Generating port map: {port_map_output}")
-            # Use the generator's own resolved top-level port list
-            # (report["top_ports"]) instead of re-parsing it back out of
-            # the file just written.
-            _top_ports_for_map = {
-                p["name"]: (p["direction"], p["width"]) for p in report.get("top_ports", [])
-            }
-            port_map_data, port_sig_hash = generate_port_map(
-                output, port_map_output, cfg.interface_metadata, ports=_top_ports_for_map or None
-            )
-
-            if port_map_data is not None:
-                from forge.core.utils import port_signature as _sig
-                sig_output = output.parent / "port_signature.json"
-                _sig.write_artifact(
-                    port_sig_hash,
-                    sig_output,
-                    source_file=str(output.resolve()),
-                    top_module=port_map_data.get("top_module", "algo_top"),
-                    port_count=sum(
-                        len(v) if isinstance(v, list)
-                        else v.get("count", 0) if isinstance(v, dict)
-                        else 0
-                        for v in port_map_data.get("port_groups", {}).values()
-                    ),
-                )
-                print(f"  ✓ Port signature artifact: {sig_output}")
-
-            params_output = output.parent / "design_parameters.json"
-            print(f"\n📋 Generating design parameters: {params_output}")
-            write_design_parameters(
-                cfg,
-                params_output,
-                algo_top_v_path=output,
-                hls_metrics_file=args.hls_metrics,
-                port_map_data=port_map_data,
-            )
-
-            probe_map_output = None
-            if port_map_data is not None:
-                probe_map_output = output.parent / "probe_map.yaml"
-                print(f"\n🔎 Generating probe map: {probe_map_output}")
-                generate_probe_map(port_map_data, probe_map_output)
-
-            if port_map_data is not None:
-                tb_bindings_output = output.parent / "tb_bindings.svh"
-                print(f"\n🔌 Generating TB bindings: {tb_bindings_output}")
-                generate_tb_bindings(port_map_data, tb_bindings_output)
-
-                if probe_map_output and probe_map_output.exists():
-                    import yaml as _yaml
-                    probe_map_data = _yaml.safe_load(probe_map_output.read_text()) or {}
-                    validate_generated_contracts(
-                        port_map_data,
-                        probe_map_data,
-                        tb_bindings_output,
-                        params_output,
-                    )
-
-            maturity_output = output.parent / "maturity_report.json"
-            maturity = _compute_maturity_summary(
-                cfg, match_report, report, ir_content_hash=ir_content_hash_of(project),
-            )
-            maturity["port_signature_hash"] = port_sig_hash if port_map_data else None
-            maturity_output.write_text(json.dumps(maturity, indent=2) + "\n")
-            print(f"  ✓ Maturity report: {maturity_output}")
-
-            # Canonical IR snapshot — `project` was already built above to
-            # drive this generation run; reuse it rather
-            # than building it a second time.
-            ir_output = output.parent / "design.ir.json"
-            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
-            print(f"  ✓ Canonical IR snapshot: {ir_output}")
-            _write_gen_top_provenance(project, ctx, args, ir_output)
-
-            should_gen_tb = args.gen_testbench or (cfg.testbench and cfg.testbench.generate)
-            if should_gen_tb:
-                print("\n🧪 Generating SystemVerilog testbench...")
-                xml_path = None
-                event_id = args.event_id
-                if args.xml_stimulus:
-                    xml_path = Path(args.xml_stimulus)
-                elif cfg.testbench and cfg.testbench.xml_stimulus_path:
-                    xml_path = design_path.parent / cfg.testbench.xml_stimulus_path
-                    event_id = cfg.testbench.event_id
-                    print("   ℹ️  Using testbench config from design.yml")
-                if xml_path:
-                    if not xml_path.exists():
-                        print(f"⚠️  Warning: XML stimulus file not found: {xml_path}")
-                        print(f"   📁 Searched: {xml_path.absolute()}")
-                        print("   Will generate testbench with placeholder stimulus")
-                        xml_path = None
-                    else:
-                        print(f"   📄 XML stimulus: {xml_path}")
-                        print(f"   🔢 Event ID: {event_id}")
-                tb_path = generate_sv_testbench(
-                    rtl_path=output,
-                    output_dir=output.parent,
-                    xml_stimulus_path=xml_path,
-                    event_id=event_id,
-                    stimulus_converter_path=xml_stimulus_tool,
-                )
-                print(f"✓ Testbench generated: {tb_path}")
-
-            if args.lint:
-                _run_verilog_lint(output, args.top_name)
-
-        elif args.mode == "bd":
-            output = _resolve_path(args.output, c_root, Path("block_design.tcl"))
-            print(f"🔨 Generating Block Design TCL: {output}")
-
-            # Extended to bd mode (same pattern as verilog/vhdl):
-            # proven byte-identical to the original direct conn_map/
-            # global_nets on both reference designs
-            # (test_generation_ir_equivalence.py) before this switch.
-            project = assemble_project_ir(
-                cfg,
-                design_path,
-                contracts=_contracts or {},
-                ip_info_data=ip_info,
-                conn_map=conn_map,
-                global_nets=global_nets,
-                match_report=match_report,
-                generated_from={
-                    "design": str(design_path),
-                    "contracts_from": str(_modules_yml_path) if _modules_yml and _modules_yml_path.exists() else None,
-                    "ip_info": str(ip_info_file) if ip_info_file.exists() else None,
-                    "build_dir": str(build_root),
-                },
-            )
-            conn_map_ir, global_nets_ir = project_to_conn_map(project)
-
-            report = write_bd_tcl(
-                cfg=cfg,
-                ip_info=ip_info,
-                conn_map=conn_map_ir,
-                global_nets=global_nets_ir,
-                out_path=output,
-                bd_name=args.bd_name,
-                src_root=design_path.parent,
-                ip_root=ip_root,
-                system_yml=args.system,
-                contracts=_contracts or {},
-                match_report=match_report,
-            )
-
-            print(f"✓ Block Design TCL generated: {output}")
-            _print_gen_report(report)
-
-            # Attach the generator's resolved top-level port list to the
-            # IR — same join verilog mode performs, from the same shared
-            # resolver (forge.generation.generators._port_resolution), so
-            # the two modes can never independently disagree on it.
-            project.design.top_ports = [
-                ResolvedTopLevelPort(
-                    name=p["name"], direction=p["direction"], width=p["width"],
-                    origin=p.get("origin"),
-                    instance_id=p.get("instance"),
-                    instance_port=p.get("port"),
-                )
-                for p in report.get("top_ports", [])
-            ]
-
-            # Attach tie_off connections — same as verilog mode.
-            project.design.connections.extend(build_tie_off_connections(report.get("tied_to_zero", [])))
-            project.design.connections.sort(key=lambda c: c.id)
-
-            if getattr(args, "strict", False):
-                _strict_port_gate(report, cfg)
-
-            # BD mode has no Verilog/VHDL top module name — the BD's own
-            # name is the closest equivalent for provenance/manifest
-            # bookkeeping (deliberate divergence from verilog's
-            # args.top_name).
-            project.design.top_module = args.bd_name
-
-            manifest_output = output.parent / "build_manifest.json"
-            print(f"📦 Generating build manifest: {manifest_output}")
-            generate_build_manifest(
-                project=project,
-                ip_info=ip_info,
-                ip_root=ip_root,
-                algo_top=output,
-                design_file=design_path,
-                manifest_output=manifest_output,
-                project_root=c_root,
-                hls_build_root=hls_build_root,
-                auto_delays=ctx.auto_delays,
-            )
-
-            port_map_output = output.parent / "port_map.yaml"
-            print(f"\n🗺  Generating port map: {port_map_output}")
-            # generate_port_map never re-parses `output` (a Tcl file, not
-            # Verilog) since `ports=` is supplied here — same mechanism
-            # the verilog branch uses to avoid re-parsing algo_top.v.
-            _top_ports_for_map = {
-                p["name"]: (p["direction"], p["width"]) for p in report.get("top_ports", [])
-            }
-            port_map_data, port_sig_hash = generate_port_map(
-                output, port_map_output, cfg.interface_metadata, ports=_top_ports_for_map or None
-            )
-
-            if port_map_data is not None:
-                from forge.core.utils import port_signature as _sig
-                sig_output = output.parent / "port_signature.json"
-                _sig.write_artifact(
-                    port_sig_hash,
-                    sig_output,
-                    source_file=str(output.resolve()),
-                    top_module=port_map_data.get("top_module", "algo_top"),
-                    port_count=sum(
-                        len(v) if isinstance(v, list)
-                        else v.get("count", 0) if isinstance(v, dict)
-                        else 0
-                        for v in port_map_data.get("port_groups", {}).values()
-                    ),
-                )
-                print(f"  ✓ Port signature artifact: {sig_output}")
-
-            params_output = output.parent / "design_parameters.json"
-            print(f"\n📋 Generating design parameters: {params_output}")
-            # algo_top_v_path=None: block_design.tcl isn't Verilog, so the
-            # module-level debug-port-association section
-            # (design_parameters.py's parse_algo_top_ports) can't read it
-            # — a known, accepted gap for --mode bd (no debug-port
-            # metadata in design_parameters.json yet). The interface-counts
-            # section still populates fully from port_map_data.
-            write_design_parameters(
-                cfg,
-                params_output,
-                algo_top_v_path=None,
-                hls_metrics_file=args.hls_metrics,
-                port_map_data=port_map_data,
-            )
-
-            probe_map_output = None
-            if port_map_data is not None:
-                probe_map_output = output.parent / "probe_map.yaml"
-                print(f"\n🔎 Generating probe map: {probe_map_output}")
-                generate_probe_map(port_map_data, probe_map_output)
-
-            if port_map_data is not None:
-                tb_bindings_output = output.parent / "tb_bindings.svh"
-                print(f"\n🔌 Generating TB bindings: {tb_bindings_output}")
-                generate_tb_bindings(port_map_data, tb_bindings_output)
-
-                if probe_map_output and probe_map_output.exists():
-                    import yaml as _yaml
-                    probe_map_data = _yaml.safe_load(probe_map_output.read_text()) or {}
-                    validate_generated_contracts(
-                        port_map_data,
-                        probe_map_data,
-                        tb_bindings_output,
-                        params_output,
-                    )
-
-            maturity_output = output.parent / "maturity_report.json"
-            maturity = _compute_maturity_summary(
-                cfg, match_report, report, ir_content_hash=ir_content_hash_of(project),
-            )
-            maturity["port_signature_hash"] = port_sig_hash if port_map_data else None
-            maturity_output.write_text(json.dumps(maturity, indent=2) + "\n")
-            print(f"  ✓ Maturity report: {maturity_output}")
-
-            # Canonical IR snapshot — `project` was already built above,
-            # now carrying top_ports/tie-offs attached above, to drive
-            # this generation run; reuse it rather than building it twice.
-            ir_output = output.parent / "design.ir.json"
-            ir_output.write_text(json.dumps(to_json_dict(project), indent=2, sort_keys=True))
-            print(f"  ✓ Canonical IR snapshot: {ir_output}")
-            _write_gen_top_provenance(project, ctx, args, ir_output)
+                _run_verilog_lint(generated.output, generated.top_name)
+                if generated.vhdl_output is not None:
+                    _run_vhdl_lint(generated.vhdl_output)
 
     except Exception as e:
         print_cli_error(
             "Generation failed",
             e,
-            hint="Check the design file, mode, and IP paths, then re-run forge topgen gen-top.",
+            hint="Check the design file, mode, and IP paths, then re-run forge dev topgen gen-top.",
         )
         sys.exit(1)
+
+
+def _print_dry_run(ctx, options: GenTopOptions, cfg, args) -> None:
+    preview = Path(planned_output_artifacts(ctx, options)[0])
+    if options.mode == "vhdl":
+        print("\n[dry-run] Would also write the Verilog top it wraps:")
+        print(f"  {preview.with_name(options.top_name + '_core.v')}")
+
+    print("\n[dry-run] Would write:")
+    print(f"  {preview}")
+    for _artifact in (
+        "build_manifest.json", "port_map.yaml", "port_signature.json",
+        "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
+        "maturity_report.json",
+    ):
+        print(f"  {preview.parent / _artifact}")
+    # The canonical IR snapshot and its provenance are written in every mode.
+    print(f"  {preview.parent / 'design.ir.json'}")
+    print(f"  {preview.parent / 'provenance.json'}")
+    if options.mode != "bd" and (args.gen_testbench or (cfg.testbench and cfg.testbench.generate)):
+        print(f"  {preview.parent}/  (SystemVerilog testbench — exact name set by generate_sv_testbench)")
+
+    assert not ctx.ip_info_generated_now, (
+        "dry-run must never persist ip_info.yaml to disk"
+    )
+    print("\n[dry-run] No files written.")
+
+
+def _generate_testbench(output: Path, cfg, design_path: Path, args, xml_stimulus_tool) -> None:
+    print("\n🧪 Generating SystemVerilog testbench...")
+    xml_path = None
+    event_id = args.event_id
+    if args.xml_stimulus:
+        xml_path = Path(args.xml_stimulus)
+    elif cfg.testbench and cfg.testbench.xml_stimulus_path:
+        xml_path = design_path.parent / cfg.testbench.xml_stimulus_path
+        event_id = cfg.testbench.event_id
+        print("   ℹ️  Using testbench config from design.yml")
+    if xml_path:
+        if not xml_path.exists():
+            print(f"⚠️  Warning: XML stimulus file not found: {xml_path}")
+            print(f"   📁 Searched: {xml_path.absolute()}")
+            print("   Will generate testbench with placeholder stimulus")
+            xml_path = None
+        else:
+            print(f"   📄 XML stimulus: {xml_path}")
+            print(f"   🔢 Event ID: {event_id}")
+    tb_path = generate_sv_testbench(
+        rtl_path=output,
+        output_dir=output.parent,
+        xml_stimulus_path=xml_path,
+        event_id=event_id,
+        stimulus_converter_path=xml_stimulus_tool,
+    )
+    print(f"✓ Testbench generated: {tb_path}")
 
 
 # ---------------------------------------------------------------------------
 # gen-top internal helpers
 # ---------------------------------------------------------------------------
-
-def _gen_top_command_options(args) -> Dict[str, Any]:
-    """The subset of CLI args that affect generation output — recorded in
-    the provenance manifest so a future ``--explain-staleness`` can tell
-    "you changed how you called gen-top" apart from "an input file
-    changed" (same rationale as
-    ``forge.core.cli.groups.inspect._command_options``, scoped to
-    gen-top's own flags)."""
-    _system = getattr(args, "system", None)
-    _contracts_from = getattr(args, "contracts_from", None)
-    return {
-        "mode": getattr(args, "mode", None),
-        "top_name": getattr(args, "top_name", None),
-        "strict": getattr(args, "strict", False),
-        # --system/--contracts-from are argparse `type=Path` — stringify so
-        # the manifest stays plain-JSON-serializable (a bare `Path` isn't).
-        "system": str(_system) if _system is not None else None,
-        "contracts_from": str(_contracts_from) if _contracts_from is not None else None,
-    }
-
-
-def _write_gen_top_provenance(
-    project, ctx: "GenTopPlanContext", args, ir_output: Path,
-) -> Path:
-    """Write ``provenance.json`` as a sibling of ``design.ir.json`` — same
-    ``project`` object, same directory, same timing as the IR snapshot
-    (closing the gap between the existing IR-attached provenance manifest
-    and gen-top, which never wrote one).
-
-    ``plan_hash`` is computed from ``ctx.project`` (the *pre-generation*
-    IR, before tie-off/top-port attachment) via the exact same
-    ``build_generation_plan``/``plan_hash`` call ``forge build`` already
-    uses — so a plan hash pinned via ``forge build --accept-plan-hash``
-    can be compared directly against the one a subsequent ``gen-top`` run
-    records here. ``output_hashes`` reuses ``forge build``'s own
-    ``_planned_output_artifacts`` for the candidate file list rather than
-    re-deriving gen-top's artifact set a third time — files that mode
-    didn't actually write (e.g. verilog-only artifacts when nothing
-    needed a testbench) are silently skipped by ``build_provenance``,
-    which only hashes files that exist.
-    """
-    from forge.ir.provenance import build_provenance, write_provenance
-    from forge.ir.plan import build_generation_plan, plan_hash as _plan_hash_of
-    from forge.core.cli.groups.build import _planned_output_artifacts
-
-    plan = build_generation_plan(
-        ctx.project, ctx.match_report,
-        topology_group_issues=ctx.topology_group_issues,
-        cardinality_issues=ctx.cardinality_issues,
-        cdc_issues=ctx.cdc_issues,
-        compat_mode_modules=ctx.match_report.compat_mode_modules,
-        output_artifacts=_planned_output_artifacts(ctx, args),
-    )
-
-    manifest = build_provenance(
-        project,
-        command_options=_gen_top_command_options(args),
-        plan_hash=_plan_hash_of(plan),
-        output_paths=_planned_output_artifacts(ctx, args),
-        project_identity=ctx.c_root.name or None,
-    )
-    provenance_output = ir_output.parent / "provenance.json"
-    write_provenance(provenance_output, manifest)
-    print(f"  ✓ Provenance manifest: {provenance_output}")
-    return provenance_output
-
-
-def _print_gen_report(report: dict) -> None:
-    sep = "=" * 70
-    print(f"\n{sep}")
-    print("📊 GENERATION REPORT")
-    print(f"{sep}")
-    print(f"  Modules:     {report['total_modules']}")
-    print(f"  Instances:   {report['total_instances']}")
-    print(f"  Connections: {report['total_connections']}")
-    if report.get("tied_to_zero"):
-        print(f"\n⚠️  INPUTS TIED TO ZERO ({len(report['tied_to_zero'])}):")
-        for inst, port, width in sorted(report["tied_to_zero"]):
-            print(f"    {inst}.{port} [{width} bits]")
-    if report.get("open_outputs"):
-        print(f"\n⚠️  OUTPUTS LEFT OPEN ({len(report['open_outputs'])}):")
-        for inst, port, width in sorted(report["open_outputs"]):
-            print(f"    {inst}.{port} [{width} bits]")
-    if not report.get("tied_to_zero") and not report.get("open_outputs"):
-        print("\n✅ All ports properly connected!")
-    print(f"{sep}\n")
-
-
-def _strict_port_gate(report: dict, cfg) -> None:
-    unaccounted_open = _filter_unaccounted(
-        report.get("open_outputs", []), cfg.allowed_unconnected.open_outputs
-    )
-    unaccounted_tied = _filter_unaccounted(
-        report.get("tied_to_zero", []), cfg.allowed_unconnected.tied_inputs
-    )
-    if not unaccounted_open and not unaccounted_tied:
-        return
-    if unaccounted_open:
-        print(f"❌ Strict mode: {len(unaccounted_open)} unaccounted open output(s):")
-        for inst, port, w in sorted(unaccounted_open)[:20]:
-            print(f"   • {inst}.{port} [{w} bits]")
-        if len(unaccounted_open) > 20:
-            print(f"   … and {len(unaccounted_open) - 20} more")
-    if unaccounted_tied:
-        print(f"❌ Strict mode: {len(unaccounted_tied)} unaccounted tied input(s):")
-        for inst, port, w in sorted(unaccounted_tied)[:20]:
-            print(f"   • {inst}.{port} [{w} bits]")
-        if len(unaccounted_tied) > 20:
-            print(f"   … and {len(unaccounted_tied) - 20} more")
-    print("   Add patterns to allowed_unconnected in design.yml or remove --strict.")
-    sys.exit(1)
-
 
 def _run_vhdl_lint(output: Path) -> None:
     try:
@@ -2536,11 +881,11 @@ def _run_verilog_lint(output: Path, top_name: str) -> None:
 # ---------------------------------------------------------------------------
 # init-plugin command — scaffold the topgen side of a new plugin capsule
 # ---------------------------------------------------------------------------
-# Mirrors forge.verification.__main__._cmd_init_plugin's shape (template-string
+# Mirrors forge.verification.plugin_scaffold.scaffold_plugin's shape (template-string
 # constants, files_to_create dict, --dry-run lists without writing, skip
 # already-existing files on a real run). This scaffolds the *topgen* half
 # (modules.yml, designs/design.yml, interfaces/*.yaml, an RTL stub);
-# `forge verify init-plugin` scaffolds the verify/ half separately.
+# `forge dev verify init-plugin` scaffolds the verify/ half separately.
 #
 # plugin_id is used as both the module ref/registry name *and* the
 # design.yml instance name, so ip_info_key trivially equals the design
@@ -2610,7 +955,7 @@ ip_interface:
   module_name: {plugin_id}
   # Optional: defaults to module_name above. Declare it only when a design
   # instance (design.yml modules[].name) is named differently from its
-  # module — `forge core verify-contract` names the available keys if it
+  # module — `forge dev core verify-contract` names the available keys if it
   # doesn't resolve.
   ip_info_key: {plugin_id}
   source_type: rtl
@@ -2660,7 +1005,7 @@ _INIT_RTL_STUB_TEMPLATE = '''\
 // Scaffolded by `forge init`. A minimal registered N-bit
 // passthrough with a valid strobe — replace the body with your real logic.
 // Ports and behavior deliberately match plugins/passthrough_demo's proven
-// reference implementation, so `forge topgen gen-top` succeeds immediately
+// reference implementation, so `forge dev topgen gen-top` succeeds immediately
 // with zero further edits.
 //
 // Parameters:
@@ -2743,10 +1088,10 @@ def cmd_init_plugin(args):
     # one of its stages and hides this epilogue, so what's printed here is
     # what someone who ran *this* command alone still has to do.
     print("\nNext steps:")
-    print(f"  1. Run: forge verify init-plugin {plugin_id}   (scaffolds the verify/ half)")
+    print(f"  1. Run: forge dev verify init-plugin {plugin_id}   (scaffolds the verify/ half)")
     print(
         f"  2. Run: forge build {design_yml} "
-        f"--contracts-from {modules_yml} --apply --output out/algo_top.v"
+        f"--contracts-from {modules_yml} --output out/algo_top.v"
     )
     print(f"  3. Run: forge test prepare {forge_root / 'verify' / 'design.verification.yml'}")
     print("\n  (or run `forge init` next time to do all of the above in one step)")
@@ -2862,11 +1207,11 @@ def cmd_migrate(args):
 # ---------------------------------------------------------------------------
 
 def register(sub) -> None:
-    """Register the ``forge topgen`` subparser and its commands."""
+    """Register the ``forge dev topgen`` subparser and its commands."""
     p_tg = sub.add_parser("topgen", help="Generate hardware topology structure")
     tg_sub = p_tg.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    # forge topgen gen-top
+    # forge dev topgen gen-top
     p_gen = tg_sub.add_parser("gen-top", help="Generate algorithm top-level")
     p_gen.add_argument("design", type=Path, help="design.yaml file")
     p_gen.add_argument(
@@ -2875,7 +1220,8 @@ def register(sub) -> None:
     )
     p_gen.add_argument(
         "--mode", choices=["vhdl", "verilog", "bd"], required=True,
-        help="Output mode: vhdl, verilog, or bd (Block Design TCL)",
+        help="Output mode: verilog, vhdl (a VHDL entity around the Verilog top, written as "
+             "<top>_core.v), or bd (Block Design TCL)",
     )
     p_gen.add_argument("--ip-root", type=Path, help="IP directory (default: ips/)")
     p_gen.add_argument("--ip-info", type=Path, help="IP info file (auto-generated if missing)")
@@ -2940,7 +1286,7 @@ def register(sub) -> None:
     )
     p_gen.set_defaults(func=cmd_gen_top)
 
-    # forge topgen validate
+    # forge dev topgen validate
     p_validate = tg_sub.add_parser("validate", help="Validate design.yml without generating")
     p_validate.add_argument("design", type=Path, help="design.yaml file to validate")
     p_validate.add_argument("--strict", action="store_true", help="Treat warnings as errors")
@@ -2959,7 +1305,7 @@ def register(sub) -> None:
     )
     p_validate.set_defaults(func=cmd_validate)
 
-    # forge topgen validate-registry
+    # forge dev topgen validate-registry
     p_val_reg = tg_sub.add_parser(
         "validate-registry", help="Validate a modules.yml registry independently",
     )
@@ -2971,7 +1317,7 @@ def register(sub) -> None:
     )
     p_val_reg.set_defaults(func=cmd_validate_registry)
 
-    # forge topgen ip-summary
+    # forge dev topgen ip-summary
     p_summary = tg_sub.add_parser(
         "ip-summary", help="Generate IP metadata summary (ip_info.yaml)",
     )
@@ -2991,7 +1337,7 @@ def register(sub) -> None:
     )
     p_summary.set_defaults(func=cmd_ip_summary)
 
-    # forge topgen match-ports
+    # forge dev topgen match-ports
     p_match = tg_sub.add_parser("match-ports", help="Show port connection report")
     p_match.add_argument("design", type=Path, help="design.yaml file")
     p_match.add_argument(
@@ -3002,7 +1348,7 @@ def register(sub) -> None:
     p_match.add_argument("--system", type=Path, help="system.yml for global nets")
     p_match.set_defaults(func=cmd_match_ports)
 
-    # forge topgen unpack-ips
+    # forge dev topgen unpack-ips
     p_unpack = tg_sub.add_parser("unpack-ips", help="Extract IP archives")
     p_unpack.add_argument(
         "src", type=Path,
@@ -3016,7 +1362,7 @@ def register(sub) -> None:
     p_unpack.add_argument("--force", action="store_true", help="Overwrite existing directories")
     p_unpack.set_defaults(func=cmd_unpack_ips)
 
-    # forge topgen clean
+    # forge dev topgen clean
     p_clean = tg_sub.add_parser("clean", help="Remove generated artifacts for one design")
     p_clean.add_argument("design", type=Path, help="design.yaml file")
     p_clean.add_argument(
@@ -3045,7 +1391,7 @@ def register(sub) -> None:
     )
     p_clean.set_defaults(func=cmd_clean)
 
-    # forge topgen lint
+    # forge dev topgen lint
     p_lint = tg_sub.add_parser("lint", help="Lint VHDL file(s) using GHDL")
     p_lint.add_argument("files", nargs="+", type=Path, help="VHDL file(s) to lint")
     p_lint.add_argument(
@@ -3062,7 +1408,7 @@ def register(sub) -> None:
     )
     p_lint.set_defaults(func=cmd_lint)
 
-    # forge topgen lint-verilog
+    # forge dev topgen lint-verilog
     p_lint_verilog = tg_sub.add_parser(
         "lint-verilog", help="Lint Verilog file(s) with Verilator",
     )
@@ -3078,7 +1424,7 @@ def register(sub) -> None:
     )
     p_lint_verilog.set_defaults(func=cmd_lint_verilog)
 
-    # forge topgen init-plugin
+    # forge dev topgen init-plugin
     p_init = tg_sub.add_parser(
         "init-plugin",
         help="Scaffold the topgen side of a new plugin (modules.yml, "

@@ -77,7 +77,7 @@ def build_tie_off_connections(
 ) -> List[ResolvedConnection]:
     """Build synthetic ``tie_off`` connections from a generator's
     ``report["tied_to_zero"]`` list (``[(instance, port, width), ...]`` —
-    ``write_structural_verilog``/``write_structural_vhdl``).
+    ``write_structural_verilog``).
 
     Mirrors the existing ``"$external"`` sentinel convention: a tied port
     has no real producer in ``conn_map`` at all (there's nothing driving
@@ -204,10 +204,14 @@ def _build_matching_evidence(
     gets a ``MatchingEvidence`` with only ``producer_width``/``consumer_width``
     populated, which is itself real evidence (no ``width_adapter`` exists,
     so a width mismatch here would otherwise be silent)."""
-    src_entry = port_index_by_module.get(src_mod, {}).get(src_port)
-    dst_entry = port_index_by_module.get(dst_mod, {}).get(dst_port)
-    src_width = ip_ports_by_module.get(src_mod, {}).get(src_port, {}).get("width")
-    dst_width = ip_ports_by_module.get(dst_mod, {}).get(dst_port, {}).get("width")
+    src_index = port_index_by_module.get(src_mod, {}) if src_mod else {}
+    dst_index = port_index_by_module.get(dst_mod, {}) if dst_mod else {}
+    src_ports = ip_ports_by_module.get(src_mod, {}) if src_mod else {}
+    dst_ports = ip_ports_by_module.get(dst_mod, {}) if dst_mod else {}
+    src_entry = src_index.get(src_port)
+    dst_entry = dst_index.get(dst_port)
+    src_width = src_ports.get(src_port, {}).get("width")
+    dst_width = dst_ports.get(dst_port, {}).get("width")
 
     if (src_entry is None and dst_entry is None and src_width is None
             and dst_width is None and gather_scatter_pattern is None
@@ -647,7 +651,7 @@ def assemble_project_ir(
                     id=f"xform:{c.from_}->{c.to}:latency_delay",
                     kind="latency_delay", cycles=c.delay_cycles,
                 ))
-        if c.cdc:
+        if c.cdc and c.cdc.get("kind") != "waived":
             # The 5-kind CDC primitive family.
             # 'level_sync'/'2ff_sync' (alias) both map to the existing
             # 'cdc_synchronizer' transformation kind; the other 3 declared
@@ -722,9 +726,11 @@ def assemble_project_ir(
         # instances resolve to different, both-known domains? Enforcement
         # (rejecting an undeclared crossing under --strict) is
         # forge.contracts.cdc.verify_cdc's job, not this builder's.
-        src_clock, dst_clock = clock_of_module.get(src_mod), clock_of_module.get(dst_mod)
+        src_clock = clock_of_module.get(src_mod) if src_mod else None
+        dst_clock = clock_of_module.get(dst_mod) if dst_mod else None
         crosses_clock = src_clock is not None and dst_clock is not None and src_clock != dst_clock
-        src_reset, dst_reset = reset_of_module.get(src_mod), reset_of_module.get(dst_mod)
+        src_reset = reset_of_module.get(src_mod) if src_mod else None
+        dst_reset = reset_of_module.get(dst_mod) if dst_mod else None
         crosses_reset = src_reset is not None and dst_reset is not None and src_reset != dst_reset
         cdc_declared = cdc_declared_by_pair.get((src_mod, dst_mod))
         for src_port, dst_port in pairs:
@@ -796,16 +802,16 @@ def assemble_project_ir(
     # built above, no new schema. Excludes "$external" producers (clock/
     # reset global-net fan-out is universal — flagging it would make
     # every design "all fanout," not a meaningful signal).
-    producer_counts: Dict[Tuple[str, str], int] = {}
+    producer_counts: Dict[Tuple[str, Optional[str]], int] = {}
     for conn in connections:
         if conn.producer.instance_id != _EXTERNAL:
-            key = (conn.producer.instance_id, conn.producer.port)
-            producer_counts[key] = producer_counts.get(key, 0) + 1
+            pin = (conn.producer.instance_id, conn.producer.port)
+            producer_counts[pin] = producer_counts.get(pin, 0) + 1
     for conn in connections:
         if conn.producer.instance_id == _EXTERNAL:
             continue
-        key = (conn.producer.instance_id, conn.producer.port)
-        if producer_counts.get(key, 0) > 1:
+        pin = (conn.producer.instance_id, conn.producer.port)
+        if producer_counts.get(pin, 0) > 1:
             conn.transformations.append(ResolvedTransformation(
                 id=f"xform:{conn.id}:fanout", kind="fanout",
             ))

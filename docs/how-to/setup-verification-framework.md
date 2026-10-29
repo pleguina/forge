@@ -35,8 +35,8 @@ source .venv/bin/activate
 pip install -e forge/
 ```
 
-This installs the `forge topgen`, `forge verify`, `forge hls`, `forge analyze`, and
-`forge core` sub-command groups under the single `forge` entry point.  To verify:
+This installs the `forge dev topgen`, `forge dev verify`, `forge dev hls`, `forge dev analyze`, and
+`forge dev core` sub-command groups under the single `forge` entry point.  To verify:
 
 ```bash
 forge --version
@@ -75,7 +75,7 @@ Downstream plugin test suites are run from the plugin repository. FORGE should n
 
 | Test file                      | Covers                                         |
 |-------------------------------|------------------------------------------------|
-| `test_gen_stimulus.py` (48 tests) | XML dataset parsing, per-module stimulus generation, dry-run behavior, committed `stimulus_current.svh` fixtures |
+| `test_gen_stimulus.py` (48 tests) | XML dataset parsing, per-module stimulus generation, dry-run behavior, generated `stimulus_current.svh` and testbenches |
 | `test_trigger_demo_verify.py` (62 tests) | Plugin bootstrap, csim/xsim backend registration, `verify.flow.yml` loading, `design.verification.yml` contract validation, full-chip synthetic-flow loading |
 
 ---
@@ -91,7 +91,7 @@ Framework-owned smoke examples:
 source .venv/bin/activate
 pip install -e forge/
 
-forge verify doctor \
+forge dev verify doctor \
   plugins/trigger_demo/forge/verify/design.verification.yml
 ```
 
@@ -100,13 +100,13 @@ Downstream plugins may add their own environment setup for plugin-local tools an
 ## 5. Generate DUT artifacts (example consumer flow)
 
 The exact DUT-generation command depends on the consumer design you are using.
-For a plugin-owned design, use `forge topgen gen-top` with explicit plugin
+For a plugin-owned design, use `forge dev topgen gen-top` with explicit plugin
 paths:
 
 ```bash
 source .venv/bin/activate
 
-forge topgen gen-top \
+forge dev topgen gen-top \
   plugins/<plugin>/designs/design.yml \
   --mode verilog \
   --consumer-root . \
@@ -127,11 +127,11 @@ With DUT artifacts and Vivado available, run plugin simulations from the plugin 
 
 ```text
 workspace/
-  arc-framework/
+  forge/
   my-plugin/
 ```
 
-Install FORGE from `arc-framework/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `forge/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
+Install FORGE from `forge/`, then execute the plugin-owned verification command from `my-plugin/` with explicit paths to the plugin's `forge/verify/...` files. Submodules are optional packaging choices, not a framework requirement.
 
 ---
 
@@ -142,9 +142,9 @@ Install FORGE from `arc-framework/`, then execute the plugin-owned verification 
 | `ModuleNotFoundError: No module named 'forge'`        | `pip install -e forge/`                                   |
 | `ModuleNotFoundError: No module named 'yaml'`            | `pip install pyyaml`                                    |
 | `ModuleNotFoundError: No module named 'pytest'`          | `pip install pytest`                                    |
-| `LookupError: Plugin '<id>' has not been declared`       | Source or import the plugin bootstrap before calling `forge verify` |
+| `LookupError: Plugin '<id>' has not been declared`       | Source or import the plugin bootstrap before calling `forge dev verify` |
 | `RuntimeError: Plugin '<id>' has not been bootstrapped`  | Tests: check conftest imports bootstrap; scripts: source plugin setup first |
-| `[preflight] FAILED: Port signature not found`           | Run `forge topgen gen-top ...` to regenerate artifacts    |
+| `[preflight] FAILED: Port signature not found`           | Run `forge dev topgen gen-top ...` to regenerate artifacts    |
 | `verify.flow.yml missing required fields`                | Check YAML has: `flow.plugin`, `flow.kind`, `flow.backend`, `dut.*`, `simulation.*` |
 | `xvlog: command not found`                               | Source your Vivado settings: `source $XILINX_VIVADO/settings64.sh` |
 
@@ -157,7 +157,7 @@ forge/verification/                   <- framework verification Python package s
 plugins/trigger_demo/               <- supported proof consumer
 <plugin-repo>/forge/verify/tools/     <- plugin-owned Python files
 <plugin-repo>/forge/verify/*_xsim/    <- plugin-owned generated or maintained XSIM flows
-out/<design>/                       <- forge topgen gen-top generated DUT artifacts
+out/<design>/                       <- forge dev topgen gen-top generated DUT artifacts
 getting-started/quickstart.md       <- canonical new-plugin quickstart
 how-to/integrate-verification.md    <- canonical verification integration guide
 <plugin-repo>/forge/verify/           <- plugin-local backend adapters and docs

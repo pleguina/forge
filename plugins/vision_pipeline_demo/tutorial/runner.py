@@ -105,7 +105,7 @@ def build_plan(manifest: dict, step_ids: Optional[list] = None) -> Plan:
 def missing_tools(plan: Plan) -> list:
     """Real, PATH-checked missing-tool list across every requirement any
     selected step declares — checked once up front so a step fails fast
-    with one clear message instead of partway through `forge hls run`.
+    with one clear message instead of partway through `forge dev hls run`.
     """
     needed = set()
     for step in plan.steps:
@@ -163,20 +163,20 @@ def _clean(plan: Plan) -> None:
 
 
 def _validate(plan: Plan) -> None:
-    _run(["forge", "topgen", "validate-registry", str(_MODULES_YML)], check=True)
+    _run(["forge", "dev", "topgen", "validate-registry", str(_MODULES_YML)], check=True)
     for step in plan.steps:
         design_path = _DESIGNS_DIR / step["design"]
-        _run(["forge", "topgen", "validate", str(design_path)], check=True)
+        _run(["forge", "dev", "topgen", "validate", str(design_path)], check=True)
 
 
 def _hls_build(plan: Plan, hls_build_root: Path, jobs: int) -> None:
     if not plan.hls_modules and not plan.needs_csim:
         print("  (no step in this run uses an HLS module — skipping HLS build)")
         return
-    _run(["forge", "hls", "gen-tcl", "--hls-config", str(_MODULES_YML), "--output-dir", str(hls_build_root)], check=True)
+    _run(["forge", "dev", "hls", "gen-tcl", "--hls-config", str(_MODULES_YML), "--output-dir", str(hls_build_root)], check=True)
     if plan.needs_csim:
         _run([
-            "forge", "hls", "run",
+            "forge", "dev", "hls", "run",
             "--registry", str(_MODULES_YML),
             "--hls-build-root", str(hls_build_root),
             "--stages", "csim",
@@ -185,7 +185,7 @@ def _hls_build(plan: Plan, hls_build_root: Path, jobs: int) -> None:
         ], check=True)
     if plan.hls_modules:
         _run([
-            "forge", "hls", "run",
+            "forge", "dev", "hls", "run",
             "--registry", str(_MODULES_YML),
             "--hls-build-root", str(hls_build_root),
             "--stages", "synth",
@@ -200,7 +200,7 @@ def _negative_gen_top_reject(step: dict, hls_build_root: Path) -> None:
     tmp_log = Path("/tmp") / f"vpd_{step['id']}_gen_top.log"
     with open(tmp_log, "w") as log:
         result = _run([
-            "forge", "topgen", "gen-top", str(design_path),
+            "forge", "dev", "topgen", "gen-top", str(design_path),
             "--mode", "verilog",
             "--consumer-root", ".",
             "--contracts-from", str(_MODULES_YML),
@@ -224,7 +224,7 @@ def _gen_top(plan: Plan, hls_build_root: Path) -> None:
         design_path = _DESIGNS_DIR / step["design"]
         out = _REPO_ROOT / "gen-top" / step["gen_top_outdir"] / "algo_top.v"
         _run([
-            "forge", "topgen", "gen-top", str(design_path),
+            "forge", "dev", "topgen", "gen-top", str(design_path),
             "--mode", "verilog",
             "--consumer-root", ".",
             "--contracts-from", str(_MODULES_YML),
@@ -236,11 +236,11 @@ def _gen_top(plan: Plan, hls_build_root: Path) -> None:
 def _verify_generate(plan: Plan) -> None:
     if plan.full_selection:
         # Exactly the original script's own single, unscoped call.
-        _run(["forge", "verify", "generate", str(_VERIFY_YML)], check=True)
+        _run(["forge", "dev", "verify", "generate", str(_VERIFY_YML)], check=True)
         return
     for step in plan.steps:
         for flow in step.get("flows", []):
-            _run(["forge", "verify", "generate", str(_VERIFY_YML), "--flow", flow["name"]], check=True)
+            _run(["forge", "dev", "verify", "generate", str(_VERIFY_YML), "--flow", flow["name"]], check=True)
 
 
 def _gen_stimulus(plan: Plan) -> None:
@@ -255,7 +255,7 @@ def _gen_stimulus(plan: Plan) -> None:
 
 
 def _doctor() -> None:
-    _run(["forge", "verify", "doctor", str(_VERIFY_YML)], check=True)
+    _run(["forge", "dev", "verify", "doctor", str(_VERIFY_YML)], check=True)
 
 
 @dataclasses.dataclass
@@ -278,7 +278,7 @@ def _verify_run(plan: Plan, hls_build_root: Path) -> list:
         for flow in step.get("flows", []):
             flow_yml = _FORGE_ROOT / "verify" / flow["name"] / "verify.flow.yml"
             result = _run([
-                "forge", "verify", "run", str(flow_yml),
+                "forge", "dev", "verify", "run", str(flow_yml),
                 "--plugin", "vision_pipeline_demo",
                 "--consumer-root", str(_REPO_ROOT),
             ], env=env)
@@ -418,16 +418,16 @@ def main(argv: Optional[list] = None) -> int:
     print("== Generate algo_top ==")
     _gen_top(plan, hls_build_root)
 
-    print("== forge verify generate ==")
+    print("== forge dev verify generate ==")
     _verify_generate(plan)
 
     print("== Generate stimulus ==")
     _gen_stimulus(plan)
 
-    print("== forge verify doctor ==")
+    print("== forge dev verify doctor ==")
     _doctor()
 
-    print("== forge verify run ==")
+    print("== forge dev verify run ==")
     outcomes = _verify_run(plan, hls_build_root)
 
     ok = _print_summary(plan, outcomes, time.time() - start, negative_topgen_ok)

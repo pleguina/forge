@@ -22,11 +22,14 @@ subdirectory of this repository, plus two optional extras:
   regex-based fallback is used automatically when it's absent, so plugins
   work without it, just with slightly less precise port extraction.
 
-Two more extras exist, for other purposes:
+More extras exist, for other purposes:
 
-- **`docs`** — `mkdocs`, `mkdocs-material`, `mike`. Only needed to build
-  this documentation site locally.
-- **`all`** — shorthand for `forge[dev,parser,docs]`.
+- **`plot`** — `matplotlib`, for `forge dev analyze plot-results`, which
+  fails without it.
+- **`docs`** — `mkdocs`, `mkdocs-material`, `mike`, plus `Pillow` and
+  `matplotlib` for the tutorial's figures. Only needed to build this
+  documentation site locally.
+- **`all`** — shorthand for `forge[dev,parser,plot,docs]`.
 
 If you only want to use FORGE as a plugin author (not contribute to
 FORGE itself, not build docs), `pip install -e "forge[parser]"` is enough
@@ -73,14 +76,14 @@ are for developing FORGE itself — see
 A few things live outside the Python package and are installed separately,
 only if you need them:
 
-- **GHDL** — used by `forge topgen lint` for VHDL linting (`apt-get install ghdl` / `dnf install ghdl` / `brew install ghdl`).
-- **Verilator** — used by `forge topgen lint-verilog` for Verilog linting only, not as a simulation backend (`apt-get install verilator` / `dnf install verilator` / `brew install verilator`).
-- **Vivado / XSim** — required for any `forge verify run` flow that uses the `xsim` backend.
-- **Vitis HLS** — required for `forge hls run` and any `hls_csim` verification flow.
+- **GHDL** — used by `forge dev topgen lint` for VHDL linting (`apt-get install ghdl` / `dnf install ghdl` / `brew install ghdl`).
+- **Verilator** — used by `forge dev topgen lint-verilog` for Verilog linting only, not as a simulation backend (`apt-get install verilator` / `dnf install verilator` / `brew install verilator`).
+- **Vivado / XSim** — required for any `forge dev verify run` flow that uses the `xsim` backend.
+- **Vitis HLS** — required for `forge dev hls run` and any `hls_csim` verification flow.
 
 None of these are required just to install FORGE and scaffold a plugin —
 you'll hit a clear, specific error (or an honest `FAIL` from
-`forge verify doctor`) if a step needs one that isn't on `PATH`.
+`forge dev verify doctor`) if a step needs one that isn't on `PATH`.
 
 ## Next
 

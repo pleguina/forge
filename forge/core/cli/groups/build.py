@@ -1,32 +1,28 @@
-"""forge build — deterministic generation plan.
+"""forge build — compute the generation plan, then generate.
 
-``forge build design.yml`` computes and prints a ``GenerationPlan``
-(inferred/explicit connections, generated transformations, latency
-changes, matching evidence, compatibility-mode use, unresolved issues,
-output artifacts) without writing anything — the same read-only guarantee
-``forge inspect``/``gen-top --dry-run`` already provide, reusing
-``forge.core.cli.groups.topgen.compute_gen_top_plan`` (the same compute
-phase ``gen-top`` itself uses) with ``read_only=True`` unconditionally.
-
-``--apply`` performs the real generation by delegating to
-``topgen.cmd_gen_top`` directly — this reuses 100% of gen-top's existing
-write logic (artifact generation, manifests, testbenches, IR snapshot,
-tie-off/top-port attachment, lint) with zero duplication here.
+``forge build`` with no design argument builds the ``forge.yml`` project it
+is run in (see :mod:`forge.project.resolve`); ``forge build design.yml``
+builds that design. Either way it first computes and prints a
+``GenerationPlan`` (inferred/explicit connections, generated
+transformations, latency changes, matching evidence, compatibility-mode
+use, unresolved issues, output artifacts) with
+:func:`forge.generation.pipeline.compute_gen_top_plan`, then generates
+from that same plan with :func:`forge.generation.pipeline.generate_top`.
+``--dry-run`` stops after the plan and writes nothing.
 
 ``--accept-plan-hash <hash>`` is a CI gate: exit 1 if the freshly computed
-plan's hash doesn't match. No CI *pipeline* is implemented — this is just
-the flag/exit-code contract any CI runner can already invoke.
+plan's hash doesn't match.
 
-Scope note: this command intentionally exposes a smaller flag surface
-than ``gen-top`` (no ``--bd-name``/``--gen-testbench``/``--xml-stimulus``/
-``--lint`` knobs) — a deliberate v1 choice, not an oversight. ``--apply``
-fills in gen-top's defaults for those when delegating.
+This command exposes a smaller flag surface than ``gen-top`` (no
+``--bd-name``/``--gen-testbench``/``--xml-stimulus``/``--lint`` knobs).
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -51,12 +47,12 @@ def _guided_failure(msg: str, *, json_mode: bool) -> int:
 
 
 def _strict_violations(ctx) -> List[str]:
-    """The same 6 strict-mode checks `gen-top --strict` performs
-    (`core/cli/groups/topgen.py::cmd_gen_top`), computed here as plain
-    description strings instead of print+`sys.exit` — presentation only,
-    reusing *ctx*'s already-computed `match_report`/`topology_group_issues`/
-    `cardinality_issues`/`cdc_issues`. Called
-    only when `--strict` is set; an empty result means no violations."""
+    """The checks only `gen-top --strict` applies
+    (`core/cli/groups/topgen.py::cmd_gen_top`), as plain description
+    strings instead of print+`sys.exit` — presentation only, reusing
+    *ctx*'s already-computed `match_report`. Topology-group, cardinality
+    and CDC errors are plan errors with or without --strict. Called only
+    when `--strict` is set; an empty result means no violations."""
     violations: List[str] = []
     match_report = ctx.match_report
     wmc = match_report.wiring_method_counts
@@ -74,17 +70,6 @@ def _strict_violations(ctx) -> List[str]:
         violations.append(
             f"{wmc['port_map_ranges']} connection(s) still use port_map_ranges"
         )
-    if ctx.contracts and ctx.cfg.topology_groups:
-        tg_errors = [i for i in ctx.topology_group_issues if i.severity == "error"]
-        if tg_errors:
-            violations.append(f"{len(tg_errors)} topology group verification error(s)")
-    if ctx.contracts:
-        card_errors = [i for i in ctx.cardinality_issues if i.severity == "error"]
-        if card_errors:
-            violations.append(f"{len(card_errors)} declarative cardinality violation(s)")
-    cdc_errors = [i for i in ctx.cdc_issues if i.severity == "error"]
-    if cdc_errors:
-        violations.append(f"{len(cdc_errors)} undeclared clock/reset domain crossing(s)")
     return violations
 
 
@@ -103,7 +88,7 @@ def _build_command_options(args) -> Dict[str, Any]:
     provenance manifest so a future `--explain-staleness` can tell "you
     changed how you called forge build" apart from "an input file changed"
     (same rationale as `inspect._command_options`/
-    `topgen._gen_top_command_options`, scoped to `forge build`'s own flags)."""
+    `forge.generation.pipeline.command_options`, scoped to `forge build`'s own flags)."""
     system = getattr(args, "system", None)
     contracts_from = getattr(args, "contracts_from", None)
     return {
@@ -117,17 +102,35 @@ def _build_command_options(args) -> Dict[str, Any]:
 
 def cmd_build(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.core.cli.groups import topgen
     from forge.contracts.config import DesignConfig
+    from forge.generation.pipeline import (
+        GenTopOptions, compute_gen_top_plan, planned_output_artifacts,
+    )
     from forge.generation.validation import validate_design
     from forge.ir.plan import build_generation_plan, plan_hash
 
     json_mode = getattr(args, "json", False)
     strict = getattr(args, "strict", False)
+    project = None
+    if args.design is None:
+        from forge.core.cli._shared import resolve_project_args
+
+        try:
+            project = resolve_project_args(args)
+        except (FileNotFoundError, ValueError) as e:
+            sys.exit(_guided_failure(str(e), json_mode=json_mode))
+    args.mode = args.mode or "verilog"
+    args.top_name = args.top_name or "algo_top"
+    if project is not None and args.output is None:
+        args.output = str(project.top_level(args.mode, args.top_name))
     design_path = Path(args.design).expanduser().resolve()
 
     if not design_path.exists():
         sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
+    if getattr(args, "rtl_resource_root", None):
+        os.environ["TOPGEN_RTL_RESOURCE_ROOT"] = str(
+            Path(args.rtl_resource_root).expanduser().resolve()
+        )
 
     try:
         cfg = DesignConfig.load_relaxed(design_path)
@@ -144,9 +147,11 @@ def cmd_build(args) -> None:
     if not json_mode:
         print("✅ Validation passed!\n")
 
+    options = GenTopOptions.from_namespace(args)
     try:
-        ctx = topgen.compute_gen_top_plan(
-            cfg, design_path, args, read_only=True, emit_progress=not json_mode,
+        ctx = compute_gen_top_plan(
+            cfg, design_path, options,
+            read_only=getattr(args, "dry_run", False), emit_progress=not json_mode,
         )
     except Exception as e:  # noqa: BLE001 - surfaced as a clean CLI error
         sys.exit(_guided_failure(f"Failed to compute plan: {e}", json_mode=json_mode))
@@ -158,7 +163,7 @@ def cmd_build(args) -> None:
             json_mode=json_mode,
         ))
 
-    output_artifacts = _planned_output_artifacts(ctx, args)
+    output_artifacts = planned_output_artifacts(ctx, options)
     plan = build_generation_plan(
         ctx.project, ctx.match_report,
         topology_group_issues=ctx.topology_group_issues,
@@ -202,7 +207,11 @@ def cmd_build(args) -> None:
 
     artifacts = list(plan.output_artifacts)
 
-    if getattr(args, "provenance", None):
+    def write_requested_provenance() -> None:
+        # Written last: generation writes a provenance.json of its own next
+        # to the output, which would replace this one at the same path.
+        if not getattr(args, "provenance", None):
+            return
         from forge.ir.provenance import build_provenance, write_provenance
 
         prov_path = Path(args.provenance).expanduser().resolve()
@@ -210,7 +219,7 @@ def cmd_build(args) -> None:
             ctx.project,
             command_options=_build_command_options(args),
             plan_hash=h,
-            output_paths=artifacts,
+            output_paths=list(plan.output_artifacts),
             project_identity=ctx.c_root.name or None,
         ))
         artifacts.append(str(prov_path))
@@ -261,83 +270,63 @@ def cmd_build(args) -> None:
         },
     )
 
-    if json_mode:
-        exit_code = emit(envelope, json_mode=True)
-    else:
+    if not json_mode:
         _print_plan_human(plan, h, envelope)
-        exit_code = envelope.exit_code()
 
-    if getattr(args, "apply", False):
-        if not json_mode:
-            # How `build` is implemented internally (it reuses gen-top's
-            # compute+emit path) is not something to teach the user at the
-            # moment they're succeeding with `build`.
-            print("\n▶ Applying — generating …\n")
-        ns = _gen_top_namespace_from_build_args(args)
-        topgen.cmd_gen_top(ns)  # SystemExit propagates: forge build's own exit code IS this one
-        return
+    if getattr(args, "dry_run", False) or status == "fail":
+        write_requested_provenance()
+        if json_mode:
+            sys.exit(emit(envelope, json_mode=True))
+        sys.exit(envelope.exit_code())
 
-    sys.exit(exit_code)
+    if not json_mode:
+        print("\n▶ Generating …\n")
+    # Generation narrates on stdout; under --json that would break the one
+    # JSON document stdout must hold, so it goes to stderr instead.
+    narration = contextlib.redirect_stdout(sys.stderr) if json_mode else contextlib.nullcontext()
+    with narration:
+        generated = _generate(ctx, options, args, design_path)
 
-
-def _planned_output_artifacts(ctx, args) -> List[str]:
-    """The exact artifact list `gen-top --dry-run` already previews for
-    this mode (`forge/core/cli/groups/topgen.py`'s dry-run branch) —
-    duplicated here rather than shared, to avoid touching gen-top's own
-    code path for a purely read-only preview computation."""
-    from forge.core.cli.groups.topgen import _resolve_path
-
-    if args.mode == "vhdl":
-        out = _resolve_path(args.output, ctx.c_root, Path(f"{args.top_name}.vhd"))
-    elif args.mode == "verilog":
-        out = _resolve_path(args.output, ctx.c_root, Path(f"{args.top_name}.v"))
+    if not generated:
+        envelope.status = "fail"
+        envelope.diagnostics.append({
+            "severity": "error", "code": None, "category": "generation",
+            "message": "generation failed (see the messages above)",
+        })
     else:
-        out = _resolve_path(args.output, ctx.c_root, Path("block_design.tcl"))
-
-    artifacts = [str(out)]
-    if args.mode in ("vhdl", "verilog"):
-        for name in (
-            "build_manifest.json", "port_map.yaml", "port_signature.json",
-            "design_parameters.json", "probe_map.yaml", "tb_bindings.svh",
-            "maturity_report.json",
-        ):
-            artifacts.append(str(out.parent / name))
-        artifacts.append(str(out.parent / "design.ir.json"))
-    elif args.mode == "bd":
-        artifacts.append(str(out.parent / "design.ir.json"))
-    return artifacts
+        write_requested_provenance()
+    if json_mode:
+        sys.exit(emit(envelope, json_mode=True))
+    sys.exit(envelope.exit_code())
 
 
-def _gen_top_namespace_from_build_args(args):
-    """Build an argparse.Namespace `topgen.cmd_gen_top` can consume
-    directly — copies every attribute `forge build` already has, and
-    fills in gen-top-only knobs `forge build` doesn't expose (see this
-    module's docstring "Scope note") with gen-top's own defaults."""
-    ns = argparse.Namespace(**vars(args))
-    ns.dry_run = False
-    # `strict` is already a real `forge build` flag and so is always
-    # present on `args`/`ns` here — no hardcoded
-    # fallback needed for it (unlike the gen-top-only knobs below, which
-    # `forge build` deliberately doesn't expose; see this module's
-    # docstring "Scope note").
-    for name, default in (
-        ("bd_name", "design_1"),
-        ("gen_testbench", False),
-        ("xml_stimulus", None),
-        ("xml_stimulus_tool", None),
-        ("event_id", 1),
-        ("hls_metrics", None),
-        ("lint", False),
-        ("fix_lint", False),
-        # Verification-plan resolution: gen-top discovers the conventional
-        # design.verification.yml when neither is given, which is what
-        # `forge build` wants too.
-        ("verify_design", None),
-        ("no_verify", False),
-    ):
-        if not hasattr(ns, name):
-            setattr(ns, name, default)
-    return ns
+def _generate(ctx, options, args, design_path: Path) -> bool:
+    """Generate from the plan already computed; whether it succeeded."""
+    from forge.core.cli._shared import print_cli_error
+    from forge.core.cli.groups.topgen import _attach_verification_plan
+    from forge.generation.pipeline import GenerationRefused, gate_failure, generate_top
+
+    failure = gate_failure(ctx, options)
+    if failure:
+        print(failure)
+        return False
+    try:
+        generate_top(
+            ctx, options,
+            attach_verification=lambda project, dut_dir: _attach_verification_plan(
+                project, design_path, args, ctx.c_root, dut_dir=dut_dir,
+            ),
+        )
+    except GenerationRefused as refused:
+        print(refused)
+        return False
+    except Exception as e:  # noqa: BLE001 - reported, and the build fails
+        print_cli_error(
+            "Generation failed", e,
+            hint="Check the design file, mode, and IP paths, then re-run forge build.",
+        )
+        return False
+    return True
 
 
 def _print_plan_human(plan, plan_hash_value: str, envelope) -> None:
@@ -365,12 +354,16 @@ def register(sub) -> None:
     """Register the top-level ``forge build`` command."""
     p = sub.add_parser(
         "build",
-        help="Compute (and optionally apply) a deterministic generation plan",
+        help="Generate the structural top level (--dry-run: print the plan only)",
     )
-    p.add_argument("design", help="Path to design.yml")
     p.add_argument(
-        "--mode", choices=["vhdl", "verilog", "bd"], default="verilog",
-        help="Output mode: vhdl, verilog, or bd (Block Design TCL)",
+        "design", nargs="?", default=None,
+        help="Path to design.yml (default: the forge.yml project around the current directory)",
+    )
+    p.add_argument(
+        "--mode", choices=["vhdl", "verilog", "bd"], default=None,
+        help="Output mode: verilog (default), vhdl (a VHDL entity around the Verilog top, "
+             "written as <top>_core.v), or bd (Block Design TCL)",
     )
     p.add_argument("--consumer-root", help="Consumer workspace root used to resolve relative defaults")
     p.add_argument("--ip-root", help="IP directory (default: ips/)")
@@ -380,7 +373,7 @@ def register(sub) -> None:
     p.add_argument("--src-root", help="Source root for HDL files (default: design file's directory)")
     p.add_argument("--system", help="system.yml for global nets")
     p.add_argument("--output", "-o", help="Output file (same meaning as `gen-top --output`)")
-    p.add_argument("--top-name", default="algo_top", help="Top entity/module name")
+    p.add_argument("--top-name", default=None, help="Top entity/module name (default: algo_top)")
     p.add_argument(
         "--contracts-from", metavar="MODULES_YML",
         help="modules.yml with interface_contract paths; enables contract-driven wiring",
@@ -389,26 +382,17 @@ def register(sub) -> None:
         "--rtl-resource-root", help="Framework RTL helpers root; sets ${TOPGEN_RTL_RESOURCE_ROOT}",
     )
     p.add_argument(
-        "--plan", action="store_true", default=True,
-        help="Compute and print the generation plan (the default behavior — "
-             "this flag exists for symmetry with --apply). Equivalent to "
-             "--dry-run: both mean 'never write, plan only'.",
+        "--dry-run", "--plan", dest="dry_run", action="store_true", default=False,
+        help="Compute and print the generation plan only; write nothing",
     )
-    p.add_argument(
-        "--dry-run", dest="apply", action="store_false", default=argparse.SUPPRESS,
-        help="Alias for omitting --apply: compute the plan only, write nothing "
-             "(this is already the default). Matches `gen-top --dry-run`'s "
-             "meaning — see docs/development/cli_exit_codes.md.",
-    )
-    p.add_argument(
-        "--apply", action="store_true", default=False,
-        help="After computing the plan, generate for real (delegates to `topgen gen-top`)",
-    )
+    # Generation is the default; --apply is still accepted so existing
+    # command lines keep working.
+    p.add_argument("--apply", action="store_true", default=False, help=argparse.SUPPRESS)
     p.add_argument(
         "--strict", action="store_true", default=False,
-        help="Fail if the plan would trigger any of `gen-top --strict`'s violations "
-             "(compat-mode modules, auto-match/port_map_ranges wiring, topology-group/"
-             "cardinality/CDC errors) — reported here, not just at generation time.",
+        help="Also fail on heuristic wiring (modules with no contract, auto-match, "
+             "port_map_ranges), as `gen-top --strict` does. Topology-group, cardinality "
+             "and clock-domain-crossing errors fail without it.",
     )
     p.add_argument(
         "--accept-plan-hash", default=None, metavar="HASH",

@@ -94,14 +94,15 @@ check "dead 'framework/verify/python' path reference" 'framework/verify/python'
 # 'topgen <subcommand>' as a bare, unprefixed CLI invocation predates the
 # CLI unification into a single 'forge' entry point. Uses a negative
 # lookbehind rather than a blanket word search so it doesn't flag the
-# correct 'forge topgen ...' form, or backtick-quoted prose/docstring
+# correct 'forge dev topgen ...' form (or the old 'forge topgen ...'
+# name, which still parses), or backtick-quoted prose/docstring
 # references like `` `topgen gen-top` `` / ` ``topgen gen-top`` ` (an
 # inline-code-quoted mention of the command, not a literal invocation —
 # found as a real, widespread false positive in a release audit: this
 # codebase's docstrings routinely cross-reference the CLI command this
 # way).
 check "bare (unprefixed) 'topgen <subcommand>' invocation" \
-    '(?<!forge )(?<!forge --debug )(?<!`)\btopgen (validate|gen-top|ip-summary|match-ports|unpack-ips|clean|lint|validate-registry)\b'
+    '(?<!forge )(?<!forge dev )(?<!forge --debug )(?<!forge --debug dev )(?<!`)\btopgen (validate|gen-top|ip-summary|match-ports|unpack-ips|clean|lint|validate-registry)\b'
 
 # forge.verify / forge.analyze / forge.topgen.ip / forge.topgen.generators
 # were real packages, then permanent/deprecation-window compat shims,

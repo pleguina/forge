@@ -7,7 +7,243 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Changed
+- **One configuration path for a `forge.yml` project.** `forge build`,
+  `forge test`, `forge report` and `forge inspect` with no design argument
+  find `forge.yml` above the working directory and regenerate `.forge/`
+  from it and the sources before running (`forge.project.resolve`). An open
+  connection decision stops them with the question to answer.
+- **`forge build` generates by default**; `--dry-run` (or `--plan`) prints
+  the plan only. `--apply` is still accepted. A plan error stops
+  generation. Under `--json`, generation
+  output goes to stderr so stdout stays one JSON document, and a
+  `--provenance` manifest is written after generation instead of being
+  replaced by the one generation writes next to the output.
+- **Decisions live in `forge.yml`, never under `.forge/`.** New keys:
+  `modules.<name>.latency` (a cycle count or any registry latency block),
+  `modules.<name>.contract` (a user-kept interface contract used instead of
+  the inferred one) and `verification.config` (the `design.verification.yml`
+  that `forge test` runs). `forge check`, `next`, `fix` and `explain` point
+  at these keys and recommend plain `forge build`. Re-running `forge adopt`
+  keeps them, and keeps the part, clock frequency and reset polarity already
+  in `forge.yml` (`--part` now defaults to the existing part).
+- **Inferred contracts need no review.** They are rewritten from the ports on
+  every command, so `forge check` reports them as passing and no longer asks
+  to mark them `ready` (ATG035 retired). Drift (ATG036) and missing files
+  (ATG034) are checked for contracts named in `forge.yml`.
+- **A hand-written design behind the same entry point.** `forge.yml` may
+  name an existing `design:` (and `registry:`, by default the design's own
+  `registry:` key) plus `build:` options (`mode`, `top_name`,
+  `hls_build_root`, `ip_root`, `ip_info`, `build_dir`, `system`,
+  `rtl_resource_root`). Bare commands then use that design as it stands,
+  with every output under `.forge/`, and `forge check` validates the design
+  and registry and asks the latency graph (with the HLS reports under
+  `build.hls_build_root`) which modules have no known latency.
+- **An undeclared clock- or reset-domain crossing stops generation**
+  (`gen-top`, `build`, and `topgen validate` fail on ATG023/ATG024), with
+  or without `--strict`. A module's domain is now the top-level net its
+  port is wired to, so under `connect_clock` a module's `clk` and another's
+  `ap_clk` are one domain rather than a crossing. A crossing that needs no
+  synchronizer is declared `cdc: {kind: waived, reason: ...}`: it is wired
+  directly and listed with its reason in the crossing report.
+- **Topology-group and cardinality errors stop generation** in `gen-top`
+  and `build` with or without `--strict`, like an undeclared crossing: a
+  group that resolves to no roles, or a role with fewer or more drivers
+  than its contract's `cardinality:` allows, would otherwise generate a
+  top with inputs tied to zero or a driver dropped. `--strict` still adds
+  the checks for heuristic wiring (no contract, auto-match,
+  `port_map_ranges`) and validator warnings.
+- **`forge --help` lists the everyday commands; stage-level groups move
+  under `forge dev`.** The help lists `init`, `adopt`, `check`, `build`,
+  `test`, `report`, `inspect` and `explain`, then `next`, `fix`, `connect`,
+  `migrate` and `doctor`. `topgen`, `contract`, `verify`, `hls`, `analyze`,
+  `framework` and `core` are `forge dev <group>`; their old top-level names
+  still parse, with a note on stderr, and are documented once, under
+  `forge dev`. Every command hint, docstring and page names the new form.
+- **`forge check` says which verification flows cannot run here.** A flow
+  whose simulator is not on PATH turns the Verification section to WARN
+  with ATG049, naming the flow and the missing tools, instead of `forge
+  test` discovering it by skipping the flow.
+- **Generation is a library, not a CLI command.** Planning, the gates
+  that stop generation, the generators and every artifact written next to
+  the top level moved out of `forge/core/cli/groups/topgen.py`:
+  `forge.generation.pipeline` (`GenTopOptions`, `compute_gen_top_plan`,
+  `gate_failure`, `generate_top`) and `forge.generation.artifacts` (build
+  manifest, port map, probe map, testbench bindings, maturity summary).
+  `forge build` generates from the plan it has already computed instead of
+  re-running `gen-top`, so it validates and plans once; `gen-top` is a thin
+  front end over the same calls. The outputs are byte-identical.
+- **Verification is a library too.** Running a flow (plugin bootstrap, flow
+  loading, preflight, simulation, checking, one simulation per event, the
+  JUnit/results/golden-comparison reports) is `forge.verification.run`;
+  generating and preparing flow files is `forge.verification.prepare`; the
+  doctor checks and the plugin skeleton are `forge.verification.doctor` and
+  `forge.verification.plugin_scaffold`. `forge/verification/__main__.py`
+  keeps the `forge dev verify` parser and thin commands (2029 → ~640
+  lines). `forge test` calls `prepare_flows`/`open_flow`/`run_flow_events`
+  directly instead of re-entering the CLI for each flow, and both `forge
+  test` and `forge dev verify run` use a plugin's `runtime_context.py`
+  whether or not it also has a `flow_config.py`.
+- **The reference plugins' generated flow files are no longer committed.**
+  `verify.flow.yml`, `tb_*.sv`, `wave.tcl`, `stimulus_current.svh`, the
+  readmemh `.mem` files and the `port_map.yaml` copies under
+  `plugins/*/forge/verify/<flow>/` (88 files, some holding one machine's
+  absolute paths) are ignored; the tutorials already generate them before a
+  run. trigger_demo's per-module `port_map.yaml` stay: they are hand-written
+  inputs to `forge dev verify generate`. Tests prepare their own copies (the
+  `prepare_plugin_flows` fixture, trigger_demo's `generated_verify_root`).
+- The vision_pipeline_demo tutorial runner and reference-asset generator
+  call `forge dev …` instead of the old top-level group names.
+- **CI runs on GitHub.** `.github/workflows/ci.yml` runs the jobs
+  `.gitlab-ci.yml` defines (lint, type check, schema validation, the `ci/`
+  guards, docs build, unit and plugin tests, verify smoke, fresh-user check,
+  versioned docs on `main` and tags) for pull requests and pushes to `main`
+  and `forge_devel`; the Vivado release gate stays GitLab-only. flake8 also
+  covers `forge/project`.
+- **`ci/verify_smoke.sh`** generates every reference plugin's tops, flow
+  files and stimulus from a clean checkout and runs `forge dev verify
+  doctor` on each, without HLS or a simulator; the verify-smoke job runs it
+  in place of `generate --dry-run` plus a doctor that only passed on the
+  committed flow files.
+- **`forge dev analyze plot-results` fails when it draws nothing.** Without
+  matplotlib it printed a skip per figure and exited 0; it now exits 1 and
+  names the `plot` extra. A figure that fails to render also fails the
+  command instead of being dropped from a passing run.
+- **mypy is clean and blocking.** The 181 errors over the checked packages
+  are fixed with annotations and narrowing (no `# type: ignore` except
+  networkx's missing stubs), `forge/project` is checked too, and the CI
+  type-check job fails on any new error. Under Python 3.9 and 3.11 alike.
+  Found along the way:
+  - `forge build --system` failed with "'str' object has no attribute
+    'read_text'": generation passed the option through as a string.
+    `--system` and `--hls-metrics` are resolved against the consumer root
+    like every other path option.
+  - `python -m forge.generation.generators.block_design` unpacked two values
+    from `auto_match_ports`, which returns three.
+  - The design explorer read its vendored script with a two-argument
+    `joinpath`, which Python 3.9's `Traversable` does not define; it
+    worked only because a package on disk resolves to a `pathlib.Path`.
+- **Generated reference pages no longer depend on the Python version.**
+  `python -m forge.docsgen` wrote argparse's "optional arguments:" heading
+  under Python < 3.10 and "options:" from 3.10, and took an enum's
+  docstring from Python's placeholder or from `str`; the pages now read
+  "options:" and a class's own docstring under every version, so the
+  staleness check passes on CI's Python 3.11.
+- **`forge/hls/generate_hls_tcl.py` runs again.** It imported its logic
+  from `topgen.hls.catalog`, the package's old name, and exited on import;
+  it uses `forge.hls.catalog`.
+- **The vision tutorial's reference-asset check holds on other machines.**
+  `manifest.json` records the Graphviz, matplotlib and Pillow versions that
+  rendered the committed figures; `--check` compares files byte for byte
+  only where the renderer is the same version, and by source hash
+  otherwise.
+- **Undeclared dependencies.** New `plot` extra (matplotlib), also in
+  `docs` (the tutorial's FIFO figure goes through `plot-results`) and
+  `all`. CI's shared setup installs `forge[plot]` and numpy, which
+  vision_pipeline_demo's dataset adapter tests import.
+- **`--mode vhdl` writes a VHDL entity around the Verilog top.** The
+  separate VHDL generator tied every module output to `'0'`, left out the
+  design's external ports and did not compile; it is removed, with
+  `write_structural_vhdl`. `gen-top`/`build --mode vhdl` now write the
+  structural Verilog top as `<top>_core.v` and a VHDL entity `<top>` with
+  the same ports that instantiates it (`write_vhdl_wrapper`), so VHDL code
+  gets every stage, crossing and synchronizer the Verilog top has. The
+  design is mixed-language: Vivado elaborates it, a VHDL-only simulator
+  does not.
+- **`forge init` writes `forge.yml`** at the consumer root, naming the new
+  plugin's design and verification file, unless one is already there, and
+  the scaffolded flow names its design (`design: ../designs/design.yml`).
+  `forge check`, `forge build`, `forge test` and `forge report` then work
+  on the plugin with no arguments. A `forge.yml` that names its own design
+  is written without the `sources`, `part`, `clock` and `reset` keys,
+  which the design carries.
+- **No Vivado logs in the working directory.** The toolchain-version probe
+  ran `xvlog`/`xelab`/`xsim -version` where FORGE was invoked, which left
+  `xvlog.log`/`xvlog.pb` and friends there; it now runs them in a
+  temporary directory.
+- **Union types in the generated reference are sorted.** Python 3.9 hands
+  back one cached object for equal unions, with the member order of
+  whichever spelling was created first, so the reference pages could
+  change with import order.
+- **A design can be a variant of another.** `variant_of: <design>` in a
+  design file, with `remove:` (modules with everything touching them,
+  connections, topology groups), `modules:` (fields set by module name,
+  `null` removing one) and `add:` (appended to lists, merged into
+  mappings), describes a design by its differences from a base in the same
+  directory (`forge.contracts.design_variant`). Every reader of a design
+  goes through `load_design_document`, a name the base does not have is an
+  error, and the generated top level goes stale when the base changes.
+- **A flow names the design its DUT comes from.** `design:` on a flow in
+  `design.verification.yml` (relative to that file) makes bare `forge test`
+  build that design into the flow's `dut_rtl_source` before preparing it,
+  so a flow that simulates a variant of the project's design never runs
+  against a stale top level. A `forge.yml` that names its own design also
+  gets the `.forge/.gitignore` an adopted project has.
+- **`forge test --event-list` keeps a qualified event whole.** A token
+  such as `4:2` (an event and the processor it ran on) is passed to the
+  plugin as that run's `event_list` instead of failing to parse as an
+  integer, and gets its own result.
+- **An exception about the user's input exits 1.** A command that raises
+  `FileNotFoundError` or `ValueError` (a missing dataset XML, say) reports
+  `Error:` and exits 1 instead of `Unexpected error` and 2, matching
+  `status_for_exception`. Bare `forge test` and the other commands that
+  chain `forge` steps report such a step as failed instead of stopping
+  with a traceback-style error.
+- **One latency graph for every command.** `forge report`, `forge check`,
+  `forge analyze latency-check` and `delay_cycles: auto` build it through
+  `build_resolved_graph`: HLS latencies from `--hls-build-root` (or
+  `build.hls_build_root` in `forge.yml`) and the contract-resolved
+  instance pairing. `forge report` used neither, so it counted mismatches
+  `latency-check` did not (3 on the OMTF design, now 0). A malformed HLS
+  report now fails `latency-check` instead of being skipped with a
+  warning.
+- **Active-low module resets are driven by the inverted `ap_rst`.** The
+  generated top keeps one active-high `ap_rst`; a reset pin that asserts low
+  (by its contract's `active_level`, or by name: `rst_n`, `aresetn`,
+  `rst_b`) is wired to `~ap_rst` in Verilog, an inverted signal in VHDL and
+  one `util_vector_logic` inverter in a block design. Previously it was
+  wired straight through, holding the module in reset while `ap_rst` was
+  released. An adopted project's `reset.active` in `forge.yml` sets the
+  level in its inferred contracts, and ATG041 is retired.
+- **Skipped is not passed.** `forge test` on a project builds the design,
+  prepares and runs every flow, writes results to `.forge/reports/test/`
+  (picked up by a bare `forge report`), and reports a flow whose simulator
+  is not on `PATH` as skipped with status `warn`. `forge init` reports
+  `warn` instead of `pass` when it could not simulate.
+
 ### Added
+- **`forge dev framework floorplan`**: one `USER_SLR_ASSIGNMENT` per cell of
+  a `--mode bd` top level (optionally its SLR pblock too). The link
+  interfaces, and the decoders only one link feeds, go to the SLR of their
+  endpoint in the resolved I/O; declared cell patterns place the rest, and
+  other cells follow their neighbours (`docs/reference/floorplan.md`). On
+  OMTF's board image it writes the same constraints as the hand-kept tables
+  it replaces.
+- **Payload control policies for the consumer's own logic.** `emit-payload
+  --policies` takes `tx` (a register per used TX lane, an orbit marker on
+  every `tx_orbit`), `input_register` (one register per link word),
+  `connect` (extra algorithm ports, optionally registered), `drive` (payload
+  outputs FORGE would tie off), `rx_gate` (a mask on an RX lane) and
+  `verilog` (blocks after the port list or before the algorithm), so a
+  generated `payload.v` needs no patching afterwards
+  (`docs/reference/payload-policies.md`). OMTF's six regex steps that patched
+  `payload.v` become one policies file; the generated file has the same
+  statements as before and, unlike the patched one, compiles without
+  `xvlog --relax`.
+- **ipbb components and EMP pattern files.** `forge dev framework
+  ipbb-component` copies a build's compile list into an ipbb component and
+  writes its `.dep` file, so an ipbb project (an EMP payload, say) includes
+  the generated top without FORGE; `forge dev framework ipbb-xsim` compiles
+  an ipbb dep tree in XSim, as ipbb's own sim flow needs Questa.
+  `forge.integration.emp` reads and writes EMP pattern files and compares a
+  payload's ports with an emp-fwk release's. `build_manifest.json` lists the
+  `--mode vhdl` entity under `vhdl_files`.
+- **trigger_demo as an EMP payload** (`plugins/trigger_demo/emp/`): a
+  hand-written `emp_payload.vhd` (emp-fwk v0.9.3) around the `--mode vhdl`
+  top, its dep files, and `run_emp_sim.sh`, which plays the golden events
+  through emp-fwk's testbench in XSim and checks the trigger words.
+- **`forge dev hls run --registry` writes missing Tcl scripts** the way
+  `gen-tcl` does, instead of failing until `gen-tcl` has been run.
 - **`delay_cycles: auto`** on connections and topology groups: `gen-top` /
   `forge build` compute the alignment depth from the latency graph
   (`forge.analysis.latency_static.balance`), so the delays follow the
@@ -531,6 +767,17 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`emit-payload` connected only `tdata` of CSP links.** The resolved I/O
+  file dropped each endpoint's `protocol`, so a `csp_64b` link lost its
+  `tlast`/`tfirst`/`tvalid` bits; the protocol is recorded, and
+  `emit-payload` takes endpoints from the framework import. A policies file
+  that cannot be loaded, or a policy the ABI cannot satisfy, is an error
+  instead of a warning followed by a payload without the policies.
+- **`--build-dir` alone left HLS RTL out of `build_manifest.json`.**
+  `gen-top`/`build` read HLS metadata from `--build-dir` but looked for the
+  HLS Verilog (for the manifest and `delay_cycles: auto`) under
+  `--hls-build-root`, which defaulted to `build_hls/`. Both name the HLS
+  output tree; either one given alone now sets both.
 - **`forge verify run` failed on a fresh checkout of an RTL flow fed from a
   dataset XML.** Preflight and the xsim/Verilator backend requirement checks
   required `stimulus_current.svh`, which the plugin's `prepare_backend_inputs`

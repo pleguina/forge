@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Dict, Any
 import yaml
 
+from .design_variant import load_design_document
+
 
 # Schema-version identity for the two user-authored YAML schemas this
 # module loads — see forge/core/schema_version.py for
@@ -51,7 +53,7 @@ def _reject_unknown_keys(cls: type, data: Dict[str, Any], source: Path) -> None:
     useless to the person who typed it. This names the file, the key, and
     the closest real field, which is almost always the actual typo.
     """
-    known = {f.name for f in dataclass_fields(cls)}
+    known = {f.name for f in dataclass_fields(cls) if f.init}
     unknown = [k for k in data if k not in known]
     if not unknown:
         return
@@ -462,7 +464,7 @@ class Connection:
     # slr_crossing_delay instance instead of a plain signal_delay, gives it a
     # stable deterministic name, and writes a stage-level crossing manifest.
     # The tag is resolved to physical SLR placement exclusively by blobfish;
-    # arc-framework and omtf-firmware treat it as an opaque string.
+    # forge and omtf-firmware treat it as an opaque string.
     # A boundary tag requires delay_cycles > 0 or register_stages > 0. The
     # protected crossing is register_stages when declared, else delay_cycles;
     # with both, delay_cycles is a plain delay after the crossing.
@@ -638,6 +640,8 @@ class DesignConfig:
     # `cdc:` at all. See forge.contracts.cdc's module docstring.
     clock_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     reset_domains: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # The design file load() read, for provenance; None for a config built in code.
+    _source_file: Optional[str] = field(default=None, init=False, repr=False, compare=False)
 
     # ────────────────────────────────────────────────────────
     # Loader (now with validate_sources switch)
@@ -670,7 +674,7 @@ class DesignConfig:
         if yaml_path.suffix not in (".yaml", ".yml"):
             raise ValueError(f"Config file must end in .yaml/.yml: {yaml_path}")
 
-        data = yaml.safe_load(yaml_path.read_text())
+        data = load_design_document(yaml_path)
 
         # ── Extract sweeps
         raw_sweeps = data.pop("sweeps", {}) or {}
@@ -801,12 +805,22 @@ class DesignConfig:
                         f"must be a mapping with at least 'kind', got: {cdc!r}"
                     )
                 kind = cdc["kind"]
-                if kind not in ("level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo"):
+                if kind not in ("level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo", "waived"):
                     raise ValueError(
                         f"[ATG021] Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind "
                         f"{kind!r} must be one of ('level_sync' (alias '2ff_sync'), "
-                        "'pulse_sync', 'mailbox_transfer', 'async_fifo')"
+                        "'pulse_sync', 'mailbox_transfer', 'async_fifo', 'waived')"
                     )
+                if kind == "waived":
+                    # No synchronizer is generated, so the reason is the only
+                    # record a reviewer has of why the crossing is safe.
+                    reason = cdc.get("reason")
+                    if not isinstance(reason, str) or not reason.strip():
+                        raise ValueError(
+                            f"[ATG021] Connection {c['from']!r} -> {c.get('to')!r}: "
+                            "cdc.kind='waived' requires a 'reason' saying why the "
+                            "crossing needs no synchronizer."
+                        )
                 if kind == "2ff_sync":
                     # Backwards-compatible alias — normalize to the
                     # canonical name so every downstream consumer (the
@@ -884,7 +898,7 @@ class DesignConfig:
         # module pair (see design_cdc.yml's per-crossing-kind module split
         # for the pattern). A genuinely per-pin cdc_map is a larger,
         # separate refactor not attempted here.
-        _cdc_kind_by_pair: Dict[Tuple[str, str], str] = {}
+        _cdc_kind_by_pair: Dict[Tuple[str, str], Optional[str]] = {}
         for conn in connections:
             if not conn.cdc:
                 continue

@@ -108,7 +108,7 @@ def _scan_hdl_fallback(mod, src_root: Path) -> Optional[Dict[str, Any]]:
                     continue
                 ent = _vhdl_entity_name(f, mod.top or mod.name)
                 generics = _extract_vhdl_generics(f)
-                result = {
+                result: Dict[str, Any] = {
                     "vendor": "user",
                     "library": "hdl",
                     "name": ent,            # keep "name" aligned with entity

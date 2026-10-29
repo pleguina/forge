@@ -43,7 +43,7 @@
 # recomputed to 20 (thresh's own fixed 2-cycle latency + 20 = 22), scaled
 # up from the smaller FRAME_WIDTH=8 designs' 12 (2+12=14, matching
 # FRAME_WIDTH=8's 10+4=14 total) -- both figures are re-verified against a
-# real `forge analyze latency-check` run and a real xsim run, not assumed
+# real `forge dev analyze latency-check` run and a real xsim run, not assumed
 # from the formula alone: a hand-derived latency figure is only trustworthy
 # once confirmed against a real tool run, not derived from the formula in
 # isolation.
@@ -71,7 +71,7 @@ reset_domains:
 
 # Tier 2 probes: same mechanism/convention as design_packetizer.yml,
 # bound to this design's own real net names (confirmed against a real
-# `forge topgen gen-top` run of this exact design).
+# `forge dev topgen gen-top` run of this exact design).
 interface_metadata:
   tier2_probes:
     - {name: pr_full,        net: "dut.sync_net_prpack_pktz_out_record_full",        width: 1}

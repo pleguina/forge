@@ -17,7 +17,7 @@
 #   3b.  init-plugin --dry-run regression check
 #   4b.  Scaffolded plugin's doctor --json structural check, plus file/
 #        import/load assertions the quickstart itself doesn't need
-#   5.   forge topgen validate + forge verify prepare --dry-run on trigger_demo
+#   5.   forge dev topgen validate + forge dev verify prepare --dry-run on trigger_demo
 #   6.   trigger_demo reference plugin passes doctor
 #   7.   forge unit tests + trigger_demo plugin tests (no HLS / Vivado required)
 #
@@ -66,7 +66,9 @@ SCRATCH_DIR="$(mktemp -d)"
 trap 'rm -rf "${SCRATCH_DIR}"' EXIT
 
 PLUGIN_ID="fresh_test_plugin"
-PLUGINS_ROOT="${SCRATCH_DIR}"
+# A directory of its own: forge init writes forge.yml next to the plugins root,
+# and every later stage below SCRATCH_DIR would otherwise sit inside that project.
+PLUGINS_ROOT="${SCRATCH_DIR}/quickstart/plugins"
 # shellcheck source=ci/quickstart_commands.sh
 source "${REPO_ROOT}/ci/quickstart_commands.sh"
 pass "quickstart command sequence (install, forge --help, init-plugin, doctor)"
@@ -78,24 +80,24 @@ fi
 python3 -c "import forge; print(f'  forge imported OK (location: {forge.__file__})')"
 pass "forge package importable"
 
-forge verify doctor --help > /dev/null
-pass "forge verify doctor --help"
+forge dev verify doctor --help > /dev/null
+pass "forge dev verify doctor --help"
 
-forge verify generate --help > /dev/null
-pass "forge verify generate --help"
+forge dev verify generate --help > /dev/null
+pass "forge dev verify generate --help"
 
-forge verify init-plugin --help > /dev/null
-pass "forge verify init-plugin --help"
+forge dev verify init-plugin --help > /dev/null
+pass "forge dev verify init-plugin --help"
 
 # ─────────────────────────────────────────────────────────────────────────
 section "Stage 3b: init-plugin --dry-run regression check"
 # ─────────────────────────────────────────────────────────────────────────
-forge verify init-plugin "${PLUGIN_ID}_dry_run_only" \
+forge dev verify init-plugin "${PLUGIN_ID}_dry_run_only" \
     --plugins-root "${SCRATCH_DIR}" \
     --dry-run | grep -q "Would create"
-pass "forge verify init-plugin --dry-run"
+pass "forge dev verify init-plugin --dry-run"
 
-SCAFFOLDED_VERIFY="${SCRATCH_DIR}/${PLUGIN_ID}/forge/verify"
+SCAFFOLDED_VERIFY="${PLUGINS_ROOT}/${PLUGIN_ID}/forge/verify"
 
 for f in \
     "design.verification.yml" \
@@ -141,7 +143,7 @@ section "Stage 4b: doctor --json structural check"
 # ─────────────────────────────────────────────────────────────────────────
 DOCTOR_JSON="${SCRATCH_DIR}/doctor_out.json"
 set +e
-forge verify doctor "${SCAFFOLDED_VERIFY}/design.verification.yml" --json > "${DOCTOR_JSON}"
+forge dev verify doctor "${SCAFFOLDED_VERIFY}/design.verification.yml" --json > "${DOCTOR_JSON}"
 set -e
 
 python3 - "${DOCTOR_JSON}" <<'EOF'
@@ -155,34 +157,52 @@ EOF
 pass "doctor --json produces valid structured output for scaffolded plugin"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 5: forge topgen validate + prepare --dry-run on trigger_demo"
+section "Stage 5: forge dev topgen validate + prepare --dry-run on trigger_demo"
 # ─────────────────────────────────────────────────────────────────────────
 [[ -f "${TRIGGER_FORGE_ROOT}/designs/design.yml" ]] \
     || fail "trigger_demo design.yml not found: ${TRIGGER_FORGE_ROOT}/designs/design.yml"
 
-forge topgen validate "${TRIGGER_FORGE_ROOT}/designs/design.yml" > /dev/null
-pass "forge topgen validate (trigger_demo)"
+forge dev topgen validate "${TRIGGER_FORGE_ROOT}/designs/design.yml" > /dev/null
+pass "forge dev topgen validate (trigger_demo)"
 
-forge verify prepare "${TRIGGER_FORGE_ROOT}/verify/design.verification.yml" --dry-run > /dev/null
-pass "forge verify prepare --dry-run (trigger_demo)"
+forge dev verify prepare "${TRIGGER_FORGE_ROOT}/verify/design.verification.yml" --dry-run > /dev/null
+pass "forge dev verify prepare --dry-run (trigger_demo)"
 
 # ─────────────────────────────────────────────────────────────────────────
-section "Stage 6: forge verify doctor on trigger_demo (canonical reference)"
+section "Stage 6: forge dev verify doctor on trigger_demo (canonical reference)"
 # ─────────────────────────────────────────────────────────────────────────
-TRIGGER_DESIGN="${TRIGGER_FORGE_ROOT}/verify/design.verification.yml"
+# The flow files are not committed: write them into a copy first, as a user
+# does before running a flow. The copy keeps the plugin's place in a
+# repository: gen_stimulus.py finds the repository root four levels up.
+TRIGGER_VERIFY="${SCRATCH_DIR}/trigger_copy/plugins/trigger_demo/forge/verify"
+mkdir -p "$(dirname "${TRIGGER_VERIFY}")"
+cp -r "${TRIGGER_FORGE_ROOT}/verify" "${TRIGGER_VERIFY}"
+TRIGGER_DESIGN="${TRIGGER_VERIFY}/design.verification.yml"
 TRIGGER_JSON="${SCRATCH_DIR}/trigger_doctor.json"
 
 set +e
-forge verify doctor "${TRIGGER_DESIGN}" --json > "${TRIGGER_JSON}"
+forge dev verify generate "${TRIGGER_DESIGN}" --consumer-root "${REPO_ROOT}" > /dev/null 2>&1
+set -e
+python3 "${TRIGGER_VERIFY}/tools/gen_stimulus.py" --verify-root "${TRIGGER_VERIFY}" \
+    --xml "${TRIGGER_VERIFY}/schemas/data/trigger_demo_golden.xml" > /dev/null
+
+set +e
+forge dev verify doctor "${TRIGGER_DESIGN}" --consumer-root "${REPO_ROOT}" --json > "${TRIGGER_JSON}"
 set -e
 
 python3 - "${TRIGGER_JSON}" <<'EOF'
 import json, sys
 data = json.load(open(sys.argv[1]))
 # Zero-port and missing-tool findings are expected/acceptable without
-# Vivado in this job; anything else at error severity is a real problem.
+# Vivado in this job, and so is trigger_pipeline_xsim's testbench: it is
+# generated from the gen-top RTL, which needs an HLS build. Anything else at
+# error severity is a real problem.
 errors = [d for d in data["diagnostics"] if d["severity"] == "error"]
-hard_errors = [e for e in errors if e.get("code") not in ("FWV015", "FWV019")]
+hard_errors = [
+    e for e in errors
+    if e.get("code") not in ("FWV015", "FWV019")
+    and not (e.get("code") == "FWV004" and e.get("flow") == "trigger_pipeline_xsim")
+]
 if hard_errors:
     print(f"Unexpected hard errors: {hard_errors}", file=sys.stderr)
     sys.exit(1)
@@ -214,8 +234,8 @@ pass "forge adopt (foreign repository -> forge.yml + .forge/)"
 
 # Adoption must produce ordinary FORGE configuration, not a dialect only
 # the new commands understand.
-forge topgen validate "${FOREIGN_DIR}/.forge/project/design.yml" > /dev/null
-pass "forge topgen validate (adopted project)"
+forge dev topgen validate "${FOREIGN_DIR}/.forge/project/design.yml" > /dev/null
+pass "forge dev topgen validate (adopted project)"
 
 forge check "${FOREIGN_DIR}" > /dev/null
 pass "forge check (adopted project, no blockers)"
@@ -228,7 +248,7 @@ NEXT_CMD="$(python3 - "${NEXT_JSON}" <<'EOF'
 import json, sys
 action = json.load(open(sys.argv[1]))["metrics"]["recommended_action"]
 command = action["command"] or ""
-if not command.startswith("forge build "):
+if command != "forge build":
     print(f"unexpected recommendation: {action}", file=sys.stderr)
     sys.exit(1)
 print(command)
@@ -258,20 +278,20 @@ assert {"HDL", "Contract", "Resolved connection"} <= headings, sorted(headings)
 EOF
 pass "forge explain (port explained from the canonical IR, with evidence)"
 
-# `forge fix` must apply what the sources prove and nothing else. Deleting
-# a generated contract is the cleanest provable case: the module's ports
-# are right there in its own RTL.
+# Everything under .forge/ is derived: a deleted inferred contract is not
+# something to fix, the next command that reads the project writes it again
+# from the module's own RTL.
 rm "${FOREIGN_DIR}/.forge/contracts/packer.interface.yaml"
 forge fix "${FOREIGN_DIR}" > /dev/null
 [[ -f "${FOREIGN_DIR}/.forge/contracts/packer.interface.yaml" ]] \
     && fail "forge fix wrote without --apply"
-forge fix "${FOREIGN_DIR}" --apply > /dev/null
+(cd "${FOREIGN_DIR}" && forge build > /dev/null)
 [[ -f "${FOREIGN_DIR}/.forge/contracts/packer.interface.yaml" ]] \
-    || fail "forge fix --apply did not regenerate the missing contract"
+    || fail "forge build did not regenerate the deleted inferred contract"
 grep -q "normalization_status: draft" \
     "${FOREIGN_DIR}/.forge/contracts/packer.interface.yaml" \
     || fail "a regenerated contract must be emitted as an unreviewed draft"
-pass "forge fix (previews by default, applies only what the sources prove)"
+pass "derived state (a deleted inferred contract is regenerated by the next command)"
 
 # ─────────────────────────────────────────────────────────────────────────
 section "Stage 6c: the rest of the foreign corpus adopts and validates"
@@ -291,8 +311,8 @@ for project in peripheral_subsystem daq_readout; do
 
     forge adopt "${dst}" > /dev/null
     [[ -f "${dst}/forge.yml" ]] || fail "forge adopt produced no forge.yml for ${project}"
-    forge topgen validate "${dst}/.forge/project/design.yml" > /dev/null
-    pass "forge adopt + forge topgen validate (${project})"
+    forge dev topgen validate "${dst}/.forge/project/design.yml" > /dev/null
+    pass "forge adopt + forge dev topgen validate (${project})"
 done
 
 # B's vendor IP has three functional clocks. It must be reported and left
@@ -316,9 +336,7 @@ printf '\nmodules:\n  axi_bridge:\n    management: opaque\n' >> "${PERIPH}/forge
 forge adopt "${PERIPH}" > /dev/null
 grep -q "axi_bridge" "${PERIPH}/.forge/project/modules.yml" \
     || fail "a module declared opaque was still left out of the design"
-( cd "${PERIPH}" && forge build .forge/project/design.yml \
-    --contracts-from .forge/project/modules.yml --consumer-root . \
-    --output .forge/generated/algo_top.v --apply > /dev/null )
+( cd "${PERIPH}" && forge build > /dev/null )
 for clock in s_axi_aclk m_axi_aclk ref_clk; do
     grep -q "\.${clock}(axi_bridge_${clock})" "${PERIPH}/.forge/generated/algo_top.v" \
         || fail "opaque module's ${clock} was not routed to the top level"
@@ -362,7 +380,7 @@ import json, sys
 metrics = json.load(open(sys.argv[1]))["metrics"]
 assert metrics["up_to_date"], f"migration is not idempotent: {metrics['migrations']}"
 EOF
-forge topgen validate "${MIG_DIR}/forge/designs/design.yml" > /dev/null
+forge dev topgen validate "${MIG_DIR}/forge/designs/design.yml" > /dev/null
 pass "forge migrate (preview -> apply -> idempotent -> still validates)"
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -449,7 +467,7 @@ IR_DIR="${SCRATCH_DIR}/ir_demo"
 mkdir -p "${IR_DIR}"
 (
   cd "${IR_DIR}"
-  forge topgen gen-top "${REPO_ROOT}/plugins/passthrough_demo/forge/designs/design.yml" \
+  forge dev topgen gen-top "${REPO_ROOT}/plugins/passthrough_demo/forge/designs/design.yml" \
       --mode verilog \
       --consumer-root . \
       --contracts-from "${REPO_ROOT}/plugins/passthrough_demo/forge/modules.yml" \
