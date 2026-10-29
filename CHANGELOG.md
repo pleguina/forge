@@ -212,6 +212,10 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **`forge.integration.csp`**: Blobfish's 67-bit CSP word
+  (`{data, last, first, valid}`, the orbit marker on its own port) and EMP's
+  link word converted field by field; a word CSP cannot hold (strobe 0) is
+  refused rather than dropped.
 - **`forge dev framework emp-payload`**: `emp_payload.vhd` around the
   generated top for the emp-fwk checkout a project uses. The entity and its
   `use` clauses are copied from that release (`bc0` up to 0.9.x; `ttc2`,
