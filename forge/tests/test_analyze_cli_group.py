@@ -1,9 +1,8 @@
 """End-to-end coverage for `forge dev analyze` (core/cli/groups/analyze.py, ~22%).
 
-`plot-results` is skipped: it imports forge.analysis.result_plots.engine
-at call time, which requires matplotlib — an optional dependency not
-installed in this environment. Everything else here has no such
-dependency and is driven for real.
+Rendering with `plot-results` needs matplotlib, an optional dependency
+(forge[plot]); those tests skip without it. Its failure paths, and every
+other subcommand, are driven for real.
 """
 
 from __future__ import annotations
@@ -303,3 +302,43 @@ class TestPlotResults:
 
         assert result.returncode == 1
         assert "ERROR loading plot config" in result.stderr
+
+
+class TestPlotResultsFailures:
+    @pytest.fixture
+    def plot_inputs(self, tmp_path: Path) -> list:
+        config = tmp_path / "plots.yml"
+        config.write_text("plots:\n  - name: occupancy\n    kind: bar\n    x: crossing\n    y: depth\n")
+        observed = tmp_path / "observed.csv"
+        observed.write_text("crossing,depth\na,3\nb,5\n")
+        return [
+            "plot-results", "--config", str(config), "--observed", str(observed),
+            "--output", str(tmp_path / "plots"),
+        ]
+
+    def test_missing_matplotlib_fails_and_names_the_extra(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, plot_inputs: list,
+    ) -> None:
+        import forge.analysis.result_plots.engine as engine
+
+        monkeypatch.setattr(engine, "_try_import_matplotlib", lambda: (None, None))
+        result = _run_analyze(capsys, *plot_inputs)
+
+        assert result.returncode == 1
+        assert 'pip install "forge[plot]"' in result.stderr
+        assert "Wrote" not in result.stdout
+
+    def test_a_figure_that_does_not_render_fails_the_command(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, plot_inputs: list,
+    ) -> None:
+        import forge.analysis.result_plots.engine as engine
+
+        def broken(*_args, **_kwargs):
+            raise ValueError("no such column")
+
+        monkeypatch.setattr(engine, "_try_import_matplotlib", lambda: (object(), object()))
+        monkeypatch.setattr(engine, "_render_figure", broken)
+        result = _run_analyze(capsys, *plot_inputs)
+
+        assert result.returncode == 1
+        assert "not written: occupancy" in result.stderr

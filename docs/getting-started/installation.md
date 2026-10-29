@@ -22,11 +22,14 @@ subdirectory of this repository, plus two optional extras:
   regex-based fallback is used automatically when it's absent, so plugins
   work without it, just with slightly less precise port extraction.
 
-Two more extras exist, for other purposes:
+More extras exist, for other purposes:
 
-- **`docs`** — `mkdocs`, `mkdocs-material`, `mike`. Only needed to build
-  this documentation site locally.
-- **`all`** — shorthand for `forge[dev,parser,docs]`.
+- **`plot`** — `matplotlib`, for `forge dev analyze plot-results`, which
+  fails without it.
+- **`docs`** — `mkdocs`, `mkdocs-material`, `mike`, plus `Pillow` and
+  `matplotlib` for the tutorial's figures. Only needed to build this
+  documentation site locally.
+- **`all`** — shorthand for `forge[dev,parser,plot,docs]`.
 
 If you only want to use FORGE as a plugin author (not contribute to
 FORGE itself, not build docs), `pip install -e "forge[parser]"` is enough

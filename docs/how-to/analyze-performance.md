@@ -219,7 +219,7 @@ cycle,tout_out_valid,trigger_quality,trigger_accept
 ```
 
 The framework does not dictate what columns exist — those are fully
-plugin-defined.  `matplotlib` must be installed (`pip install matplotlib`).
+plugin-defined.  It needs matplotlib (`pip install "forge[plot]"`) and fails without it.
 
 ---
 

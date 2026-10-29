@@ -94,6 +94,14 @@ for the versioning policy.
   `prepare_plugin_flows` fixture, trigger_demo's `generated_verify_root`).
 - The vision_pipeline_demo tutorial runner and reference-asset generator
   call `forge dev …` instead of the old top-level group names.
+- **`forge dev analyze plot-results` fails when it draws nothing.** Without
+  matplotlib it printed a skip per figure and exited 0; it now exits 1 and
+  names the `plot` extra. A figure that fails to render also fails the
+  command instead of being dropped from a passing run.
+- **Undeclared dependencies.** New `plot` extra (matplotlib), also in
+  `docs` (the tutorial's FIFO figure goes through `plot-results`) and
+  `all`. CI's shared setup installs `forge[plot]` and numpy, which
+  vision_pipeline_demo's dataset adapter tests import.
 - **`--mode vhdl` writes a VHDL entity around the Verilog top.** The
   separate VHDL generator tied every module output to `'0'`, left out the
   design's external ports and did not compile; it is removed, with

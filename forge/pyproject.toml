@@ -52,16 +52,22 @@ dev = [
 parser = [
     "pyverilog>=1.3.0",
 ]
+# `forge dev analyze plot-results`
+plot = [
+    "matplotlib>=3.5",
+]
 docs = [
     "mkdocs>=1.6,<2.0",
     "mkdocs-material>=9.7,<10.0",
     "mike>=2.2,<3.0",
     # Needed by plugins/vision_pipeline_demo/tutorial/generate_reference_assets.py
-    # (and its image_panels.py renderer) to build the tutorial's figure assets.
+    # (and its image_panels.py renderer) to build the tutorial's figure assets;
+    # its FIFO figure goes through plot-results.
     "Pillow>=10.0",
+    "matplotlib>=3.5",
 ]
 all = [
-    "forge[dev,parser,docs]",
+    "forge[dev,parser,plot,docs]",
 ]
 
 [project.urls]

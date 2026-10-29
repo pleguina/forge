@@ -294,6 +294,13 @@ def cmd_plot_results(args) -> None:
             output_dir=output_dir,
             reference_csv=reference_csv,
         )
+    except ImportError as exc:
+        _emit_analyze_envelope(
+            status="fail", json_mode=json_mode,
+            diagnostics=[{"severity": "error", "message": str(exc)}],
+        )
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
     except Exception as exc:
         _emit_analyze_envelope(
             status="error", json_mode=json_mode,
@@ -302,12 +309,19 @@ def cmd_plot_results(args) -> None:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    missing = [spec.name for spec in specs if output_dir / f"{spec.name}.png" not in written]
     _emit_analyze_envelope(
-        status="pass", json_mode=json_mode,
+        status="fail" if missing else "pass", json_mode=json_mode,
         artifacts=[str(p) for p in written],
         metrics={"figures": len(written)},
+        diagnostics=[
+            {"severity": "error", "message": f"figure {name!r} was not written"} for name in missing
+        ],
     )
     print(f"Wrote {len(written)} figure(s) to {output_dir}/")
+    if missing:
+        print(f"ERROR: not written: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
