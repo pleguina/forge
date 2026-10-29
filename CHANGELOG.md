@@ -212,6 +212,14 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **ipbb components and EMP pattern files.** `forge dev framework
+  ipbb-component` copies a build's compile list into an ipbb component and
+  writes its `.dep` file, so an ipbb project (an EMP payload, say) includes
+  the generated top without FORGE; `forge dev framework ipbb-xsim` compiles
+  an ipbb dep tree in XSim, as ipbb's own sim flow needs Questa.
+  `forge.integration.emp` reads and writes EMP pattern files and compares a
+  payload's ports with an emp-fwk release's. `build_manifest.json` lists the
+  `--mode vhdl` entity under `vhdl_files`.
 - **`forge dev hls run --registry` writes missing Tcl scripts** the way
   `gen-tcl` does, instead of failing until `gen-tcl` has been run.
 - **`delay_cycles: auto`** on connections and topology groups: `gen-top` /

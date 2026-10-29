@@ -549,7 +549,7 @@ def generate_top(
     if options.mode != "bd" and attach_verification is not None:
         attach_verification(project, output.parent)
 
-    _write_artifacts(ctx, options, project, report, output)
+    _write_artifacts(ctx, options, project, report, output, vhdl_output)
 
     if vhdl_output is not None:
         write_vhdl_wrapper(
@@ -565,6 +565,7 @@ def generate_top(
 
 def _write_artifacts(
     ctx: GenTopPlanContext, options: GenTopOptions, project, report: Dict[str, Any], output: Path,
+    vhdl_output: Optional[Path] = None,
 ) -> None:
     """Every file written next to the top level, in the order the top-level
     port list, the IR and the provenance depend on each other."""
@@ -581,6 +582,7 @@ def _write_artifacts(
         project_root=ctx.c_root,
         hls_build_root=ctx.hls_build_root,
         auto_delays=ctx.auto_delays,
+        vhdl_top=vhdl_output,
     )
 
     port_map_output = output.parent / "port_map.yaml"

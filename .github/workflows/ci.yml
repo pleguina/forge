@@ -116,6 +116,13 @@ jobs:
         run: python3 -m pytest plugins/passthrough_demo/forge/verify/tests --tb=short -q --junitxml=ci-logs/passthrough-demo-junit.xml
       - name: vision_pipeline_demo verify tests
         run: python3 -m pytest plugins/vision_pipeline_demo/forge/verify/tools/tests --tb=short -q --junitxml=ci-logs/vision-pipeline-demo-junit.xml
+      # ipbb is not on PyPI, and its vunit-hdl dependency still imports
+      # pkg_resources. Last, so the setuptools pin touches nothing above.
+      - name: ipbb dep-tree tests
+        run: |
+          pip install "setuptools<70" wheel
+          pip install --no-build-isolation "git+https://github.com/ipbus/ipbb.git@dev/2024b"
+          python3 -m pytest forge/tests/test_integration_ipbb.py --tb=short -q -o addopts="" --junitxml=ci-logs/ipbb-junit.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: unit-tests, path: ci-logs/, retention-days: 14}

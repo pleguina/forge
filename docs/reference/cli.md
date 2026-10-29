@@ -202,7 +202,7 @@ positional arguments:
     hls       Build HLS modules and IPs
     analyze   Performance analysis, latency checks, and reporting
     framework
-              External framework import and detector I/O resolution
+              External frameworks: ABI import, detector I/O, payloads, ipbb components
     core      Shared schema, CLI, and plugin utilities
 
 options:
@@ -422,14 +422,16 @@ options:
 usage: forge dev framework [-h] COMMAND ...
 
 positional arguments:
-  COMMAND       framework sub-command
-    import      Load and validate a framework ABI + endpoint manifest
-    io-resolve  Resolve detector_io.yml against a framework import
-    emit-payload
-                Generate a Blobfish-compatible payload.v
+  COMMAND         framework sub-command
+    import        Load and validate a framework ABI + endpoint manifest
+    io-resolve    Resolve detector_io.yml against a framework import
+    emit-payload  Generate a Blobfish-compatible payload.v
+    ipbb-component
+                  Copy a build's sources into an ipbb component with its .dep file
+    ipbb-xsim     Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
 
 options:
-  -h, --help    show this help message and exit
+  -h, --help      show this help message and exit
 ```
 
 ##### `forge dev framework emit-payload`
@@ -480,6 +482,33 @@ options:
                         Path to detector_io.yml
   --plugin PLUGIN       Path to plugin directory (for modules.yml registry validation)
   --out OUT             Output directory for detector_io.resolved.json
+```
+
+##### `forge dev framework ipbb-component`
+
+```text
+usage: forge dev framework ipbb-component [-h] --manifest MANIFEST --out OUT [--dep DEP]
+
+options:
+  -h, --help           show this help message and exit
+  --manifest MANIFEST  build_manifest.json written next to the generated top
+  --out OUT            Component directory (gets firmware/hdl and firmware/cfg)
+  --dep DEP            Dep file name (default: <top>.dep)
+```
+
+##### `forge dev framework ipbb-xsim`
+
+```text
+usage: forge dev framework ipbb-xsim [-h] --src-dir SRC_DIR --component COMPONENT --dep DEP --out
+                                     OUT
+
+options:
+  -h, --help            show this help message and exit
+  --src-dir SRC_DIR     The ipbb work area's src/ directory
+  --component COMPONENT
+                        package:component holding the top-level dep file
+  --dep DEP             Top-level dep file name
+  --out OUT             Shell script to write
 ```
 
 #### `forge dev hls`

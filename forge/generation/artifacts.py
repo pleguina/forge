@@ -282,6 +282,7 @@ def generate_build_manifest(
     project_root: Path | None = None,
     hls_build_root: Path | None = None,
     auto_delays=None,
+    vhdl_top: Path | None = None,
 ):
     """Generate the simulation build manifest with all Verilog source paths.
 
@@ -304,6 +305,8 @@ def generate_build_manifest(
     — the same identity ``design.ir.json`` and ``provenance.json`` carry.
     *auto_delays* (an ``AutoDelayResult``) records the depth each
     ``delay_cycles: auto`` was resolved to, which the design file does not.
+    *vhdl_top* is the VHDL entity ``--mode vhdl`` writes around the Verilog
+    top; it is listed under ``vhdl_files``, compiled after ``verilog_files``.
     """
     import datetime
 
@@ -328,6 +331,8 @@ def generate_build_manifest(
     }
 
     manifest["verilog_files"].append(str(algo_top.resolve()))
+    if vhdl_top is not None:
+        manifest["vhdl_files"] = [str(vhdl_top.resolve())]
     manifest["include_dirs"].append(str(algo_top.parent.resolve()))
 
     if hls_build_root is not None:

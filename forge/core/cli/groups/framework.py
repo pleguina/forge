@@ -1,4 +1,4 @@
-"""forge framework — external framework import and detector I/O resolution."""
+"""forge framework — external framework import, detector I/O resolution and ipbb."""
 
 from __future__ import annotations
 
@@ -231,11 +231,36 @@ def cmd_emit_payload(args):
 # Registration
 # ---------------------------------------------------------------------------
 
+def cmd_ipbb_component(args):
+    """Write a build's compile list as an ipbb component."""
+    from forge.integration.ipbb import write_component
+
+    try:
+        dep = write_component(Path(args.manifest), Path(args.out), args.dep)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Written: {dep}")
+
+
+def cmd_ipbb_xsim(args):
+    """Write the XSim compile commands for an ipbb dep tree."""
+    from forge.integration.ipbb import xsim_compile_script
+
+    try:
+        script = xsim_compile_script(Path(args.src_dir), args.component, args.dep)
+    except (ImportError, OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    Path(args.out).write_text(script)
+    print(f"Written: {args.out}")
+
+
 def register(sub):
     """Register the 'framework' command group."""
     grp = sub.add_parser(
         "framework",
-        help="External framework import and detector I/O resolution",
+        help="External frameworks: ABI import, detector I/O, payloads, ipbb components",
     )
     grp_sub = grp.add_subparsers(
         dest="framework_cmd",
@@ -316,3 +341,45 @@ def register(sub):
         help="Output path for payload.v (default: build/generated/payload.v)",
     )
     p_emit.set_defaults(func=cmd_emit_payload)
+
+    # ── framework ipbb-component ──────────────────────────────────────────
+    p_ipbb = grp_sub.add_parser(
+        "ipbb-component",
+        help="Copy a build's sources into an ipbb component with its .dep file",
+    )
+    p_ipbb.add_argument(
+        "--manifest", required=True,
+        help="build_manifest.json written next to the generated top",
+    )
+    p_ipbb.add_argument(
+        "--out", required=True,
+        help="Component directory (gets firmware/hdl and firmware/cfg)",
+    )
+    p_ipbb.add_argument(
+        "--dep", default=None,
+        help="Dep file name (default: <top>.dep)",
+    )
+    p_ipbb.set_defaults(func=cmd_ipbb_component)
+
+    # ── framework ipbb-xsim ───────────────────────────────────────────────
+    p_xsim = grp_sub.add_parser(
+        "ipbb-xsim",
+        help="Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)",
+    )
+    p_xsim.add_argument(
+        "--src-dir", required=True,
+        help="The ipbb work area's src/ directory",
+    )
+    p_xsim.add_argument(
+        "--component", required=True,
+        help="package:component holding the top-level dep file",
+    )
+    p_xsim.add_argument(
+        "--dep", required=True,
+        help="Top-level dep file name",
+    )
+    p_xsim.add_argument(
+        "--out", required=True,
+        help="Shell script to write",
+    )
+    p_xsim.set_defaults(func=cmd_ipbb_xsim)
