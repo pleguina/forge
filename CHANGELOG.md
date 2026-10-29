@@ -73,6 +73,17 @@ for the versioning policy.
   `forge build` generates from the plan it has already computed instead of
   re-running `gen-top`, so it validates and plans once; `gen-top` is a thin
   front end over the same calls. The outputs are byte-identical.
+- **Verification is a library too.** Running a flow (plugin bootstrap, flow
+  loading, preflight, simulation, checking, one simulation per event, the
+  JUnit/results/golden-comparison reports) is `forge.verification.run`;
+  generating and preparing flow files is `forge.verification.prepare`; the
+  doctor checks and the plugin skeleton are `forge.verification.doctor` and
+  `forge.verification.plugin_scaffold`. `forge/verification/__main__.py`
+  keeps the `forge dev verify` parser and thin commands (2029 → ~640
+  lines). `forge test` calls `prepare_flows`/`open_flow`/`run_flow_events`
+  directly instead of re-entering the CLI for each flow, and both `forge
+  test` and `forge dev verify run` use a plugin's `runtime_context.py`
+  whether or not it also has a `flow_config.py`.
 - **`--mode vhdl` writes a VHDL entity around the Verilog top.** The
   separate VHDL generator tied every module output to `'0'`, left out the
   design's external ports and did not compile; it is removed, with

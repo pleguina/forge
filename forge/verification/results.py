@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """Versioned, structured per-flow/per-event verification results.
 
-Before this module, `forge test run`'s per-event loop
-(`forge/core/cli/groups/test.py::cmd_run`) built a bare `dict` per event and
-threw away everything but three printed counters — no structured
-`backend_id`, no real duration, no waveform path, and log selection for a
-failed event always read `simulate_log` even when the failure happened at
-`xvlog`/`xelab`/`verilate` time (`ExecutionResult.stage` is the direct
-fix for that).
+:func:`forge.verification.run.run_flow_events` returns a
+:class:`FlowResult`: per event, the backend, duration, artifacts (the log of
+the stage that failed is tagged with that stage), checks and diagnostics.
 
 `ArtifactSchema` is the shared version tag every structured artifact this
 phase introduces (results, and dataset envelopes) carries, so a future

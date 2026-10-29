@@ -9,17 +9,9 @@ same code, instead of some paths reading raw XML directly and others
 going through the adapter registry. No new hashing or parsing logic lives
 here: every method below delegates to primitives that already exist.
 
-Before this module, two real bypasses existed:
-  * ``forge.core.cli.groups.test``'s ``_enumerate_xml_event_ids`` parsed
-    XML directly with :mod:`xml.etree.ElementTree`, never touching layer
-    A's loaders or layer B's adapters at all.
-  * A plugin's own ``gen_stimulus.py`` (the ``svh_include`` stimulus
-    path) called layer A's :func:`~forge.verification.dataset_format.get_format_loader`
-    directly, never layer B.
-
-Both are retired to route through :class:`DatasetService` instead (see
-``forge/core/cli/groups/test.py`` and
-``plugins/passthrough_demo/forge/verify/tools/gen_stimulus.py``).
+Its users include ``forge test``'s event enumeration
+(:mod:`forge.verification.run`) and the ``svh_include`` stimulus path of
+``plugins/passthrough_demo/forge/verify/tools/gen_stimulus.py``.
 """
 from __future__ import annotations
 

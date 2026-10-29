@@ -21,6 +21,7 @@ import pytest
 
 from forge.core.cli.main import build_parser
 import forge.verification.__main__ as verify_cli
+from forge.verification.run import bootstrap_for_flow
 
 pytestmark = pytest.mark.integration
 
@@ -167,7 +168,7 @@ def test_run_backend_populates_enriched_execution_result_fields(
     from forge.verification.flow_loader import load_generic_flow
     from forge.verification.runtime_context import RuntimeContext
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
     adapter = get_adapter(cfg.backend)
     ctx = RuntimeContext(work_dir=flow_yml.parent / "xsim_work")
@@ -210,7 +211,7 @@ def test_run_backend_compile_failure_reports_compile_stage(
     from forge.verification.flow_loader import load_generic_flow
     from forge.verification.runtime_context import RuntimeContext
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
     adapter = get_adapter(cfg.backend)
     ctx = RuntimeContext(work_dir=flow_yml.parent / "xsim_work")
@@ -325,7 +326,7 @@ def test_identity_dataset_adapter_drives_a_real_passing_run(
         / "plugins/passthrough_demo/forge/verify/schemas/data/passthrough_demo_golden.xml"
     )
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_dir / "verify.flow.yml"))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_dir / "verify.flow.yml"))
 
     from forge.verification.dataset_adapter import DatasetSource, get_dataset_adapter
     from forge.verification.dataset_format import XmlDatasetLoader

@@ -12,7 +12,7 @@ step failed — never silently continuing past a failure and claiming
 success (governing rule 11).
 
 This command depends on the verify-side scaffolder templates in
-`forge/verification/__main__.py` matching the scaffolded RTL (an exact
+`forge/verification/plugin_scaffold.py` matching the scaffolded RTL (an exact
 copy of `plugins/passthrough_demo`'s working RTL): both halves are real
 and matched, so the whole chain runs with zero manual edits.
 """

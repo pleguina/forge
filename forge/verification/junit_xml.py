@@ -1,9 +1,6 @@
-"""forge.verification.junit_xml — minimal JUnit XML writer. Consumes the
-per-event result list `forge test run` builds by
-looping the existing single-run verification path (`_build_runtime_context`/
-`_run_one_loaded_flow`) once per event — this module only renders that
-already-computed data as `<testsuite><testcase>` XML, stdlib
-`xml.etree.ElementTree` only, no new dependency and no new checking logic.
+"""forge.verification.junit_xml — minimal JUnit XML writer for the per-event
+results of :func:`forge.verification.run.run_flow_events`, rendered as
+``<testsuite><testcase>`` with the standard library only.
 """
 
 from __future__ import annotations

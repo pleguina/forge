@@ -7,7 +7,7 @@ this codebase, not one:
    ``ATGDiagnostic(code="ATG007", ...)`` (``forge/verification/results.py``).
 2. Convenience-method calls — ``report.note("FWV000", ...)`` /
    ``.warn(...)`` / ``.error(...)`` / ``.critical(...)`` on
-   ``DiagnosticReport``/``ATGDiagnosticReport`` (``forge/verification/__main__.py``,
+   ``DiagnosticReport``/``ATGDiagnosticReport`` (``forge/verification/doctor.py``,
    ``forge/verification/release_check.py``), where the code is the first
    *positional* argument, not a keyword.
 3. Raw dict literals — ``{"code": "ATG007", ...}``

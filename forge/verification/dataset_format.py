@@ -202,10 +202,8 @@ def _parse_event_element(elem: "ET.Element") -> "dict[str, Any]":
 class XmlDatasetLoader:
     """Reference/default loader for ``.xml``-suffixed dataset files.
 
-    Matches the tag-name-agnostic ``<event id="N">`` scanning pattern
-    already proven in ``core/cli/groups/test.py::_enumerate_xml_event_ids``
-    — works for both real reference plugins' disjoint XML schemas without
-    hardcoding either one's field names.
+    Scans ``<event id="N">`` elements under any root tag, so the reference
+    plugins' different XML schemas load without naming their fields.
     """
 
     def load(self, path: Path) -> SerializedDataset:

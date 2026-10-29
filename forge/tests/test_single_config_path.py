@@ -344,6 +344,7 @@ def test_bare_test_builds_the_design_a_flow_names_before_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import forge.core.cli._shared as shared
+    import forge.core.cli.groups.test as test_cmd
     import forge.core.toolchain_versions as toolchain
 
     root = tmp_path / "flows"
@@ -371,11 +372,14 @@ def test_bare_test_builds_the_design_a_flow_names_before_running_it(
 
     def run(argv, *, quiet):
         steps.append(argv[:2])
-        if argv[0] == "build":
-            return real(argv, quiet=quiet)
-        return 0, ""
+        return real(argv, quiet=quiet)
+
+    def prepare_and_run(design, flow_name, args, **_):
+        steps.append(["prepare", flow_name])
+        return True, ""
 
     monkeypatch.setattr(shared, "run_forge_command", run)
+    monkeypatch.setattr(test_cmd, "_prepare_and_run", prepare_and_run)
 
     code, _out, err = _run(capsys, ["test"])
 
@@ -383,7 +387,7 @@ def test_bare_test_builds_the_design_a_flow_names_before_running_it(
     assert (root / "sim" / "dut" / "algo_top.v").is_file()
     assert (root / "sim" / "dut" / "port_map.yaml").is_file()
     flow_build = steps.index(["build", str(PASSTHROUGH / "designs" / "design.yml")])
-    assert steps[flow_build + 1] == ["test", "prepare"]
+    assert steps[flow_build + 1] == ["prepare", contract["flows"][0]["name"]]
 
 
 @pytest.mark.parametrize("error, code", [
