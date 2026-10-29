@@ -78,6 +78,9 @@ def _write_run_reports(
 # Command implementations
 # ---------------------------------------------------------------------------
 
+DEFAULT_EXPORT_FLOW = "impl"
+
+
 def cmd_hls_gen_tcl(args):
     """Generate Vitis HLS TCL scripts for one or all catalog modules."""
     from forge.hls.catalog import (
@@ -143,7 +146,7 @@ def cmd_hls_run(args):
 
     from forge.core.utils.content_hash import hash_bytes
     from forge.hls import stage_stamp
-    from forge.hls.catalog import load_hls_catalog
+    from forge.hls.catalog import generate_tcl, load_hls_catalog
 
     # ── Resolve inputs ────────────────────────────────────────────────────
     registry_path = (
@@ -227,6 +230,17 @@ def cmd_hls_run(args):
     except OSError as exc:
         print(f"ERROR: cannot create build directories: {exc}", file=sys.stderr)
         sys.exit(1)
+
+    if catalog is not None:
+        for module in module_list:
+            if (build_root / module / "project.tcl").exists():
+                continue
+            print(f"Generating TCL for {module} (none in {build_root})")
+            if not generate_tcl(
+                catalog, module, None, build_root, ip_pack_dir,
+                {"flow": DEFAULT_EXPORT_FLOW},
+            ):
+                sys.exit(1)
 
     tool = stage_stamp.resolve_tool(vitis_hls)
     output_roots = (build_root, ip_pack_dir)
@@ -313,7 +327,9 @@ def cmd_hls_run(args):
         if not tcl_path.exists():
             with open(log_path, "w") as f:
                 f.write(f"ERROR: TCL script not found: {tcl_path}\n")
-                f.write("Generate TCL scripts first: forge dev hls gen-tcl ...\n")
+                f.write(
+                    "Pass --registry to generate it, or run forge dev hls gen-tcl first.\n"
+                )
             return False, log_path
 
         try:
@@ -510,7 +526,7 @@ def register(sub) -> None:
         help="Override .tcl.j2 template directory",
     )
     p_hls_gen.add_argument(
-        "--flow", choices=["export", "syn", "impl"], default="impl",
+        "--flow", choices=["export", "syn", "impl"], default=DEFAULT_EXPORT_FLOW,
         help="IP export flow: export (no synth), syn (RTL only), impl (synth+P&R) (default: impl)",
     )
     p_hls_gen.set_defaults(func=cmd_hls_gen_tcl)

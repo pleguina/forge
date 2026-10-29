@@ -212,6 +212,8 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **`forge dev hls run --registry` writes missing Tcl scripts** the way
+  `gen-tcl` does, instead of failing until `gen-tcl` has been run.
 - **`delay_cycles: auto`** on connections and topology groups: `gen-top` /
   `forge build` compute the alignment depth from the latency graph
   (`forge.analysis.latency_static.balance`), so the delays follow the

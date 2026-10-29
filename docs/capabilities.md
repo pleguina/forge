@@ -173,7 +173,8 @@ rules taken from real synthesis, and still a prediction.
 ## HLS orchestration
 
 - **`forge dev hls gen-tcl` / `forge dev hls run`** generate Vitis HLS scripts and
-  run synthesis jobs in parallel, from a module catalog.
+  run synthesis jobs in parallel, from a module catalog. `run` writes the
+  scripts itself for a module that has none yet.
 - **Port prediction** — an HLS module's RTL ports don't exist until its IP
   is built, and their names shift with the interface pragma and argument
   shape. `forge dev contract infer --predict` reads the C++ signature,
