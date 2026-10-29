@@ -356,3 +356,100 @@ class TestPayloadPolicies:
     def test_unknown_verilog_place_is_refused(self):
         with pytest.raises(ValueError, match="verilog.middle"):
             ControlPolicies.from_dict({"verilog": {"middle": []}})
+
+
+def _quad(gt: int, lanes: int) -> list:
+    """RX and TX ports of a quad of *lanes* lanes on SLR2."""
+    one = lambda kind, d, w: {"name": f"slr2_gt_{gt}_{kind}", "direction": d, "width": w,
+                              "kind": f"gt_{kind}", "slr": 2, "gt_site": gt, "lanes": lanes}
+    return [dict(one("rx_tdata", "input", 64 * lanes), lane_width=64),
+            *(one(f"rx_{s}", "input", lanes) for s in ("tvalid", "tfirst", "tlast", "orbit")),
+            dict(one("tx_tdata", "output", 64 * lanes), lane_width=64),
+            *(one(f"tx_{s}", "output", lanes) for s in ("tvalid", "tfirst", "tlast", "orbit"))]
+
+
+class TestTypedServices:
+    """config_words, status_words and rx_taps: written by FORGE and checked against the ABI."""
+
+    @pytest.fixture()
+    def wide(self, tmp_path):
+        ports = [dict(p, width=192, n_registers=3) if p["name"] == "slr2_config_registers_in" else p
+                 for p in _ABI["ports"]]
+        ports += [{"name": "slr2_usr_ctrl_in", "direction": "input", "width": 8, "kind": "slr_usr_ctrl"}]
+        (tmp_path / "abi.json").write_text(json.dumps(dict(_ABI, ports=ports + _quad(1, 2))))
+        (tmp_path / "ep.json").write_text(json.dumps(_EPS))
+        fw = load("blobfish", tmp_path / "abi.json", tmp_path / "ep.json")
+        (tmp_path / "detector_io.yml").write_text(_DET_IO)
+        return fw, resolve(tmp_path / "detector_io.yml", fw)
+
+    def _gen(self, wide, **policies):
+        fw, resolved_io = wide
+        return generate_payload_verilog(fw, resolved_io, policies=ControlPolicies.from_dict(
+            {"reset": "disabled", **policies}))
+
+    def test_config_words_connect_a_register_word(self, wide):
+        content = self._gen(wide, config_words={"cfg_a": {"register": "slr2_config_registers_in", "word": 2}})
+        assert ".cfg_a (slr2_config_registers_in[64*2 +: 64])" in content
+
+    @pytest.mark.parametrize("spec, message", [
+        ({"register": "slr2_readback_registers_out", "word": 0}, "not a config register port"),
+        ({"register": "slr2_config_registers_in", "word": 3}, "holds 3 words, not word 3"),
+    ])
+    def test_config_words_outside_the_abi_are_refused(self, wide, spec, message):
+        with pytest.raises(ValueError, match=message):
+            self._gen(wide, config_words={"cfg_a": spec})
+
+    def test_status_words_pack_fields_and_pad_with_zeros(self, wide):
+        content = self._gen(wide, status_words={"slr2_readback_registers_out": [
+            {"net": "locked", "width": 1}, {"zero": 15}, {"net": "count[15:0]", "width": 16}]})
+        assert "assign slr2_readback_registers_out = {32'b0, count[15:0], 15'b0, locked};" in content
+        assert content.count("assign slr2_readback_registers_out") == 1
+
+    def test_status_words_wider_than_the_port_are_refused(self, wide):
+        with pytest.raises(ValueError, match="65 bits of fields, the port is 64"):
+            self._gen(wide, status_words={"slr2_readback_registers_out": [
+                {"net": "a", "width": 64}, {"net": "b", "width": 1}]})
+
+    def test_rx_tap_copies_a_lane_to_a_spare_tx_lane(self, wide):
+        content = self._gen(wide, rx_taps={
+            "enable": {"port": "slr2_usr_ctrl_in", "bit": 3}, "stages": 2,
+            "taps": [{"name": "tap0", "rx": {"quad": "slr2_gt_1", "lane": 1}, "tx": {"quad": "slr2_gt_1", "lane": 0}},
+                     {"name": "tap1", "rx": {"endpoint": "rx_slr2_gt0_lane0"},
+                      "tx": {"quad": "slr2_gt_1", "lane": 1}}]})
+        assert "always @(posedge logic_clk) rx_tap_en_s <= {rx_tap_en_s[0], slr2_usr_ctrl_in[3]};" in content
+        assert ("    tap0_r0 <= rx_tap_en ? {slr2_gt_1_rx_tdata[64*1 +: 64], slr2_gt_1_rx_tvalid[1], "
+                "slr2_gt_1_rx_tfirst[1], slr2_gt_1_rx_tlast[1], slr2_gt_1_rx_orbit[1]} : 68'b0;") in content
+        assert "    tap0_r1 <= tap0_r0;" in content
+        assert "assign slr2_gt_1_tx_tdata[64*0 +: 64] = tap0_r1[67:4];  // RX tap: slr2_gt_1 lane 1" in content
+        assert "assign slr2_gt_1_tx_orbit[0] = tap0_r1[0];" in content
+        assert ("tap1_r0 <= rx_tap_en ? {rx_slr2_gt0_lane0_tdata, rx_slr2_gt0_lane0_tvalid, "
+                "rx_slr2_gt0_lane0_tfirst, rx_slr2_gt0_lane0_tlast, 1'b0} : 68'b0;") in content
+        assert "assign slr2_gt_1_tx_tdata[64*1 +: 64] = 64'b0" not in content
+        assert content.index("wire [63:0] rx_slr2_gt0_lane0_tdata;") < content.index("tap1_r0 <=")
+
+    @pytest.mark.parametrize("tx, rx, message", [
+        ({"quad": "slr2_gt_0", "lane": 0}, {"quad": "slr2_gt_1", "lane": 0}, "already driven"),
+        ({"quad": "slr2_gt_1", "lane": 2}, {"quad": "slr2_gt_1", "lane": 0}, "has no TX lane 2"),
+        ({"quad": "slr2_gt_1", "lane": 0}, {"endpoint": "rx_slr2_gt9_lane0"}, "not a connected RX endpoint"),
+        ({"quad": "slr2_gt_1", "lane": 0}, {"quad": "slr2_gt_0", "lane": 0}, "slr2_gt_0_rx_orbit not found"),
+    ])
+    def test_rx_taps_outside_the_abi_are_refused(self, wide, tx, rx, message):
+        with pytest.raises(ValueError, match=message):
+            self._gen(wide, rx_taps={"enable": {"port": "slr2_usr_ctrl_in", "bit": 0},
+                                     "taps": [{"name": "t", "rx": rx, "tx": tx}]})
+
+    def test_rx_taps_need_an_enable_bit(self, wide):
+        with pytest.raises(ValueError, match="rx_taps.enable"):
+            self._gen(wide, rx_taps={"taps": [{"name": "t", "rx": {"quad": "slr2_gt_1", "lane": 0},
+                                               "tx": {"quad": "slr2_gt_1", "lane": 1}}]})
+
+    def test_a_service_and_a_hand_drive_of_one_port_are_refused(self, wide):
+        with pytest.raises(ValueError, match="by a typed service and by hand: slr2_readback_registers_out"):
+            self._gen(wide, drive={"slr2_readback_registers_out": "x"},
+                      status_words={"slr2_readback_registers_out": [{"net": "y", "width": 1}]})
+
+    def test_raw_entries_count_what_forge_does_not_check(self, tmp_path):
+        (tmp_path / "a.v").write_text("wire a;\n")
+        p = ControlPolicies.from_dict({"drive": {"x": "1'b0", "y": "z"}, "verilog": {"before_algo": ["a.v"]},
+                                       "config_words": {"c": {"register": "r", "word": 0}}}, base=tmp_path)
+        assert p.raw_entries() == {"drive": 2, "verilog": 1}

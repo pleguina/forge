@@ -212,6 +212,12 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **Typed payload services.** Control policies take `config_words` (an SLR
+  config register word to an algorithm input), `status_words` (fields packed
+  into a readback port) and `rx_taps` (received words copied to spare TX
+  lanes behind a synchronized enable bit), written by FORGE and checked
+  against the ABI. `emit-payload` prints how many `drive` entries and Verilog
+  blocks it did not check.
 - **`forge.integration.csp`**: Blobfish's 67-bit CSP word
   (`{data, last, first, valid}`, the orbit marker on its own port) and EMP's
   link word converted field by field; a word CSP cannot hold (strobe 0) is

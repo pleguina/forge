@@ -46,11 +46,25 @@ the framework's endpoint manifest.
 | `tx.register: true` | Every used TX lane's word leaves through a `DONT_TOUCH` register of its own, `<endpoint>_csp_q` |
 | `tx.orbit: <port>` | That algorithm output drives `tx_orbit` of every used TX lane (registered per lane with `tx.register`). The ABI must have the quad's `tx_orbit` port |
 
+## Services
+
+FORGE writes these and checks them against the ABI; prefer them to `connect`,
+`drive` and Verilog of your own.
+
+| Key | Effect |
+|-----|--------|
+| `config_words` | `algo_port: {register: <config register port>, word: K}` connects 64-bit word K of an SLR config register port (`slr_config_registers`) to that algorithm input. A word the port does not hold is an error |
+| `status_words` | `output_port: [{net, width} \| {zero: width}, ...]` packs the fields into that payload output, least significant first, zero-padded to the port's width; more bits than the port is an error |
+| `rx_taps` | `{enable: {port, bit}, stages: N, taps: [{name, rx, tx}]}` copies each received word to a spare TX lane: `rx` is `{quad, lane}` (the receiver, with its orbit bit) or `{endpoint}` (the word the algorithm receives, after `rx_gate`; orbit bit 0), `tx` is `{quad, lane}`. Word, valid, first, last and orbit pass N registers (default 2) in `logic_clk`, zeros while the enable bit is clear. The enable bit passes two registers, net `rx_tap_en`. A TX lane the payload or another tap uses is an error |
+
+A port given both to a service and to `drive` or `connect` is an error.
+
 ## The payload's own logic
 
-What the ABI and the resolved I/O do not describe, such as board control,
-status words and test features, is written by the consumer and placed by
-these keys. Nothing patches `payload.v` afterwards.
+What neither the ABI, the resolved I/O nor a service describes is written by
+the consumer and placed by these keys. FORGE does not check it: `emit-payload`
+prints how many `drive` entries and Verilog blocks a payload has. Nothing
+patches `payload.v` afterwards.
 
 | Key | Effect |
 |-----|--------|

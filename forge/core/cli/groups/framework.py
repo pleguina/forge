@@ -237,6 +237,9 @@ def cmd_emit_payload(args):
         sys.exit(1)
     print(f"Generated payload wrapper: {out_path}")
     print(f"  ports: {len(fi.ports)}")
+    raw = policies.raw_entries()
+    if any(raw.values()):
+        print(f"  unchecked by FORGE: {raw['drive']} drive entries, {raw['verilog']} Verilog blocks")
 
 
 # ---------------------------------------------------------------------------
