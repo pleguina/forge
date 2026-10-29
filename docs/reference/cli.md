@@ -365,8 +365,8 @@ options:
                         an HLS module before its IP is built)
   --source-type {rtl,hls}
                         Override the source type (default: the module's 'kind')
-  --predict             Predict an HLS module's RTL ports from its C++ source instead of scanning
-                        HDL — for a module whose IP has not been built yet
+  --predict             An HLS module's RTL ports: those of its synthesised IP (component.xml)
+                        when one exists, else predicted from its C++ source
   --output OUTPUT, -o OUTPUT
                         Write the skeleton to this path
   --dry-run             Print the skeleton without writing it
@@ -422,18 +422,22 @@ options:
 usage: forge dev framework [-h] COMMAND ...
 
 positional arguments:
-  COMMAND         framework sub-command
-    import        Load and validate a framework ABI + endpoint manifest
-    io-resolve    Resolve detector_io.yml against a framework import
-    emit-payload  Generate a Blobfish-compatible payload.v
-    ipbb-component
-                  Copy a build's sources into an ipbb component with its .dep file
-    ipbb-xsim     Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
-    floorplan     SLR assignment of a block-design top level from the links and a floorplan spec
-    emp-payload   emp_payload.vhd around the generated top, for an emp-fwk checkout
+  COMMAND            framework sub-command
+    import           Load and validate a framework ABI + endpoint manifest
+    io-resolve       Resolve detector_io.yml against a framework import
+    emit-payload     Generate a Blobfish-compatible payload.v
+    ipbb-component   Copy a build's sources into an ipbb component with its .dep file
+    ipbb-xsim        Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
+    floorplan        SLR assignment of a block-design top level from the links and a floorplan
+                     spec
+    floorplan-compare
+                     A floorplan proposal against the placed design and Vivado's timing reports
+    emp-payload      emp_payload.vhd around the generated top, for an emp-fwk checkout
+    registers        Export a register map: IPbus address table, Blobfish payload services,
+                     Markdown
 
 options:
-  -h, --help      show this help message and exit
+  -h, --help         show this help message and exit
 ```
 
 ##### `forge dev framework emit-payload`
@@ -473,7 +477,7 @@ options:
 ```text
 usage: forge dev framework floorplan [-h] --block-design BLOCK_DESIGN --ir IR
                                      [--crossings CROSSINGS] --detector-io DETECTOR_IO --spec SPEC
-                                     --out OUT
+                                     --out OUT [--report REPORT] [--resources RESOURCES]
 
 options:
   -h, --help            show this help message and exit
@@ -487,6 +491,29 @@ options:
   --spec SPEC           YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell
                         patterns]}}
   --out OUT             XDC to write
+  --report REPORT       JSON report of the proposal (per-SLR load, crossings, spec errors) to
+                        write, with a .check.tcl next to it for after place_design
+  --resources RESOURCES
+                        HLS metrics JSON (modules: {name: {resources: {used}}}) for the per-SLR
+                        load
+```
+
+##### `forge dev framework floorplan-compare`
+
+```text
+usage: forge dev framework floorplan-compare [-h] --report REPORT --placed PLACED
+                                             [--timing-summary TIMING_SUMMARY]
+                                             [--timing-paths TIMING_PATHS] --out OUT
+
+options:
+  -h, --help            show this help message and exit
+  --report REPORT       The proposal's JSON report (floorplan --report)
+  --placed PLACED       floorplan_placed.csv written by the .check.tcl
+  --timing-summary TIMING_SUMMARY
+                        report_timing_summary output
+  --timing-paths TIMING_PATHS
+                        report_timing output (many paths)
+  --out OUT             JSON comparison to write
 ```
 
 ##### `forge dev framework import`
@@ -545,6 +572,23 @@ options:
                         package:component holding the top-level dep file
   --dep DEP             Top-level dep file name
   --out OUT             Shell script to write
+```
+
+##### `forge dev framework registers`
+
+```text
+usage: forge dev framework registers [-h] --map MAP [--ipbus IPBUS] [--top TOP]
+                                     [--blobfish BLOBFISH] [--slr SLR] [--doc DOC]
+
+options:
+  -h, --help           show this help message and exit
+  --map MAP            YAML register map (see forge.integration.registers)
+  --ipbus IPBUS        uHAL address table XML to write
+  --top TOP            Top node id of the address table
+  --blobfish BLOBFISH  YAML with the control_policies placing the map in an SLR's config/readback
+                       words
+  --slr SLR            SLR whose words --blobfish uses
+  --doc DOC            Markdown register table to write
 ```
 
 #### `forge dev hls`

@@ -216,6 +216,10 @@ for the versioning policy.
   lists the synthesised interface as the one FORGE uses.
 
 ### Added
+- **Vitis HLS 2023.2 and 2025.2.1 in the port matrix.** The fixture corpus
+  was synthesised under both; 2025.2.1 gives the 2024.1 port lists exactly,
+  2023.2 also drops `ap_rst` from `m_structs` (a gap documented for that
+  release only, with the new `versions` key of a documented gap).
 - **Register maps.** `forge dev framework registers` reads a typed register
   map (config, status, counter, snapshot and latency-monitor registers with
   fields, reset values, clock domains, clear-on-read and atomic reads) and
