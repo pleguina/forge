@@ -165,10 +165,11 @@ def compute_gen_top_plan(
     """
     c_root = consumer_root(design_path, getattr(options, "consumer_root", None))
     ip_root = resolve_path(options.ip_root, c_root, Path("ips"))
-    build_root = resolve_path(options.build_dir, c_root, Path("build"))
-    hls_build_root = resolve_path(
-        getattr(options, "hls_build_root", None), c_root, Path("build_hls")
-    )
+    # --build-dir (IP metadata) and --hls-build-root (HLS RTL for the manifest
+    # and auto delays) both name the HLS output tree; one given alone is both.
+    hls_build_dir = getattr(options, "hls_build_root", None)
+    build_root = resolve_path(options.build_dir or hls_build_dir, c_root, Path("build"))
+    hls_build_root = resolve_path(hls_build_dir or options.build_dir, c_root, Path("build_hls"))
     src_root = (
         resolve_path(options.src_root, c_root)
         if hasattr(options, "src_root") and options.src_root

@@ -573,6 +573,21 @@ def test_gen_top_writes_provenance_manifest_alongside_design_ir(
     assert manifest.plan_hash == _plan_hash_of(plan)
 
 
+@pytest.mark.parametrize("given", ["build_dir", "hls_build_root"])
+def test_one_hls_build_flag_names_both_roots(tmp_path: Path, given: str) -> None:
+    from forge.contracts.config import DesignConfig
+    from forge.generation.pipeline import GenTopOptions, compute_gen_top_plan
+
+    hls = tmp_path / "hls_out"
+    options = GenTopOptions(
+        mode="verilog", output=str(tmp_path / "algo_top.v"), top_name="algo_top",
+        contracts_from=str(MODULES_YML), **{given: str(hls)},
+    )
+    ctx = compute_gen_top_plan(DesignConfig.load_relaxed(DESIGN_YML), DESIGN_YML, options, read_only=True)
+    assert ctx.build_root == hls
+    assert ctx.hls_build_root == hls
+
+
 def _copy_passthrough_demo_forge_tree(dest_root: Path) -> Path:
     """Copy the real passthrough_demo plugin's forge/ tree (design.yml,
     modules.yml, interface contracts, preserving the real relative layout

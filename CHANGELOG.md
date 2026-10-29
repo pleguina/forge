@@ -735,6 +735,11 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`--build-dir` alone left HLS RTL out of `build_manifest.json`.**
+  `gen-top`/`build` read HLS metadata from `--build-dir` but looked for the
+  HLS Verilog (for the manifest and `delay_cycles: auto`) under
+  `--hls-build-root`, which defaulted to `build_hls/`. Both name the HLS
+  output tree; either one given alone now sets both.
 - **`forge verify run` failed on a fresh checkout of an RTL flow fed from a
   dataset XML.** Preflight and the xsim/Verilator backend requirement checks
   required `stimulus_current.svh`, which the plugin's `prepare_backend_inputs`
