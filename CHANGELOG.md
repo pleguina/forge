@@ -212,6 +212,13 @@ for the versioning policy.
   `warn` instead of `pass` when it could not simulate.
 
 ### Added
+- **Floorplan reports.** `forge dev framework floorplan --report` writes the
+  proposal's per-SLR cells and resources, the nets crossing each SLR boundary
+  against a budget, and the spec's errors (patterns matching nothing, a cell in
+  two SLRs, an SLR not on the device), with a Tcl that records where Vivado
+  placed each cell. `floorplan-compare` sets that, `report_timing_summary` and
+  `report_timing` against the proposal: moved cells, WNS/TNS, slack histogram
+  and worst slack per cell. The XDC calls itself a placement proposal.
 - **Typed payload services.** Control policies take `config_words` (an SLR
   config register word to an algorithm input), `status_words` (fields packed
   into a readback port) and `rx_taps` (received words copied to spare TX

@@ -274,14 +274,22 @@ def cmd_ipbb_xsim(args):
 def cmd_floorplan(args):
     """Write the SLR assignment of a block-design top level."""
     import yaml
-    from forge.integration.floorplan import floorplan, write_xdc
+    from forge.integration.floorplan import cell_modules, floorplan, write_xdc
+    from forge.integration.floorplan_report import check_tcl, hls_resources, proposal
 
     try:
         spec = (yaml.safe_load(Path(args.spec).read_text()) or {}).get("floorplan") or {}
         if "root" not in spec:
             raise ValueError(f"{args.spec}: floorplan.root (the block-design instance in the netlist) is required")
-        res, cells = floorplan(Path(args.block_design), Path(args.ir), Path(args.detector_io), spec,
-                               Path(args.crossings) if args.crossings else None)
+        res, cells, adj, registered = floorplan(Path(args.block_design), Path(args.ir), Path(args.detector_io),
+                                                spec, Path(args.crossings) if args.crossings else None)
+        report = None
+        if args.report:
+            resources = None
+            if args.resources:
+                resources = hls_resources(json.loads(Path(args.resources).read_text()),
+                                          cell_modules(Path(args.block_design).read_text()))
+            report = proposal(res, cells, adj, spec, registered=registered, resources=resources)
     except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -291,6 +299,34 @@ def cmd_floorplan(args):
     per_slr = {s: sum(1 for v in res.values() if v == s) for s in sorted(set(res.values()))}
     print(f"Written: {out} ({len(res)} of {len(cells)} cells: "
           + ", ".join(f"SLR{s} {n}" for s, n in per_slr.items()) + ")")
+    if report is not None:
+        Path(args.report).write_text(json.dumps(report, indent=2) + "\n")
+        check = Path(args.report).with_suffix(".check.tcl")
+        check.write_text(check_tcl(res, root=spec["root"], out_csv="floorplan_placed.csv"))
+        print(f"Written: {args.report} (placement proposal), {check} (run after place_design)")
+        for issue in report["issues"]:
+            print(f"  {issue['level'].upper()}: {issue['message']}")
+        if any(i["level"] == "error" for i in report["issues"]):
+            sys.exit(1)
+
+
+def cmd_floorplan_compare(args):
+    """Compare a floorplan proposal with the placed design and its timing reports."""
+    from forge.integration.floorplan_report import compare
+
+    try:
+        report = json.loads(Path(args.report).read_text())
+        result = compare(report, Path(args.placed),
+                         summary=Path(args.timing_summary).read_text() if args.timing_summary else None,
+                         paths=Path(args.timing_paths).read_text() if args.timing_paths else None)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    Path(args.out).write_text(json.dumps(result, indent=2) + "\n")
+    line = f"{result['placed_as_proposed']} of {result['cells']} cells placed as proposed"
+    if "timing" in result:
+        line += f", WNS {result['timing']['wns_ns']} ns, TNS {result['timing']['tns_ns']} ns"
+    print(f"Written: {args.out} ({line})")
 
 
 def cmd_emp_payload(args):
@@ -446,7 +482,23 @@ def register(sub):
     p_fp.add_argument("--spec", required=True,
                       help="YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell patterns]}}")
     p_fp.add_argument("--out", required=True, help="XDC to write")
+    p_fp.add_argument("--report", default=None,
+                      help="JSON report of the proposal (per-SLR load, crossings, spec errors) to write, "
+                           "with a .check.tcl next to it for after place_design")
+    p_fp.add_argument("--resources", default=None,
+                      help="HLS metrics JSON (modules: {name: {resources: {used}}}) for the per-SLR load")
     p_fp.set_defaults(func=cmd_floorplan)
+
+    p_fpc = grp_sub.add_parser(
+        "floorplan-compare",
+        help="A floorplan proposal against the placed design and Vivado's timing reports",
+    )
+    p_fpc.add_argument("--report", required=True, help="The proposal's JSON report (floorplan --report)")
+    p_fpc.add_argument("--placed", required=True, help="floorplan_placed.csv written by the .check.tcl")
+    p_fpc.add_argument("--timing-summary", default=None, help="report_timing_summary output")
+    p_fpc.add_argument("--timing-paths", default=None, help="report_timing output (many paths)")
+    p_fpc.add_argument("--out", required=True, help="JSON comparison to write")
+    p_fpc.set_defaults(func=cmd_floorplan_compare)
 
     # ── framework emp-payload ─────────────────────────────────────────────
     p_emp = grp_sub.add_parser(
