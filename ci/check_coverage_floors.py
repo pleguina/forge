@@ -63,11 +63,10 @@ GROUPS = [
         (),
         55,
         90,
-        "backend_csim.py and backend_verilator.py measure low under "
-        "`pytest -m 'not integration'`; Vitis HLS and Verilator are both "
-        "actually installed in CI, so re-measure with integration tests "
-        "included before treating this as a real gap rather than a "
-        "marker-exclusion artifact.",
+        "backend_xsim.py and backend_csim.py run their simulators only where "
+        "Vivado and Vitis HLS are installed, which hosted CI runners are "
+        "not; there they are covered up to the tool call. Verilator is "
+        "installed in CI, so backend_verilator.py runs for real.",
     ),
 ]
 

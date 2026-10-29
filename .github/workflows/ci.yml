@@ -100,7 +100,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
-      - run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends graphviz
+      # Verilator runs the verilator backend's tests; xsim and Vitis HLS are
+      # not available on hosted runners.
+      - run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends graphviz verilator
       - run: pip install $FORGE_SETUP
       - name: forge unit tests
         run: python3 -m pytest forge/tests --tb=short -q --junitxml=ci-logs/forge-junit.xml
