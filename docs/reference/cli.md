@@ -1399,7 +1399,7 @@ usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_L
                   [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
                   [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
                   [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE] [--record-modules]
-                  [--plan] [--json]
+                  [--plan] [--require-verified] [--json]
                   MODE ...
 
 positional arguments:
@@ -1419,6 +1419,8 @@ options:
                         one (e.g. event:processor, 4:2)
   --all-events          Run every event in the dataset
   --plugin PLUGIN       Plugin ID to bootstrap (when flow.plugin is absent from YAML)
+  --require-verified    Exit 1 unless everything was verified: a missing simulator, a missing
+                        expected output or a skipped flow fails instead of warning (for CI)
   --json                Machine-readable JSON output
 
 without a verification config:
@@ -1426,7 +1428,8 @@ without a verification config:
 
   --input INPUT         Input transactions (JSON, EMP or APx pattern file)
   --input-format INPUT_FORMAT
-                        json | empv2 | apx | apx-2021 (default: from the file)
+                        A registered dataset format, e.g. json, empv2, apx, apx-2021 (default:
+                        from the file)
   --expected EXPECTED   Expected output transactions
   --expected-format EXPECTED_FORMAT
   --compare-mode {transaction,exact_cycle,fixed_latency,latency_window}

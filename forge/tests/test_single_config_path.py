@@ -204,7 +204,8 @@ def test_bare_test_without_a_verification_config_says_what_to_set(
     payload = json.loads(out)
     assert payload["status"] == "warn"
     assert payload["metrics"]["verification"] == "BLOCKED_MISSING_TOOL"
-    assert "--expected" in payload["next_actions"][0]
+    assert "on PATH" in payload["next_actions"][0]
+    assert "--expected" in payload["next_actions"][1]
 
 
 def test_a_flow_without_its_simulator_is_skipped_not_passed(

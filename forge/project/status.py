@@ -35,6 +35,9 @@ from forge.project.discovery import (
     ProjectDiscovery,
 )
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
+from forge.project.verification_state import (
+    DATA, VerificationSetup, latest_results, overall_status, verification_setup,
+)
 
 # ── Section states ────────────────────────────────────────────────────────
 
@@ -834,6 +837,72 @@ def _flows_without_simulator(design: Path) -> List[Tuple[str, List[str]]]:
     return unrunnable
 
 
+def _check_data_verification(status: ProjectStatus, setup: VerificationSetup) -> _CheckOutput:
+    """``verification.input``/``expected``: the files exist, a level has an
+    expected output, a simulator is here, and what the last run found."""
+    from forge.core.toolchain_versions import tool_present
+    from forge.verification.auto import BACKENDS
+
+    paths = status.paths
+    assert paths is not None
+    if setup.missing:
+        for key, path in setup.missing:
+            status.report.error(
+                "ATG044", f"{key} names {paths.relative(path)}, which does not exist",
+                action=f"Correct {key} in {ROOT_CONFIG_NAME}", path=path,
+            )
+        return _CheckOutput(
+            StatusSection("Verification", FAIL,
+                          f"{len(setup.missing)} verification file(s) missing", ("ATG044",)),
+            [Action(id="fix-verification-data",
+                    description="Point " + ", ".join(k for k, _ in setup.missing)
+                    + f" in {ROOT_CONFIG_NAME} at existing files", safe=False)],
+        )
+
+    actions: List[Action] = []
+    codes: Tuple[str, ...] = ()
+    state = PASS
+    usable = [b for b in setup.backends
+              if b in BACKENDS and all(tool_present(t) for t in BACKENDS[b])]
+    if not usable:
+        status.report.warn(
+            "ATG049",
+            f"no simulator for verification here: {', '.join(setup.backends)} "
+            f"need {'; '.join(', '.join(BACKENDS[b]) for b in setup.backends if b in BACKENDS)}"
+            " — `forge test` records BLOCKED_MISSING_TOOL",
+            action="Put XSim or Verilator on PATH (`forge doctor` lists what it finds)",
+        )
+        codes += ("ATG049",)
+        state = WARN
+    if not setup.expected:
+        status.report.warn(
+            "ATG044",
+            "verification has input but no expected output — `forge test` simulates "
+            "it and checks for X/Z, but verifies nothing (NOT_VERIFIED_NO_ORACLE)",
+            action=f"Set verification.expected in {ROOT_CONFIG_NAME}",
+        )
+        codes += ("ATG044",)
+        state = PARTIAL
+        actions.append(Action(
+            id="add-expected-output",
+            description=f"Add the expected output: verification.expected in {ROOT_CONFIG_NAME}",
+            safe=False,
+        ))
+
+    detail = ", ".join(f"{k.split('.')[-1]} {paths.relative(p)}" for k, p in setup.data_files)
+    records = [r for r in latest_results(paths.report_root) if r.path.name.endswith(".evidence.json")]
+    if records:
+        stale = [r for r in records if r.stale]
+        detail += f"; last forge test: {overall_status(records)}"
+        if stale:
+            detail += f" ({len(stale)} result(s) out of date)"
+    else:
+        detail += "; not run yet"
+        actions.append(Action(id="run-forge-test", description="Run the verification",
+                              command="forge test", safe=True))
+    return _CheckOutput(StatusSection("Verification", state, detail, codes), actions)
+
+
 def _check_verification(status: ProjectStatus) -> _CheckOutput:
     """Is there anything to test the design against?"""
     config, paths = status.config, status.paths
@@ -877,6 +946,10 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
             )],
         )
 
+    setup = verification_setup(config)
+    if setup.kind == DATA:
+        return _check_data_verification(status, setup)
+
     if config.dataset:
         dataset = (config.root / config.dataset).resolve()
         if not dataset.is_file():
@@ -912,17 +985,17 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
         "no verification is configured for this design — nothing checks that the "
         "generated top level behaves correctly",
         action=(
-            "Set verification.config in forge.yml to a design.verification.yml, "
-            "then run `forge test`"
+            "Set verification.input and verification.expected in forge.yml to the "
+            "design's input and expected output, then run `forge test`"
         ),
     )
     return _CheckOutput(
-        StatusSection("Verification", NOT_CONFIGURED, "no verification config", ("ATG044",)),
+        StatusSection("Verification", NOT_CONFIGURED, "no input or expected output", ("ATG044",)),
         [Action(
             id="configure-verification",
             description=(
-                "Configure verification — set verification.config in forge.yml to the "
-                "design.verification.yml that tests this design"
+                "Configure verification — set verification.input and verification.expected "
+                "in forge.yml (or verification.config for a plugin flow)"
             ),
             safe=False,
         )],

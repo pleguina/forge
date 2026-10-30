@@ -181,12 +181,16 @@ def cmd_auto_test(args, project) -> None:
             print(yaml.safe_dump(plan.to_dict(), sort_keys=False))
         sys.exit(0)
 
-    out_dir = project.paths.report_root / "test" / "auto"
+    from forge.project.verification_state import evidence_dir
+
+    out_dir = evidence_dir(project.paths.report_root)
     try:
         evidence = auto.run_plan(plan, project.paths.state_root / "verify", seed=args.seed,
                                  stall=args.stall, backpressure=args.backpressure)
     except (OSError, ValueError, KeyError) as exc:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
+    for old in out_dir.glob("*.evidence.json"):
+        old.unlink()
     artifacts, diagnostics, results = [], [], []
     for e in evidence:
         path = out_dir / f"{e.level.replace(':', '_')}.{e.backend}.evidence.json"
@@ -209,17 +213,48 @@ def cmd_auto_test(args, project) -> None:
     write_junit_xml(junit, suite_name=project.config.project, results=results)
     artifacts.append(str(junit))
     overall = auto.summary(evidence)
+    status = {"VERIFIED": "pass", "FAILED": "fail"}.get(overall, "warn")
+    if status == "warn" and getattr(args, "require_verified", False):
+        status = "fail"
+        diagnostics.append({"severity": "error",
+                            "message": f"--require-verified: verification is {overall}, not VERIFIED"})
     envelope = CommandEnvelope(
-        status={"VERIFIED": "pass", "FAILED": "fail"}.get(overall, "warn"),
+        status=status,
         diagnostics=diagnostics,
         artifacts=artifacts,
         metrics={"verification": overall,
                  "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence}},
-        next_actions=([] if overall == "VERIFIED" else
-                      ["Give an expected output (--expected, or verification.expected / "
-                       "verification.modules.<name>.expected in forge.yml) for each level to verify"]),
+        next_actions=_auto_next_actions(evidence),
     )
     sys.exit(emit(envelope, json_mode=json_mode))
+
+
+def _auto_next_actions(evidence) -> List[str]:
+    """What would turn each unverified level into a verified one, from its status."""
+    from forge.verification import auto
+
+    actions: List[str] = []
+    blocked = sorted({t for e in evidence if e.status == "BLOCKED_MISSING_TOOL"
+                      for t in auto.missing_tools(e.backend)})
+    if blocked:
+        ran = sorted({e.backend for e in evidence if e.status != "BLOCKED_MISSING_TOOL"
+                      and e.status != "SKIPPED"})
+        actions.append(f"Put {', '.join(blocked)} on PATH (`forge doctor` shows what is found)"
+                       + (f", or run only {' / '.join(ran)} with --backend" if ran else ""))
+    failed = [e for e in evidence if e.status == "FAILED"]
+    for e in failed:
+        actions.append(f"Fix {e.level} [{e.backend}]: " + (e.doc.get("reason") or "see its evidence file"))
+    no_oracle = sorted({e.level for e in evidence if e.status == "NOT_VERIFIED_NO_ORACLE"
+                        or (e.status == "BLOCKED_MISSING_TOOL" and not e.doc.get("expected"))})
+    if no_oracle:
+        design = "design" in no_oracle
+        modules = [lv.split(":", 1)[1] for lv in no_oracle if lv.startswith("module:")]
+        where = (["verification.expected (or --expected)"] if design else []) + (
+            [f"verification.modules.{m}.expected" for m in modules])
+        actions.append(f"Give an expected output: {', '.join(where)} in forge.yml")
+    if any(e.status == "PARTIAL" for e in evidence):
+        actions.append("Some interfaces have no expected output; add them to the expected file")
+    return actions
 
 
 def cmd_project_test(args) -> None:
@@ -335,7 +370,10 @@ def cmd_project_test(args) -> None:
     if failed:
         status = "fail"
     elif skipped:
-        status = "warn"
+        status = "fail" if getattr(args, "require_verified", False) else "warn"
+        if status == "fail":
+            diagnostics.append({"severity": "error",
+                                "message": f"--require-verified: {len(skipped)} flow(s) not simulated"})
     else:
         status = "pass"
     envelope = CommandEnvelope(
@@ -522,7 +560,8 @@ def register(sub) -> None:
     )
     auto.add_argument("--input", default=None, help="Input transactions (JSON, EMP or APx pattern file)")
     auto.add_argument("--input-format", dest="input_format", default=None,
-                      help="json | empv2 | apx | apx-2021 (default: from the file)")
+                      help="A registered dataset format, e.g. json, empv2, apx, apx-2021 "
+                           "(default: from the file)")
     auto.add_argument("--expected", default=None, help="Expected output transactions")
     auto.add_argument("--expected-format", dest="expected_format", default=None)
     auto.add_argument("--compare-mode", dest="compare_mode", default=None,
@@ -539,6 +578,11 @@ def register(sub) -> None:
                            "as data a module level can be checked against (derived, not independent)")
     auto.add_argument("--plan", action="store_true", default=False,
                       help="Print what would be verified, and what was inferred, without simulating")
+    p_test.add_argument(
+        "--require-verified", dest="require_verified", action="store_true", default=False,
+        help="Exit 1 unless everything was verified: a missing simulator, a missing expected "
+             "output or a skipped flow fails instead of warning (for CI)",
+    )
     p_test.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p_test.set_defaults(func=cmd_project_test)
     test_sub = p_test.add_subparsers(dest="test_command", metavar="MODE")
