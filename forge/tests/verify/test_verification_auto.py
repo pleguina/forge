@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from forge.core.cli.main import build_parser
 from forge.integration.emp import LinkWord, packet, write_pattern_file
@@ -259,3 +260,89 @@ def test_module_traces_recorded_from_the_design_check_a_module_and_say_where_the
     evidence = json.loads((project / ".forge/reports/test/auto/module_shaper.verilator.evidence.json").read_text())
     assert evidence["expected"]["derived_from"]["level"] == "design"
     assert "not an independent oracle" in evidence["expected"]["derived_from"]["note"]
+
+
+# --- the plan: clock period, module ports from the resolved design, registered formats -----------------------
+
+def test_the_testbench_clock_follows_clock_frequency(project, capsys):
+    config = yaml.safe_load((project / "forge.yml").read_text())
+    config["clock"]["frequency"] = "360MHz"
+    (project / "forge.yml").write_text(yaml.safe_dump(config, sort_keys=False))
+
+    code, out = _test(capsys, "--plan", "--json")
+
+    assert code == 0, out.err
+    assert {lv["clock_period_ns"] for lv in json.loads(out.out)["levels"]} == {2.777778}
+    from forge.verification.auto_tb import Bench, testbench
+    assert "always #1.389 clk" in testbench(Bench("t", "clk", "rst", True, [], period_ns=2.777778))
+
+
+_VHDL = """library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity scaler is
+  generic ( W : integer := 8 );
+  port (
+    clk        : in  std_logic;
+    rst        : in  std_logic;
+    din        : in  std_logic_vector(W-1 downto 0);
+    din_valid  : in  std_logic;
+    dout       : out std_logic_vector(W-1 downto 0);
+    dout_valid : out std_logic
+  );
+end entity;
+
+architecture rtl of scaler is
+begin
+  process (clk) begin
+    if rising_edge(clk) then
+      dout_valid <= din_valid;
+      dout <= std_logic_vector(unsigned(din) + 1);
+    end if;
+  end process;
+end architecture;
+"""
+
+
+def test_a_vhdl_module_level_is_planned_from_the_resolved_design(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "vhd"
+    (root / "rtl").mkdir(parents=True)
+    (root / "rtl" / "scaler.vhd").write_text(_VHDL)
+    plan_adoption(root).write()
+    monkeypatch.chdir(root)
+
+    code, out = _test(capsys, "--plan", "--json")
+
+    assert code == 0, out.err
+    level = next(lv for lv in json.loads(out.out)["levels"] if lv["level"] == "module:scaler")
+    assert "skipped" not in level
+    assert level["clock"] == "clk" and level["reset"] == {"port": "rst", "active": "high"}
+    assert [(i["name"], i["width"]) for i in level["interfaces"]] == [("din", 8), ("dout", 8)]
+    ir = json.loads((root / ".forge/generated/design.ir.json").read_text())["design"]
+    scaler = next(m for m in ir["modules"] if m["name"] == "scaler")
+    assert scaler["language"] == "vhdl"
+    assert {p["name"]: p["width"] for p in scaler["ports"]}["din"] == 8
+
+
+def test_a_registered_dataset_format_feeds_the_concise_path(tmp_path, monkeypatch):
+    from forge.verification import dataset_format as df
+
+    class CsvLoader:
+        def load(self, path):
+            values = [int(x) for x in Path(path).read_text().split(",")]
+            return df.SerializedDataset(
+                events=[{"a": [v]} for v in values],
+                metadata=df.DatasetMetadata(
+                    schema=df.DATASET_SCHEMA, event_ids=[str(i) for i in range(len(values))],
+                    semantic=df.SemanticMetadata(source_content_hash=""),
+                    environment=df.EnvironmentMetadata(source_path=str(path), generated_at="")))
+
+    monkeypatch.setitem(df._NAMED_LOADERS, "csv-test", CsvLoader())
+    (tmp_path / "in.csv").write_text("1,2,3")
+    ref = auto.DataRef.from_spec({"path": "in.csv", "format": "csv-test"}, tmp_path)
+    bench = auto.Bench("m", "clk", "rst", True, infer(
+        [Port("a", "in", 8), Port("a_valid", "in", 1), Port("y", "out", 8), Port("y_valid", "out", 1)]))
+
+    assert auto.load_inputs(ref, bench) == {"a": [1, 2, 3]}
+    assert "csv-test" in auto.data_formats()

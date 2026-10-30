@@ -35,7 +35,7 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from forge.verification.protocols import EMP_FIELDS, Interface
 
-TB_GENERATOR_VERSION = "1"
+TB_GENERATOR_VERSION = "2"
 TB_MODULE = "forge_tb"
 # Drives forge_tb's clock where the simulator runs Verilog delays (XSim);
 # Verilator runs forge_tb from a generated C++ main instead.
@@ -140,7 +140,7 @@ def _concat(names: Sequence[str]) -> str:
 
 
 def testbench(b: Bench) -> str:
-    half = b.period_ns / 2
+    half = round(b.period_ns / 2, 3)   # `timescale 1ns/1ps
     active = "1'b1" if b.reset_active_high else "1'b0"
     idle = "1'b0" if b.reset_active_high else "1'b1"
     ins = [i for i in b.interfaces if i.direction == "in"]

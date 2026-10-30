@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 # Module.timing's flat fields verbatim.
 from ..contracts.config import LatencyDeclaration
 
-IR_SCHEMA_VERSION = "0.3.0"
+IR_SCHEMA_VERSION = "0.4.0"
 
 
 @dataclass
@@ -109,6 +109,16 @@ class ResolvedLogicalInterface:
 
 
 @dataclass
+class ResolvedModulePort:
+    """One physical port of a module, as its port metadata states it: the
+    scanned RTL, the built IP, or the contract standing in for either.
+    ``direction`` is ``in``/``out``/``inout``."""
+    name: str
+    direction: str
+    width: int
+
+
+@dataclass
 class ResolvedModuleDefinition:
     """A module definition (shared across all its instances).
 
@@ -163,6 +173,11 @@ class ResolvedModuleDefinition:
     # the role ``ResolvedConnection.emission_order`` already plays for
     # connections.
     declaration_order: int = 0
+    # ``verilog``/``systemverilog``/``vhdl`` for an RTL module; None for HLS.
+    language: Optional[str] = None
+    # Every physical port, contract roles or not, so a consumer that drives
+    # the module on its own (module-level verification) needs no HDL parser.
+    ports: List[ResolvedModulePort] = field(default_factory=list)
 
 
 @dataclass

@@ -29,7 +29,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from forge.verification import scoreboard as sb
 from forge.verification.auto_tb import (
@@ -40,7 +40,13 @@ from forge.verification.protocols import Interface, Port, infer
 
 EVIDENCE_SCHEMA = "forge.verification_evidence/1"
 BACKENDS = {"xsim": ("xvlog", "xelab", "xsim"), "verilator": ("verilator",)}
-DATA_FORMATS = ("json", "empv2", "apx", "apx-2021")
+
+
+def data_formats() -> List[str]:
+    """Formats ``verification.input``/``expected`` accept: those registered with
+    :mod:`forge.verification.dataset_format`."""
+    from forge.verification.dataset_format import known_formats
+    return known_formats()
 
 
 @dataclass
@@ -55,8 +61,8 @@ class DataRef:
             spec = {"path": str(spec)}
         path = (root / str(spec["path"])).resolve()
         fmt = str(spec.get("format") or _guess_format(path))
-        if fmt not in DATA_FORMATS:
-            raise ValueError(f"{path}: format {fmt!r}, want one of {', '.join(DATA_FORMATS)}")
+        if fmt not in data_formats():
+            raise ValueError(f"{path}: format {fmt!r}, want one of {', '.join(data_formats())}")
         return cls(path, fmt, {str(k): int(v) for k, v in (links or {}).items()})
 
     def sha256(self) -> str:
@@ -70,15 +76,17 @@ class DataRef:
 
 
 def _guess_format(path: Path) -> str:
-    if path.suffix.lower() == ".json":
-        return "json"
-    from forge.integration.apx import is_apx_file
-    from forge.integration.emp import is_pattern_file
-    if is_pattern_file(path):
-        return "empv2"
-    if is_apx_file(path):
-        return "apx"
-    raise ValueError(f"{path}: name its format (one of {', '.join(DATA_FORMATS)})")
+    from forge.verification.dataset_format import get_format_loader
+    try:
+        loader = get_format_loader(path)
+    except ValueError:
+        raise ValueError(f"{path}: name its format (one of {', '.join(data_formats())})") from None
+    named = {name: get_format_loader(path, name) for name in data_formats()}
+    for match in (lambda other: other is loader, lambda other: type(other) is type(loader)):
+        for name, other in named.items():
+            if match(other):
+                return name
+    raise ValueError(f"{path}: name its format (one of {', '.join(data_formats())})")
 
 
 @dataclass
@@ -101,6 +109,7 @@ class Level:
             return out
         assert self.bench is not None
         out["clock"] = self.bench.clock
+        out["clock_period_ns"] = self.bench.period_ns
         out["reset"] = {"port": self.bench.reset, "active": "high" if self.bench.reset_active_high else "low"}
         out["interfaces"] = [{
             "name": i.name, "direction": i.direction, "protocol": i.version, "width": i.width,
@@ -125,8 +134,58 @@ class VerificationPlan:
                 "levels": [lv.to_dict() for lv in self.levels]}
 
 
-def _ports(scanned: Mapping[str, Tuple[str, int]]) -> List[Port]:
-    return [Port(n, d, w) for n, (d, w) in scanned.items()]
+def _role_port(module: Mapping[str, Any], role: str) -> Optional[str]:
+    for iface in module.get("interfaces") or []:
+        if iface.get("name") == role:
+            for member in iface.get("members") or []:
+                raw = (member.get("binding") or {}).get("raw_port")
+                if raw:
+                    return str(raw)
+    return None
+
+
+def _contract_reset_level(module: Mapping[str, Any]) -> Optional[str]:
+    path = module.get("contract_path")
+    if not path or not Path(path).is_file():
+        return None
+    import yaml
+    roles = ((yaml.safe_load(Path(path).read_text()) or {}).get("ip_interface") or {}).get("roles") or {}
+    level = (roles.get("reset_primary") or {}).get("active_level")
+    return str(level).lower() if level else None
+
+
+ModuleBench = Tuple[List[Port], str, str, bool]
+
+
+def _module_bench(module: Optional[Mapping[str, Any]], config: Any) -> Union[str, ModuleBench]:
+    """``(ports, clock, reset, reset_active_high)`` of one IR module, or why not.
+
+    Ports, clock and reset come from the resolved design: the module's own
+    port metadata and its contract's clock/reset roles, falling back to the
+    names ``forge.yml`` gives the design's clock and reset.
+    """
+    from forge.core.utils.signal_names import is_active_low_reset
+
+    if module is None:
+        return "not in the resolved design"
+    ports = [Port(p["name"], p["direction"], int(p["width"])) for p in module.get("ports") or []]
+    if not ports:
+        return "no resolved port metadata for this module"
+    names = {p.name for p in ports}
+    clock = _role_port(module, "clock_primary") or (
+        config.clock.port if config.clock.port in names else None)
+    reset = _role_port(module, "reset_primary") or (
+        config.reset.port if config.reset.port in names else None)
+    if clock is None or reset is None:
+        missing = " or ".join(x for x, v in (("clock", clock), ("reset", reset)) if v is None)
+        return (f"no {missing} port: neither a clock_primary/reset_primary contract role nor "
+                f"forge.yml's {config.clock.port}/{config.reset.port}")
+    level = _contract_reset_level(module)
+    if level is None and reset == config.reset.port:
+        level = config.reset.active
+    if level is None:
+        level = "low" if is_active_low_reset(reset) else "high"
+    return ports, clock, reset, level == "high"
 
 
 def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
@@ -154,19 +213,19 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     def data(value: Any) -> Optional[DataRef]:
         return DataRef.from_spec(value, root, links) if value else None
 
-    from forge.core.utils.hdl_parser import _scan_verilog_ports
-
-    mclock, mreset = project.config.clock.port, project.config.reset.port
+    period = project.config.clock.resolved_period_ns()
     per_module = spec.get("modules") or {}
+    ir_modules = {m["name"]: m for m in ir.get("modules", [])}
+    module_benches: Dict[str, Union[str, ModuleBench]] = {}
     module_ifaces: Dict[str, List[Interface]] = {}
     for name, mod in manifest.get("modules", {}).items():
         files = [Path(f) for f in mod.get("verilog_files", [])]
         if mod.get("kind") != "rtl" or not files:
             continue
-        top = str(mod.get("top") or name)
-        src = next((f for f in files if top in f.read_text()), files[0])
-        ports = _ports(_scan_verilog_ports(src))
-        if {mclock, mreset} <= {p.name for p in ports}:
+        resolved = _module_bench(ir_modules.get(name), project.config)
+        module_benches[name] = resolved
+        if not isinstance(resolved, str):
+            ports, mclock, mreset, _ = resolved
             module_ifaces[name] = infer(ports, exclude=[mclock, mreset],
                                         declared=(per_module.get(name) or {}).get("protocols"))
 
@@ -187,12 +246,11 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
             levels.append(Level(
                 "design", top, [Path(f) for f in manifest["verilog_files"]],
                 [Path(d) for d in manifest.get("include_dirs", [])],
-                Bench(top, clock, reset, True, ifaces, period_ns=_period(project),
+                Bench(top, clock, reset, True, ifaces, period_ns=period,
                       depth=int(spec.get("depth", 1 << 16)), probes=probes),
                 data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
                 compare, int(spec.get("gap", 0))))
     if "modules" in levels_wanted:
-        active_high = project.config.reset.active == "high"
         for name, mod in sorted(manifest.get("modules", {}).items()):
             files = [Path(f) for f in mod.get("verilog_files", [])]
             top = str(mod.get("top") or name)
@@ -201,32 +259,27 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
                 levels.append(Level(f"module:{name}", top, [], [], None,
                                     skip="not an RTL module; checked through the design level"))
                 continue
-            if name not in module_ifaces:
-                levels.append(Level(f"module:{name}", top, [], [], None,
-                                    skip=f"no {mclock}/{mreset} port (forge.yml clock/reset)"))
+            bench = module_benches[name]
+            if isinstance(bench, str):
+                levels.append(Level(f"module:{name}", top, [], [], None, skip=bench))
                 continue
-            ifaces = module_ifaces[name]
+            _, mclock, mreset, active_high = bench
             levels.append(Level(
                 f"module:{name}", top, files, [Path(d) for d in mod.get("include_dirs", [])],
-                Bench(top, mclock, mreset, active_high, ifaces, period_ns=_period(project)),
+                Bench(top, mclock, mreset, active_high, module_ifaces[name], period_ns=period),
                 data(mspec.get("input")), data(mspec.get("expected")),
                 sb.Compare.from_dict(mspec.get("compare")), int(mspec.get("gap", 0))))
-        notes.append(f"modules: clock {mclock}, reset {mreset} (active {project.config.reset.active}, forge.yml)")
+            notes.append(f"module:{name}: clock {mclock}, reset {mreset} "
+                         f"(active {'high' if active_high else 'low'})")
+    notes.append(f"clock period {period:g} ns (forge.yml clock)")
     return VerificationPlan(levels, backends, notes)
-
-
-def _period(project: Any) -> float:
-    c = project.config.clock
-    if c.period_ns:
-        return float(c.period_ns)
-    return 10.0
 
 
 # ── Data ────────────────────────────────────────────────────────────────────
 
 def load_inputs(ref: DataRef, bench: Bench) -> Dict[str, List[Any]]:
     by = {i.name: i for i in bench.interfaces if i.direction == "in"}
-    if ref.format == "json":
+    if _is_concise_json(ref):
         doc = json.loads(ref.path.read_text())
         doc = doc.get("inputs", doc)
         unknown = sorted(set(doc) - set(by))
@@ -238,7 +291,7 @@ def load_inputs(ref: DataRef, bench: Bench) -> Dict[str, List[Any]]:
 
 def load_expected(ref: DataRef, bench: Bench) -> Dict[str, List[sb.Expected]]:
     by = {i.name: i for i in bench.interfaces if i.direction == "out"}
-    if ref.format == "json":
+    if _is_concise_json(ref):
         doc = json.loads(ref.path.read_text())
         doc = doc.get("outputs", doc)
         unknown = sorted(set(doc) - set(by))
@@ -258,21 +311,62 @@ def load_expected(ref: DataRef, bench: Bench) -> Dict[str, List[sb.Expected]]:
             for k, vals in _from_patterns(ref, by, inputs=False).items()}
 
 
+def _is_concise_json(ref: DataRef) -> bool:
+    """``{"inputs"|"outputs": {interface: [values]}}`` or ``{interface: [values]}``,
+    as opposed to a ``forge.dataset`` JSON envelope with ``events``."""
+    if ref.format != "json":
+        return False
+    doc = json.loads(ref.path.read_text())
+    return not (isinstance(doc, dict) and "events" in doc)
+
+
+def _word(raw: Any) -> Any:
+    from types import SimpleNamespace
+    if not isinstance(raw, Mapping):
+        return SimpleNamespace(data=int(str(raw), 0), valid=True, start=False, last=False,
+                               start_of_orbit=False, strobe=True)
+    return SimpleNamespace(
+        data=int(str(raw.get("data", 0)), 0), valid=bool(raw.get("valid", True)),
+        start=bool(raw.get("start", False)), last=bool(raw.get("last", False)),
+        start_of_orbit=bool(raw.get("start_of_orbit", False)), strobe=bool(raw.get("strobe", True)))
+
+
+def _dataset_links(ref: DataRef, by: Mapping[str, Interface]) -> Tuple[Dict[int, List[Any]], Dict[str, List[Any]]]:
+    """``(words per link, values per interface)`` from the format's registered loader.
+
+    A loader with ``read`` (the pattern-file loaders) gives every frame of
+    every link, idle ones included. Any other loader is read through its
+    events: an event's ``links`` (link -> words) are concatenated per link,
+    and values it keys by an interface name are concatenated per interface.
+    """
+    from forge.verification.dataset_format import get_format_loader
+    loader = get_format_loader(ref.path, ref.format)
+    if hasattr(loader, "read"):
+        return dict(loader.read(ref.path).links), {}
+    links: Dict[int, List[Any]] = {}
+    values: Dict[str, List[Any]] = {}
+    for event in loader.load(ref.path).events:
+        for link, words in (event.get("links") or {}).items():
+            links.setdefault(int(link), []).extend(_word(w) for w in words)
+        for name in by:
+            if name in event:
+                v = event[name]
+                values.setdefault(name, []).extend(v if isinstance(v, list) else [v])
+    return links, values
+
+
 def _from_patterns(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) -> Dict[str, List[Any]]:
-    if ref.format == "empv2":
-        from forge.integration.emp import read_board_data
-        board = read_board_data(ref.path)
-    else:
-        from forge.integration.apx import read_apx
-        board = read_apx(ref.path, "2021" if ref.format == "apx-2021" else "2025")
+    board_links, by_name = _dataset_links(ref, by)
+    if by_name:
+        return by_name
     wanted = {k: v for k, v in ref.links.items() if k in by}
     if not wanted:
         raise ValueError(f"{ref.path}: verification.links maps no interface of this level to a link")
     out: Dict[str, List[Any]] = {}
     for name, link in wanted.items():
-        if link not in board.links:
+        if link not in board_links:
             raise ValueError(f"{ref.path}: no link {link} (for {name})")
-        words = board.links[link]
+        words = board_links[link]
         iface = by[name]
         if iface.protocol == "emp_lword":
             keep = words if inputs else [w for w in words if w.valid]
@@ -401,6 +495,7 @@ def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence
         "expected": _expected_ref(level),
         "checker": {"version": sb.CHECKER_VERSION, **level.compare.to_dict()},
         "protocols": {i.name: i.version for i in level.bench.interfaces} if level.bench else {},
+        "clock_period_ns": level.bench.period_ns if level.bench else None,
         "testbench_generator": TB_GENERATOR_VERSION,
         **extra,
     }

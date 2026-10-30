@@ -141,7 +141,8 @@ def _migrate_0_1_0_to_0_2_0(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 # 0.2.0 → 0.3.0 is additive only (a module's resolved compile set and
 # declaration order, a top-level port's origin and the instance pin behind
-# it, and the verification plan's own fields) — no step needed.
+# it, and the verification plan's own fields) — no step needed. So is
+# 0.3.0 → 0.4.0 (a module's HDL language and physical ports).
 _MIGRATIONS = [
     ("0.1.0", "0.2.0", _migrate_0_1_0_to_0_2_0),
 ]

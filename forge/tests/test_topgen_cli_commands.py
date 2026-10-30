@@ -225,7 +225,7 @@ def test_gen_top_verilog_full_pipeline(capsys: pytest.CaptureFixture[str], tmp_p
         assert (tmp_path / artifact).exists(), f"missing {artifact}"
 
     ir_payload = json.loads((tmp_path / "design.ir.json").read_text())
-    assert ir_payload["schema_version"] == "0.3.0"  # module compile set + declaration order
+    assert ir_payload["schema_version"] == "0.4.0"  # module language and ports
     assert len(ir_payload["design"]["modules"]) == 1
 
     # design.ir.json's top_ports must be a real, non-empty cross-check
