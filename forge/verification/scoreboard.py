@@ -7,8 +7,10 @@ Modes (``compare.mode``):
 - ``exact_cycle``: as ``transaction``, and each expected word that gives a
   ``cycle`` must be observed in that cycle.
 - ``fixed_latency``: as ``transaction``, and each word must leave
-  ``latency`` cycles after the input transaction it comes from (``source``,
-  by default its own index, of the first input interface).
+  ``latency`` cycles after its event's first input word on any input
+  interface when the data names events, else after the input transaction it
+  comes from (``source``, by default its own index, of the first input
+  interface).
 - ``latency_window``: as ``fixed_latency`` with ``latency: {min, max}``.
 
 ``tolerance`` (an absolute difference) relaxes a numeric data comparison;
@@ -23,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-CHECKER_VERSION = "1"
+CHECKER_VERSION = "2"
 MODES = ("transaction", "exact_cycle", "fixed_latency", "latency_window")
 
 # Verification statuses, per interface, level and run.
@@ -41,6 +43,7 @@ class Expected:
     value: int
     cycle: Optional[int] = None
     source: Optional[int] = None
+    event: Optional[str] = None      # the experiment event the word belongs to
 
 
 @dataclass
@@ -92,10 +95,12 @@ class InterfaceResult:
 
 
 def compare(interface: str, expected: Optional[Sequence[Expected]], observed: Sequence[Tuple[int, int]],
-            cmp: Compare, *, input_cycles: Sequence[int] = (), unknown: Sequence[int] = ()
-            ) -> InterfaceResult:
+            cmp: Compare, *, input_cycles: Sequence[int] = (), unknown: Sequence[int] = (),
+            event_cycles: Optional[Mapping[str, int]] = None) -> InterfaceResult:
     """Compare one output interface. *observed* is ``(cycle, value)`` in order;
-    *unknown* the cycles where it carried X or Z."""
+    *unknown* the cycles where it carried X or Z; *event_cycles* the cycle of
+    each event's first input word. A row about an expected word names its
+    event."""
     res = InterfaceResult(interface, NOT_VERIFIED_NO_ORACLE, observed=len(observed))
     for c in unknown:
         res.rows.append({"kind": "unknown", "cycle": c})
@@ -110,27 +115,11 @@ def compare(interface: str, expected: Optional[Sequence[Expected]], observed: Se
         return abs(a - b) <= cmp.tolerance
 
     for k, exp in enumerate(expected):
-        if k >= len(observed):
-            row = {"kind": "missing", "index": k, "expected": hex(exp.value)}
-            later = [j for j in range(len(observed)) if same(values[j], exp.value)]
-            if later:
-                row["seen_at"] = later[0]
-            res.rows.append(row)
-            continue
-        cycle, value = observed[k]
-        if not same(value, exp.value):
-            row = {"kind": "mismatch", "index": k, "cycle": cycle, "expected": hex(exp.value), "observed": hex(value)}
-            elsewhere = [j for j in range(len(observed)) if j != k and same(values[j], exp.value)]
-            if elsewhere:
-                row["kind"] = "out_of_order"
-                row["seen_at"] = elsewhere[0]
-            res.rows.append(row)
-            continue
-        timing = _timing(k, exp, cycle, cmp, input_cycles)
-        if timing:
-            res.rows.append(timing)
-            continue
-        res.matched += 1
+        rows_before = len(res.rows)
+        _scan_one(res, k, exp, observed, values, same, cmp, input_cycles, event_cycles)
+        if exp.event is not None:
+            for row in res.rows[rows_before:]:
+                row["event"] = exp.event
     for k in range(len(expected), len(observed)):
         cycle, value = observed[k]
         kind = "duplicate" if k > 0 and values[k - 1] == value else "extra"
@@ -139,14 +128,47 @@ def compare(interface: str, expected: Optional[Sequence[Expected]], observed: Se
     return res
 
 
-def _timing(k: int, exp: Expected, cycle: int, cmp: Compare, input_cycles: Sequence[int]) -> Optional[Dict[str, Any]]:
+def _scan_one(res: InterfaceResult, k: int, exp: Expected, observed: Sequence[Tuple[int, int]],
+              values: Sequence[int], same: Any, cmp: Compare, input_cycles: Sequence[int],
+              event_cycles: Optional[Mapping[str, int]]) -> None:
+    """Check expected word *k*, adding a row to *res* or counting a match."""
+    if k >= len(observed):
+        row = {"kind": "missing", "index": k, "expected": hex(exp.value)}
+        later = [j for j in range(len(observed)) if same(values[j], exp.value)]
+        if later:
+            row["seen_at"] = later[0]
+        res.rows.append(row)
+        return
+    cycle, value = observed[k]
+    if not same(value, exp.value):
+        row = {"kind": "mismatch", "index": k, "cycle": cycle, "expected": hex(exp.value), "observed": hex(value)}
+        elsewhere = [j for j in range(len(observed)) if j != k and same(values[j], exp.value)]
+        if elsewhere:
+            row["kind"] = "out_of_order"
+            row["seen_at"] = elsewhere[0]
+        res.rows.append(row)
+        return
+    timing = _timing(k, exp, cycle, cmp, input_cycles, event_cycles)
+    if timing:
+        res.rows.append(timing)
+        return
+    res.matched += 1
+
+
+def _timing(k: int, exp: Expected, cycle: int, cmp: Compare, input_cycles: Sequence[int],
+            event_cycles: Optional[Mapping[str, int]] = None) -> Optional[Dict[str, Any]]:
     if cmp.mode == "exact_cycle" and exp.cycle is not None and cycle != exp.cycle:
         return {"kind": "wrong_cycle", "index": k, "cycle": cycle, "expected_cycle": exp.cycle}
     if cmp.mode in ("fixed_latency", "latency_window"):
-        src = exp.source if exp.source is not None else k
-        if src >= len(input_cycles):
-            return {"kind": "no_source", "index": k, "source": src}
-        latency = cycle - input_cycles[src]
+        if exp.event is not None and event_cycles is not None:
+            if exp.event not in event_cycles:
+                return {"kind": "no_source", "index": k, "source": exp.event}
+            latency = cycle - event_cycles[exp.event]
+        else:
+            src = exp.source if exp.source is not None else k
+            if src >= len(input_cycles):
+                return {"kind": "no_source", "index": k, "source": src}
+            latency = cycle - input_cycles[src]
         assert cmp.latency_min is not None and cmp.latency_max is not None
         if not cmp.latency_min <= latency <= cmp.latency_max:
             return {"kind": "latency", "index": k, "cycle": cycle, "latency": latency,

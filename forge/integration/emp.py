@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence
+from typing import Dict, List, Mapping, Sequence, Tuple
 
 LWORD_WIDTH = 64
 
@@ -68,6 +68,71 @@ class BoardData:
         if current:
             out.append(current)
         return out
+
+
+class EventAssociationError(ValueError):
+    """Packets on different links cannot be put together into events."""
+
+
+def associate_events(
+    board: BoardData, links: Sequence[int], *, max_skew: int = 0, missing: str = "error",
+) -> List[Dict[int, Tuple[int, int, List[LinkWord]]]]:
+    """The packets of *links*, grouped into events by the frame they start in:
+    per event, ``link -> (first frame, last frame, valid words)``.
+
+    An event opens at the earliest packet not yet taken and spans its frames
+    plus *max_skew*; every link's next packet must start inside that span. A
+    link with no packet there is an error naming the link and frame
+    (``missing="error"``), or an empty packet for that event
+    (``missing="empty"``). Grouping by frame rather than by position keeps
+    one missing packet from shifting every later event onto the wrong partner.
+    """
+    if missing not in ("error", "empty"):
+        raise ValueError(f"association missing: {missing!r}, want error or empty")
+    starts: Dict[int, List[Tuple[int, int, List[LinkWord]]]] = {}
+    for link in links:
+        found: List[Tuple[int, int, List[LinkWord]]] = []
+        current: List[LinkWord] = []
+        first = last = 0
+        for i, w in enumerate(board.links.get(link, [])):
+            if not w.valid:
+                continue
+            if w.start and current:
+                found.append((first, last, current))
+                current = []
+            if not current:
+                first = i
+            current.append(w)
+            last = i
+            if w.last:
+                found.append((first, last, current))
+                current = []
+        if current:
+            found.append((first, last, current))
+        starts[link] = found
+    nxt = {link: 0 for link in links}
+    events: List[Dict[int, Tuple[int, int, List[LinkWord]]]] = []
+    while True:
+        pending = [starts[link][nxt[link]][0] for link in links if nxt[link] < len(starts[link])]
+        if not pending:
+            return events
+        opened = min(pending)
+        span_end = max(starts[link][nxt[link]][1] for link in links
+                       if nxt[link] < len(starts[link]) and starts[link][nxt[link]][0] == opened) + max_skew
+        present = [link for link in links
+                   if nxt[link] < len(starts[link]) and starts[link][nxt[link]][0] <= span_end]
+        absent = [link for link in links if link not in present]
+        if absent and missing == "error":
+            raise EventAssociationError(
+                f"event {len(events)} (frames {opened}-{span_end}): link(s) {', '.join(map(str, absent))} have "
+                f"no packet starting there, link(s) {', '.join(map(str, present))} do. Pairing "
+                f"packets by position would shift every later event; set "
+                f"verification.association.missing: empty if a link may carry no packet")
+        event: Dict[int, Tuple[int, int, List[LinkWord]]] = {link: (-1, -1, []) for link in absent}
+        for link in present:
+            event[link] = starts[link][nxt[link]]
+            nxt[link] += 1
+        events.append(event)
 
 
 def write_pattern_file(

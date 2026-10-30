@@ -32,7 +32,7 @@ def test_formats_are_named_and_txt_is_known_by_content(tmp_path):
         get_format_loader(emp, "x2o")
 
 
-def test_an_emp_event_is_the_kth_packet_of_every_link(tmp_path):
+def test_an_emp_event_is_the_packets_that_start_together(tmp_path):
     data = EmpPatternDatasetLoader().load(_emp(tmp_path))
     assert data.metadata.event_ids == ["0", "1"]
     first, second = data.events
@@ -40,6 +40,19 @@ def test_an_emp_event_is_the_kth_packet_of_every_link(tmp_path):
     assert [w["data"] for w in first["links"]["1"]] == ["0x000000000000000b", "0x000000000000000c"]
     assert first["links"]["1"][0]["strobe"] is False and first["links"]["1"][1]["strobe"] is True
     assert list(second["links"]) == ["0"] and second["links"]["0"][0]["data"] == "0x000000000000000d"
+
+
+def test_a_link_without_a_packet_is_not_paired_with_its_next_one(tmp_path):
+    path = tmp_path / "gap.txt"
+    frames = [{1: packet(0x1)}, {}, {0: packet(0xA), 1: packet(0x2)}]
+    write_pattern_file(path, frames, [0, 1])
+
+    first, second = EmpPatternDatasetLoader().load(path).events
+
+    assert list(first["links"]) == ["1"] and first["frame"] == 0
+    assert second["frame"] == 2
+    assert [w["data"] for w in second["links"]["0"]] == ["0x000000000000000a"]
+    assert [w["data"] for w in second["links"]["1"]] == ["0x0000000000000002"]
 
 
 def test_events_of_a_named_format_are_listed_for_a_run(tmp_path):

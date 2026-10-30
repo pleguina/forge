@@ -325,10 +325,12 @@ class JsonDatasetLoader:
 class EmpPatternDatasetLoader:
     """Loader for EMP pattern files (format ``empv2``, emp-fwk and CMSSW's EMPv2).
 
-    Event *k* is the *k*-th packet (start to last valid word) of every link
-    that carries one: ``{"links": {link: [word, ...]}}``, each word with its
-    data and metadata bits, strobe included. Idle frames separate events and
-    are not kept; the file itself is the lossless record
+    An event is the packets (start to last valid word) that start in the same
+    frame, on every link that carries one: ``{"frame": f, "links": {link:
+    [word, ...]}}``, each word with its data and metadata bits, strobe
+    included. A link with no packet in that frame is absent from the event,
+    never paired with its next packet. Idle frames separate events and are
+    not kept; the file itself is the lossless record
     (``forge.integration.emp.read_board_data``).
     """
 
@@ -340,20 +342,22 @@ class EmpPatternDatasetLoader:
 
     def load(self, path: Path) -> SerializedDataset:
         path = Path(path)
+        from forge.integration.emp import associate_events
+
         board = self.read(path)
-        per_link = {link: board.packets(link) for link in board.links}
-        n = max((len(p) for p in per_link.values()), default=0)
+        carrying = sorted(link for link in board.links if board.packets(link))
         events: "list[dict[str, Any]]" = []
-        for k in range(n):
+        for k, grouped in enumerate(associate_events(board, carrying, missing="empty")):
             links = {
                 str(link): [
                     {"data": f"0x{w.data:016x}", "valid": w.valid, "start": w.start, "last": w.last,
                      "start_of_orbit": w.start_of_orbit, "strobe": w.strobe}
-                    for w in packets[k]
+                    for w in words
                 ]
-                for link, packets in per_link.items() if k < len(packets)
+                for link, (_, _, words) in grouped.items() if words
             }
-            events.append({"id": str(k), "board": board.name, "links": links})
+            frame = min(first for first, _, words in grouped.values() if words)
+            events.append({"id": str(k), "board": board.name, "frame": frame, "links": links})
         metadata = DatasetMetadata(
             schema=DATASET_SCHEMA,
             event_ids=[e["id"] for e in events],
