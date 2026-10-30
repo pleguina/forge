@@ -228,7 +228,7 @@ module algo_top (
   ...
   shaper shaper (
     .clk(ap_clk),
-    .rst_n(ap_rst),
+    .rst_n(~ap_rst),
     .decimated(net_decimator_decimated),
     .decimated_valid(net_decimator_decimated_valid),
     .shaped(net_shaper_shaped),
@@ -329,7 +329,6 @@ Available: 1 automatic fix(es).
      width_declared_by_source = shaped: 31 -> 16  [deterministic, from rtl/shaper.v]
 
 Needs you — these are decisions, not transcription:
-  - Confirm how 'rst_n' is driven — FORGE does not model reset polarity and wires it straight through
   - Declare each module's latency in forge.yml (`modules: {decimator: {latency: <cycles>}}`) — it cannot be read from the ports
 
 Run `forge fix --apply` to apply them.
