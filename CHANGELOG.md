@@ -240,7 +240,9 @@ for the versioning policy.
   `PARTIAL`, never a pass without an expected output, and each comes with an
   evidence file (sources, compile key, tool, input and expected hashes,
   protocol and checker versions, rows). `--plan` prints what was inferred;
-  `--stall` and `--backpressure` exercise flow control.
+  `--stall` and `--backpressure` exercise flow control; `--record-modules`
+  records each module instance's traffic during the design-level run, for
+  module levels to be checked against, marked as derived.
 - **APx pattern files.** `forge.integration.apx` reads and writes them as
   CMSSW's DemonstratorTools does, and datasets name them `apx` (the sideband
   bit order CMSSW writes) or `apx-2021` (the one its reader expects). There is

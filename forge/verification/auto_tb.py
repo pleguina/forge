@@ -20,17 +20,18 @@ Protocols, as driven and observed:
 - ``emp_lword``: an input word per frame, all fields as given; an output is
   recorded when valid is high, with its fields.
 
-An X or Z on a recorded output, or on an output's valid after reset, is
-written to the trace as ``<cycle> !<interface> x``. The run ends ``drain``
+A probe records an interface of a module instance inside the DUT the same
+way, as ``<instance>/<interface>``. An X or Z on a recorded output, or on an
+output's valid after reset, is written to the trace as ``<cycle> !<interface> x``. The run ends ``drain``
 cycles after the inputs are consumed and every output has given the words
 expected of it, or ``quiet`` cycles after the last input or output.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from forge.verification.protocols import EMP_FIELDS, Interface
 
@@ -51,6 +52,8 @@ class Bench:
     period_ns: float = 10.0
     reset_cycles: int = 8
     depth: int = 1 << 16
+    # (instance, interface of its module): traffic recorded inside the DUT
+    probes: List[Tuple[str, Interface]] = field(default_factory=list)
 
 
 def word_width(iface: Interface) -> int:
@@ -90,6 +93,18 @@ def pack(iface: Interface, value: Any) -> int:
     if v < 0 or v >> iface.width:
         raise ValueError(f"{iface.name}: {value!r} does not fit {iface.width} bits")
     return v
+
+
+def unpack(iface: Interface, word: int) -> Any:
+    """A traced word as :func:`pack` takes it."""
+    if iface.protocol != "emp_lword":
+        return hex(word)
+    order = _emp_order(iface)
+    flags = word >> iface.width
+    out: Dict[str, Any] = {"data": hex(word & ((1 << iface.width) - 1))}
+    for k, f in enumerate(order):
+        out[f] = (flags >> (len(order) - 1 - k)) & 1
+    return out
 
 
 def _int(v: Any) -> int:
@@ -236,6 +251,20 @@ def testbench(b: Bench) -> str:
         if o.ready is not None:
             L.append(f"    {o.ready.name} <= ($urandom % 100) >= bp_{o.name};")
         L += ["  end", ""]
+
+    for inst, pi in b.probes:
+        ref = [f"dut.{inst}.{q.name}" for q in reversed(pi.data)]
+        if pi.protocol == "emp_lword":
+            ref = [f"dut.{inst}.{pi.fields[f].name}" for f in _emp_order(pi)] + [f"dut.{inst}.{pi.data[0].name}"]
+        if pi.protocol == "scalar":
+            fire = "1'b1"
+        elif pi.protocol == "ready_valid":
+            fire = f"dut.{inst}.{pi.valid.name} && dut.{inst}.{pi.ready.name}"  # type: ignore[union-attr]
+        else:
+            fire = f"dut.{inst}.{pi.valid.name}"  # type: ignore[union-attr]
+        tag = (">" if pi.direction == "in" else "<") + f"{inst}/{pi.name}"
+        L += [f"  always @(posedge {b.clock}) if (running && {fire})",
+              f'    $fdisplay(fd, "%0d {tag} %h", cycle, {_concat(ref)});', ""]
 
     consumed = " && ".join([f"p_{i.name} >= n_{i.name}" for i in ins] or ["1'b1"])
     if any(i.protocol == "ready_valid" for i in ins):

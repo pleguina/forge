@@ -238,3 +238,24 @@ def test_hls_calls_return_their_results_at_the_reported_latency(tmp_path, backen
     ev = auto.run(level, backend, tmp_path / "work", stall=25, seed=2)
     assert ev.status == sb.VERIFIED, (ev.doc.get("reason"), ev.doc.get("interfaces"))
     assert ev.doc["interfaces"][0]["matched"] == 60
+
+
+@needs_verilator
+def test_module_traces_recorded_from_the_design_check_a_module_and_say_where_they_came_from(project, capsys):
+    code, out = _test(capsys, "--input", "input.json", "--expected", "expected.json", "--backend", "verilator",
+                      "--level", "design", "--record-modules", "--json")
+    assert code == 0, out.err
+    design = json.loads((project / ".forge/reports/test/auto/design.verilator.evidence.json").read_text())
+    shaper = Path(next(d for d in design["recorded_modules"] if d.endswith("/shaper")))
+    assert len(json.loads((shaper / "input.json").read_text())["decimated"]) == 20
+    config = (project / "forge.yml").read_text()
+    (project / "forge.yml").write_text(config + (
+        f"verification:\n  modules:\n    shaper:\n      input: {shaper / 'input.json'}\n"
+        f"      expected: {shaper / 'expected.json'}\n"))
+    code, out = _test(capsys, "--backend", "verilator", "--level", "modules", "--json")
+    levels = json.loads(out.out)["metrics"]["levels"]
+    assert levels["module:shaper[verilator]"] == "VERIFIED"
+    assert levels["module:packer[verilator]"] == "NOT_VERIFIED_NO_ORACLE"
+    evidence = json.loads((project / ".forge/reports/test/auto/module_shaper.verilator.evidence.json").read_text())
+    assert evidence["expected"]["derived_from"]["level"] == "design"
+    assert "not an independent oracle" in evidence["expected"]["derived_from"]["note"]

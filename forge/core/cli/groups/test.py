@@ -148,6 +148,8 @@ def cmd_auto_test(args, project) -> None:
         value = getattr(args, key, None)
         if value:
             spec[f"{key}s"] = [value]
+    if getattr(args, "record_modules", False):
+        spec["record_modules"] = True
     if getattr(args, "compare_mode", None):
         spec["compare"] = {**(spec.get("compare") or {}), "mode": args.compare_mode}
     if getattr(args, "latency", None):
@@ -532,6 +534,9 @@ def register(sub) -> None:
     auto.add_argument("--stall", type=int, default=0, help="Percent of cycles a ready_valid input withholds a word")
     auto.add_argument("--backpressure", type=int, default=0,
                       help="Percent of cycles a ready_valid output's ready is low")
+    auto.add_argument("--record-modules", dest="record_modules", action="store_true", default=False,
+                      help="Record each module instance's inputs and outputs during the design-level run, "
+                           "as data a module level can be checked against (derived, not independent)")
     auto.add_argument("--plan", action="store_true", default=False,
                       help="Print what would be verified, and what was inferred, without simulating")
     p_test.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")

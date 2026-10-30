@@ -1398,7 +1398,8 @@ usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_L
                   [--expected EXPECTED] [--expected-format EXPECTED_FORMAT]
                   [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
                   [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
-                  [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE] [--plan] [--json]
+                  [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE] [--record-modules]
+                  [--plan] [--json]
                   MODE ...
 
 positional arguments:
@@ -1438,6 +1439,9 @@ without a verification config:
   --stall STALL         Percent of cycles a ready_valid input withholds a word
   --backpressure BACKPRESSURE
                         Percent of cycles a ready_valid output's ready is low
+  --record-modules      Record each module instance's inputs and outputs during the design-level
+                        run, as data a module level can be checked against (derived, not
+                        independent)
   --plan                Print what would be verified, and what was inferred, without simulating
 ```
 

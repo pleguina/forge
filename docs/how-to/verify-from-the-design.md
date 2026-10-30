@@ -61,6 +61,15 @@ compiled, reset, run and checked for X and Z on its outputs, and reports
 `--level design` or `verification.levels: [design]` runs one level only. An
 HLS module is checked through the levels that contain it.
 
+When the only reference is at the design level, `--record-modules` records,
+during the design-level run, what every module instance received and
+produced, under `.forge/verify/design/<backend>/module_traces/<instance>/`
+(`input.json`, `expected.json`). Naming them as a module's
+`verification.modules.<name>.input`/`expected` checks that module against
+them, and its evidence carries `expected.derived_from`: the run they were
+recorded from. They are a regression reference for a module, taken from the
+design as it behaved, not an independent statement of what it should do.
+
 ## Data
 
 A JSON input names each input interface and its transactions, in order; an

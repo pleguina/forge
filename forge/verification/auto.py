@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from forge.verification import scoreboard as sb
 from forge.verification.auto_tb import (
-    TB_CLOCKED, TB_GENERATOR_VERSION, TB_MODULE, Bench, pack, testbench, verilator_main, write_inputs,
+    TB_CLOCKED, TB_GENERATOR_VERSION, TB_MODULE, Bench, pack, testbench, unpack, verilator_main, write_inputs,
 )
 from forge.verification.compile_key import build_key, reusable, tool_version
 from forge.verification.protocols import Interface, Port, infer
@@ -154,6 +154,22 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     def data(value: Any) -> Optional[DataRef]:
         return DataRef.from_spec(value, root, links) if value else None
 
+    from forge.core.utils.hdl_parser import _scan_verilog_ports
+
+    mclock, mreset = project.config.clock.port, project.config.reset.port
+    per_module = spec.get("modules") or {}
+    module_ifaces: Dict[str, List[Interface]] = {}
+    for name, mod in manifest.get("modules", {}).items():
+        files = [Path(f) for f in mod.get("verilog_files", [])]
+        if mod.get("kind") != "rtl" or not files:
+            continue
+        top = str(mod.get("top") or name)
+        src = next((f for f in files if top in f.read_text()), files[0])
+        ports = _ports(_scan_verilog_ports(src))
+        if {mclock, mreset} <= {p.name for p in ports}:
+            module_ifaces[name] = infer(ports, exclude=[mclock, mreset],
+                                        declared=(per_module.get(name) or {}).get("protocols"))
+
     top_ports = [Port(p["name"], p["direction"], int(p["width"])) for p in ir["top_ports"]]
     clock = next((p["name"] for p in ir["top_ports"] if p.get("origin") == "clock"), None)
     reset = next((p["name"] for p in ir["top_ports"] if p.get("origin") == "reset"), None)
@@ -164,20 +180,19 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
             levels.append(Level("design", top, [], [], None, skip="the top level has no clock or reset port"))
         else:
             ifaces = infer(top_ports, exclude=[clock, reset], declared=spec.get("protocols"))
+            probes = [(inst["id"], i) for inst in ir.get("instances", []) if spec.get("record_modules")
+                      for i in module_ifaces.get(inst["module"], [])]
             notes.append(f"design: clock {clock}, reset {reset} (active high, generated top), "
                          + ", ".join(f"{i.name}: {i.protocol}" for i in ifaces))
             levels.append(Level(
                 "design", top, [Path(f) for f in manifest["verilog_files"]],
                 [Path(d) for d in manifest.get("include_dirs", [])],
-                Bench(top, clock, reset, True, ifaces, period_ns=_period(project), depth=int(spec.get("depth", 1 << 16))),
+                Bench(top, clock, reset, True, ifaces, period_ns=_period(project),
+                      depth=int(spec.get("depth", 1 << 16)), probes=probes),
                 data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
                 compare, int(spec.get("gap", 0))))
     if "modules" in levels_wanted:
-        from forge.core.utils.hdl_parser import _scan_verilog_ports
-
-        mclock, mreset = project.config.clock.port, project.config.reset.port
         active_high = project.config.reset.active == "high"
-        per_module = spec.get("modules") or {}
         for name, mod in sorted(manifest.get("modules", {}).items()):
             files = [Path(f) for f in mod.get("verilog_files", [])]
             top = str(mod.get("top") or name)
@@ -186,14 +201,11 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
                 levels.append(Level(f"module:{name}", top, [], [], None,
                                     skip="not an RTL module; checked through the design level"))
                 continue
-            src = next((f for f in files if top in f.read_text()), files[0])
-            ports = _ports(_scan_verilog_ports(src))
-            names = {p.name for p in ports}
-            if mclock not in names or mreset not in names:
+            if name not in module_ifaces:
                 levels.append(Level(f"module:{name}", top, [], [], None,
                                     skip=f"no {mclock}/{mreset} port (forge.yml clock/reset)"))
                 continue
-            ifaces = infer(ports, exclude=[mclock, mreset], declared=mspec.get("protocols"))
+            ifaces = module_ifaces[name]
             levels.append(Level(
                 f"module:{name}", top, files, [Path(d) for d in mod.get("include_dirs", [])],
                 Bench(top, mclock, mreset, active_high, ifaces, period_ns=_period(project)),
@@ -346,6 +358,36 @@ class Evidence:
         path.write_text(json.dumps(self.doc, indent=2) + "\n")
 
 
+DERIVED = "derived.json"
+
+
+def _expected_ref(level: Level) -> Optional[Dict[str, Any]]:
+    if level.expected is None:
+        return None
+    ref = level.expected.to_dict()
+    sidecar = level.expected.path.parent / DERIVED
+    if sidecar.is_file():
+        ref["derived_from"] = json.loads(sidecar.read_text())
+    return ref
+
+
+def _record(bench: Bench, trace: Mapping[str, Any], out: Path, origin: Dict[str, Any]) -> List[str]:
+    """Each probed instance's inputs and outputs as the JSON a module level reads."""
+    written = []
+    for inst in sorted({i for i, _ in bench.probes}):
+        ifaces = [pi for i, pi in bench.probes if i == inst]
+        d = out / inst
+        d.mkdir(parents=True, exist_ok=True)
+        for name, direction in (("input.json", "inputs"), ("expected.json", "outputs")):
+            want = "in" if direction == "inputs" else "out"
+            doc = {pi.name: [unpack(pi, v) for _, v in trace[direction].get(f"{inst}/{pi.name}", [])]
+                   for pi in ifaces if pi.direction == want}
+            (d / name).write_text(json.dumps(doc, indent=1) + "\n")
+        (d / DERIVED).write_text(json.dumps({**origin, "instance": inst}, indent=1) + "\n")
+        written.append(str(d))
+    return written
+
+
 def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence:
     doc: Dict[str, Any] = {
         "schema": EVIDENCE_SCHEMA,
@@ -356,7 +398,7 @@ def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence
         "sources": [{"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
                     for f in level.sources if f.is_file()],
         "input": level.input.to_dict() if level.input else None,
-        "expected": level.expected.to_dict() if level.expected else None,
+        "expected": _expected_ref(level),
         "checker": {"version": sb.CHECKER_VERSION, **level.compare.to_dict()},
         "protocols": {i.name: i.version for i in level.bench.interfaces} if level.bench else {},
         "testbench_generator": TB_GENERATOR_VERSION,
@@ -441,6 +483,11 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     status = sb.combine([r.status for r in results])
     if expected is None and status != sb.FAILED:
         status = sb.NOT_VERIFIED_NO_ORACLE
+    if bench.probes:
+        ident["recorded_modules"] = _record(bench, t, work / "module_traces", {
+            "level": level.name, "backend": backend, "status": status, "compile_key": key,
+            "input_sha256": level.input.sha256() if level.input else None,
+            "note": "recorded from the design level: a regression reference, not an independent oracle"})
     return _evidence(level, backend, status, **ident,
                      inputs_driven={k: len(v) for k, v in t["inputs"].items()},
                      interfaces=[r.to_dict() for r in results])
