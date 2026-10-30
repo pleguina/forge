@@ -15,6 +15,20 @@ before doing any further work (`validate_flow_matrix()`).
 | `reduced_chain_rtl` | experimental | `xsim` | `xsim` | Multi-module RTL chain simulation; TB generation and port extraction are not yet proven for this scope on the canonical path |
 | `single_module_rtl` | supported | `xsim` | `verilator`, `xsim` | Single HLS-generated RTL module via Xilinx XSIM or Verilator |
 
+## Verification from input and expected data
+
+What `forge test` runs when forge.yml gives `verification.input` /
+`expected` (or `--input` / `--expected`), from
+`forge.verification.auto.BACKENDS` and the dataset formats registered
+with `forge.verification.dataset_format`:
+
+| Simulator | Tools it needs on PATH |
+|---|---|
+| `verilator` | `verilator` |
+| `xsim` | `xvlog`, `xelab`, `xsim` |
+
+Data formats: `apx`, `apx-2021`, `empv2`, `json`, `xml`.
+
 ## Vitis HLS versions
 
 FORGE predicts the RTL interface Vitis HLS will generate for a C++

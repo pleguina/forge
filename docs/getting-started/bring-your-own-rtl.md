@@ -177,7 +177,7 @@ FORGE project status
   ✅ Clock/reset model         PASS               clock clk, reset rst_n (active low, driven by ~ap_rst)
   ◐  Latency model             PARTIAL            0 of 3 declared
   ○  Generated artifacts       NOT CONFIGURED     not generated yet
-  ○  Verification              NOT CONFIGURED     no verification config
+  ○  Verification              NOT CONFIGURED     no input or expected output
 
   Project completion: 64% (in progress)
 ```
@@ -459,6 +459,50 @@ question:
   ✅ Supported constructs      PASS               1 opaque: axi_bridge
 ```
 
+### Widths the source does not state
+
+A port whose range FORGE cannot evaluate — a macro defined elsewhere, a
+package constant, a function other than `$clog2` — has no width it can
+generate. Adoption asks for it instead of guessing, and `forge check` and
+`forge build` fail (`ATG051`) until it is declared:
+
+```yaml title="forge.yml"
+modules:
+  lookup:
+    widths:
+      lookup_addr: 4
+```
+
+A declared width for a port whose width the source does state must agree
+with it.
+
+## 4. Verify it
+
+Give `forge test` the design's input and the output you expect for it:
+
+```yaml title="forge.yml"
+verification:
+  input: data/input.json
+  expected: data/expected.json
+```
+
+`forge test` builds the design, drives its input interfaces, compares its
+outputs with the expected words, and writes the evidence under
+`.forge/reports/test/auto/`; `forge report` shows it, and says when a source
+or a data file changed after the run. A level with no expected output is
+`NOT_VERIFIED_NO_ORACLE` and one whose simulator is missing is
+`BLOCKED_MISSING_TOOL`. Both are warnings unless you pass
+`--require-verified`, which is what CI should run:
+
+```bash
+forge test --require-verified
+```
+
+The testbench clock follows `clock.frequency` (or `clock.period_ns`). Pattern
+files (`empv2`, `apx`) and any format registered with
+`forge.verification.dataset_format` are read too; see the
+[support matrix](../reference/support-matrix.md).
+
 ## Already have a design.yml?
 
 A project that already describes its design by hand — a `design.yml`, its
@@ -501,9 +545,11 @@ Everything under `.forge/` is ordinary FORGE configuration — the same
 format a hand-authored project uses, which is why `forge dev topgen validate`
 and the rest work on an adopted project unchanged. It is rewritten by every
 command, so when you need more than adoption can infer, record it in
-`forge.yml`: a module's latency, a contract of your own
-(`modules.<name>.contract`), and the `design.verification.yml` that
-`forge test` runs (`verification.config`).
+`forge.yml`: a module's latency, a port width the source does not state
+(`modules.<name>.widths`), a contract of your own
+(`modules.<name>.contract`), and what `forge test` verifies against
+(`verification.input`/`expected`, or a plugin flow's
+`design.verification.yml` as `verification.config`).
 
 - [Contracts and protocols](../concepts/contracts-and-protocols.md) — the
   semantics adoption leaves blank (`wiring_kind`, `protocol`, coordinates)
