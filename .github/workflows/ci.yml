@@ -138,6 +138,22 @@ jobs:
       - run: pip install $FORGE_SETUP
       - run: bash ci/verify_smoke.sh
 
+  verification-fresh-user:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends verilator
+      - run: pip install $FORGE_SETUP
+      - run: bash ci/verification_fresh_user.sh "$RUNNER_TEMP/verification"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-evidence
+          path: ${{ runner.temp }}/verification/simple_pipeline/.forge/reports/test/auto/
+          retention-days: 14
+
   fresh-user-check:
     runs-on: ubuntu-latest
     steps:

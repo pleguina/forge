@@ -219,6 +219,12 @@ for the versioning policy.
   `pass`; it now loads the verification contract and checks every flow's
   dataset exists, and says the simulation is `forge test`'s.
 ### Added
+- **Reference runs with evidence.** `ci/verification_fresh_user.sh` (a hosted
+  CI job, Verilator) verifies a plain-RTL design from data alone and keeps the
+  evidence files; `ci/reference_pipelines.sh`, on a machine with Vivado and
+  Vitis HLS, runs it on XSim too and plays trigger_demo through emp-fwk's
+  testbench for the emp-fwk release given, recording tool versions, logs,
+  sink files and results.
 - **Verification from the design, without a plugin.** `forge test --input
   --expected` (or `verification.input`/`expected` in `forge.yml`) finds the
   top level's interfaces from its ports (`valid`, `ready_valid`, AXI4-Stream,

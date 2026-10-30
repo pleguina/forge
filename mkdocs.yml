@@ -133,6 +133,7 @@ nav:
       - Floorplan: reference/floorplan.md
       - Register Maps: reference/registers.md
       - Link Map: reference/link-map.md
+      - Reference Runs: reference/reference-runs.md
       - Interface Members: reference/interface-members.md
       - Transformations: reference/transformations.md
       - Diagnostic Catalogue: reference/diagnostics.md
