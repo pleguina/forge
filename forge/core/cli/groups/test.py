@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -129,6 +130,133 @@ def _flow_build_argv(project, verification: Path, flow) -> List[str]:
     return argv
 
 
+_STATUS_ICON = {"VERIFIED": "✅", "FAILED": "❌", "PARTIAL": "⚠️ ", "NOT_VERIFIED_NO_ORACLE": "⚠️ ",
+                "BLOCKED_MISSING_TOOL": "⏭️ ", "SKIPPED": "⏭️ "}
+
+
+def cmd_auto_test(args, project) -> None:
+    """`forge test` without a verification config: plan from the design and
+    forge.yml's verification keys, simulate every level, record evidence."""
+    from forge.core.cli._shared import run_forge_command
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.verification import auto
+    from forge.verification.junit_xml import write_junit_xml
+
+    json_mode = getattr(args, "json", False)
+    spec = dict(project.config.verification_spec)
+    for key in ("backend", "level"):
+        value = getattr(args, key, None)
+        if value:
+            spec[f"{key}s"] = [value]
+    if getattr(args, "record_modules", False):
+        spec["record_modules"] = True
+    if getattr(args, "compare_mode", None):
+        spec["compare"] = {**(spec.get("compare") or {}), "mode": args.compare_mode}
+    if getattr(args, "latency", None):
+        lo, _, hi = args.latency.partition(":")
+        spec["compare"] = {**(spec.get("compare") or {}),
+                           "latency": {"min": int(lo), "max": int(hi or lo)}}
+
+    def ref(value, fmt):
+        if not value:
+            return None
+        return {"path": str(Path(value).resolve()), **({"format": fmt} if fmt else {})}
+
+    code, output = run_forge_command(["build"], quiet=True)
+    if code != 0:
+        if output:
+            print(output, file=sys.stderr)
+        sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
+    try:
+        plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
+                         expected_override=ref(args.expected, args.expected_format))
+    except (OSError, ValueError, KeyError) as exc:
+        sys.exit(_guided_run_failure(str(exc), json_mode=json_mode,
+                                     action="Declare the interfaces under verification.protocols in forge.yml"))
+    if getattr(args, "plan", False):
+        if json_mode:
+            print(json.dumps(plan.to_dict(), indent=2))
+        else:
+            import yaml
+            print(yaml.safe_dump(plan.to_dict(), sort_keys=False))
+        sys.exit(0)
+
+    from forge.project.verification_state import evidence_dir
+
+    out_dir = evidence_dir(project.paths.report_root)
+    try:
+        evidence = auto.run_plan(plan, project.paths.state_root / "verify", seed=args.seed,
+                                 stall=args.stall, backpressure=args.backpressure)
+    except (OSError, ValueError, KeyError) as exc:
+        sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
+    for old in out_dir.glob("*.evidence.json"):
+        old.unlink()
+    artifacts, diagnostics, results = [], [], []
+    for e in evidence:
+        path = out_dir / f"{e.level.replace(':', '_')}.{e.backend}.evidence.json"
+        e.write(path)
+        artifacts.append(str(path))
+        reason = e.doc.get("reason", "")
+        detail = reason or ", ".join(
+            f"{r['interface']} {r['matched']}/{r['expected']}" if r["expected"] else f"{r['interface']} {r['observed']} words"
+            for r in e.doc.get("interfaces", []))
+        if not json_mode:
+            print(f"  {_STATUS_ICON[e.status]} {e.level} [{e.backend}]: {e.status}" + (f" ({detail})" if detail else ""))
+        if e.status == "FAILED":
+            diagnostics.append({"severity": "error", "message": f"{e.level} [{e.backend}]: {detail}"})
+        elif e.status != "VERIFIED":
+            diagnostics.append({"severity": "warning", "message": f"{e.level} [{e.backend}]: {e.status}"
+                                + (f", {reason}" if reason else "")})
+        results.append({"name": f"{e.level}[{e.backend}]", "success": e.status != "FAILED",
+                        "skipped": e.status not in ("VERIFIED", "FAILED"), "message": detail})
+    junit = out_dir / "junit.xml"
+    write_junit_xml(junit, suite_name=project.config.project, results=results)
+    artifacts.append(str(junit))
+    overall = auto.summary(evidence)
+    status = {"VERIFIED": "pass", "FAILED": "fail"}.get(overall, "warn")
+    if status == "warn" and getattr(args, "require_verified", False):
+        status = "fail"
+        diagnostics.append({"severity": "error",
+                            "message": f"--require-verified: verification is {overall}, not VERIFIED"})
+    envelope = CommandEnvelope(
+        status=status,
+        diagnostics=diagnostics,
+        artifacts=artifacts,
+        metrics={"verification": overall,
+                 "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence}},
+        next_actions=_auto_next_actions(evidence),
+    )
+    sys.exit(emit(envelope, json_mode=json_mode))
+
+
+def _auto_next_actions(evidence) -> List[str]:
+    """What would turn each unverified level into a verified one, from its status."""
+    from forge.verification import auto
+
+    actions: List[str] = []
+    blocked = sorted({t for e in evidence if e.status == "BLOCKED_MISSING_TOOL"
+                      for t in auto.missing_tools(e.backend)})
+    if blocked:
+        ran = sorted({e.backend for e in evidence if e.status != "BLOCKED_MISSING_TOOL"
+                      and e.status != "SKIPPED"})
+        actions.append(f"Put {', '.join(blocked)} on PATH (`forge doctor` shows what is found)"
+                       + (f", or run only {' / '.join(ran)} with --backend" if ran else ""))
+    failed = [e for e in evidence if e.status == "FAILED"]
+    for e in failed:
+        actions.append(f"Fix {e.level} [{e.backend}]: " + (e.doc.get("reason") or "see its evidence file"))
+    no_oracle = sorted({e.level for e in evidence if e.status == "NOT_VERIFIED_NO_ORACLE"
+                        or (e.status == "BLOCKED_MISSING_TOOL" and not e.doc.get("expected"))})
+    if no_oracle:
+        design = "design" in no_oracle
+        modules = [lv.split(":", 1)[1] for lv in no_oracle if lv.startswith("module:")]
+        where = (["verification.expected (or --expected)"] if design else []) + (
+            [f"verification.modules.{m}.expected" for m in modules])
+        actions.append(f"Give an expected output: {', '.join(where)} in forge.yml")
+    if any(e.status == "PARTIAL" for e in evidence):
+        actions.append("Some interfaces have no expected output; add them to the expected file")
+    return actions
+
+
 def cmd_project_test(args) -> None:
     """`forge test` with no design file: build the project, then prepare and
     run each flow of its verification config, one line per step."""
@@ -140,6 +268,9 @@ def cmd_project_test(args) -> None:
 
     json_mode = getattr(args, "json", False)
     project = _project_or_exit(json_mode)
+    if project.verification is None or getattr(args, "input", None) or getattr(args, "plan", False):
+        cmd_auto_test(args, project)
+        return
     design = _verification_or_exit(project, json_mode)
     try:
         contract = load_verify_design(design)
@@ -239,7 +370,10 @@ def cmd_project_test(args) -> None:
     if failed:
         status = "fail"
     elif skipped:
-        status = "warn"
+        status = "fail" if getattr(args, "require_verified", False) else "warn"
+        if status == "fail":
+            diagnostics.append({"severity": "error",
+                                "message": f"--require-verified: {len(skipped)} flow(s) not simulated"})
     else:
         status = "pass"
     envelope = CommandEnvelope(
@@ -420,6 +554,35 @@ def register(sub) -> None:
         help="Run every event in the dataset",
     )
     p_test.add_argument("--plugin", help="Plugin ID to bootstrap (when flow.plugin is absent from YAML)")
+    auto = p_test.add_argument_group(
+        "without a verification config",
+        "The design's interfaces are found from its ports and driven by a generated testbench",
+    )
+    auto.add_argument("--input", default=None, help="Input transactions (JSON, EMP or APx pattern file)")
+    auto.add_argument("--input-format", dest="input_format", default=None,
+                      help="A registered dataset format, e.g. json, empv2, apx, apx-2021 "
+                           "(default: from the file)")
+    auto.add_argument("--expected", default=None, help="Expected output transactions")
+    auto.add_argument("--expected-format", dest="expected_format", default=None)
+    auto.add_argument("--compare-mode", dest="compare_mode", default=None,
+                      choices=("transaction", "exact_cycle", "fixed_latency", "latency_window"))
+    auto.add_argument("--latency", default=None, help="Cycles, or MIN:MAX, for the latency modes")
+    auto.add_argument("--backend", default=None, choices=("xsim", "verilator"), help="Only this simulator")
+    auto.add_argument("--level", default=None, choices=("design", "modules"), help="Only this level")
+    auto.add_argument("--seed", type=int, default=1, help="Seed of the stall and backpressure patterns")
+    auto.add_argument("--stall", type=int, default=0, help="Percent of cycles a ready_valid input withholds a word")
+    auto.add_argument("--backpressure", type=int, default=0,
+                      help="Percent of cycles a ready_valid output's ready is low")
+    auto.add_argument("--record-modules", dest="record_modules", action="store_true", default=False,
+                      help="Record each module instance's inputs and outputs during the design-level run, "
+                           "as data a module level can be checked against (derived, not independent)")
+    auto.add_argument("--plan", action="store_true", default=False,
+                      help="Print what would be verified, and what was inferred, without simulating")
+    p_test.add_argument(
+        "--require-verified", dest="require_verified", action="store_true", default=False,
+        help="Exit 1 unless everything was verified: a missing simulator, a missing expected "
+             "output or a skipped flow fails instead of warning (for CI)",
+    )
     p_test.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p_test.set_defaults(func=cmd_project_test)
     test_sub = p_test.add_subparsers(dest="test_command", metavar="MODE")

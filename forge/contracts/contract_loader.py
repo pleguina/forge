@@ -379,7 +379,11 @@ def _scan_module_ports(mod_entry: dict, plugin_root: Path) -> Dict[str, dict]:
     empty dict when nothing could be scanned — a contract that can't be
     resolved simply keeps whatever it declared.
     """
-    from forge.core.utils.hdl_parser import _scan_ports, _scan_verilog_ports
+    from forge.core.utils.hdl_parser import (
+        apply_declared_widths,
+        parse_verilog_defines,
+        scan_hdl_port_decls,
+    )
 
     srcs: List[Path] = []
     for entry in (mod_entry.get("src") or []):
@@ -402,14 +406,23 @@ def _scan_module_ports(mod_entry: dict, plugin_root: Path) -> Dict[str, dict]:
     for f in sorted((p for p in srcs if p.suffix.lower() in (".v", ".sv", ".vhd")),
                     key=_score, reverse=True):
         try:
-            raw = _scan_ports(f) if f.suffix.lower() == ".vhd" else _scan_verilog_ports(f)
+            raw = apply_declared_widths(
+                scan_hdl_port_decls(
+                    f, mod_entry.get("parameters"),
+                    parse_verilog_defines(mod_entry.get("verilog_defines") or []),
+                ),
+                mod_entry.get("port_widths"),
+            )
         except Exception:
             continue
         if raw:
+            # A width the scan could not evaluate is left out, so the role
+            # keeps whatever its contract declares instead of a guess.
             return {
-                name: {"direction": "IN" if str(d).lower().startswith("in") else "OUT",
-                       "width": w}
-                for name, (d, w) in raw.items()
+                name: {"direction": "IN" if decl.direction.lower().startswith("in") else "OUT",
+                       "width": decl.width}
+                for name, decl in raw.items()
+                if decl.width is not None
             }
     return {}
 

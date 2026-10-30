@@ -157,21 +157,48 @@ def register_format_loader(suffix: str, loader: DatasetFormatLoader) -> None:
     _FORMAT_LOADERS[suffix.lower()] = loader
 
 
-def get_format_loader(path: "str | Path") -> DatasetFormatLoader:
-    """Return the registered loader for *path*'s suffix.
+_NAMED_LOADERS: "dict[str, DatasetFormatLoader]" = {}
+
+
+def register_named_format(name: str, loader: DatasetFormatLoader) -> None:
+    """Register *loader* under a format name a flow or command can state (``format: empv2``)."""
+    _NAMED_LOADERS[name.lower()] = loader
+
+
+def known_formats() -> "list[str]":
+    return sorted(_NAMED_LOADERS)
+
+
+def get_format_loader(path: "str | Path", fmt: "str | None" = None) -> DatasetFormatLoader:
+    """The loader for *path*: the named *fmt* when given, else by suffix, else by content.
+
+    A suffix such as ``.txt`` says nothing about the format, so it is never
+    registered; an EMP pattern file is recognised by its header.
 
     Raises:
-        ValueError: no loader is registered for that suffix.
+        ValueError: *fmt* is not a known format, or *path* matches none.
     """
+    if fmt:
+        loader = _NAMED_LOADERS.get(fmt.lower())
+        if loader is None:
+            raise ValueError(f"unknown dataset format {fmt!r}; known: {', '.join(known_formats())}")
+        return loader
     suffix = Path(path).suffix.lower()
     loader = _FORMAT_LOADERS.get(suffix)
-    if loader is None:
-        known = ", ".join(sorted(_FORMAT_LOADERS)) or "(none registered)"
-        raise ValueError(
-            f"No dataset format loader registered for suffix {suffix!r} "
-            f"(path: {path}). Registered suffixes: {known}"
-        )
-    return loader
+    if loader is not None:
+        return loader
+    from forge.integration.apx import is_apx_file
+    from forge.integration.emp import is_pattern_file
+    if is_pattern_file(Path(path)):
+        return _NAMED_LOADERS["empv2"]
+    if is_apx_file(Path(path)):
+        return _NAMED_LOADERS["apx"]
+    known = ", ".join(sorted(_FORMAT_LOADERS)) or "(none registered)"
+    raise ValueError(
+        f"No dataset format loader registered for suffix {suffix!r} "
+        f"(path: {path}). Registered suffixes: {known}; name the format "
+        f"(one of {', '.join(known_formats())}) for any other file"
+    )
 
 
 # ── XmlDatasetLoader — the reference/default loader ─────────────────────
@@ -295,5 +322,73 @@ class JsonDatasetLoader:
 
 # ── Registration ──────────────────────────────────────────────────────────
 
+class EmpPatternDatasetLoader:
+    """Loader for EMP pattern files (format ``empv2``, emp-fwk and CMSSW's EMPv2).
+
+    Event *k* is the *k*-th packet (start to last valid word) of every link
+    that carries one: ``{"links": {link: [word, ...]}}``, each word with its
+    data and metadata bits, strobe included. Idle frames separate events and
+    are not kept; the file itself is the lossless record
+    (``forge.integration.emp.read_board_data``).
+    """
+
+    adapter_id = "empv2"
+
+    def read(self, path: Path) -> Any:
+        from forge.integration.emp import read_board_data
+        return read_board_data(path)
+
+    def load(self, path: Path) -> SerializedDataset:
+        path = Path(path)
+        board = self.read(path)
+        per_link = {link: board.packets(link) for link in board.links}
+        n = max((len(p) for p in per_link.values()), default=0)
+        events: "list[dict[str, Any]]" = []
+        for k in range(n):
+            links = {
+                str(link): [
+                    {"data": f"0x{w.data:016x}", "valid": w.valid, "start": w.start, "last": w.last,
+                     "start_of_orbit": w.start_of_orbit, "strobe": w.strobe}
+                    for w in packets[k]
+                ]
+                for link, packets in per_link.items() if k < len(packets)
+            }
+            events.append({"id": str(k), "board": board.name, "links": links})
+        metadata = DatasetMetadata(
+            schema=DATASET_SCHEMA,
+            event_ids=[e["id"] for e in events],
+            semantic=SemanticMetadata(
+                source_content_hash=compute_events_content_hash(events),
+                adapter_id=self.adapter_id,
+            ),
+            environment=EnvironmentMetadata(
+                source_path=str(path),
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        return SerializedDataset(events=events, metadata=metadata)
+
+
+class ApxPatternDatasetLoader(EmpPatternDatasetLoader):
+    """APx pattern files (``forge.integration.apx``), events as for ``empv2``.
+
+    ``apx`` reads the sideband as CMSSW writes it today, ``apx-2021`` as
+    CMSSW's reader does.
+    """
+
+    def __init__(self, encoding: str = "2025") -> None:
+        self.encoding = encoding
+        self.adapter_id = "apx" if encoding == "2025" else f"apx-{encoding}"
+
+    def read(self, path: Path) -> Any:
+        from forge.integration.apx import read_apx
+        return read_apx(path, self.encoding)
+
+
 register_format_loader(".xml", XmlDatasetLoader())
 register_format_loader(".json", JsonDatasetLoader())
+register_named_format("xml", XmlDatasetLoader())
+register_named_format("json", JsonDatasetLoader())
+register_named_format("empv2", EmpPatternDatasetLoader())
+register_named_format("apx", ApxPatternDatasetLoader())
+register_named_format("apx-2021", ApxPatternDatasetLoader("2021"))

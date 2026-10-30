@@ -67,6 +67,16 @@ def block_design_cells(tcl: str) -> Tuple[List[str], Graph]:
     return cells, adj
 
 
+def cell_modules(tcl: str) -> Dict[str, str]:
+    """Cell -> the module (``-reference``) or IP name (``-vlnv``) behind it."""
+    out = {}
+    for line in _expand_loops(tcl):
+        m = re.match(r"create_bd_cell -type \w+ (?:-reference (\S+)|-vlnv (\S+)) (\S+)\s*$", line.strip())
+        if m:
+            out[m.group(3)] = m.group(1) or m.group(2).split(":")[2]
+    return out
+
+
 def crossing_cells(crossings: Mapping) -> Set[str]:
     return {inst["name"] for c in crossings.get("crossings", []) for inst in c.get("instances", [])}
 
@@ -132,7 +142,8 @@ def write_xdc(res: Mapping[str, int], *, root: str, pblock: Optional[str] = None
     """Tcl constraints: *root* finds the block-design instance; *pblock* (``{slr}`` in it) makes them hard."""
     lines = [
         "# Written by forge (forge.integration.floorplan); do not edit.",
-        "# SLR assignment of the block-design cells, no coordinates.",
+        "# A placement proposal: SLR assignment of the block-design cells, no coordinates.",
+        "# It does not close timing; compare it with the implemented design (floorplan-compare).",
         "",
         f"set _bd [get_cells -quiet -hier -filter {{NAME =~ {root}}}]",
         "if {[llength $_bd] != 1} {",
@@ -166,12 +177,12 @@ def write_xdc(res: Mapping[str, int], *, root: str, pblock: Optional[str] = None
 
 
 def floorplan(block_design: Path, ir: Path, resolved_io: Path, spec: Mapping,
-              crossings: Optional[Path] = None) -> Tuple[Dict[str, int], List[str]]:
-    """(cell -> SLR, every cell) from the build's files and a floorplan spec
-    (``slr``, ``reserved``; see :func:`assign`)."""
+              crossings: Optional[Path] = None) -> Tuple[Dict[str, int], List[str], Graph, Set[str]]:
+    """(cell -> SLR, every cell, the cells' nets, the registered crossings) from the
+    build's files and a floorplan spec (``slr``, ``reserved``; see :func:`assign`)."""
     cells, adj = block_design_cells(block_design.read_text())
     skip = crossing_cells(json.loads(crossings.read_text())) if crossings and crossings.exists() else set()
     links = link_slrs(json.loads(ir.read_text()), json.loads(resolved_io.read_text()))
     res = assign(cells, adj, slr=spec.get("slr") or {}, links=links,
                  reserved=spec.get("reserved") or (), skip=skip)
-    return res, cells
+    return res, cells, adj, skip

@@ -35,6 +35,9 @@ from forge.project.discovery import (
     ProjectDiscovery,
 )
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
+from forge.project.verification_state import (
+    DATA, VerificationSetup, latest_results, overall_status, verification_setup,
+)
 
 # ── Section states ────────────────────────────────────────────────────────
 
@@ -690,6 +693,14 @@ def _check_unsupported(status: ProjectStatus) -> Optional[_CheckOutput]:
         )
 
     for ambiguity in discovery.unsupported:
+        if ambiguity.action is not None and ambiguity.action.id == "declare-port-widths":
+            status.report.error(
+                "ATG051",
+                ambiguity.question,
+                action=ambiguity.action.description,
+                module=ambiguity.subject,
+            )
+            continue
         status.report.warn(
             "ATG042",
             ambiguity.question,
@@ -708,8 +719,13 @@ def _check_unsupported(status: ProjectStatus) -> Optional[_CheckOutput]:
     detail = f"{len(left_out)} module(s) left out: {', '.join(left_out)}"
     if opaque:
         detail += f"; {len(opaque)} opaque"
+    codes = tuple(sorted({
+        "ATG051" if a.action is not None and a.action.id == "declare-port-widths" else "ATG042"
+        for a in discovery.unsupported
+    }))
     return _CheckOutput(
-        StatusSection("Supported constructs", PARTIAL, detail, ("ATG042",)),
+        StatusSection(
+            "Supported constructs", FAIL if "ATG051" in codes else PARTIAL, detail, codes),
         [a.action for a in discovery.unsupported if a.action],
     )
 
@@ -821,6 +837,72 @@ def _flows_without_simulator(design: Path) -> List[Tuple[str, List[str]]]:
     return unrunnable
 
 
+def _check_data_verification(status: ProjectStatus, setup: VerificationSetup) -> _CheckOutput:
+    """``verification.input``/``expected``: the files exist, a level has an
+    expected output, a simulator is here, and what the last run found."""
+    from forge.core.toolchain_versions import tool_present
+    from forge.verification.auto import BACKENDS
+
+    paths = status.paths
+    assert paths is not None
+    if setup.missing:
+        for key, path in setup.missing:
+            status.report.error(
+                "ATG044", f"{key} names {paths.relative(path)}, which does not exist",
+                action=f"Correct {key} in {ROOT_CONFIG_NAME}", path=path,
+            )
+        return _CheckOutput(
+            StatusSection("Verification", FAIL,
+                          f"{len(setup.missing)} verification file(s) missing", ("ATG044",)),
+            [Action(id="fix-verification-data",
+                    description="Point " + ", ".join(k for k, _ in setup.missing)
+                    + f" in {ROOT_CONFIG_NAME} at existing files", safe=False)],
+        )
+
+    actions: List[Action] = []
+    codes: Tuple[str, ...] = ()
+    state = PASS
+    usable = [b for b in setup.backends
+              if b in BACKENDS and all(tool_present(t) for t in BACKENDS[b])]
+    if not usable:
+        status.report.warn(
+            "ATG049",
+            f"no simulator for verification here: {', '.join(setup.backends)} "
+            f"need {'; '.join(', '.join(BACKENDS[b]) for b in setup.backends if b in BACKENDS)}"
+            " — `forge test` records BLOCKED_MISSING_TOOL",
+            action="Put XSim or Verilator on PATH (`forge doctor` lists what it finds)",
+        )
+        codes += ("ATG049",)
+        state = WARN
+    if not setup.expected:
+        status.report.warn(
+            "ATG044",
+            "verification has input but no expected output — `forge test` simulates "
+            "it and checks for X/Z, but verifies nothing (NOT_VERIFIED_NO_ORACLE)",
+            action=f"Set verification.expected in {ROOT_CONFIG_NAME}",
+        )
+        codes += ("ATG044",)
+        state = PARTIAL
+        actions.append(Action(
+            id="add-expected-output",
+            description=f"Add the expected output: verification.expected in {ROOT_CONFIG_NAME}",
+            safe=False,
+        ))
+
+    detail = ", ".join(f"{k.split('.')[-1]} {paths.relative(p)}" for k, p in setup.data_files)
+    records = [r for r in latest_results(paths.report_root) if r.path.name.endswith(".evidence.json")]
+    if records:
+        stale = [r for r in records if r.stale]
+        detail += f"; last forge test: {overall_status(records)}"
+        if stale:
+            detail += f" ({len(stale)} result(s) out of date)"
+    else:
+        detail += "; not run yet"
+        actions.append(Action(id="run-forge-test", description="Run the verification",
+                              command="forge test", safe=True))
+    return _CheckOutput(StatusSection("Verification", state, detail, codes), actions)
+
+
 def _check_verification(status: ProjectStatus) -> _CheckOutput:
     """Is there anything to test the design against?"""
     config, paths = status.config, status.paths
@@ -864,6 +946,10 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
             )],
         )
 
+    setup = verification_setup(config)
+    if setup.kind == DATA:
+        return _check_data_verification(status, setup)
+
     if config.dataset:
         dataset = (config.root / config.dataset).resolve()
         if not dataset.is_file():
@@ -899,17 +985,17 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
         "no verification is configured for this design — nothing checks that the "
         "generated top level behaves correctly",
         action=(
-            "Set verification.config in forge.yml to a design.verification.yml, "
-            "then run `forge test`"
+            "Set verification.input and verification.expected in forge.yml to the "
+            "design's input and expected output, then run `forge test`"
         ),
     )
     return _CheckOutput(
-        StatusSection("Verification", NOT_CONFIGURED, "no verification config", ("ATG044",)),
+        StatusSection("Verification", NOT_CONFIGURED, "no input or expected output", ("ATG044",)),
         [Action(
             id="configure-verification",
             description=(
-                "Configure verification — set verification.config in forge.yml to the "
-                "design.verification.yml that tests this design"
+                "Configure verification — set verification.input and verification.expected "
+                "in forge.yml (or verification.config for a plugin flow)"
             ),
             safe=False,
         )],
@@ -967,12 +1053,30 @@ def _check_latency(status: ProjectStatus) -> _CheckOutput:
     )
 
 
+def _changed_by_content(top: Path) -> Optional[List[str]]:
+    """Inputs of *top*'s build whose content changed since, per its provenance; ``None`` without one."""
+    import json
+
+    from forge.ir.provenance import changed_sources
+
+    manifest, provenance = top.parent / "build_manifest.json", top.parent / "provenance.json"
+    if not (manifest.is_file() and provenance.is_file()):
+        return None
+    try:
+        design_dir = Path(json.loads(manifest.read_text())["design_file"]).parent
+    except (OSError, ValueError, KeyError):
+        return None
+    return changed_sources(provenance, design_dir)
+
+
 def _check_generated(status: ProjectStatus) -> _CheckOutput:
     """Has the design been generated, and is what was generated current?
 
-    Staleness is decided by comparing the newest source/config timestamp
-    against the generated top level: reporting a build as done when its
-    inputs have since changed is the failure mode this check exists for.
+    Staleness is decided by content: the provenance written with the top
+    level records a hash of every input, and an input whose content differs
+    makes the build stale whatever its timestamp says (a fresh clone or a
+    restored cache has misleading times). Without a provenance record the
+    newest input timestamp is compared with the top level's.
     """
     config, paths = status.config, status.paths
     assert config is not None and paths is not None
@@ -989,6 +1093,27 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
                 command="forge build",
             )],
         )
+
+    by_content = _changed_by_content(top)
+    if by_content is not None:
+        if by_content:
+            status.report.warn(
+                "ATG046",
+                f"{paths.relative(top)} was built from other contents of {len(by_content)} of its inputs "
+                f"({', '.join(by_content[:3])}{', …' if len(by_content) > 3 else ''})",
+                action="Re-run `forge build` to regenerate from the current sources",
+                path=top,
+            )
+            return _CheckOutput(
+                StatusSection("Generated artifacts", STALE, f"{len(by_content)} inputs changed", ("ATG046",)),
+                [Action(
+                    id="rebuild-design",
+                    description="Regenerate the top level — its inputs have changed since it was built",
+                    command="forge build",
+                    auto_fixable=True,
+                )],
+            )
+        return _CheckOutput(StatusSection("Generated artifacts", PASS, paths.relative(top)))
 
     generated_at = top.stat().st_mtime
     if config.authored:

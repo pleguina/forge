@@ -21,7 +21,7 @@ Legend: **Stable** / **Beta** / **Experimental** / **Deprecated** /
 | Top-level generation (Verilog/VHDL/Block Design TCL) | **Stable** | All 3 modes exercised by reference plugins in the real `forge init` smoke test and CI. |
 | Vitis HLS integration | **Stable** | `forge hls`; `trigger_demo`/`vision_pipeline_demo` both mix HLS+RTL. |
 | XSim | **Stable** | Real tool present and exercised in this environment; primary supported simulator. |
-| Verilator | **Beta** | `doctor` confirms it's lint-only, not a simulation backend — narrower than XSim's role. Matches README's documented scope, not a gap. |
+| Verilator | **Beta** | A simulation backend for `forge test` and RTL verification flows alongside XSim, and the Verilog linter (see the generated support matrix). |
 | Domains and CDC | **Stable** for the 5 implemented kinds (`level_sync`, `2ff_sync`, `pulse_sync`, `mailbox_transfer`, `async_fifo`) | `forge/contracts/cdc.py`; real generated synchronizer/FIFO RTL, not stubs (see audit — one stale docstring claiming otherwise was found and fixed this session). `clock_secondary`/`reset_secondary` roles are **Deferred** (reserved, no functional effect, documented as such in README/docs/index.md). |
 | Latency analysis (fixed/bounded/elastic) | **Stable** | `forge/analysis/latency_static/`; exercised by `vision_pipeline_demo`. |
 | Throughput and occupancy (static) | **Stable** | `forge/analysis/throughput_static/`. |

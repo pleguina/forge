@@ -1,8 +1,10 @@
 # How to Integrate Verification
 
-This guide defines the current supported plugin interface for framework verification.
-
-It is the canonical verification-integration guide for new plugins.
+This guide defines the plugin interface for framework verification: the
+route for a design whose stimulus or checking FORGE's generated testbench
+cannot express. A design whose interfaces FORGE can drive (`valid`,
+`ready_valid`, AXI4-Stream, EMP link words) needs no plugin: see
+[Verify from the design](verify-from-the-design.md).
 
 Use it together with:
 
@@ -43,7 +45,7 @@ See [How to Author Topology Contracts](author-topology-contracts.md) for the ful
 
 For the current v1.0 framework verification surface:
 
-- datasets are XML-backed
+- a dataset is a file in a registered format: `xml`, `json`, `empv2` (EMP pattern files) or `apx`
 - the authored verification contract is `design.verification.yml`
 - the framework generates per-flow `verify.flow.yml`, `tb_<module>.sv`, and `wave.tcl`
 - the plugin generates `stimulus_current.svh`
@@ -244,43 +246,45 @@ The framework does not:
 
 That translation remains plugin-specific.
 
-## 8. If you want a dataset standard other than XML
+## 8. Datasets in other formats
 
-The current public framework verification contract is XML-backed. If a new user wants another standard, the recommended order is:
+A flow names its dataset file and, when its suffix and content do not say,
+its format:
 
-### 8.1 Preferred: translate into framework-standard XML
+```yaml
+dataset:
+  path: schemas/data/source.txt
+  format: empv2          # xml | json | empv2 | apx | apx-2021
+```
 
-Stay within the supported public contract by converting your native source format into XML before verification.
+`dataset.xml: <file>` is the older spelling of an XML dataset and keeps
+working. `.xml` and `.json` files are recognised by suffix; a `.txt` file only
+when its header is an EMP or APx pattern file's, never by the suffix alone.
 
-This can be done:
+An `empv2` dataset reads emp-fwk and CMSSW EMP pattern files: event *k* is the
+*k*-th packet (start to last valid word) of every link, each word with its
+data, valid, start, last, start-of-orbit and strobe bits.
+`forge.integration.emp.read_board_data` / `write_board_data` keep the file
+itself, idle frames included, without loss.
 
-- as a pre-generation step
-- inside plugin stimulus preparation
-- or as a checked-in generated dataset when appropriate
+An `apx` dataset reads APx pattern files the way CMSSW's DemonstratorTools
+writes them (`#LinkLabel`, `#BeginData`, a sideband byte and a 64-bit word per
+link and frame), into the same events. CMSSW's APx reader and writer use
+different sideband bit orders; `apx` is the writer's (bit 0 first frame of
+orbit, 1 start, 2 end, 3 valid), `apx-2021` the reader's (bit 0 valid, 1
+start, 2 first frame of orbit, 3 end). A word with CRC or throttle bits set is
+refused. `forge.integration.apx.read_apx` / `write_apx` keep the file.
 
-### 8.2 Extension path: own the deviation in the plugin
+There is no `x2o` format. CMSSW names an X2O file format, but its reader and
+writer only throw "not yet implemented"; without a reference file and
+specification from the X2O/Blobfish side, FORGE does not define one under that
+name. Blobfish link words convert to and from EMP's with
+`forge.integration.csp`.
 
-If XML is unacceptable, the plugin must own that explicitly. In practice, this often means providing one or more of:
-
-- plugin-specific flow loader extensions
-- plugin-specific runtime context extensions
-- plugin-specific backend overrides
-- plugin-specific checker argument conventions
-
-That path is valid, but it is outside the minimal public v1.0 verification contract.
-
-### 8.3 Platform path: upstream a new standard
-
-If more than one plugin needs the same non-XML model, it should be proposed as a new framework-standard contract rather than repeated as private plugin glue.
-
-That requires:
-
-1. framework schema changes
-2. framework doc changes
-3. explicit launcher/runtime semantics
-4. tests and at least one real consumer proof path
-
-Until then, XML remains the only framework-standard dataset contract.
+A format the framework does not read yet is registered with
+`forge.verification.dataset_format.register_named_format(name, loader)`, a
+loader returning a `SerializedDataset`; flows then name it in
+`dataset.format`.
 
 ## 9. Deployment checklist for a new plugin
 

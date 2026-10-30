@@ -642,6 +642,22 @@ A module definition (shared across all its instances).
 | `latency` | `Optional[ForwardRef('LatencyDeclaration')]` | optional | `None` |
 | `ip_info_key` | `Optional[str]` | optional | `None` |
 | `declaration_order` | `int` | optional | `0` |
+| `language` | `Optional[str]` | optional | `None` |
+| `ports` | `list[ResolvedModulePort]` | optional | `[]` |
+
+### `ResolvedModulePort`
+
+*Defined in `forge.ir.model`.*
+
+One physical port of a module, as its port metadata states it: the
+    scanned RTL, the built IP, or the contract standing in for either.
+    ``direction`` is ``in``/``out``/``inout``.
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `name` | `str` | required | — |
+| `direction` | `str` | required | — |
+| `width` | `int` | required | — |
 
 ### `ResolvedPhysicalBinding`
 
@@ -668,7 +684,7 @@ Top-level IR object returned by ``forge.ir.build.build_project_ir``.
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `design` | `ResolvedDesign` | required | — |
-| `schema_version` | `str` | optional | `'0.3.0'` |
+| `schema_version` | `str` | optional | `'0.4.0'` |
 | `forge_version` | `str` | optional | `''` |
 | `generated_from` | `dict[str, Optional[str]]` | optional | `{}` |
 

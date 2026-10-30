@@ -50,12 +50,12 @@ from forge.verification.exceptions import (
 
 # ── Schema: generic required fields ───────────────────────────────────────
 
-# (section, key) pairs required in every compliant flow file.
-# For v1.0 verification, ``dataset.xml`` is a framework-standard requirement:
-# flows are XML-backed unless a future contract revision explicitly generalizes
-# dataset representation. Plugin-specific required fields (e.g.
-# dataset.default_event_id) are declared in the plugin's own load_flow() and
-# validated before calling parse_generic_flow_fields().
+# (section, key) pairs required in every compliant flow file. The dataset is
+# ``dataset.path`` (with ``dataset.format`` when its suffix and content do not
+# say), or the older ``dataset.xml``; parse_generic_flow_fields() checks that
+# one is there. Plugin-specific required fields (e.g. dataset.default_event_id)
+# are declared in the plugin's own load_flow() and validated before calling
+# parse_generic_flow_fields().
 _REQUIRED_TOP_GENERIC: list[tuple[str, str]] = [
     ("flow",       "name"),
     ("flow",       "kind"),
@@ -65,7 +65,6 @@ _REQUIRED_TOP_GENERIC: list[tuple[str, str]] = [
     ("dut",        "rtl"),
     # dut.manifest, dut.port_map, dut.tb_bindings, dut.port_signature are
     # OPTIONAL — single-module HLS flows do not have gen-top outputs.
-    ("dataset",    "xml"),
     ("simulation", "clk_period_ns"),
     ("simulation", "reset_cycles"),
     ("simulation", "idle_cycles_after_reset"),
@@ -204,9 +203,11 @@ class FlowConfig:
     dut_probe_map:       Path | None
 
     # ── dataset:
-    # For v1.0 verification this is the framework-standard XML stimulus source.
+    # dataset_xml is the dataset file whatever its format (the name predates
+    # other formats); dataset_format names the format when the flow states it.
     dataset_xml: Path
     dataset_parts: tuple[Path, ...]
+    dataset_format: "str | None"
 
     # ── simulation:
     sim_clk_period_ns:     float
@@ -418,6 +419,22 @@ def parse_generic_flow_fields(
             extra_sources=tuple(extra_sources),
         )
 
+    dataset_file = dataset.get("path") or dataset.get("xml")
+    if not dataset_file:
+        raise FlowConfigError(
+            f"verify.flow.yml: dataset.path (or dataset.xml) is required ({flow_path})",
+            action="Point dataset.path at the dataset file, with dataset.format if needed.",
+        )
+    dataset_format = dataset.get("format") or ("xml" if dataset.get("xml") and not dataset.get("path") else None)
+    if dataset_format is not None:
+        from forge.verification.dataset_format import known_formats
+        if dataset_format not in known_formats():
+            raise FlowConfigError(
+                f"verify.flow.yml: dataset.format {dataset_format!r} is not one of "
+                f"{', '.join(known_formats())} ({flow_path})",
+                action="Name a registered dataset format, or leave dataset.format out.",
+            )
+
     dataset_parts: list[Path] = []
     parts_glob = dataset.get("parts_glob")
     if parts_glob:
@@ -454,7 +471,8 @@ def parse_generic_flow_fields(
         "dut_tb_bindings_dir": dut_tb_bindings.parent if dut_tb_bindings else None,
         "dut_port_signature":  _abs_opt(dut.get("port_signature"), consumer_root),
         "dut_probe_map":       _abs_opt(dut.get("probe_map"), consumer_root),
-        "dataset_xml":         _abs(dataset["xml"], consumer_root),
+        "dataset_xml":         _abs(dataset_file, consumer_root),
+        "dataset_format":      dataset_format,
         "dataset_parts":       tuple(dict.fromkeys(path.resolve() for path in dataset_parts)),
         "sim_clk_period_ns":      float(sim["clk_period_ns"]),
         "sim_reset_cycles":       int(sim["reset_cycles"]),

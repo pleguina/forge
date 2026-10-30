@@ -471,7 +471,7 @@ _KNOWN_RTL_EXTENSIONS: Dict[str, Set[str]] = {
 _KNOWN_MODULE_KEYS: Set[str] = {
     'name', 'kind', 'top', 'src', 'includes', 'rtl_lang', 'vhdl_library',
     'vhdl_version', 'rtl_include_dirs', 'verilog_defines', 'rtl_packages',
-    'cflags', 'stages', 'build', 'verify', 'description',
+    'cflags', 'stages', 'build', 'verify', 'description', 'port_widths',
     # Contract-driven topology extension fields (used by forge dev topgen gen-top)
     'interface_contract',
     # Latency annotation fields (used by forge analyze / the canonical IR

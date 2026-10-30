@@ -210,8 +210,96 @@ for the versioning policy.
   (picked up by a bare `forge report`), and reports a flow whose simulator
   is not on `PATH` as skipped with status `warn`. `forge init` reports
   `warn` instead of `pass` when it could not simulate.
+- **A synthesised HLS interface wins over the prediction.** `forge contract
+  infer --predict` takes the ports of the module's built IP (`component.xml`)
+  when one exists and predicts from the C++ only before that; `forge explain`
+  lists the synthesised interface as the one FORGE uses.
 
+- **`forge init`'s plugin test checks something.** The scaffolded test was a
+  `pass`; it now loads the verification contract and checks every flow's
+  dataset exists, and says the simulation is `forge test`'s.
 ### Added
+- **Reference runs with evidence.** `ci/verification_fresh_user.sh` (a hosted
+  CI job, Verilator) verifies a plain-RTL design from data alone and keeps the
+  evidence files; `ci/reference_pipelines.sh`, on a machine with Vivado and
+  Vitis HLS, runs it on XSim too and plays trigger_demo through emp-fwk's
+  testbench for the emp-fwk release given, recording tool versions, logs,
+  sink files and results.
+- **Verification from the design, without a plugin.** `forge test --input
+  --expected` (or `verification.input`/`expected` in `forge.yml`) finds the
+  top level's interfaces from its ports (`valid`, `ready_valid`, AXI4-Stream,
+  `emp_lword`, HLS `ap_ctrl_hs` and `ap_vld`, `scalar`; others declared under
+  `verification.protocols`),
+  generates one testbench, compiles it once per simulator (XSim, Verilator)
+  and compile key, runs every transaction in one simulation, and compares in
+  a shared scoreboard (`transaction`, `exact_cycle`, `fixed_latency`,
+  `latency_window`; missing, extra, duplicate, out-of-order, latency and X
+  rows). Inputs and expected outputs are JSON, EMP or APx pattern files.
+  Each RTL module is simulated on its own as well. Results are `VERIFIED`,
+  `FAILED`, `NOT_VERIFIED_NO_ORACLE`, `BLOCKED_MISSING_TOOL`, `SKIPPED` or
+  `PARTIAL`, never a pass without an expected output, and each comes with an
+  evidence file (sources, compile key, tool, input and expected hashes,
+  protocol and checker versions, rows). `--plan` prints what was inferred;
+  `--stall` and `--backpressure` exercise flow control; `--record-modules`
+  records each module instance's traffic during the design-level run, for
+  module levels to be checked against, marked as derived.
+- **APx pattern files.** `forge.integration.apx` reads and writes them as
+  CMSSW's DemonstratorTools does, and datasets name them `apx` (the sideband
+  bit order CMSSW writes) or `apx-2021` (the one its reader expects). There is
+  no `x2o` format: CMSSW's X2O codec is unimplemented and FORGE does not invent
+  one.
+- **Link map and build identity.** `forge dev framework link-map` writes
+  every resolved link (fibre, cage, quad, lane, protocol, logical input,
+  algorithm port), the register layout, and a build identity: content hashes
+  of the files given, the source commit and whether it was modified, and a
+  `build_id` with a 32-bit form for a status register. The resolved I/O JSON
+  now carries each endpoint's quad type, cage, fibre, polarity and logical id
+  and name.
+- **Vitis HLS 2023.2 and 2025.2.1 in the port matrix.** The fixture corpus
+  was synthesised under both; 2025.2.1 gives the 2024.1 port lists exactly,
+  2023.2 also drops `ap_rst` from `m_structs` (a gap documented for that
+  release only, with the new `versions` key of a documented gap).
+- **Register maps.** `forge dev framework registers` reads a typed register
+  map (config, status, counter, snapshot and latency-monitor registers with
+  fields, reset values, clock domains, clear-on-read and atomic reads) and
+  writes a uHAL address table, the Blobfish payload services that place it
+  in an SLR's config and readback words, and a Markdown table.
+  `forge.integration.registers.FakeBus` gives tests the map's bus semantics.
+- **Floorplan reports.** `forge dev framework floorplan --report` writes the
+  proposal's per-SLR cells and resources, the nets crossing each SLR boundary
+  against a budget, and the spec's errors (patterns matching nothing, a cell in
+  two SLRs, an SLR not on the device), with a Tcl that records where Vivado
+  placed each cell. `floorplan-compare` sets that, `report_timing_summary` and
+  `report_timing` against the proposal: moved cells, WNS/TNS, slack histogram
+  and worst slack per cell. The XDC calls itself a placement proposal.
+- **Typed payload services.** Control policies take `config_words` (an SLR
+  config register word to an algorithm input), `status_words` (fields packed
+  into a readback port) and `rx_taps` (received words copied to spare TX
+  lanes behind a synchronized enable bit), written by FORGE and checked
+  against the ABI. `emit-payload` prints how many `drive` entries and Verilog
+  blocks it did not check.
+- **`forge.integration.csp`**: Blobfish's 67-bit CSP word
+  (`{data, last, first, valid}`, the orbit marker on its own port) and EMP's
+  link word converted field by field; a word CSP cannot hold (strobe 0) is
+  refused rather than dropped.
+- **`forge dev framework emp-payload`**: `emp_payload.vhd` around the
+  generated top for the emp-fwk checkout a project uses. The entity and its
+  `use` clauses are copied from that release (`bc0` up to 0.9.x; `ttc2`,
+  `tts_busy`, `ext_lvds_*` from 0.10), the architecture comes from a typed
+  mapping of algorithm ports to link fields checked against the IR's
+  widths, and every other output is tied off by type or driven as the spec
+  says; an output type with no known tie-off is an error. trigger_demo's
+  EMP component uses it and passes in emp-fwk's testbench on v0.9.3 and
+  v0.10.3. `ipbb-xsim` orders VHDL files after the packages and entities
+  they use, as the simulators ipbb drives do.
+- **Datasets in any registered format, EMP pattern files among them.** A
+  flow's `dataset` takes `path` and `format` (`xml`, `json`, `empv2`);
+  `dataset.xml` still works. A `.txt` file is recognised as an EMP pattern
+  file by its header, never by its suffix. The `empv2` loader makes event
+  *k* the *k*-th packet of every link; event listing for `forge test`
+  follows the flow's format. `forge.integration.emp` reads and writes the
+  optional strobe bit (`LinkWord.strobe`) and keeps a file's ID and every
+  frame (`BoardData`), so a pattern file round-trips without loss.
 - **`forge dev framework floorplan`**: one `USER_SLR_ASSIGNMENT` per cell of
   a `--mode bd` top level (optionally its SLR pblock too). The link
   interfaces, and the decoders only one link feeds, go to the SLR of their
@@ -235,8 +323,7 @@ for the versioning policy.
   writes its `.dep` file, so an ipbb project (an EMP payload, say) includes
   the generated top without FORGE; `forge dev framework ipbb-xsim` compiles
   an ipbb dep tree in XSim, as ipbb's own sim flow needs Questa.
-  `forge.integration.emp` reads and writes EMP pattern files and compares a
-  payload's ports with an emp-fwk release's. `build_manifest.json` lists the
+  `forge.integration.emp` reads and writes EMP pattern files. `build_manifest.json` lists the
   `--mode vhdl` entity under `vhdl_files`.
 - **trigger_demo as an EMP payload** (`plugins/trigger_demo/emp/`): a
   hand-written `emp_payload.vhd` (emp-fwk v0.9.3) around the `--mode vhdl`
@@ -767,6 +854,38 @@ for the versioning policy.
   `docs/internal/release/go_no_go.md` still lists as open.
 
 ### Fixed
+- **`forge check` judged a generated top level current by timestamps**, so a
+  fresh clone or a restored cache could hide a changed input, and a touched
+  but unchanged file looked stale. It compares content against the
+  generation's `provenance.json`, which also records the modules' source
+  files and the designs a variant is built on; timestamps decide only when
+  there is no provenance.
+- **`forge dev framework ipbb-component` deleted the component's whole
+  `firmware/hdl`** before copying, and flattened sources so two files with
+  one name collided. FORGE now writes `firmware/hdl/forge/<module>/` (`top`,
+  one directory per module, `support`) through a staging directory,
+  records each file's hash in `.forge_component.json`, copies the headers
+  a source includes, replaces only that directory and a dep file it wrote,
+  and refuses a `forge/` directory or dep file it did not write. A source
+  type ipbb cannot take is an error.
+- **XSim and Verilator reused a `readmemh` build whenever its sentinel file
+  existed**, so a changed RTL, testbench, header or flag could pass on the
+  old build. The sentinel holds a content key (the compile list and its
+  sources, the include directories' headers, the commands and the
+  simulator version) and is removed before every build; run-time stimulus
+  data is not part of it, so changing events still reuses the build.
+- **The Blobfish payload tied the algorithm's `ap_rst` to 0 with no
+  decision behind it.** A payload with links now needs `reset:` in its
+  control policies: an ABI input port, its polarity and a synchronizer
+  depth (the algorithm held in reset from power-up until the first
+  synchronized deassertion), or `disabled`.
+- **A `cdc:` crossing with `register_stages` or `delay_cycles` was emitted
+  with the stages unconnected** (the consumer reads the synchronizer, which
+  reads the source) while the latency model added them up. The combination
+  is refused at load and in the generators (ATG050), also when a topology
+  group puts the delay on the crossing's instance pair; a `waived` crossing
+  keeps its stages. A test checks that the predicted latency is the emitted
+  one for every allowed combination.
 - **`emit-payload` connected only `tdata` of CSP links.** The resolved I/O
   file dropped each endpoint's `protocol`, so a `csp_64b` link lost its
   `tlast`/`tfirst`/`tvalid` bits; the protocol is recorded, and

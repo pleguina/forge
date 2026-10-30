@@ -213,6 +213,29 @@ flows:
 '''
 
 
+_PLUGIN_TEST_TEMPLATE = '''\
+"""{plugin_id}'s verification files, checked without a simulator.
+
+These say the contract is usable, not that the design works: that is
+`forge test`, which simulates each flow against its dataset.
+"""
+
+from pathlib import Path
+
+from forge.verification.design_contract import load_verify_design
+
+VERIFY = Path(__file__).resolve().parents[1]
+
+
+def test_every_flow_names_a_dataset_that_exists() -> None:
+    contract = load_verify_design(VERIFY / "design.verification.yml")
+    assert contract.flows
+    datasets = {{d.name: d for d in contract.datasets}}
+    for flow in contract.flows:
+        assert (VERIFY / datasets[flow.dataset].xml).is_file(), flow.name
+'''
+
+
 def scaffold_plugin(plugin_id: str, plugins_root: "str | Path", *, dry_run: bool = False) -> int:
     """Scaffold a new plugin skeleton under
     ``<plugins_root>/<plugin_id>/forge/verify/``.
@@ -231,11 +254,7 @@ def scaffold_plugin(plugin_id: str, plugins_root: "str | Path", *, dry_run: bool
         tools_dir / "gen_stimulus.py":
             _GEN_STIMULUS_TEMPLATE.format(plugin_id=plugin_id),
         tests_dir / "__init__.py": "",
-        tests_dir / f"test_{plugin_id}_verify.py": (
-            f'"""Placeholder tests for {plugin_id} verification flows."""\n\n'
-            f"def test_placeholder() -> None:\n"
-            f"    pass\n"
-        ),
+        tests_dir / f"test_{plugin_id}_verify.py": _PLUGIN_TEST_TEMPLATE.format(plugin_id=plugin_id),
     }
 
     if dry_run:

@@ -171,6 +171,9 @@ class ModulePolicy:
     #: A user-maintained interface contract, relative to the project root,
     #: used instead of the one inferred from the module's ports.
     contract: Optional[str] = None
+    #: ``{port: bits}`` for ports whose range the source scan cannot
+    #: evaluate (a package constant, an unsupported function).
+    widths: Dict[str, int] = field(default_factory=dict)
 
     @property
     def opaque(self) -> bool:
@@ -187,6 +190,8 @@ class ModulePolicy:
                 out["latency"] = dict(self.latency)
         if self.contract:
             out["contract"] = self.contract
+        if self.widths:
+            out["widths"] = dict(self.widths)
         return out
 
 
@@ -219,6 +224,26 @@ def _latency(value: Any, *, module: str, source: Any) -> Dict[str, Any]:
     return block
 
 
+def _port_widths(value: Any, *, module: str, source: Any) -> Dict[str, int]:
+    """Validate a ``modules.<name>.widths`` mapping of port to bit count."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{source}: module {module!r} widths must map port names to bit "
+            f"counts, e.g. `widths: {{lookup_addr: 4}}`"
+        )
+    out: Dict[str, int] = {}
+    for port, bits in value.items():
+        if isinstance(bits, bool) or not isinstance(bits, int) or bits < 1:
+            raise ValueError(
+                f"{source}: module {module!r} width of {port!r} must be a "
+                f"positive integer, got {bits!r}"
+            )
+        out[str(port)] = bits
+    return out
+
+
 @dataclass(frozen=True)
 class ProjectDecisions:
     """The answers a project has already given, as discovery sees them.
@@ -240,6 +265,8 @@ class ProjectDecisions:
     connections: "tuple" = ()
     #: Module name -> the HLS kernel top function the user named.
     hls_tops: Dict[str, str] = field(default_factory=dict)
+    #: Module name -> ``{port: bits}`` the user declared.
+    port_widths: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
     def declares_connection(self, producer: str, consumer: str) -> bool:
         return (producer, consumer) in self.connections
@@ -296,6 +323,10 @@ class ForgeConfig:
     part: str = DEFAULT_PART
     dataset: Optional[str] = None
     verification_config: Optional[str] = None
+    #: The rest of ``verification:`` (input, expected, links, compare,
+    #: protocols, backends, levels, modules), read by
+    #: ``forge.verification.auto``.
+    verification_spec: Dict[str, Any] = field(default_factory=dict)
     design: Optional[str] = None
     registry: Optional[str] = None
     build: Dict[str, str] = field(default_factory=dict)
@@ -373,6 +404,7 @@ class ForgeConfig:
                     if fields.get("latency") is not None else None
                 ),
                 contract=str(contract) if contract else None,
+                widths=_port_widths(fields.get("widths"), module=str(name), source=config_path),
             )
 
         build_raw = raw.get("build") or {}
@@ -423,6 +455,7 @@ class ForgeConfig:
             verification_config=(
                 str(verification_raw["config"]) if verification_raw.get("config") else None
             ),
+            verification_spec={str(k): v for k, v in verification_raw.items() if k not in ("dataset", "config")},
             design=str(raw["design"]) if raw.get("design") else None,
             registry=str(raw["registry"]) if raw.get("registry") else None,
             build={str(k): str(v) for k, v in build_raw.items() if v is not None},
@@ -468,6 +501,7 @@ class ForgeConfig:
             verification["dataset"] = self.dataset
         if self.verification_config:
             verification["config"] = self.verification_config
+        verification.update(self.verification_spec)
         if verification:
             out["verification"] = verification
         if self.modules:
@@ -549,6 +583,11 @@ class ForgeConfig:
                 name: policy.top
                 for name, policy in self.modules.items()
                 if policy.top
+            },
+            port_widths={
+                name: dict(policy.widths)
+                for name, policy in self.modules.items()
+                if policy.widths
             },
         )
 

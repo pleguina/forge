@@ -365,8 +365,8 @@ options:
                         an HLS module before its IP is built)
   --source-type {rtl,hls}
                         Override the source type (default: the module's 'kind')
-  --predict             Predict an HLS module's RTL ports from its C++ source instead of scanning
-                        HDL — for a module whose IP has not been built yet
+  --predict             An HLS module's RTL ports: those of its synthesised IP (component.xml)
+                        when one exists, else predicted from its C++ source
   --output OUTPUT, -o OUTPUT
                         Write the skeleton to this path
   --dry-run             Print the skeleton without writing it
@@ -422,17 +422,24 @@ options:
 usage: forge dev framework [-h] COMMAND ...
 
 positional arguments:
-  COMMAND         framework sub-command
-    import        Load and validate a framework ABI + endpoint manifest
-    io-resolve    Resolve detector_io.yml against a framework import
-    emit-payload  Generate a Blobfish-compatible payload.v
-    ipbb-component
-                  Copy a build's sources into an ipbb component with its .dep file
-    ipbb-xsim     Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
-    floorplan     SLR assignment of a block-design top level from the links and a floorplan spec
+  COMMAND            framework sub-command
+    import           Load and validate a framework ABI + endpoint manifest
+    io-resolve       Resolve detector_io.yml against a framework import
+    emit-payload     Generate a Blobfish-compatible payload.v
+    ipbb-component   Copy a build's sources into an ipbb component with its .dep file
+    ipbb-xsim        Write xvhdl/xvlog commands compiling an ipbb dep tree (needs ipbb)
+    floorplan        SLR assignment of a block-design top level from the links and a floorplan
+                     spec
+    floorplan-compare
+                     A floorplan proposal against the placed design and Vivado's timing reports
+    emp-payload      emp_payload.vhd around the generated top, for an emp-fwk checkout
+    registers        Export a register map: IPbus address table, Blobfish payload services,
+                     Markdown
+    link-map         JSON of every link, its algorithm port and the register layout, with the
+                     build's identity
 
 options:
-  -h, --help      show this help message and exit
+  -h, --help         show this help message and exit
 ```
 
 ##### `forge dev framework emit-payload`
@@ -454,12 +461,25 @@ options:
   --out OUT             Output path for payload.v (default: build/generated/payload.v)
 ```
 
+##### `forge dev framework emp-payload`
+
+```text
+usage: forge dev framework emp-payload [-h] --spec SPEC --emp-fwk EMP_FWK --ir IR --out OUT
+
+options:
+  -h, --help         show this help message and exit
+  --spec SPEC        YAML with an emp_payload mapping (see forge.integration.emp_payload)
+  --emp-fwk EMP_FWK  emp-fwk checkout whose payload entity is used
+  --ir IR            design.ir.json of the generated top
+  --out OUT          VHDL file to write
+```
+
 ##### `forge dev framework floorplan`
 
 ```text
 usage: forge dev framework floorplan [-h] --block-design BLOCK_DESIGN --ir IR
                                      [--crossings CROSSINGS] --detector-io DETECTOR_IO --spec SPEC
-                                     --out OUT
+                                     --out OUT [--report REPORT] [--resources RESOURCES]
 
 options:
   -h, --help            show this help message and exit
@@ -473,6 +493,29 @@ options:
   --spec SPEC           YAML with floorplan: {root, pblock, reserved, slr: {<slr>: [cell
                         patterns]}}
   --out OUT             XDC to write
+  --report REPORT       JSON report of the proposal (per-SLR load, crossings, spec errors) to
+                        write, with a .check.tcl next to it for after place_design
+  --resources RESOURCES
+                        HLS metrics JSON (modules: {name: {resources: {used}}}) for the per-SLR
+                        load
+```
+
+##### `forge dev framework floorplan-compare`
+
+```text
+usage: forge dev framework floorplan-compare [-h] --report REPORT --placed PLACED
+                                             [--timing-summary TIMING_SUMMARY]
+                                             [--timing-paths TIMING_PATHS] --out OUT
+
+options:
+  -h, --help            show this help message and exit
+  --report REPORT       The proposal's JSON report (floorplan --report)
+  --placed PLACED       floorplan_placed.csv written by the .check.tcl
+  --timing-summary TIMING_SUMMARY
+                        report_timing_summary output
+  --timing-paths TIMING_PATHS
+                        report_timing output (many paths)
+  --out OUT             JSON comparison to write
 ```
 
 ##### `forge dev framework import`
@@ -531,6 +574,43 @@ options:
                         package:component holding the top-level dep file
   --dep DEP             Top-level dep file name
   --out OUT             Shell script to write
+```
+
+##### `forge dev framework link-map`
+
+```text
+usage: forge dev framework link-map [-h] --detector-io DETECTOR_IO [--file LABEL=PATH]
+                                    [--repo REPO] [--registers REGISTERS] [--clock CLOCK] --out
+                                    OUT
+
+options:
+  -h, --help            show this help message and exit
+  --detector-io DETECTOR_IO
+                        detector_io.resolved.json
+  --file LABEL=PATH     A file the build is made of (IR, payload, bitstream, dataset, mapping);
+                        repeatable
+  --repo REPO           Source repository whose commit identifies the build
+  --registers REGISTERS
+                        Register map YAML whose layout to include
+  --clock CLOCK         Clock the link words are handed over in
+  --out OUT             JSON to write
+```
+
+##### `forge dev framework registers`
+
+```text
+usage: forge dev framework registers [-h] --map MAP [--ipbus IPBUS] [--top TOP]
+                                     [--blobfish BLOBFISH] [--slr SLR] [--doc DOC]
+
+options:
+  -h, --help           show this help message and exit
+  --map MAP            YAML register map (see forge.integration.registers)
+  --ipbus IPBUS        uHAL address table XML to write
+  --top TOP            Top node id of the address table
+  --blobfish BLOBFISH  YAML with the control_policies placing the map in an SLR's config/readback
+                       words
+  --slr SLR            SLR whose words --blobfish uses
+  --doc DOC            Markdown register table to write
 ```
 
 #### `forge dev hls`
@@ -1314,7 +1394,12 @@ options:
 
 ```text
 usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_LIST]
-                  [--all-events] [--plugin PLUGIN] [--json]
+                  [--all-events] [--plugin PLUGIN] [--input INPUT] [--input-format INPUT_FORMAT]
+                  [--expected EXPECTED] [--expected-format EXPECTED_FORMAT]
+                  [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
+                  [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
+                  [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE] [--record-modules]
+                  [--plan] [--require-verified] [--json]
                   MODE ...
 
 positional arguments:
@@ -1334,7 +1419,33 @@ options:
                         one (e.g. event:processor, 4:2)
   --all-events          Run every event in the dataset
   --plugin PLUGIN       Plugin ID to bootstrap (when flow.plugin is absent from YAML)
+  --require-verified    Exit 1 unless everything was verified: a missing simulator, a missing
+                        expected output or a skipped flow fails instead of warning (for CI)
   --json                Machine-readable JSON output
+
+without a verification config:
+  The design's interfaces are found from its ports and driven by a generated testbench
+
+  --input INPUT         Input transactions (JSON, EMP or APx pattern file)
+  --input-format INPUT_FORMAT
+                        A registered dataset format, e.g. json, empv2, apx, apx-2021 (default:
+                        from the file)
+  --expected EXPECTED   Expected output transactions
+  --expected-format EXPECTED_FORMAT
+  --compare-mode {transaction,exact_cycle,fixed_latency,latency_window}
+  --latency LATENCY     Cycles, or MIN:MAX, for the latency modes
+  --backend {xsim,verilator}
+                        Only this simulator
+  --level {design,modules}
+                        Only this level
+  --seed SEED           Seed of the stall and backpressure patterns
+  --stall STALL         Percent of cycles a ready_valid input withholds a word
+  --backpressure BACKPRESSURE
+                        Percent of cycles a ready_valid output's ready is low
+  --record-modules      Record each module instance's inputs and outputs during the design-level
+                        run, as data a module level can be checked against (derived, not
+                        independent)
+  --plan                Print what would be verified, and what was inferred, without simulating
 ```
 
 #### `forge test check-only`

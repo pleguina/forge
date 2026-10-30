@@ -155,12 +155,24 @@ def test_emit_payload_with_resolved_io(
         capsys, "emit-payload",
         "--framework", str(imported_framework),
         "--detector-io", str(resolve_out / "detector_io.resolved.json"),
+        "--policies", str(_no_reset(tmp_path)),
         "--out", str(payload_out),
     )
 
     assert result.returncode == 0
     assert "Generated payload wrapper" in result.stdout
     assert payload_out.exists()
+
+
+def test_emit_payload_with_links_needs_a_reset_decision(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, imported_framework: Path
+) -> None:
+    resolved = _resolved(capsys, tmp_path, imported_framework)
+    result = _run_framework(capsys, "emit-payload", "--framework", str(imported_framework),
+                            "--detector-io", str(resolved), "--out", str(tmp_path / "payload.v"))
+
+    assert result.returncode == 1
+    assert "control_policies.reset is required" in result.stderr
 
 
 def test_emit_payload_without_detector_io_uses_dummy_stub(
@@ -192,6 +204,12 @@ def test_emit_payload_missing_detector_io_file_is_guided(
     assert "detector_io.resolved.json not found" in result.stderr
 
 
+def _no_reset(tmp_path: Path) -> Path:
+    path = tmp_path / "no_reset.yml"
+    path.write_text("control_policies:\n  reset: disabled\n")
+    return path
+
+
 def _resolved(capsys: pytest.CaptureFixture[str], tmp_path: Path, imported_framework: Path) -> Path:
     detector_io = tmp_path / "detector_io.yml"
     detector_io.write_text(_DETECTOR_IO_YAML)
@@ -215,7 +233,8 @@ def test_emit_payload_takes_the_protocol_from_the_framework(
 
     payload_out = tmp_path / "payload.v"
     result = _run_framework(capsys, "emit-payload", "--framework", str(imported_framework),
-                            "--detector-io", str(resolved), "--out", str(payload_out))
+                            "--detector-io", str(resolved), "--policies", str(_no_reset(tmp_path)),
+                            "--out", str(payload_out))
 
     assert result.returncode == 0, result.stderr
     assert protocols == {"csp_64b"}

@@ -366,6 +366,8 @@ def _render_modules_yml(
         policy = config.modules.get(unit.name)
         if policy is not None and policy.latency is not None:
             entry["latency"] = dict(policy.latency)
+        if policy is not None and policy.widths:
+            entry["port_widths"] = dict(policy.widths)
         modules.append(entry)
         if unit.opaque:
             # Recorded for the reader of the generated registry, who would

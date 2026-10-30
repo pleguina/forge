@@ -50,6 +50,7 @@ class DatasetSource:
     """
     serialized: "SerializedDataset | None" = None
     raw_path:   "Path | None" = None
+    format:     "str | None" = None   # named format of raw_path (xml, json, empv2); by suffix or content when unset
 
 
 @dataclass(frozen=True)

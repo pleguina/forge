@@ -15,6 +15,20 @@ before doing any further work (`validate_flow_matrix()`).
 | `reduced_chain_rtl` | experimental | `xsim` | `xsim` | Multi-module RTL chain simulation; TB generation and port extraction are not yet proven for this scope on the canonical path |
 | `single_module_rtl` | supported | `xsim` | `verilator`, `xsim` | Single HLS-generated RTL module via Xilinx XSIM or Verilator |
 
+## Verification from input and expected data
+
+What `forge test` runs when forge.yml gives `verification.input` /
+`expected` (or `--input` / `--expected`), from
+`forge.verification.auto.BACKENDS` and the dataset formats registered
+with `forge.verification.dataset_format`:
+
+| Simulator | Tools it needs on PATH |
+|---|---|
+| `verilator` | `verilator` |
+| `xsim` | `xvlog`, `xelab`, `xsim` |
+
+Data formats: `apx`, `apx-2021`, `empv2`, `json`, `xml`.
+
 ## Vitis HLS versions
 
 FORGE predicts the RTL interface Vitis HLS will generate for a C++
@@ -26,11 +40,38 @@ it has not been tested, and FORGE claims nothing about it.
 
 | Vitis HLS | Status | What that means |
 |---|---|---|
+| `2023.2` | verified | the fixture corpus was replayed against real synthesis output from this version and every difference is accounted for — the predictor's known gaps are documented, and nothing else differs |
 | `2024.1` | verified | the fixture corpus was replayed against real synthesis output from this version and every difference is accounted for — the predictor's known gaps are documented, and nothing else differs |
+| `2025.2.1` | verified | the fixture corpus was replayed against real synthesis output from this version and every difference is accounted for — the predictor's known gaps are documented, and nothing else differs |
 
 Any other release reports `untested`: FORGE has no synthesis output from this version, so its port predictions are unvalidated here — they may still be right, but nothing has checked. `forge doctor` reports the status of the release on your own PATH.
 
+### Known gaps under 2023.2
+
+Differences between the prediction and this version's real output
+that the corpus records and explains. They are not reproduced by
+the predictor, and are reported rather than guessed at:
+
+- **`m_axi`** — s_axilite and m_axi bundles are not predicted: their port sets depend on address and data widths chosen at synthesis (see forge/hls/port_prediction.py's module docstring)
+- **`m_axi`** — with `s_axilite port=return`, block control moves into the AXI-Lite register map — HLS emits no ap_start/ap_done/ap_idle/ap_ready pins at all, which follows from the same s_axilite bundle this predictor does not model
+- **`m_dimdefault`** — HLS inferred a dual-port memory for the dim=1-partitioned array (a second _address1/_ce1/_q1 set). How many memory ports it infers depends on the access pattern in the function body, which a signature-and-pragma predictor does not read
+- **`m_dimdefault`** — HLS renamed the scalar output `out` to `out_r`. One sample does not establish the rule (`out` is a VHDL reserved word and HLS emits VHDL as well as Verilog), so the rename is recorded here rather than turned into a naming rule the predictor applies to every port
+- **`m_structs`** — this kernel synthesised with no ap_clk pin at all, while keeping ap_rst; the predictor emits ap_clk unconditionally. What makes HLS drop the clock here is not established by one sample, so the difference is recorded rather than explained away
+- **`m_structs`** — under 2023.2 this kernel also synthesised with no ap_rst; 2024.1 and 2025.2.1 keep it
+
 ### Known gaps under 2024.1
+
+Differences between the prediction and this version's real output
+that the corpus records and explains. They are not reproduced by
+the predictor, and are reported rather than guessed at:
+
+- **`m_axi`** — s_axilite and m_axi bundles are not predicted: their port sets depend on address and data widths chosen at synthesis (see forge/hls/port_prediction.py's module docstring)
+- **`m_axi`** — with `s_axilite port=return`, block control moves into the AXI-Lite register map — HLS emits no ap_start/ap_done/ap_idle/ap_ready pins at all, which follows from the same s_axilite bundle this predictor does not model
+- **`m_dimdefault`** — HLS inferred a dual-port memory for the dim=1-partitioned array (a second _address1/_ce1/_q1 set). How many memory ports it infers depends on the access pattern in the function body, which a signature-and-pragma predictor does not read
+- **`m_dimdefault`** — HLS renamed the scalar output `out` to `out_r`. One sample does not establish the rule (`out` is a VHDL reserved word and HLS emits VHDL as well as Verilog), so the rename is recorded here rather than turned into a naming rule the predictor applies to every port
+- **`m_structs`** — this kernel synthesised with no ap_clk pin at all, while keeping ap_rst; the predictor emits ap_clk unconditionally. What makes HLS drop the clock here is not established by one sample, so the difference is recorded rather than explained away
+
+### Known gaps under 2025.2.1
 
 Differences between the prediction and this version's real output
 that the corpus records and explains. They are not reproduced by

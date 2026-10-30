@@ -711,6 +711,17 @@ def _explain_hls(target: str, name: str, status: ProjectStatus) -> Explanation:
         e.describe() for e in candidate.evidence
     ])
 
+    from forge.contracts.parser import parse_component
+    from forge.project.hls_maturity import find_component_xml
+
+    component = find_component_xml(status.root, candidate.top)
+    synthesized = parse_component(component)["ports"] if component else []
+    if synthesized:
+        explanation.section(f"Synthesised RTL interface ({component}), the one FORGE uses", [
+            f"{'input ' if str(p['direction']).lower() == 'in' else 'output'} {p['name']}  [{p['width']} bit]"
+            for p in synthesized
+        ])
+
     try:
         from forge.hls.cpp_signature import parse_signature
         from forge.hls.port_prediction import predict_ports

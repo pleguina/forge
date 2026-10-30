@@ -146,6 +146,8 @@ DIAGNOSTICS: "dict[str, DiagnosticDefinition]" = {
         _atg("ATG047", "note", "Module is integrated as an opaque module — wired structurally, with its internals deliberately not modelled.", "Drive its clock/reset pins other than the design's own from the level above the generated top."),
         _atg("ATG048", "warning", "An HLS module's predicted RTL interface differs from the interface the built IP actually exposes.", "Run `forge explain hls:<module>` for the full reconciliation, then correct the contract to match the built IP."),
         _atg("ATG049", "warning", "A verification flow's simulator is not on PATH, so `forge test` would skip it.", "Put the simulator on PATH, or run `forge test` where it is installed."),
+        _atg("ATG050", "error", "A connection declares cdc: together with register_stages or delay_cycles, which the generator cannot place on either side of the synchronizer.", "Move the stages to a connection inside one clock domain."),
+        _atg("ATG051", "error", "A port's range uses a macro, package constant or function the source scan cannot evaluate, so its width is unknown and nothing is generated for it.", "Declare the width under `modules.<name>.widths` in forge.yml."),
     ]
 }
 

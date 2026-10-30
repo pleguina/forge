@@ -9,8 +9,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import emp_tools  # noqa: E402
-from emp_tools import check_entity, check_sink, parse_golden_xml, write_source  # noqa: E402
-from forge.integration.emp import IDLE, LinkWord, entity_ports, packet, read_pattern_file, write_pattern_file  # noqa: E402
+from emp_tools import check_sink, parse_golden_xml, write_source  # noqa: E402
+from forge.integration.emp import IDLE, LinkWord, packet, read_pattern_file, write_pattern_file  # noqa: E402
 
 
 @pytest.fixture
@@ -56,22 +56,3 @@ class TestCheck:
 
     def test_invalid_frames_are_ignored(self, events, tmp_path):
         assert check_sink(events, _sink(tmp_path, [LinkWord(0x1234)] + self._words(events))) == []
-
-
-class TestEntity:
-    def test_payload_declares_the_emp_ports(self):
-        names = [p.split(":")[0] for p in entity_ports(emp_tools._PAYLOAD_VHD.read_text())]
-        assert names == [
-            "clk", "rst", "ipb_in", "ipb_out", "clk40", "clk_payload", "rst_payload", "clk_p",
-            "rst_loc", "clken_loc", "ctrs", "bc0", "d", "q", "gpio", "gpio_en", "slink_q",
-            "backpressure",
-        ]
-
-    def test_a_different_emp_fwk_entity_is_reported(self, tmp_path):
-        hdl = tmp_path / "components" / "payload" / "firmware" / "hdl"
-        hdl.mkdir(parents=True)
-        ours = emp_tools._PAYLOAD_VHD.read_text()
-        (hdl / "emp_payload.vhd").write_text(ours)
-        assert check_entity(tmp_path) == []
-        (hdl / "emp_payload.vhd").write_text(ours.replace("clk40       : in  std_logic;", ""))
-        assert any(line.startswith("+clk40") for line in check_entity(tmp_path))

@@ -80,6 +80,8 @@ TCL
 done
 ```
 
+From 2025.1, Vitis HLS runs the same Tcl as `vitis-run --mode hls --tcl run_$top.tcl`.
+
 Then re-extract the port lists from each
 `prj_<top>/sol/syn/verilog/<top>.v` port declaration list into
 `golden/<version>.json`, keyed by top name. The synthesis products

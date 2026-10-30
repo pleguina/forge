@@ -96,21 +96,46 @@ class ProvenanceManifest:
 
 def _source_paths(project: ResolvedProject) -> List[Path]:
     """Every real, existing file that fed into *project*'s construction:
-    the design file, contracts_from/ip_info if given, and every module's
-    resolved interface-contract file."""
-    paths: List[Path] = []
-    for key in ("design", "contracts_from", "ip_info"):
+    the design file and the designs it is a variant of, contracts_from/ip_info
+    if given, and every module's interface contract and source files."""
+    from forge.contracts.design_variant import design_sources
+
+    candidates: List[Path] = []
+    design = project.generated_from.get("design")
+    if design:
+        candidates += design_sources(design)
+    for key in ("contracts_from", "ip_info"):
         value = project.generated_from.get(key)
         if value:
-            p = Path(value)
-            if p.exists() and p.is_file():
-                paths.append(p)
+            candidates.append(Path(value))
     for mod in project.design.modules:
         if mod.contract_path:
-            p = Path(mod.contract_path)
-            if p.exists() and p.is_file():
-                paths.append(p)
+            candidates.append(Path(mod.contract_path))
+        candidates += [Path(f) for f in [*mod.source_files, *mod.rtl_sources]]
+    paths: List[Path] = []
+    seen = set()
+    for p in candidates:
+        key = os.path.abspath(p)
+        if key not in seen and p.is_file():
+            seen.add(key)
+            paths.append(p)
     return paths
+
+
+def changed_sources(provenance_path: Path, design_dir: Path) -> Optional[List[str]]:
+    """The recorded inputs of *provenance_path* whose content is no longer
+    what was recorded (or that are gone), keys relative to *design_dir*; ``None``
+    when there is no readable manifest to judge by."""
+    try:
+        manifest = read_provenance(provenance_path)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    changed = []
+    for key, recorded in sorted(manifest.source_hashes.items()):
+        path = design_dir / key
+        if not path.is_file() or hash_file(path) != recorded:
+            changed.append(key)
+    return changed
 
 
 def _design_dir(project: ResolvedProject) -> Path:

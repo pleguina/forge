@@ -69,6 +69,26 @@ def _hls_tool_versions() -> list:
     return lines
 
 
+def _data_driven_verification() -> list:
+    from forge.verification.auto import BACKENDS, data_formats
+
+    return [
+        "## Verification from input and expected data",
+        "",
+        "What `forge test` runs when forge.yml gives `verification.input` /",
+        "`expected` (or `--input` / `--expected`), from",
+        "`forge.verification.auto.BACKENDS` and the dataset formats registered",
+        "with `forge.verification.dataset_format`:",
+        "",
+        "| Simulator | Tools it needs on PATH |",
+        "|---|---|",
+        *[f"| `{name}` | {', '.join(f'`{t}`' for t in tools)} |" for name, tools in sorted(BACKENDS.items())],
+        "",
+        "Data formats: " + ", ".join(f"`{f}`" for f in data_formats()) + ".",
+        "",
+    ]
+
+
 def generate_support_matrix_page() -> str:
     lines = [
         "# Support Matrix",
@@ -93,6 +113,7 @@ def generate_support_matrix_page() -> str:
         )
     lines.append("")
 
+    lines += _data_driven_verification()
     lines += _hls_tool_versions()
 
     supported = sorted(k for k, v in MATRIX.items() if v.classification == FlowClassification.SUPPORTED)

@@ -504,7 +504,7 @@ class ProjectDiscovery:
         for discovered in result.files:
             if discovered.role not in ("rtl", "testbench"):
                 continue
-            units = scan_hdl_file(discovered.path)
+            units = scan_hdl_file(discovered.path, self.decisions.port_widths)
             target = result.units if discovered.role == "rtl" else result.testbench_units
             for unit in units:
                 if unit.name in seen:
@@ -912,12 +912,40 @@ class ProjectDiscovery:
         spelled out, rather than after authoring contracts for it.
         """
         for unit in result.units:
+            if unit.unresolved_widths:
+                # Opaque or not, the generated top needs every port's width.
+                example = ", ".join(f"{port}: <bits>" for port in sorted(unit.unresolved_widths))
+                declare = (
+                    f"declare the width under `modules:` in forge.yml: "
+                    f"`{unit.name}: {{widths: {{{example}}}}}`, then re-run `forge adopt`"
+                )
+                result.unsupported.append(Ambiguity(
+                    id=f"unsupported:{unit.name}:widths",
+                    classification=UNSUPPORTED,
+                    subject=unit.name,
+                    kind=KIND_MODULE,
+                    question=f"{unit.name}: " + next(
+                        r for r in unit.unsupported if r.startswith("width of")),
+                    options=(declare, f"exclude {unit.name} from the FORGE-managed topology"),
+                    action=Action(
+                        id="declare-port-widths",
+                        description=declare[0].upper() + declare[1:],
+                        auto_fixable=False,
+                        safe=False,
+                    ),
+                    evidence=tuple(
+                        Evidence(str(unit.path), "unresolved_width", f"{port} {rng}", DETERMINISTIC)
+                        for port, rng in sorted(unit.unresolved_widths.items())
+                    ),
+                ))
             if unit.opaque:
                 # The user has already answered this question. The reason is
                 # still worth recording — it is why the module is opaque —
                 # but it is no longer an open decision.
                 continue
             for reason in unit.unsupported:
+                if unit.unresolved_widths and reason.startswith("width of"):
+                    continue
                 result.unsupported.append(Ambiguity(
                     id=f"unsupported:{unit.name}",
                     classification=UNSUPPORTED,

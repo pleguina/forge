@@ -51,6 +51,7 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from forge.verification.compile_key import build_key, reusable
 from forge.verification import backend_checker
 from forge.verification.backend_base import (
     ArtifactRequirement,
@@ -265,21 +266,23 @@ class VerilatorBackend(BackendAdapter):
         build_sentinel = work_dir / ".build_complete"
         binary = obj_dir / snapshot
 
-        if readmemh_mode and build_sentinel.exists() and binary.exists():
-            print("[verilator 1/2] Reusing existing build (stimulus_mode=readmemh)")
+        verilate_cmd = [
+            "verilator", "--binary", "--timing", "--Wno-fatal",
+            "-f", str(sources_f),
+            "--top-module", cfg.tb_module,
+            "-o", snapshot,
+            "--Mdir", str(obj_dir),
+        ]
+        if getattr(ctx, "probe_log", False):
+            verilate_cmd += ["-DPROBE_LOG=1"]
+        key = build_key(sources_f, [verilate_cmd], ["verilator"]) if readmemh_mode else None
+
+        if key is not None and reusable(build_sentinel, key) and binary.exists():
+            print("[verilator 1/2] Reusing the build of identical inputs (stimulus_mode=readmemh)")
         else:
+            build_sentinel.unlink(missing_ok=True)
             # ── verilator --binary ────────────────────────────────────────
             print(f"[verilator 1/2] Compiling+Elaborating ({cfg.tb_module})")
-            verilate_cmd = [
-                "verilator", "--binary", "--timing", "--Wno-fatal",
-                "-f", str(sources_f),
-                "--top-module", cfg.tb_module,
-                "-o", snapshot,
-                "--Mdir", str(obj_dir),
-            ]
-            if getattr(ctx, "probe_log", False):
-                verilate_cmd += ["-DPROBE_LOG=1"]
-
             run = _run_logged(verilate_cmd, verilate_log, cwd=work_dir)
             if run.exit_code != 0:
                 return ExecutionResult(
@@ -288,8 +291,8 @@ class VerilatorBackend(BackendAdapter):
                     backend_id=BACKEND_ID,
                     backend_metadata={"step": "verilate"},
                 )
-            if readmemh_mode:
-                build_sentinel.write_text("1")
+            if key is not None:
+                build_sentinel.write_text(key + "\n")
 
         # ── run the built binary ──────────────────────────────────────────
         print("[verilator 2/2] Simulating")

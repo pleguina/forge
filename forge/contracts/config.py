@@ -84,7 +84,7 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
     IDENTITY_FIELDS = {
         "name", "kind", "top", "src", "includes", "rtl_lang", "vhdl_library",
         "vhdl_version", "rtl_include_dirs", "verilog_defines", "rtl_packages",
-        "cflags", "stages",
+        "cflags", "stages", "port_widths",
         # Latency annotation fields — recognized pass-through keys, not
         # identity/equality semantics; converted into a typed ModuleTiming
         # by _pop_timing() at Module-construction time, not stored flat.
@@ -389,6 +389,10 @@ class Module:
     
     # RTL module parameters (e.g., for parameterized Verilog modules)
     parameters: Dict[str, Any] = field(default_factory=dict)
+
+    # Port widths the source scan cannot evaluate (a range built from a
+    # package constant, say), declared by the user: {port: bits}.
+    port_widths: Dict[str, int] = field(default_factory=dict)
 
     # HLS fields
     tb:        List[str] = field(default_factory=list)
@@ -828,6 +832,16 @@ class DesignConfig:
                     # has to recognize one spelling.
                     kind = "level_sync"
                     cdc = {**cdc, "kind": "level_sync"}
+
+                # The generator feeds the synchronizer from the source and the
+                # consumer from the synchronizer, so stages declared next to it
+                # would be emitted unconnected while the latency model counted them.
+                if kind != "waived" and (int(reg_stages or 0) > 0 or int(delay_cycles or 0) > 0 or delay_auto):
+                    raise ValueError(
+                        f"[ATG050] Connection {c['from']!r} -> {c.get('to')!r}: cdc.kind={kind!r} "
+                        "cannot be combined with register_stages or delay_cycles on the same "
+                        "connection. Put the stages on a connection inside one clock domain."
+                    )
 
                 depth = cdc.get("depth")
                 if depth is not None and (not isinstance(depth, int) or isinstance(depth, bool) or depth <= 0):

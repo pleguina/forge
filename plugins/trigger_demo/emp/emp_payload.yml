@@ -1,0 +1,18 @@
+# trigger_demo in emp_payload: links 0-3 each carry one raw hit into the four hit decoders, and
+# output link 0 carries the trigger word as a one-frame packet. `forge dev framework emp-payload`
+# writes firmware/hdl/emp_payload.vhd from this and the emp-fwk checkout the project uses.
+emp_payload:
+  algo_entity: algo_top
+  clock: clk_p
+  reset: {source: "rst_loc(0)"}
+  inputs:
+    dec_0_raw_hit: {link: 0, field: data, bits: [31, 0]}
+    dec_1_raw_hit: {link: 1, field: data, bits: [31, 0]}
+    dec_2_raw_hit: {link: 2, field: data, bits: [31, 0]}
+    dec_3_raw_hit: {link: 3, field: data, bits: [31, 0]}
+    dec_0_raw_valid: {link: 0, field: valid}
+    dec_1_raw_valid: {link: 1, field: valid}
+    dec_2_raw_valid: {link: 2, field: valid}
+    dec_3_raw_valid: {link: 3, field: valid}
+  outputs:
+    0: {data: tout_trigger_word, valid: tout_out_valid, start: tout_out_valid, last: tout_out_valid}

@@ -52,6 +52,7 @@ from .model import (
     ResolvedInterfaceMember,
     ResolvedLogicalInterface,
     ResolvedModuleDefinition,
+    ResolvedModulePort,
     ResolvedPhysicalBinding,
     ResolvedProject,
     ResolvedResetDomain,
@@ -103,6 +104,19 @@ def build_tie_off_connections(
 
 def _as_path(value: Optional[Path | str]) -> Optional[Path]:
     return Path(value).expanduser().resolve() if value is not None else None
+
+
+def _module_language(mod: Module) -> Optional[str]:
+    """The HDL an RTL module is written in: its declared ``rtl_lang``, else
+    its sources' suffixes."""
+    if mod.kind != "rtl":
+        return None
+    if mod.rtl_lang:
+        return str(mod.rtl_lang)
+    suffixes = {Path(p).suffix.lower() for p in mod.src}
+    if suffixes & {".vhd", ".vhdl"}:
+        return "vhdl"
+    return "systemverilog" if ".sv" in suffixes else "verilog"
 
 
 def _resolve_ip_info(
@@ -581,6 +595,17 @@ def assemble_project_ir(
             latency=timing.latency if timing else None,
             ip_info_key=mod.ip_info_key,
             declaration_order=declaration_order,
+            language=_module_language(mod),
+            ports=[
+                ResolvedModulePort(
+                    name=str(p["name"]),
+                    direction={"IN": "in", "INPUT": "in", "OUT": "out", "OUTPUT": "out"}.get(
+                        str(p.get("direction", "")).upper(), "inout"),
+                    width=int(p.get("width", 1)),
+                )
+                for p in (ip_entry or {}).get("ports") or []
+                if isinstance(p, dict) and p.get("name")
+            ],
         ))
     modules.sort(key=lambda m: m.name)
 

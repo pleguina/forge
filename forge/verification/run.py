@@ -93,12 +93,11 @@ def resolve_consumer_root(arg: "str | Path | None") -> Path | None:
 
 @dataclass(frozen=True)
 class XmlRunSelection:
-    """Framework-standard run selection for XML-backed verification flows.
+    """Framework-standard run selection: which events of which dataset.
 
-    v1.0 of the framework verification contract standardizes XML-backed datasets
-    and event-oriented run selection across framework launchers and backends.
-    Plugins may still extend RuntimeContext, but these selectors are now an
-    explicit framework surface rather than an implicit plugin-local convention.
+    The name is historical; ``dataset_xml`` is the dataset file in any
+    registered format, which ``dataset_format`` names when the flow states it
+    (otherwise the file's suffix or content decides).
     """
 
     event_id: int | None
@@ -108,6 +107,7 @@ class XmlRunSelection:
     dataset_xml: Path | None
     dataset_parts_glob: str | None
     probe_log: bool
+    dataset_format: "str | None" = None
 
 
 def resolve_run_selection(
@@ -150,6 +150,7 @@ def resolve_run_selection(
         dataset_xml=Path(xml_input_raw) if xml_input_raw else None,
         dataset_parts_glob=str(_dataset_parts_glob).strip() if _dataset_parts_glob else None,
         probe_log=_probe_log,
+        dataset_format=None if (xml_input or os.environ.get("XML_INPUT")) else getattr(cfg, "dataset_format", None),
     )
 
 
@@ -411,6 +412,7 @@ def run_dataset_parts(flow_path: Path, cfg, selection: XmlRunSelection, adapter,
             dataset_xml=xml_path,
             dataset_parts_glob=None,
             probe_log=selection.probe_log,
+            dataset_format=selection.dataset_format,
         )
         work_dir = flow_path.parent / "xsim_work" / "dataset_parts" / xml_path.stem
         ctx = build_runtime_context(flow_path, cfg, part_selection, importlib_module, work_dir=work_dir)
@@ -453,13 +455,13 @@ def parse_event_list(event_list: str) -> List[str]:
     return sorted(set(events), key=lambda e: (int(e.split(":", 1)[0]), e))
 
 
-def _enumerate_xml_event_ids(xml_path: Path) -> List[int]:
-    """Every event id in the dataset XML at *xml_path*."""
+def _enumerate_event_ids(path: Path, fmt: "str | None" = None) -> List[str]:
+    """Every event id of the dataset at *path*, numeric ids in numeric order."""
     from forge.verification.dataset_adapter import DatasetSource
     from forge.verification.dataset_service import DatasetService
 
-    serialized = DatasetService().load(DatasetSource(raw_path=xml_path))
-    return sorted(int(eid) for eid in serialized.metadata.event_ids)
+    ids = DatasetService().load(DatasetSource(raw_path=path, format=fmt)).metadata.event_ids
+    return sorted(ids, key=lambda e: (0, int(e), "") if str(e).isdigit() else (1, 0, str(e)))
 
 
 def resolve_event_ids(selection) -> List[str]:
@@ -473,9 +475,9 @@ def resolve_event_ids(selection) -> List[str]:
         return [str(selection.event_id)]
     if not selection.dataset_xml:
         raise ValueError(
-            "no dataset XML resolved — pass --xml-input or check the flow's dataset.xml"
+            "no dataset resolved — pass --xml-input or check the flow's dataset.path"
         )
-    return [str(eid) for eid in _enumerate_xml_event_ids(selection.dataset_xml)]
+    return [str(eid) for eid in _enumerate_event_ids(selection.dataset_xml, selection.dataset_format)]
 
 
 def _tail_of_log(log_path: Any, *, lines: int = 20) -> Optional[str]:
@@ -684,6 +686,7 @@ def run_flow_events(flow: LoadedFlow, selection: XmlRunSelection, *, strict: boo
             dataset_xml=selection.dataset_xml,
             dataset_parts_glob=None,
             probe_log=selection.probe_log,
+            dataset_format=selection.dataset_format,
         )
         event_index: Optional[int] = None
         if readmemh_mode:

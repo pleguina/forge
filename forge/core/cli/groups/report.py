@@ -55,7 +55,9 @@ def cmd_report(args) -> None:
         output = output or str(project.paths.report_root)
         if getattr(args, "verify_design", None) is None and project.verification is not None:
             args.verify_design = str(project.verification)
-        project_results = sorted((project.paths.report_root / "test").glob("*.results.json"))
+        from forge.project.verification_state import latest_results
+
+        project_results = latest_results(project.paths.report_root)
     else:
         project_results = []
     design_path = Path(args.design).expanduser().resolve()
@@ -202,14 +204,26 @@ def cmd_report(args) -> None:
         )
         artifacts.append(str(output_dir / "verification_results.md"))
     elif project_results:
-        import json
+        from forge.project.verification_state import overall_status, render_markdown
 
-        from forge.verification.results import render_results_markdown
-
-        (output_dir / "verification_results.md").write_text("\n".join(
-            render_results_markdown(json.loads(p.read_text())) for p in project_results
-        ))
+        (output_dir / "verification_results.md").write_text(render_markdown(project_results))
         artifacts.append(str(output_dir / "verification_results.md"))
+        metrics["verification"] = overall_status(project_results)
+        metrics["verification_results"] = [r.to_dict() for r in project_results]
+        stale = [r for r in project_results if r.stale]
+        if stale:
+            diagnostics.append({
+                "severity": "warning",
+                "message": f"{len(stale)} verification result(s) predate a change to what they "
+                           f"were computed from: " + "; ".join(f"{r.name} ({r.stale})" for r in stale),
+            })
+            next_actions.append("Re-run `forge test`: some results are out of date")
+        unverified = [r for r in project_results if not r.stale and r.status not in ("VERIFIED", "PASS")]
+        for r in unverified:
+            diagnostics.append({
+                "severity": "warning",
+                "message": f"{r.name}: {r.status}" + (f", {r.reason}" if r.reason else ""),
+            })
     else:
         (output_dir / "verification_results.md").write_text(
             "# Verification results\n\n"
