@@ -206,6 +206,9 @@ def generate_flows(
         if flow_decl.kind in _CSIM_KINDS:
             # CSIM flows run a native binary — no RTL testbench to generate.
             continue
+        if not flow_decl.requires_generated_tb:
+            print(f"  {flow_decl.name}: requires_generated_tb is false — its own testbench is kept")
+            continue
 
         # Resolve port_map: CLI arg > per-flow discovery > root port_map > auto-derive from dut_rtl_source
         tb_port_map = cli_port_map

@@ -36,7 +36,7 @@ from forge.project.discovery import (
 )
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
 from forge.project.verification_state import (
-    DATA, VerificationSetup, latest_results, overall_status, verification_setup,
+    DATA, VerificationSetup, current_plans, latest_results, overall_status, verification_setup,
 )
 
 # ── Section states ────────────────────────────────────────────────────────
@@ -245,7 +245,9 @@ def evaluate(
         return status
 
     status.paths = status.config.paths()
-    if status.config.authored:
+    if (status.config.verification_spec or {}).get("target") == "existing":
+        checks = EXISTING_CHECKS
+    elif status.config.authored:
         checks = AUTHORED_CHECKS
     else:
         checks = CHECKS
@@ -890,12 +892,16 @@ def _check_data_verification(status: ProjectStatus, setup: VerificationSetup) ->
         ))
 
     detail = ", ".join(f"{k.split('.')[-1]} {paths.relative(p)}" for k, p in setup.data_files)
-    records = [r for r in latest_results(paths.report_root) if r.path.name.endswith(".evidence.json")]
+    records = [r for r in latest_results(paths.report_root, current_plans(status.config))
+               if r.path.name.endswith(".evidence.json")]
     if records:
         stale = [r for r in records if r.stale]
         detail += f"; last forge test: {overall_status(records)}"
         if stale:
             detail += f" ({len(stale)} result(s) out of date)"
+            state = WARN if state == PASS else state
+            actions.append(Action(id="run-forge-test", command="forge test", safe=True,
+                                  description="Re-run the verification: results predate a change"))
     else:
         detail += "; not run yet"
         actions.append(Action(id="run-forge-test", description="Run the verification",
@@ -1302,6 +1308,33 @@ CHECKS: Tuple[CheckFn, ...] = (
     _check_hls,
     _check_latency,
     _check_generated,
+    _check_verification,
+)
+
+def _check_existing_top(status: ProjectStatus) -> _CheckOutput:
+    """``verification.target: existing``: can the project's own top be
+    simulated as written — found in its sources, every port's width known,
+    forge.yml's clock and reset among its ports?"""
+    from forge.verification.auto import plan_existing
+
+    config = status.config
+    assert config is not None
+    try:
+        level = plan_existing(config, config.verification_spec)
+    except (OSError, ValueError) as exc:
+        status.report.error("ATG044", f"the existing top cannot be simulated: {exc}",
+                            action=f"Correct top:, sources or verification.filelist in {ROOT_CONFIG_NAME}")
+        return _CheckOutput(StatusSection("Existing top", FAIL, str(exc), ("ATG044",)))
+    assert level.bench is not None
+    ifaces = ", ".join(f"{i.name} ({i.protocol})" for i in level.bench.interfaces)
+    return _CheckOutput(StatusSection(
+        "Existing top", PASS,
+        f"{level.top}: {len(level.sources)} source(s), clock {level.bench.clock}, interfaces {ifaces}"))
+
+
+#: The checks for a project that simulates its own top as written.
+EXISTING_CHECKS: Tuple[CheckFn, ...] = (
+    _check_existing_top,
     _check_verification,
 )
 

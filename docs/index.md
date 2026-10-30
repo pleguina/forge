@@ -16,6 +16,15 @@ framework, not its scope. See
 current distribution story (git-install-only, no PyPI publish — a closed
 decision, not a placeholder pending one).
 
+## Start with a task
+
+1. **Compare my existing firmware with reference data** — your top, your
+   compile list, your data; no generation. See
+   [compare existing firmware](getting-started/compare-existing-firmware.md).
+2. **Bring my RTL under FORGE** — adopt the sources, let FORGE generate and
+   check the structural top. See [bring your own RTL](getting-started/bring-your-own-rtl.md).
+3. **Start a new design from scratch** — see the [quickstart](getting-started/quickstart.md).
+
 ## Current scope
 
 FORGE's public identity for this release is deliberately narrower than

@@ -131,3 +131,19 @@ def test_generation_scans_with_the_instance_parameters(tmp_path):
     ports = {p["name"]: p["width"] for p in _scan_hdl_fallback(mod, tmp_path)["ports"]}
 
     assert ports == {"clk": 1, "d": 24}
+
+
+def test_a_packed_array_port_is_generated_at_its_full_width(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "packed"
+    (root / "rtl").mkdir(parents=True)
+    (root / "rtl" / "pair.sv").write_text(
+        "module pair (input logic clk, input logic rst_n,\n"
+        "  input logic [1:0][7:0] pair_in, input logic pair_in_valid,\n"
+        "  output logic [15:0] pair_out, output logic pair_out_valid);\n"
+        "endmodule\n")
+    plan_adoption(root).write()
+
+    code, _ = _build(root, monkeypatch, capsys)
+
+    assert code == 0
+    assert "input [15:0] pair_pair_in," in (root / ".forge/generated/algo_top.v").read_text()

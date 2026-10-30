@@ -208,3 +208,24 @@ def test_missing_positional_arg_is_argparse_error(monkeypatch: pytest.MonkeyPatc
 
     assert exc_info.value.code == 2
     assert "usage:" in capsys.readouterr().err.lower()
+
+
+def test_a_flow_with_its_own_testbench_keeps_it(prepared_plugin: Path) -> None:
+    import yaml
+
+    from forge.verification.design_contract import load_verify_design
+    from forge.verification.prepare import prepare_flows
+
+    doc = yaml.safe_load(prepared_plugin.read_text())
+    flow = next(f for f in doc["flows"] if f.get("kind", "") not in ("hls_csim", "hls_cosim"))
+    flow["requires_generated_tb"] = False
+    prepared_plugin.write_text(yaml.safe_dump(doc, sort_keys=False))
+    decl = next(f for f in load_verify_design(prepared_plugin).flows if f.name == flow["name"])
+    consumer_root = prepared_plugin.parents[4]
+    tb = next(consumer_root.rglob(f"{decl.tb_module}.sv"))
+    tb.write_text("// hand-written\n")
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert prepare_flows(prepared_plugin, consumer_root=consumer_root, flow=decl.name) == 0
+
+    assert tb.read_text() == "// hand-written\n"
