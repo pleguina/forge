@@ -257,14 +257,22 @@ def _build_config(
         connections=[
             DeclaredConnection(producer=p, consumer=c) for p, c in decided.connections
         ],
-        rtl_globs=_source_globs(root, result, "rtl"),
-        hls_globs=_source_globs(root, result, "hls"),
+        # Globs the user already has say where the design is; a directory
+        # added later joins it only when they add it.
+        rtl_globs=list(existing.rtl_globs) if existing and existing.rtl_globs
+        else _source_globs(root, result, "rtl"),
+        hls_globs=list(existing.hls_globs) if existing and existing.hls_globs
+        else _source_globs(root, result, "hls"),
         top=decided.top or result.structural_top,
         clock=clock,
         reset=reset,
         part=part or (existing.part if existing else DEFAULT_PART),
         dataset=existing.dataset if existing else None,
         verification_config=existing.verification_config if existing else None,
+        verification_spec=dict(existing.verification_spec) if existing else {},
+        design=existing.design if existing else None,
+        registry=existing.registry if existing else None,
+        build=dict(existing.build) if existing else {},
         schema_version=FORGE_YML_SCHEMA_VERSION,
     )
 
@@ -277,8 +285,8 @@ def _module_policies(
     """The ``modules:`` block: what the user decided about each module.
 
     Opacity is carried through from the previous config via
-    ``result.opaque_units``, an HLS kernel's top via *decided*, and a
-    module's latency and own contract straight from *existing*.
+    ``result.opaque_units``, an HLS kernel's top via *decided*, and
+    everything else the previous config says about a module from *existing*.
     """
     policies: Dict[str, ModulePolicy] = {
         name: ModulePolicy(management=MANAGEMENT_OPAQUE)
@@ -292,11 +300,11 @@ def _module_policies(
         )
     if existing is not None:
         for name, previous in sorted(existing.modules.items()):
-            if previous.latency is None and not previous.contract:
-                continue
-            current = policies.setdefault(name, ModulePolicy())
+            current = policies.setdefault(name, ModulePolicy(management=previous.management))
+            current.top = current.top or previous.top
             current.latency = previous.latency
             current.contract = previous.contract
+            current.widths = dict(previous.widths)
     return policies
 
 
