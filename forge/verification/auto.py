@@ -54,16 +54,21 @@ class DataRef:
     path: Path
     format: str = "json"
     links: Dict[str, int] = field(default_factory=dict)   # interface -> link, for pattern files
+    events: Optional[Path] = None      # names of the events the file holds, in order
+    association: Dict[str, Any] = field(default_factory=dict)   # max_skew, missing
 
     @classmethod
-    def from_spec(cls, spec: Any, root: Path, links: Optional[Mapping[str, int]] = None) -> "DataRef":
+    def from_spec(cls, spec: Any, root: Path, links: Optional[Mapping[str, int]] = None,
+                  association: Optional[Mapping[str, Any]] = None) -> "DataRef":
         if isinstance(spec, (str, Path)):
             spec = {"path": str(spec)}
         path = (root / str(spec["path"])).resolve()
         fmt = str(spec.get("format") or _guess_format(path))
         if fmt not in data_formats():
             raise ValueError(f"{path}: format {fmt!r}, want one of {', '.join(data_formats())}")
-        return cls(path, fmt, {str(k): int(v) for k, v in (links or {}).items()})
+        events = (root / str(spec["events"])).resolve() if spec.get("events") else None
+        return cls(path, fmt, {str(k): int(v) for k, v in (links or {}).items()}, events,
+                   dict(association or {}))
 
     def sha256(self) -> str:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
@@ -72,6 +77,11 @@ class DataRef:
         out: Dict[str, Any] = {"path": str(self.path), "format": self.format, "sha256": self.sha256()}
         if self.links:
             out["links"] = dict(self.links)
+        if self.events is not None:
+            out["events"] = {"path": str(self.events),
+                             "sha256": hashlib.sha256(self.events.read_bytes()).hexdigest()}
+        if self.association:
+            out["association"] = dict(self.association)
         return out
 
 
@@ -101,12 +111,18 @@ class Level:
     compare: sb.Compare = field(default_factory=sb.Compare)
     gap: int = 0
     skip: str = ""          # why the level is not simulated
+    defines: Dict[str, str] = field(default_factory=dict)
+    decoder: Any = None     # project function naming the fields of a word, for mismatch rows
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"level": self.name, "top": self.top}
         if self.skip:
             out["skipped"] = self.skip
             return out
+        if self.defines:
+            out["defines"] = dict(self.defines)
+        if self.decoder is not None:
+            out["decoder"] = f"{getattr(self.decoder, '__module__', '')}.{getattr(self.decoder, '__qualname__', '')}"
         assert self.bench is not None
         out["clock"] = self.bench.clock
         out["clock_period_ns"] = self.bench.period_ns
@@ -198,20 +214,29 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     """
     spec = dict(spec or {})
     root: Path = project.root
-    gen = project.top_level().parent
-    manifest = json.loads((gen / "build_manifest.json").read_text())
-    ir = json.loads((gen / "design.ir.json").read_text())["design"]
     notes: List[str] = []
     backends = [str(b) for b in spec.get("backends") or ["xsim", "verilator"]]
     for b in backends:
         if b not in BACKENDS:
             raise ValueError(f"verification.backends: {b!r}, want {' or '.join(BACKENDS)}")
+    target = str(spec.get("target") or "generated")
+    decoder = load_decoder(spec["decoder"], root) if spec.get("decoder") else None
+    if target == "existing":
+        level = plan_existing(project.config, spec, input_override, expected_override)
+        level.decoder = decoder
+        notes.append(f"{level.name}: the project's own top, as written; nothing generated")
+        return VerificationPlan([level], backends, notes)
+    if target != "generated":
+        raise ValueError(f"verification.target: {target!r}, want generated or existing")
+    gen = project.top_level().parent
+    manifest = json.loads((gen / "build_manifest.json").read_text())
+    ir = json.loads((gen / "design.ir.json").read_text())["design"]
     levels_wanted = [str(x) for x in spec.get("levels") or ["design", "modules"]]
     compare = sb.Compare.from_dict(spec.get("compare"))
     links = spec.get("links") or {}
 
     def data(value: Any) -> Optional[DataRef]:
-        return DataRef.from_spec(value, root, links) if value else None
+        return DataRef.from_spec(value, root, links, spec.get("association")) if value else None
 
     period = project.config.clock.resolved_period_ns()
     per_module = spec.get("modules") or {}
@@ -272,43 +297,49 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
             notes.append(f"module:{name}: clock {mclock}, reset {mreset} "
                          f"(active {'high' if active_high else 'low'})")
     notes.append(f"clock period {period:g} ns (forge.yml clock)")
+    for level in levels:
+        level.decoder = decoder
     return VerificationPlan(levels, backends, notes)
 
 
 # ── Data ────────────────────────────────────────────────────────────────────
 
+#: An interface's transactions, each with the event it belongs to (None when
+#: the data names no events).
+Tagged = Dict[str, List[Tuple[Optional[str], Any]]]
+
+
 def load_inputs(ref: DataRef, bench: Bench) -> Dict[str, List[Any]]:
-    by = {i.name: i for i in bench.interfaces if i.direction == "in"}
-    if _is_concise_json(ref):
-        doc = json.loads(ref.path.read_text())
-        doc = doc.get("inputs", doc)
-        unknown = sorted(set(doc) - set(by))
-        if unknown:
-            raise ValueError(f"{ref.path}: no input interface {', '.join(unknown)} (have {', '.join(by)})")
-        return {k: list(v) for k, v in doc.items()}
-    return _from_patterns(ref, by, inputs=True)
+    return {k: [v for _, v in rows] for k, rows in load_tagged(ref, bench, inputs=True).items()}
 
 
 def load_expected(ref: DataRef, bench: Bench) -> Dict[str, List[sb.Expected]]:
     by = {i.name: i for i in bench.interfaces if i.direction == "out"}
+    out: Dict[str, List[sb.Expected]] = {}
+    for k, rows in load_tagged(ref, bench, inputs=False).items():
+        out[k] = []
+        for event, v in rows:
+            if isinstance(v, Mapping) and "value" in v:
+                out[k].append(sb.Expected(pack(by[k], v["value"]), v.get("cycle"), v.get("source"),
+                                          v.get("event", event)))
+            else:
+                out[k].append(sb.Expected(pack(by[k], v), event=event))
+    return out
+
+
+def load_tagged(ref: DataRef, bench: Bench, *, inputs: bool) -> Tagged:
+    """*ref*'s transactions for the input (or output) interfaces of *bench*,
+    each tagged with its event."""
+    by = {i.name: i for i in bench.interfaces if i.direction == ("in" if inputs else "out")}
     if _is_concise_json(ref):
         doc = json.loads(ref.path.read_text())
-        doc = doc.get("outputs", doc)
+        doc = doc.get("inputs" if inputs else "outputs", doc)
         unknown = sorted(set(doc) - set(by))
         if unknown:
-            raise ValueError(f"{ref.path}: no output interface {', '.join(unknown)} (have {', '.join(by)})")
-        out = {}
-        for k, values in doc.items():
-            rows = []
-            for v in values:
-                if isinstance(v, Mapping) and "value" in v:
-                    rows.append(sb.Expected(pack(by[k], v["value"]), v.get("cycle"), v.get("source")))
-                else:
-                    rows.append(sb.Expected(pack(by[k], v)))
-            out[k] = rows
-        return out
-    return {k: [sb.Expected(pack(by[k], v)) for v in vals]
-            for k, vals in _from_patterns(ref, by, inputs=False).items()}
+            kind = "input" if inputs else "output"
+            raise ValueError(f"{ref.path}: no {kind} interface {', '.join(unknown)} (have {', '.join(by)})")
+        return {k: [(None, v) for v in values] for k, values in doc.items()}
+    return _from_dataset(ref, by, inputs=inputs)
 
 
 def _is_concise_json(ref: DataRef) -> bool:
@@ -331,49 +362,91 @@ def _word(raw: Any) -> Any:
         start_of_orbit=bool(raw.get("start_of_orbit", False)), strobe=bool(raw.get("strobe", True)))
 
 
-def _dataset_links(ref: DataRef, by: Mapping[str, Interface]) -> Tuple[Dict[int, List[Any]], Dict[str, List[Any]]]:
-    """``(words per link, values per interface)`` from the format's registered loader.
+def _event_names(ref: DataRef, count: int) -> List[str]:
+    """The name of each of *count* events: from ``events:`` (run/lumi/event/bx
+    or ``id`` per event) when the data spec gives one, else its index."""
+    if ref.events is None:
+        return [str(k) for k in range(count)]
+    listed = json.loads(ref.events.read_text())
+    if len(listed) != count:
+        raise ValueError(f"{ref.events}: names {len(listed)} event(s), {ref.path} holds {count}")
+    names = []
+    for entry in listed:
+        if not isinstance(entry, Mapping):
+            names.append(str(entry))
+        elif "id" in entry:
+            names.append(str(entry["id"]))
+        else:
+            name = ":".join(str(entry[k]) for k in ("run", "lumi", "event") if k in entry)
+            names.append(name + (f"@bx{entry['bx']}" if "bx" in entry else ""))
+    return names
+
+
+def _emp_dict(w: Any) -> Dict[str, Any]:
+    return {"data": w.data, "valid": w.valid, "start": w.start, "last": w.last,
+            "start_of_orbit": w.start_of_orbit, "strobe": w.strobe}
+
+
+def _from_dataset(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) -> Tagged:
+    """Transactions from the format's registered loader.
 
     A loader with ``read`` (the pattern-file loaders) gives every frame of
-    every link, idle ones included. Any other loader is read through its
-    events: an event's ``links`` (link -> words) are concatenated per link,
-    and values it keys by an interface name are concatenated per interface.
+    every link. The links ``verification.links`` maps are put together into
+    events by :func:`forge.integration.emp.associate_events` — a link missing
+    a packet is an error, not a shift — and each word is tagged with its
+    event. Any other loader is read through its events: values an event keys
+    by an interface name, or words under its ``links``, in event order.
     """
     from forge.verification.dataset_format import get_format_loader
     loader = get_format_loader(ref.path, ref.format)
+    wanted = {k: v for k, v in ref.links.items() if k in by}
+    out: Tagged = {}
     if hasattr(loader, "read"):
-        return dict(loader.read(ref.path).links), {}
-    links: Dict[int, List[Any]] = {}
-    values: Dict[str, List[Any]] = {}
-    for event in loader.load(ref.path).events:
-        for link, words in (event.get("links") or {}).items():
-            links.setdefault(int(link), []).extend(_word(w) for w in words)
+        from forge.integration.emp import associate_events
+        if not wanted:
+            raise ValueError(f"{ref.path}: verification.links maps no interface of this level to a link")
+        board = loader.read(ref.path)
+        for name, link in wanted.items():
+            if link not in board.links:
+                raise ValueError(f"{ref.path}: no link {link} (for {name})")
+        events = associate_events(board, sorted(set(wanted.values())),
+                                  max_skew=int(ref.association.get("max_skew", 0)),
+                                  missing=str(ref.association.get("missing", "error")))
+        names = _event_names(ref, len(events))
+        for name, link in wanted.items():
+            frame_event: Dict[int, str] = {}
+            for event_name, grouped in zip(names, events):
+                first, last, _ = grouped[link]
+                for frame in range(first, last + 1):
+                    frame_event[frame] = event_name
+            rows: List[Tuple[Optional[str], Any]] = []
+            for frame, w in enumerate(board.links[link]):
+                if by[name].protocol == "emp_lword":
+                    if inputs or w.valid:
+                        rows.append((frame_event.get(frame), _emp_dict(w)))
+                elif w.valid:
+                    rows.append((frame_event.get(frame), w.data))
+            out[name] = rows
+        return out
+    dataset = loader.load(ref.path)
+    names = [str(e.get("id", k)) for k, e in enumerate(dataset.events)]
+    if ref.events is not None:
+        names = _event_names(ref, len(names))
+    for event_name, event in zip(names, dataset.events):
         for name in by:
             if name in event:
                 v = event[name]
-                values.setdefault(name, []).extend(v if isinstance(v, list) else [v])
-    return links, values
-
-
-def _from_patterns(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) -> Dict[str, List[Any]]:
-    board_links, by_name = _dataset_links(ref, by)
-    if by_name:
-        return by_name
-    wanted = {k: v for k, v in ref.links.items() if k in by}
-    if not wanted:
-        raise ValueError(f"{ref.path}: verification.links maps no interface of this level to a link")
-    out: Dict[str, List[Any]] = {}
-    for name, link in wanted.items():
-        if link not in board_links:
-            raise ValueError(f"{ref.path}: no link {link} (for {name})")
-        words = board_links[link]
-        iface = by[name]
-        if iface.protocol == "emp_lword":
-            keep = words if inputs else [w for w in words if w.valid]
-            out[name] = [{"data": w.data, "valid": w.valid, "start": w.start, "last": w.last,
-                          "start_of_orbit": w.start_of_orbit, "strobe": w.strobe} for w in keep]
-        else:
-            out[name] = [w.data for w in words if w.valid]
+                out.setdefault(name, []).extend((event_name, x) for x in (v if isinstance(v, list) else [v]))
+        for name, link in wanted.items():
+            for w in (event.get("links") or {}).get(str(link), []):
+                word = _word(w)
+                if by[name].protocol == "emp_lword":
+                    out.setdefault(name, []).append((event_name, _emp_dict(word)))
+                elif word.valid:
+                    out.setdefault(name, []).append((event_name, word.data))
+    if not out:
+        raise ValueError(f"{ref.path}: no event names an interface of this level"
+                         + ("" if wanted else ", and verification.links maps none to a link"))
     return out
 
 
@@ -392,11 +465,13 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
     vhdl = [str(f) for f in level.sources if f.suffix.lower() in (".vhd", ".vhdl")]
     vlog = [str(f) for f in level.sources if f.suffix.lower() not in (".vhd", ".vhdl")]
     incs = [str(d) for d in level.include_dirs]
+    defs = [f"{k}={v}" if v != "" else k for k, v in level.defines.items()]
     if backend == "xsim":
         cmds = []
         if vhdl:
             cmds.append(["xvhdl", *vhdl])
-        cmds.append(["xvlog", "-sv", *[a for d in incs for a in ("-i", d)], *vlog, str(tb)])
+        cmds.append(["xvlog", "-sv", *[a for d in incs for a in ("-i", d)], *[a for d in defs for a in ("-d", d)],
+                     *vlog, str(tb)])
         cmds.append(["xelab", TB_CLOCKED, "-s", "forge_tb_snap", "-timescale", "1ns/1ps"])
         return cmds
     if vhdl:
@@ -405,7 +480,7 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
     # (HLS writes `initial #0 ...`) are taken as zero.
     return [["verilator", "--cc", "--exe", "--build", "--no-timing", "-j", "0", "-Wno-fatal", "-Wno-lint", "-Wno-style",
              "-Wno-STMTDLY", "--top-module", TB_MODULE, "-Mdir", str(work / "obj"), "-o", "forge_tb",
-             *[f"-I{d}" for d in incs], *vlog, str(tb), str(work / "forge_tb_main.cpp")]]
+             *[f"-I{d}" for d in incs], *[f"-D{d}" for d in defs], *vlog, str(tb), str(work / "forge_tb_main.cpp")]]
 
 
 def _sim_command(backend: str, work: Path, plusargs: Mapping[str, str]) -> List[str]:
@@ -480,6 +555,172 @@ def _record(bench: Bench, trace: Mapping[str, Any], out: Path, origin: Dict[str,
         (d / DERIVED).write_text(json.dumps({**origin, "instance": inst}, indent=1) + "\n")
         written.append(str(d))
     return written
+
+
+def read_filelist(path: Path, _seen: Optional[set] = None) -> Tuple[List[Path], List[Path], Dict[str, str]]:
+    """``(sources, include dirs, defines)`` of a simulator compile list (``.f``).
+
+    Reads file paths, ``+incdir+``, ``-I``, ``+define+``, ``-D`` and nested
+    ``-f``; relative paths resolve against the list's own directory.
+    """
+    seen = _seen if _seen is not None else set()
+    path = path.resolve()
+    if path in seen:
+        return [], [], {}
+    seen.add(path)
+    base = path.parent
+    sources: List[Path] = []
+    incs: List[Path] = []
+    defines: Dict[str, str] = {}
+    text = "\n".join(line.split("//", 1)[0].split("#", 1)[0] for line in path.read_text().splitlines())
+    tokens = text.split()
+    i = 0
+
+    def define(item: str) -> None:
+        name, _, value = item.partition("=")
+        if name:
+            defines[name] = value or "1"
+
+    while i < len(tokens):
+        tok = tokens[i]
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else ""
+        if tok.startswith("+incdir+"):
+            incs += [(base / d).resolve() for d in tok[len("+incdir+"):].split("+") if d]
+        elif tok.startswith("+define+"):
+            for item in tok[len("+define+"):].split("+"):
+                define(item)
+        elif tok in ("-I", "-D", "-f", "-F") and nxt:
+            if tok == "-I":
+                incs.append((base / nxt).resolve())
+            elif tok == "-D":
+                define(nxt)
+            else:
+                sub = read_filelist(base / nxt, seen)
+                sources += sub[0]
+                incs += sub[1]
+                defines.update(sub[2])
+            i += 1
+        elif tok.startswith("-I"):
+            incs.append((base / tok[2:]).resolve())
+        elif tok.startswith("-D"):
+            define(tok[2:])
+        elif not tok.startswith(("-", "+")):
+            sources.append((base / tok).resolve())
+        i += 1
+    return sources, incs, defines
+
+
+def plan_existing(config: Any, spec: Mapping[str, Any], input_override: Optional[Any] = None,
+                  expected_override: Optional[Any] = None) -> Level:
+    """The level that simulates the project's own top as it is written.
+
+    The top is ``verification.top`` or forge.yml's ``top``; its sources are
+    ``verification.filelist`` when given, else forge.yml's ``sources:``; its
+    ports, clock and reset come from that top's declaration and forge.yml's
+    ``clock``/``reset``. Nothing is generated and no adoption question has to
+    be answered first.
+    """
+    from forge.core.utils.hdl_parser import (
+        UnresolvedWidthError, apply_declared_widths, parse_verilog_defines,
+        scan_verilog_port_decls, scan_vhdl_port_decls,
+    )
+    from forge.project.hdl_scan import scan_hdl_file, split_verilog_modules
+
+    root: Path = config.root
+    top = str(spec.get("top") or config.top or "")
+    if not top:
+        raise ValueError("verification.target: existing needs the top to simulate: set top: (or verification.top) "
+                         "in forge.yml to the name of your existing top-level module")
+    if spec.get("filelist"):
+        sources, incs, defines = read_filelist(root / str(spec["filelist"]))
+    else:
+        sources, incs, defines = list(config.resolve_sources("rtl")), [], {}
+    if not sources:
+        raise ValueError("verification.target: existing found no sources: set sources.rtl or verification.filelist")
+    raw_defines = spec.get("defines") or {}
+    defines.update(parse_verilog_defines(raw_defines) if isinstance(raw_defines, list)
+                   else {str(k): str(v) for k, v in raw_defines.items()})
+    incs += [(root / str(d)).resolve() for d in spec.get("include_dirs") or []]
+    for src in sources:
+        if src.parent not in incs:
+            incs.append(src.parent)
+
+    unit = next((u for src in sources for u in scan_hdl_file(src) if u.name == top), None)
+    if unit is None:
+        raise ValueError(f"no module or entity named {top!r} in the {len(sources)} source(s) of "
+                         + ("verification.filelist" if spec.get("filelist") else "sources.rtl"))
+    if unit.language == "vhdl":
+        decls = scan_vhdl_port_decls(unit.path.read_text())
+    else:
+        text = unit.path.read_text(errors="replace")
+        decls = scan_verilog_port_decls(
+            next(src for name, src in split_verilog_modules(text) if name == top), None, defines)
+    policy = config.modules.get(top)
+    decls = apply_declared_widths(decls, policy.widths if policy else None, f"module {top!r}")
+    unresolved = {n: d.range_text for n, d in decls.items() if d.width is None}
+    if unresolved:
+        raise UnresolvedWidthError(unresolved, f"module {top!r}")
+    ports = [Port(n, d.direction, int(d.width or 0)) for n, d in decls.items()]
+    clock, reset = config.clock.port, config.reset.port
+    names = {p.name for p in ports}
+    missing = [n for n in (clock, reset) if n not in names]
+    if missing:
+        raise ValueError(f"{top} has no port {' or '.join(missing)}; set clock.port / reset.port in forge.yml")
+    links = spec.get("links") or {}
+
+    def data(value: Any) -> Optional[DataRef]:
+        return DataRef.from_spec(value, root, links, spec.get("association")) if value else None
+
+    bench = Bench(top, clock, reset, config.reset.active == "high",
+                  infer(ports, exclude=[clock, reset], declared=spec.get("protocols")),
+                  period_ns=config.clock.resolved_period_ns(), depth=int(spec.get("depth", 1 << 16)))
+    return Level(f"existing:{top}", top, sources, incs, bench,
+                 data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
+                 sb.Compare.from_dict(spec.get("compare")), int(spec.get("gap", 0)), defines=defines)
+
+
+def _event_cycles(tagged: Tagged, driven: Mapping[str, Sequence[Tuple[int, int]]]) -> Optional[Dict[str, int]]:
+    """The cycle of each event's first input word on any input interface, or
+    None when the input names no events. The trace records the words driven
+    with valid set, so each interface is matched against those."""
+    cycles: Dict[str, int] = {}
+    for name, rows in tagged.items():
+        if not any(event is not None for event, _ in rows):
+            continue
+        valid = [event for event, v in rows if not (isinstance(v, Mapping) and not v.get("valid", True))]
+        seen = list(driven.get(name, []))
+        events = valid if len(valid) == len(seen) else [event for event, _ in rows]
+        if len(events) != len(seen):
+            continue
+        for event, (cycle, _) in zip(events, seen):
+            if event is not None and (event not in cycles or cycle < cycles[event]):
+                cycles[event] = cycle
+    return cycles or None
+
+
+def load_decoder(spec: Any, root: Path) -> Any:
+    """The project's word decoder, ``path/to/file.py:function``: called as
+    ``function(interface, word)`` and returning ``{field: value}``."""
+    import importlib.util
+
+    file, _, func = str(spec).partition(":")
+    path = (root / file).resolve()
+    module_spec = importlib.util.spec_from_file_location(f"forge_decoder_{path.stem}", path)
+    if module_spec is None or module_spec.loader is None or not func:
+        raise ValueError(f"verification.decoder {spec!r}: want path/to/file.py:function")
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    return getattr(module, func)
+
+
+def _decode_rows(decoder: Any, iface: Interface, rows: List[Dict[str, Any]]) -> None:
+    for row in rows:
+        for key in ("expected", "observed"):
+            if key in row:
+                try:
+                    row[f"{key}_fields"] = dict(decoder(iface.name, int(row[key], 16)))
+                except Exception as exc:  # noqa: BLE001 — a decoder failure must not hide the raw words
+                    row[f"{key}_fields"] = {"decoder_error": str(exc)}
 
 
 def plan_identity(level: Level) -> str:
@@ -564,7 +805,8 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
                                  reason=f"{cmd[0]} failed, see {work / 'compile.log'}")
         sentinel.write_text(key)
 
-    values = load_inputs(level.input, bench) if level.input else {}
+    tagged = load_tagged(level.input, bench, inputs=True) if level.input else {}
+    values = {k: [v for _, v in rows] for k, rows in tagged.items()}
     expected = load_expected(level.expected, bench) if level.expected else None
     plusargs = write_inputs(bench, values, work / "data", gap=level.gap)
     trace = work / "trace.txt"
@@ -590,11 +832,16 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
 
     first_in = next((i.name for i in bench.interfaces if i.direction == "in"), None)
     input_cycles = [c for c, _ in t["inputs"].get(first_in, [])] if first_in else []
+    event_cycles = _event_cycles(tagged, t["inputs"])
     results = []
     for o in (i for i in bench.interfaces if i.direction == "out"):
         exp = None if expected is None else expected.get(o.name)
-        results.append(sb.compare(o.name, exp, t["outputs"].get(o.name, []), level.compare,
-                                  input_cycles=input_cycles, unknown=t["unknown"].get(o.name, [])))
+        result = sb.compare(o.name, exp, t["outputs"].get(o.name, []), level.compare,
+                            input_cycles=input_cycles, unknown=t["unknown"].get(o.name, []),
+                            event_cycles=event_cycles)
+        if level.decoder is not None:
+            _decode_rows(level.decoder, o, result.rows)
+        results.append(result)
     status = sb.combine([r.status for r in results])
     if expected is None and status != sb.FAILED:
         status = sb.NOT_VERIFIED_NO_ORACLE

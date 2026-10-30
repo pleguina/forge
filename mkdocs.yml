@@ -85,6 +85,7 @@ nav:
   - What FORGE Does: capabilities.md
   - Getting Started:
       - Installation: getting-started/installation.md
+      - Compare Existing Firmware: getting-started/compare-existing-firmware.md
       - Quickstart: getting-started/quickstart.md
       - Bring Your Own RTL: getting-started/bring-your-own-rtl.md
   - Tutorials:

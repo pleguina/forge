@@ -37,6 +37,49 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+def _existing_target_config():
+    """forge.yml when it simulates the project's own top (``verification.target:
+    existing``): there is no generated design to report on, only results."""
+    from forge.project.config import ForgeConfig
+    from forge.project.paths import find_project_root
+
+    root = find_project_root(Path.cwd())
+    if root is None:
+        return None
+    try:
+        config = ForgeConfig.load(root)
+    except (FileNotFoundError, ValueError):
+        return None
+    return config if (config.verification_spec or {}).get("target") == "existing" else None
+
+
+def _verification_only_report(config, output: Optional[str]):
+    from forge.core.cli.envelope import CommandEnvelope
+    from forge.project.verification_state import (
+        current_plans, latest_results, overall_status, render_markdown, run_history,
+    )
+
+    paths = config.paths()
+    output_dir = Path(output or paths.report_root).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    records = latest_results(paths.report_root, current_plans(config))
+    (output_dir / "verification_results.md").write_text(render_markdown(records))
+    history = run_history(paths.report_root)
+    diagnostics = [{"severity": "warning", "message": f"{r.name}: out of date ({r.stale})"}
+                   for r in records if r.stale]
+    diagnostics += [{"severity": "warning", "message": f"{r.name}: {r.status}" + (f", {r.reason}" if r.reason else "")}
+                    for r in records if not r.stale and r.status not in ("VERIFIED", "PASS")]
+    overall = overall_status(records)
+    return CommandEnvelope(
+        status="pass" if overall == "VERIFIED" else "warn",
+        diagnostics=diagnostics,
+        artifacts=[str(output_dir / "verification_results.md")],
+        metrics={"verification": overall, "verification_results": [r.to_dict() for r in records],
+                 **({"verification_runs": len(history), "latest_run": history[-1]["path"]} if history else {})},
+        next_actions=[] if records else ["No verification results yet — run `forge test`"],
+    )
+
+
 def cmd_report(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
 
@@ -45,6 +88,9 @@ def cmd_report(args) -> None:
     if args.design is None:
         from forge.core.cli._shared import resolve_project_args
 
+        existing = _existing_target_config()
+        if existing is not None:
+            sys.exit(emit(_verification_only_report(existing, output), json_mode=json_mode))
         try:
             project = resolve_project_args(args)
         except (FileNotFoundError, ValueError) as exc:

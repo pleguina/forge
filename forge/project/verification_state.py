@@ -24,6 +24,9 @@ DATA = "data"
 DATASET = "dataset"
 NONE = "none"
 
+#: Rows of differences shown per result in the report; the evidence has all.
+MAX_ROWS = 20
+
 #: ``forge test`` statuses that verified nothing, and why.
 UNVERIFIED = ("NOT_VERIFIED_NO_ORACLE", "BLOCKED_MISSING_TOOL", "PARTIAL", "SKIPPED")
 
@@ -130,6 +133,9 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = N
         ref = doc.get(key)
         if ref and _sha256(Path(ref["path"])) != ref.get("sha256"):
             changed.append(f"the {key} {Path(ref['path']).name}")
+        names = (ref or {}).get("events")
+        if names and _sha256(Path(names["path"])) != names.get("sha256"):
+            changed.append(f"the {key} event names {Path(names['path']).name}")
     if plans is not None:
         level = str(doc.get("level", ""))
         if level not in plans:
@@ -251,6 +257,22 @@ def render_markdown(records: List[ResultRecord]) -> str:
         fresh = f"no — changed: {r.stale}" if r.stale else "yes"
         lines.append(f"| {r.name} | {r.status} | {fresh} | {detail} | {r.path.name} |")
     lines.append("")
+    for r in records:
+        rows = [(i["interface"], row) for i in r.payload.get("interfaces") or [] for row in i.get("rows") or []]
+        if not rows:
+            continue
+        lines += [f"## {r.name}: what differed", "",
+                  "| interface | kind | event | index | cycle | expected | observed | fields |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for iface, row in rows[:MAX_ROWS]:
+            fields = "; ".join(
+                f"{side}: " + ", ".join(f"{k}={v}" for k, v in row[f"{side}_fields"].items())
+                for side in ("expected", "observed") if f"{side}_fields" in row)
+            lines.append(f"| {iface} | {row.get('kind', '')} | {row.get('event', '')} | {row.get('index', '')} | "
+                         f"{row.get('cycle', '')} | {row.get('expected', '')} | {row.get('observed', '')} | {fields} |")
+        if len(rows) > MAX_ROWS:
+            lines.append(f"\n{len(rows) - MAX_ROWS} more in {r.path.name}.")
+        lines.append("")
     for r in records:
         if r.path.name.endswith(".results.json"):
             lines.append(render_results_markdown(r.payload))

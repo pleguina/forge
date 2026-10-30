@@ -85,12 +85,30 @@ def cmd_prepare(args) -> None:
 # ── the forge.yml project ────────────────────────────────────────────────
 
 def _project_or_exit(json_mode: bool):
+    from forge.project.config import ForgeConfig
+    from forge.project.paths import find_project_root
     from forge.project.resolve import resolve_project
 
     try:
+        root = find_project_root(Path.cwd())
+        if root is not None:
+            config = ForgeConfig.load(root)
+            if (config.verification_spec or {}).get("target") == "existing":
+                # The design is simulated as written: nothing to derive or generate.
+                return existing_project(config)
         return resolve_project(Path.cwd())
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
+
+
+def existing_project(config):
+    """The parts of a project ``forge test`` and ``forge report`` use when the
+    project's own top is what gets simulated."""
+    from types import SimpleNamespace
+
+    paths = config.paths()
+    return SimpleNamespace(root=config.root, config=config, paths=paths, verification=None,
+                           top_level=lambda *a, **k: paths.top_level(*a, **k))
 
 
 def _verification_or_exit(project, json_mode: bool) -> Path:
@@ -162,11 +180,12 @@ def cmd_auto_test(args, project) -> None:
             return None
         return {"path": str(Path(value).resolve()), **({"format": fmt} if fmt else {})}
 
-    code, output = run_forge_command(["build"], quiet=True)
-    if code != 0:
-        if output:
-            print(output, file=sys.stderr)
-        sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
+    if spec.get("target") != "existing":
+        code, output = run_forge_command(["build"], quiet=True)
+        if code != 0:
+            if output:
+                print(output, file=sys.stderr)
+            sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
     try:
         plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
                          expected_override=ref(args.expected, args.expected_format))
