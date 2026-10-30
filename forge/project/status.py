@@ -36,7 +36,7 @@ from forge.project.discovery import (
 )
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
 from forge.project.verification_state import (
-    DATA, VerificationSetup, latest_results, overall_status, verification_setup,
+    DATA, VerificationSetup, current_plans, latest_results, overall_status, verification_setup,
 )
 
 # ── Section states ────────────────────────────────────────────────────────
@@ -890,7 +890,8 @@ def _check_data_verification(status: ProjectStatus, setup: VerificationSetup) ->
         ))
 
     detail = ", ".join(f"{k.split('.')[-1]} {paths.relative(p)}" for k, p in setup.data_files)
-    records = [r for r in latest_results(paths.report_root) if r.path.name.endswith(".evidence.json")]
+    records = [r for r in latest_results(paths.report_root, current_plans(status.config))
+               if r.path.name.endswith(".evidence.json")]
     if records:
         stale = [r for r in records if r.stale]
         detail += f"; last forge test: {overall_status(records)}"

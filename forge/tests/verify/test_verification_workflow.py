@@ -156,3 +156,49 @@ def test_report_flags_results_older_than_their_sources(project, capsys):
 
     assert any("shaper.v" in d["message"] for d in doc["diagnostics"])
     assert "(1 result(s) out of date)" in _verification_section(project).detail
+
+
+# ── applicability: a result applies only to what it was computed from ─────
+
+def _fake_verified(monkeypatch):
+    monkeypatch.setattr(auto, "run", lambda level, backend, work, **kw: auto._evidence(
+        level, backend, "VERIFIED"))
+
+
+def test_every_run_is_kept_and_the_latest_is_reported(project, monkeypatch, capsys):
+    _fake_verified(monkeypatch)
+    _run(capsys, "test", "--backend", "verilator", "--json")
+    _run(capsys, "test", "--backend", "verilator", "--json")
+
+    runs = sorted((project / ".forge/reports/test/runs").iterdir())
+    assert len(runs) == 2
+    assert json.loads((runs[-1] / "run.json").read_text())["verification"] == "VERIFIED"
+    _, doc, _ = _run(capsys, "report", "--json")
+    assert doc["metrics"]["verification_runs"] == 2 and doc["metrics"]["verification"] == "VERIFIED"
+
+
+def test_a_changed_header_makes_a_pass_out_of_date(project, monkeypatch, capsys):
+    (project / "rtl" / "widths.vh").write_text("`define SAMPLE_W 16\n")
+    shaper = project / "rtl" / "shaper.v"
+    shaper.write_text('`include "widths.vh"\n' + shaper.read_text())
+    _fake_verified(monkeypatch)
+    _run(capsys, "test", "--backend", "verilator", "--json")
+
+    (project / "rtl" / "widths.vh").write_text("`define SAMPLE_W 12\n")
+    _, doc, _ = _run(capsys, "report", "--json")
+
+    assert doc["metrics"]["verification"] == "OUT_OF_DATE"
+    assert any("widths.vh" in d["message"] for d in doc["diagnostics"])
+
+
+def test_a_changed_checker_setting_makes_a_pass_out_of_date(project, monkeypatch, capsys):
+    _fake_verified(monkeypatch)
+    _run(capsys, "test", "--backend", "verilator", "--json")
+    _configure(project, input="input.json", expected="expected.json", levels=["design"],
+               compare={"mode": "exact_cycle"})
+
+    _, doc, _ = _run(capsys, "report", "--json")
+
+    assert doc["metrics"]["verification"] == "OUT_OF_DATE"
+    assert any("verification settings" in d["message"] for d in doc["diagnostics"])
+    assert "out of date" in _verification_section(project).detail

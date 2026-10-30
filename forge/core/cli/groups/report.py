@@ -55,11 +55,13 @@ def cmd_report(args) -> None:
         output = output or str(project.paths.report_root)
         if getattr(args, "verify_design", None) is None and project.verification is not None:
             args.verify_design = str(project.verification)
-        from forge.project.verification_state import latest_results
+        from forge.project.verification_state import current_plans, latest_results, run_history
 
-        project_results = latest_results(project.paths.report_root)
+        project_results = latest_results(project.paths.report_root, current_plans(project.config))
+        history = run_history(project.paths.report_root)
     else:
         project_results = []
+        history = []
     design_path = Path(args.design).expanduser().resolve()
     output_dir = Path(output or "report").expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -210,6 +212,9 @@ def cmd_report(args) -> None:
         artifacts.append(str(output_dir / "verification_results.md"))
         metrics["verification"] = overall_status(project_results)
         metrics["verification_results"] = [r.to_dict() for r in project_results]
+        if history:
+            metrics["verification_runs"] = len(history)
+            metrics["latest_run"] = history[-1]["path"]
         stale = [r for r in project_results if r.stale]
         if stale:
             diagnostics.append({

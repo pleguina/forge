@@ -118,25 +118,73 @@ def _sha256(path: Path) -> Optional[str]:
         return None
 
 
-def _evidence_staleness(doc: Dict[str, Any]) -> str:
+def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = None) -> str:
+    """What changed since *doc* was recorded: a source, a header, the data, or
+    — when *plans* (level -> :func:`forge.verification.auto.plan_identity`) is
+    given — the level's verification settings."""
     changed: List[str] = []
-    for src in doc.get("sources") or []:
+    for src in [*(doc.get("sources") or []), *(doc.get("headers") or [])]:
         if _sha256(Path(src["path"])) != src.get("sha256"):
             changed.append(Path(src["path"]).name)
     for key in ("input", "expected"):
         ref = doc.get(key)
         if ref and _sha256(Path(ref["path"])) != ref.get("sha256"):
             changed.append(f"the {key} {Path(ref['path']).name}")
+    if plans is not None:
+        level = str(doc.get("level", ""))
+        if level not in plans:
+            changed.append("the level is no longer in the verification plan")
+        elif doc.get("plan_sha256") != plans[level]:
+            changed.append("its verification settings")
     return ", ".join(changed)
 
 
+def current_plans(config: Any) -> Optional[Dict[str, str]]:
+    """level -> plan identity of the data-driven plan for a loaded ``forge.yml``
+    and its last build, or None when no plan can be made (nothing built yet).
+    Reads only; nothing under ``.forge/`` is rewritten."""
+    from types import SimpleNamespace
+
+    from forge.verification import auto
+
+    paths = config.paths()
+    project = SimpleNamespace(root=config.root, config=config, top_level=lambda: paths.top_level("verilog", "algo_top"))
+    try:
+        plan = auto.plan(project, spec=dict(config.verification_spec))
+    except Exception:  # noqa: BLE001 — applicability then rests on file hashes alone
+        return None
+    return {level.name: auto.plan_identity(level) for level in plan.levels}
+
+
 def evidence_dir(report_root: Path) -> Path:
-    """Where ``forge test`` writes the evidence of a data-driven run."""
+    """Where ``forge test`` writes the evidence of its latest data-driven run."""
     return report_root / "test" / "auto"
 
 
-def latest_results(report_root: Path) -> List[ResultRecord]:
-    """Every result under *report_root*: data-driven evidence and flow results."""
+def runs_dir(report_root: Path) -> Path:
+    """Where every data-driven run keeps its own evidence, never rewritten."""
+    return report_root / "test" / "runs"
+
+
+def run_history(report_root: Path) -> List[Dict[str, Any]]:
+    """``[{run, path, status}]`` of every recorded run, oldest first."""
+    out: List[Dict[str, Any]] = []
+    for run in sorted(p for p in runs_dir(report_root).glob("*") if p.is_dir()):
+        summary = run / "run.json"
+        try:
+            doc = json.loads(summary.read_text())
+        except (OSError, ValueError):
+            continue
+        out.append({"run": run.name, "path": str(run), "status": doc.get("verification")})
+    return out
+
+
+def latest_results(report_root: Path, plans: Optional[Dict[str, str]] = None) -> List[ResultRecord]:
+    """Every result under *report_root*: data-driven evidence and flow results.
+
+    *plans* (see :func:`current_plans`) also marks a result out of date when
+    its level's verification settings changed or the level was dropped.
+    """
     records: List[ResultRecord] = []
     for path in sorted(evidence_dir(report_root).glob("*.evidence.json")):
         try:
@@ -148,7 +196,7 @@ def latest_results(report_root: Path) -> List[ResultRecord]:
             status=str(doc.get("status", "UNKNOWN")),
             path=path,
             reason=str(doc.get("reason", "")),
-            stale=_evidence_staleness(doc),
+            stale=_evidence_staleness(doc, plans),
             payload=doc,
         ))
     for path in sorted((report_root / "test").glob("*.results.json")):
@@ -166,7 +214,13 @@ def latest_results(report_root: Path) -> List[ResultRecord]:
 
 
 def overall_status(records: Iterable[ResultRecord]) -> str:
-    """One status for *records*: FAILED beats anything unverified beats VERIFIED."""
+    """One status for *records*: FAILED beats OUT_OF_DATE beats anything
+    unverified beats VERIFIED. A failure is reported even when out of date;
+    a pass that no longer applies is not."""
+    records = list(records)
+    if any(r.stale for r in records) and not any(
+            r.status in ("FAILED", "FAIL") for r in records):
+        return "OUT_OF_DATE"
     statuses = [r.status for r in records]
     if not statuses:
         return "NONE"

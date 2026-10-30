@@ -181,9 +181,14 @@ def cmd_auto_test(args, project) -> None:
             print(yaml.safe_dump(plan.to_dict(), sort_keys=False))
         sys.exit(0)
 
-    from forge.project.verification_state import evidence_dir
+    from datetime import datetime, timezone
+
+    from forge.project.verification_state import evidence_dir, runs_dir
 
     out_dir = evidence_dir(project.paths.report_root)
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_dir = runs_dir(project.paths.report_root) / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
     try:
         evidence = auto.run_plan(plan, project.paths.state_root / "verify", seed=args.seed,
                                  stall=args.stall, backpressure=args.backpressure)
@@ -195,6 +200,7 @@ def cmd_auto_test(args, project) -> None:
     for e in evidence:
         path = out_dir / f"{e.level.replace(':', '_')}.{e.backend}.evidence.json"
         e.write(path)
+        e.write(run_dir / path.name)
         artifacts.append(str(path))
         reason = e.doc.get("reason", "")
         detail = reason or ", ".join(
@@ -213,6 +219,12 @@ def cmd_auto_test(args, project) -> None:
     write_junit_xml(junit, suite_name=project.config.project, results=results)
     artifacts.append(str(junit))
     overall = auto.summary(evidence)
+    (run_dir / "run.json").write_text(json.dumps({
+        "run": run_id, "verification": overall,
+        "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence},
+        "evidence": {f"{e.level}[{e.backend}]": e.doc["evidence_id"] for e in evidence},
+    }, indent=2) + "\n")
+    artifacts.append(str(run_dir))
     status = {"VERIFIED": "pass", "FAILED": "fail"}.get(overall, "warn")
     if status == "warn" and getattr(args, "require_verified", False):
         status = "fail"

@@ -482,6 +482,24 @@ def _record(bench: Bench, trace: Mapping[str, Any], out: Path, origin: Dict[str,
     return written
 
 
+def plan_identity(level: Level) -> str:
+    """sha256 of everything about *level* other than file contents that decides
+    its result: interfaces and protocols, clock, reset, data references, compare
+    settings, checker and testbench generator versions."""
+    body = {**level.to_dict(), "checker": sb.CHECKER_VERSION, "testbench_generator": TB_GENERATOR_VERSION}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _headers(level: Level) -> List[Dict[str, str]]:
+    from forge.core.utils.hdl_includes import include_tree
+
+    seen: Dict[str, str] = {}
+    for inc in include_tree(level.sources, level.include_dirs):
+        if inc.path is not None and str(inc.path) not in seen:
+            seen[str(inc.path)] = hashlib.sha256(inc.path.read_bytes()).hexdigest()
+    return [{"path": p, "sha256": h} for p, h in sorted(seen.items())]
+
+
 def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence:
     doc: Dict[str, Any] = {
         "schema": EVIDENCE_SCHEMA,
@@ -491,6 +509,8 @@ def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence
         "status": status,
         "sources": [{"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
                     for f in level.sources if f.is_file()],
+        "headers": _headers(level),
+        "plan_sha256": plan_identity(level),
         "input": level.input.to_dict() if level.input else None,
         "expected": _expected_ref(level),
         "checker": {"version": sb.CHECKER_VERSION, **level.compare.to_dict()},
