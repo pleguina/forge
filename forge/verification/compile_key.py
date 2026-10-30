@@ -2,8 +2,9 @@
 
 A backend that compiles once and runs many events reuses its build only when
 the key stored next to it is the key of the current inputs: the compile list
-and every source it names (by content), the HDL headers in every include
-directory, the commands with their flags, and the simulator's version. Data
+and every source it names (by content), every header those sources include at
+any depth, the HDL headers in every include directory, the commands with their
+flags, and the simulator's version. Data
 the testbench loads at run time (``$readmemh`` files) is not part of it.
 """
 
@@ -15,6 +16,8 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List, Sequence
+
+from forge.core.utils.hdl_includes import include_tree
 
 _HEADERS = {".v", ".sv", ".vh", ".svh", ".vhd", ".vhdl", ".h", ".inc"}
 
@@ -53,10 +56,21 @@ def build_key(list_file: Path, commands: Sequence[Sequence[str]], tools: Iterabl
         h.update("\0".join(cmd).encode() + b"\n")
     text = list_file.read_text() if list_file.is_file() else ""
     h.update(text.encode())
-    for path in re.findall(r'"([^"]+)"', text):
-        if not re.search(rf'^-I"{re.escape(path)}"', text, re.M):
-            _file(h, Path(path))
-    for d in sorted(set(_include_dirs(text, commands))):
+    sources = [
+        Path(path) for path in re.findall(r'"([^"]+)"', text)
+        if not re.search(rf'^-I"{re.escape(path)}"', text, re.M)
+    ]
+    for path in sources:
+        _file(h, path)
+    include_dirs = sorted(set(_include_dirs(text, commands)))
+    for inc in include_tree(sources, include_dirs):
+        h.update(f"{inc.includer}\0{inc.spelling}\0".encode())
+        if inc.path is None:
+            h.update(b"<unresolved>")
+        else:
+            _file(h, inc.path)
+    # Headers a source reaches only through a macro-built `include name.
+    for d in include_dirs:
         for f in sorted(d.glob("*")) if d.is_dir() else []:
             if f.suffix in _HEADERS:
                 _file(h, f)

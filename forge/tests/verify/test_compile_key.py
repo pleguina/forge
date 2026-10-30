@@ -40,6 +40,32 @@ def test_a_source_a_header_or_a_flag_changes_the_key(tmp_path):
     assert _key(lst, ["-DPROBE_LOG=1"]) != base
 
 
+def test_a_header_included_by_a_header_changes_the_key(tmp_path):
+    inc = tmp_path / "inc"
+    (inc / "sub").mkdir(parents=True)
+    (inc / "outer.vh").write_text('`include "sub/nested.vh"\n')
+    nested = inc / "sub" / "nested.vh"
+    nested.write_text("`define W 8\n")
+    rtl = tmp_path / "block.v"
+    rtl.write_text('`include "outer.vh"\nmodule block; endmodule\n')
+    lst = tmp_path / "sources.f"
+    lst.write_text(f'-I"{inc}"\n"{rtl}"\n')
+    base = _key(lst)
+    nested.write_text("`define W 16\n")
+    assert _key(lst) != base
+
+
+def test_a_header_next_to_its_source_changes_the_key(tmp_path):
+    (tmp_path / "local.vh").write_text("`define W 8\n")
+    rtl = tmp_path / "block.v"
+    rtl.write_text('`include "local.vh"\nmodule block; endmodule\n')
+    lst = tmp_path / "sources.f"
+    lst.write_text(f'"{rtl}"\n')
+    base = _key(lst)
+    (tmp_path / "local.vh").write_text("`define W 16\n")
+    assert _key(lst) != base
+
+
 def test_run_time_data_does_not_change_the_key(tmp_path):
     lst, _, inc = _project(tmp_path)
     base = _key(lst)

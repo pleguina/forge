@@ -120,6 +120,27 @@ def test_included_headers_travel_with_their_source(tmp_path: Path) -> None:
     assert record["files"]["a/pkg.vh"]["kind"] == "header"
 
 
+def test_headers_included_by_headers_travel_at_their_include_paths(tmp_path: Path) -> None:
+    (tmp_path / "inc" / "sub").mkdir(parents=True)
+    (tmp_path / "inc" / "outer.vh").write_text('`include "sub/nested.vh"\n')
+    (tmp_path / "inc" / "sub" / "nested.vh").write_text('`include "../inner.vh"\n')
+    (tmp_path / "inc" / "inner.vh").write_text("`define W 8\n")
+    write_component(_two_modules(tmp_path, include='`include "outer.vh"\n'), tmp_path / "pkg")
+    hdl = tmp_path / "pkg/firmware/hdl/forge"
+    assert (hdl / "a/outer.vh").is_file()
+    assert (hdl / "a/sub/nested.vh").is_file()
+    assert (hdl / "a/inner.vh").read_text() == "`define W 8\n"
+    record = json.loads((hdl / ".forge_component.json").read_text())
+    assert {"a/outer.vh", "a/sub/nested.vh", "a/inner.vh"} <= set(record["files"])
+
+
+def test_a_missing_header_at_any_depth_is_an_error(tmp_path: Path) -> None:
+    (tmp_path / "inc").mkdir()
+    (tmp_path / "inc" / "outer.vh").write_text('`include "gone.vh"\n')
+    with pytest.raises(ValueError, match='`include "gone.vh"'):
+        write_component(_two_modules(tmp_path, include='`include "outer.vh"\n'), tmp_path / "pkg")
+
+
 def test_a_header_that_cannot_be_found_is_an_error(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match='`include "missing.vh"'):
         write_component(_two_modules(tmp_path, include='`include "missing.vh"\n'), tmp_path / "pkg")

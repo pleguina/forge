@@ -15,18 +15,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import re
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from forge.core.utils.hdl_includes import include_tree
+
 _HDL_SUFFIXES = {".v": "xvlog", ".sv": "xvlog --sv", ".vhd": "xvhdl", ".vhdl": "xvhdl"}
 _HEADER_SUFFIXES = {".vh", ".svh", ".h"}
 OWNED_DIR = "forge"                      # under firmware/hdl, written and replaced by FORGE only
 OWNER_FILE = ".forge_component.json"
 _DEP_MARK = "# Written by forge from"
-_INCLUDE = re.compile(r'^\s*`include\s+"([^"]+)"', re.M)
 
 
 def _sources(manifest: dict) -> List[Tuple[str, Path]]:
@@ -49,16 +51,25 @@ def _sources(manifest: dict) -> List[Tuple[str, Path]]:
     return out
 
 
-def _headers(source: Path, search: List[Path]) -> List[Path]:
-    """The headers *source* includes, found next to it or in the build's include directories."""
-    found = []
-    for name in _INCLUDE.findall(source.read_text(errors="replace")):
-        for d in [source.parent, *search]:
-            if (d / name).is_file():
-                found.append(d / name)
-                break
-        else:
-            raise ValueError(f"{source}: `include \"{name}\" is in none of the build's include directories")
+def _headers(source: Path, rel: str, search: List[Path]) -> List[Tuple[str, Path]]:
+    """``(component path, header)`` for every header *source* includes at any depth.
+
+    *rel* is where *source* lands in the component. Each header goes where its
+    `` `include `` spelling points from the file that includes it, so the copy
+    compiles without the build's include directories.
+    """
+    placed: Dict[Path, str] = {source.resolve(): rel}
+    found: List[Tuple[str, Path]] = []
+    for inc in include_tree([source], search):
+        if inc.path is None:
+            raise ValueError(
+                f"{inc.includer}: `include \"{inc.spelling}\" is in none of the build's include directories")
+        target = posixpath.normpath(posixpath.join(posixpath.dirname(placed[inc.includer]), inc.spelling))
+        if target.startswith("../") or posixpath.isabs(target):
+            raise ValueError(
+                f"{inc.includer}: `include \"{inc.spelling}\" points outside the component")
+        placed.setdefault(inc.path, target)
+        found.append((placed[inc.path], inc.path))
     return found
 
 
@@ -82,8 +93,8 @@ def write_component(manifest_path: Path, component_dir: Path, dep_name: Optional
     search = [Path(d) for d in manifest.get("include_dirs", [])]
     files: Dict[str, Path] = {}
     for subdir, src in sources:
-        for path in [src, *_headers(src, search)]:
-            rel = f"{subdir}/{path.name}"
+        rel_src = f"{subdir}/{src.name}"
+        for rel, path in [(rel_src, src), *_headers(src, rel_src, search)]:
             if rel in files and files[rel] != path and _sha256(files[rel]) != _sha256(path):
                 raise ValueError(f"two different files would both be {OWNED_DIR}/{rel}: {files[rel]} and {path}")
             files.setdefault(rel, path)
