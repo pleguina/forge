@@ -33,6 +33,8 @@ clock and reset, its interfaces and their protocols, the checks it will run.
 | `x`, `x_valid` and `x_ready` (ready the other way) | `ready_valid` |
 | `x_tdata`, `x_tvalid`, `x_tready` | `ready_valid` (AXI4-Stream) |
 | `x_data` with `x_valid` and two of `x_start`, `x_last`, `x_start_of_orbit`, `x_strobe` | `emp_lword` |
+| `x` and HLS's `x_ap_vld` | `valid` |
+| HLS block control `ap_start`, `ap_ready`, `ap_done` (`ap_ctrl_hs`) | the scalar inputs are one `call` (`ready_valid`: held with `ap_start` until `ap_ready`), the scalar outputs its `result` (`valid` at `ap_done`) |
 | any other data port | `scalar`: a value every cycle |
 
 Names that do not follow these are declared in `forge.yml`; a port left in

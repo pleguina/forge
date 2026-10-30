@@ -32,7 +32,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from forge.verification import scoreboard as sb
-from forge.verification.auto_tb import TB_GENERATOR_VERSION, TB_MODULE, Bench, pack, testbench, write_inputs
+from forge.verification.auto_tb import (
+    TB_CLOCKED, TB_GENERATOR_VERSION, TB_MODULE, Bench, pack, testbench, verilator_main, write_inputs,
+)
 from forge.verification.compile_key import build_key, reusable, tool_version
 from forge.verification.protocols import Interface, Port, infer
 
@@ -275,8 +277,8 @@ def missing_tools(backend: str) -> List[str]:
     return [t for t in BACKENDS[backend] if shutil.which(t) is None]
 
 
-def _list_file(level: Level, tb: Path, path: Path) -> None:
-    lines = [f'-I"{d}"' for d in level.include_dirs] + [f'"{f}"' for f in level.sources] + [f'"{tb}"']
+def _list_file(level: Level, generated: Sequence[Path], path: Path) -> None:
+    lines = [f'-I"{d}"' for d in level.include_dirs] + [f'"{f}"' for f in [*level.sources, *generated]]
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -289,13 +291,15 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
         if vhdl:
             cmds.append(["xvhdl", *vhdl])
         cmds.append(["xvlog", "-sv", *[a for d in incs for a in ("-i", d)], *vlog, str(tb)])
-        cmds.append(["xelab", TB_MODULE, "-s", "forge_tb_snap", "-timescale", "1ns/1ps"])
+        cmds.append(["xelab", TB_CLOCKED, "-s", "forge_tb_snap", "-timescale", "1ns/1ps"])
         return cmds
     if vhdl:
         raise RuntimeError("Verilator does not read VHDL")
-    return [["verilator", "--binary", "--timing", "-Wno-fatal", "-Wno-lint", "-Wno-style",
-             "--top-module", TB_MODULE, "-Mdir", str(work / "obj"), "-o", "forge_tb",
-             *[f"-I{d}" for d in incs], *vlog, str(tb)]]
+    # forge_tb needs no timing support; with --no-timing a source's own delays
+    # (HLS writes `initial #0 ...`) are taken as zero.
+    return [["verilator", "--cc", "--exe", "--build", "--no-timing", "-j", "0", "-Wno-fatal", "-Wno-lint", "-Wno-style",
+             "-Wno-STMTDLY", "--top-module", TB_MODULE, "-Mdir", str(work / "obj"), "-o", "forge_tb",
+             *[f"-I{d}" for d in incs], *vlog, str(tb), str(work / "forge_tb_main.cpp")]]
 
 
 def _sim_command(backend: str, work: Path, plusargs: Mapping[str, str]) -> List[str]:
@@ -372,14 +376,20 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     if missing:
         return _evidence(level, backend, sb.BLOCKED_MISSING_TOOL, reason=f"{', '.join(missing)} not on PATH")
     bench = level.bench
+    level.sources = [f.resolve() for f in level.sources]
+    level.include_dirs = [d.resolve() for d in level.include_dirs]
     work = work.resolve()
     work.mkdir(parents=True, exist_ok=True)
     tb = work / f"{TB_MODULE}.sv"
     text = testbench(bench)
     if not tb.is_file() or tb.read_text() != text:
         tb.write_text(text)
+    generated = [tb]
+    if backend == "verilator":
+        generated.append(work / "forge_tb_main.cpp")
+        generated[-1].write_text(verilator_main(bench))
     lst = work / "sources.f"
-    _list_file(level, tb, lst)
+    _list_file(level, generated, lst)
     try:
         cmds = _compile_commands(backend, level, tb, work)
     except RuntimeError as exc:

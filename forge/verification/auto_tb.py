@@ -36,6 +36,9 @@ from forge.verification.protocols import EMP_FIELDS, Interface
 
 TB_GENERATOR_VERSION = "1"
 TB_MODULE = "forge_tb"
+# Drives forge_tb's clock where the simulator runs Verilog delays (XSim);
+# Verilator runs forge_tb from a generated C++ main instead.
+TB_CLOCKED = "forge_tb_clocked"
 
 
 @dataclass
@@ -130,11 +133,15 @@ def testbench(b: Bench) -> str:
     L = [
         "// Written by forge (forge.verification.auto_tb); do not edit.",
         "`timescale 1ns/1ps",
-        f"module {TB_MODULE};",
+        f"module {TB_CLOCKED};",
         f"  reg {b.clock} = 1'b0;",
         f"  always #{half:g} {b.clock} = ~{b.clock};",
+        f"  {TB_MODULE} tb (.{b.clock}({b.clock}));",
+        "endmodule",
+        "",
+        f"module {TB_MODULE} (input {b.clock});",
         f"  reg {b.reset} = {active};",
-        "  integer cycle = 0, fd, max_cycles = 100000, drain = 32, quiet = 1000, last_activity = 0;",
+        "  integer cycle = 0, fd, max_cycles = 100000, drain = 32, quiet = 1000, last_activity = 0, held = 0;",
         "  reg running = 1'b0;",
         "  string trace;",
     ]
@@ -173,11 +180,12 @@ def testbench(b: Bench) -> str:
               f'    void\'($value$plusargs("BACKPRESSURE_{o.name}=%d", bp_{o.name}));']
         if o.ready is not None:
             L.append(f"    {o.ready.name} = 1'b1;")
-    L += [f"    repeat ({b.reset_cycles}) @(posedge {b.clock});",
-          f"    {b.reset} <= {idle};",
-          f"    @(posedge {b.clock});",
-          "    running <= 1'b1;",
-          "  end", ""]
+    L += ["  end", "",
+          f"  always @(posedge {b.clock})",
+          f"    if (held < {b.reset_cycles}) held <= held + 1;",
+          f"    else if ({b.reset} == {active}) {b.reset} <= {idle};",
+          "    else running <= 1'b1;",
+          ""]
 
     for i in ins:
         m, n, ptr = f"mem_{i.name}", f"n_{i.name}", f"p_{i.name}"
@@ -265,3 +273,29 @@ def write_inputs(b: Bench, values: Mapping[str, Sequence[Any]], directory: Path,
         args[f"STIM_{i.name}"] = str(path)
         args[f"N_{i.name}"] = str(len(lines))
     return args
+
+
+def verilator_main(b: Bench) -> str:
+    """The C++ main that clocks forge_tb under Verilator, without its timing support."""
+    return "\n".join([
+        "// Written by forge (forge.verification.auto_tb); do not edit.",
+        f'#include "V{TB_MODULE}.h"',
+        '#include "verilated.h"',
+        "",
+        "int main(int argc, char** argv) {",
+        "    VerilatedContext* ctx = new VerilatedContext;",
+        "    ctx->commandArgs(argc, argv);",
+        f"    V{TB_MODULE}* tb = new V{TB_MODULE}{{ctx}};",
+        f"    tb->{b.clock} = 0;",
+        "    while (!ctx->gotFinish()) {",
+        f"        tb->{b.clock} = !tb->{b.clock};",
+        "        tb->eval();",
+        "        ctx->timeInc(1);",
+        "    }",
+        "    tb->final();",
+        "    delete tb;",
+        "    delete ctx;",
+        "    return 0;",
+        "}",
+        "",
+    ])

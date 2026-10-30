@@ -5,8 +5,12 @@ A port list says how a design moves data, within a few naming conventions:
 ``ready_valid`` stream; AXI4-Stream's ``x_tdata``/``x_tvalid``/``x_tready``
 is ``ready_valid`` as well; EMP's link word fields ``x_data``, ``x_valid``,
 ``x_start``, ``x_last``, ``x_start_of_orbit``, ``x_strobe`` are an
-``emp_lword``. A data port with none of these is ``scalar``: a value per clock
-cycle. What the ports cannot say (a different name for the valid, a port that
+``emp_lword``; ``x`` with Vitis HLS's ``x_ap_vld`` is ``valid``. A data port
+with none of these is ``scalar``: a value per clock cycle, except in a block
+with HLS's ``ap_start``/``ap_ready``/``ap_done`` (``ap_ctrl_hs``): there the
+scalar inputs are one call, held with ``ap_start`` until ``ap_ready``
+(``ready_valid``), and the scalar outputs its result, taken at ``ap_done``
+(``valid``). What the ports cannot say (a different name for the valid, a port that
 only looks like a stream) is given in the plan's ``protocols``.
 
 Each protocol is versioned: evidence records the version a result was
@@ -19,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 PROTOCOLS = {"scalar": 1, "valid": 1, "ready_valid": 1, "emp_lword": 1}
+HLS_CONTROL = ("ap_start", "ap_ready", "ap_done")
 EMP_FIELDS = ("valid", "start", "last", "start_of_orbit", "strobe")
 
 
@@ -122,11 +127,13 @@ def infer(ports: Sequence[Port], *, exclude: Sequence[str] = (),
         if n in used:
             continue
         p = by_name[n]
-        if _strip(n, ("_valid", "_ready", "_tvalid", "_tready")):
+        if _strip(n, ("_valid", "_ready", "_tvalid", "_tready", "_ap_vld")) or n in HLS_CONTROL + ("ap_idle",):
             continue
         axis = _strip(n, ("_tdata",))
         base = axis[0] if axis else n
         vname, rname = (f"{base}_tvalid", f"{base}_tready") if axis else (f"{n}_valid", f"{n}_ready")
+        if not axis and vname not in by_name and f"{n}_ap_vld" in by_name:
+            vname = f"{n}_ap_vld"
         if vname in by_name and vname not in used:
             valid = take(vname)
             word = take(n)
@@ -135,8 +142,25 @@ def infer(ports: Sequence[Port], *, exclude: Sequence[str] = (),
             out.append(Interface(base, "ready_valid" if ready else "valid", p.direction, [word], valid, ready))
         else:
             out.append(Interface(n, "scalar", p.direction, [take(n)]))
+    if all(c in by_name and c not in used for c in HLS_CONTROL):
+        out = _hls_call(out, take, by_name)
     left = [n for n in by_name if n not in used]
     if left:
         raise InterfaceError(f"ports in no interface: {', '.join(left)} (declare them under protocols)")
     order = {p.name: i for i, p in enumerate(ports)}
     return sorted(out, key=lambda i: order[i.ports()[0].name])
+
+
+def _hls_call(ifaces: List[Interface], take, by_name: Mapping[str, Port]) -> List[Interface]:
+    """The scalar interfaces of an ``ap_ctrl_hs`` block, as its call and its result."""
+    start, ready, done = (take(c) for c in HLS_CONTROL)
+    if "ap_idle" in by_name:
+        take("ap_idle")
+    ins = [i for i in ifaces if i.protocol == "scalar" and i.direction == "in"]
+    outs = [i for i in ifaces if i.protocol == "scalar" and i.direction == "out"]
+    rest = [i for i in ifaces if i not in ins and i not in outs]
+    if ins:
+        rest.append(Interface("call", "ready_valid", "in", [p for i in ins for p in i.data], start, ready))
+    if outs:
+        rest.append(Interface("result", "valid", "out", [p for i in outs for p in i.data], done))
+    return rest

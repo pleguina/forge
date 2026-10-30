@@ -228,7 +228,8 @@ for the versioning policy.
 - **Verification from the design, without a plugin.** `forge test --input
   --expected` (or `verification.input`/`expected` in `forge.yml`) finds the
   top level's interfaces from its ports (`valid`, `ready_valid`, AXI4-Stream,
-  `emp_lword`, `scalar`; others declared under `verification.protocols`),
+  `emp_lword`, HLS `ap_ctrl_hs` and `ap_vld`, `scalar`; others declared under
+  `verification.protocols`),
   generates one testbench, compiles it once per simulator (XSim, Verilator)
   and compile key, runs every transaction in one simulation, and compares in
   a shared scoreboard (`transaction`, `exact_cycle`, `fixed_latency`,

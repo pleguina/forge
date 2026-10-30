@@ -83,7 +83,7 @@ def test_ready_valid_holds_under_stalls_and_backpressure(tmp_path):
     xs = [random.Random(4).randrange(1 << 15) for _ in range(50)]
     level = _level(tmp_path, _RV, "rv_double", _RV_PORTS, {"a": xs}, {"y": [x << 1 for x in xs]})
     ev = auto.run(level, "verilator", tmp_path / "work", stall=30, backpressure=40, seed=7)
-    assert ev.status == sb.VERIFIED, ev.doc
+    assert ev.status == sb.VERIFIED, (ev.doc.get("reason"), ev.doc.get("interfaces"))
     assert ev.doc["interfaces"][0]["matched"] == 50 and ev.doc["inputs_driven"] == {"a": 50}
     assert ev.doc["protocols"] == {"a": "ready_valid@1", "y": "ready_valid@1"}
 
@@ -131,7 +131,7 @@ def test_emp_pattern_files_drive_and_check_link_words(tmp_path):
                        auto.DataRef(tmp_path / "source.txt", "empv2", {"l": 0}),
                        auto.DataRef(tmp_path / "sink.txt", "empv2", {"q": 1}))
     ev = auto.run(level, "verilator", tmp_path / "work")
-    assert ev.status == sb.VERIFIED, ev.doc
+    assert ev.status == sb.VERIFIED, (ev.doc.get("reason"), ev.doc.get("interfaces"))
     assert ev.doc["interfaces"][0]["matched"] == 3
 
 
@@ -203,3 +203,38 @@ def test_a_wrong_expected_word_fails(project, capsys):
     assert code != 0
     evidence = json.loads((project / ".forge/reports/test/auto/design.verilator.evidence.json").read_text())
     assert [r["kind"] for r in evidence["interfaces"][0]["rows"]] == ["mismatch"]
+
+
+# --- an HLS block with ap_ctrl_hs ---------------------------------------------------------------------------------
+
+HLS_MAC = Path(__file__).resolve().parents[1] / "fixtures" / "hls_ap_ctrl_hs"
+
+
+def test_an_ap_ctrl_hs_block_is_a_call_and_a_result():
+    from forge.core.utils.hdl_parser import _scan_verilog_ports
+    ports = [Port(n, d, w) for n, (d, w) in _scan_verilog_ports(HLS_MAC / "mac.v").items()]
+    ifaces = infer(ports, exclude=["ap_clk", "ap_rst"])
+    assert [(i.name, i.protocol, [p.name for p in i.ports()]) for i in ifaces] == [
+        ("call", "ready_valid", ["a", "b", "c", "ap_start", "ap_ready"]),
+        ("result", "valid", ["ap_return", "ap_done"]),
+    ]
+
+
+@pytest.mark.parametrize("backend", [
+    pytest.param("verilator", marks=needs_verilator),
+    pytest.param("xsim", marks=pytest.mark.skipif(shutil.which("xelab") is None, reason="xsim not on PATH")),
+])
+def test_hls_calls_return_their_results_at_the_reported_latency(tmp_path, backend):
+    from forge.core.utils.hdl_parser import _scan_verilog_ports
+    ports = [Port(n, d, w) for n, (d, w) in _scan_verilog_ports(HLS_MAC / "mac.v").items()]
+    rng = random.Random(9)
+    calls = [{"a": rng.randrange(1 << 12), "b": rng.randrange(1 << 12), "c": rng.randrange(256)} for _ in range(60)]
+    (tmp_path / "in.json").write_text(json.dumps({"call": calls}))
+    (tmp_path / "exp.json").write_text(json.dumps({"result": [(x["a"] * x["b"] + x["c"]) & 0xFFFFFF for x in calls]}))
+    bench = Bench("mac", "ap_clk", "ap_rst", True, infer(ports, exclude=["ap_clk", "ap_rst"]))
+    level = auto.Level("design", "mac", sorted(HLS_MAC.glob("*.v")), [], bench,
+                       auto.DataRef(tmp_path / "in.json"), auto.DataRef(tmp_path / "exp.json"),
+                       sb.Compare.from_dict({"mode": "fixed_latency", "latency": 3}))
+    ev = auto.run(level, backend, tmp_path / "work", stall=25, seed=2)
+    assert ev.status == sb.VERIFIED, (ev.doc.get("reason"), ev.doc.get("interfaces"))
+    assert ev.doc["interfaces"][0]["matched"] == 60
