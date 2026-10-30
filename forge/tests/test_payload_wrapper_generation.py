@@ -462,3 +462,13 @@ class TestTypedServices:
         content = self._gen(wide, **to_blobfish(regs, slr=2)["control_policies"])
         assert ".cfg_ctrl (slr2_config_registers_in[64*0 +: 64])" in content
         assert "assign slr2_readback_registers_out = {48'b0, lock_status};" in content
+
+    def test_the_tap_enable_is_declared_before_the_consumers_verilog(self, wide, tmp_path):
+        (tmp_path / "late.v").write_text("wire uses_it = rx_tap_en;\n")
+        fw, resolved_io = wide
+        content = generate_payload_verilog(fw, resolved_io, policies=ControlPolicies.from_dict({
+            "reset": "disabled", "verilog": {"before_algo": ["late.v"]},
+            "rx_taps": {"enable": {"port": "slr2_usr_ctrl_in", "bit": 0},
+                        "taps": [{"name": "t", "rx": {"quad": "slr2_gt_1", "lane": 0},
+                                  "tx": {"quad": "slr2_gt_1", "lane": 1}}]}}, base=tmp_path))
+        assert content.index("wire rx_tap_en =") < content.index("wire uses_it = rx_tap_en;")

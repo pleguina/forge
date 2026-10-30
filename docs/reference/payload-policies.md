@@ -55,7 +55,7 @@ FORGE writes these and checks them against the ABI; prefer them to `connect`,
 |-----|--------|
 | `config_words` | `algo_port: {register: <config register port>, word: K}` connects 64-bit word K of an SLR config register port (`slr_config_registers`) to that algorithm input. A word the port does not hold is an error |
 | `status_words` | `output_port: [{net, width} \| {zero: width}, ...]` packs the fields into that payload output, least significant first, zero-padded to the port's width; more bits than the port is an error |
-| `rx_taps` | `{enable: {port, bit}, stages: N, taps: [{name, rx, tx}]}` copies each received word to a spare TX lane: `rx` is `{quad, lane}` (the receiver, with its orbit bit) or `{endpoint}` (the word the algorithm receives, after `rx_gate`; orbit bit 0), `tx` is `{quad, lane}`. Word, valid, first, last and orbit pass N registers (default 2) in `logic_clk`, zeros while the enable bit is clear. The enable bit passes two registers, net `rx_tap_en`. A TX lane the payload or another tap uses is an error |
+| `rx_taps` | `{enable: {port, bit}, stages: N, taps: [{name, rx, tx}]}` copies each received word to a spare TX lane: `rx` is `{quad, lane}` (the receiver, with its orbit bit) or `{endpoint}` (the word the algorithm receives, after `rx_gate`; orbit bit 0), `tx` is `{quad, lane}`. Word, valid, first, last and orbit pass N registers (default 2) in `logic_clk`, zeros while the enable bit is clear. The enable bit passes two registers, net `rx_tap_en`, declared before the `verilog.before_algo` blocks so they can use it. A TX lane the payload or another tap uses is an error |
 
 A port given both to a service and to `drive` or `connect` is an error.
 

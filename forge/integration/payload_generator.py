@@ -258,9 +258,9 @@ class PayloadWrapperGenerator:
         lines += [""];  lines += self._rx_lane_slicing_section()
         lines += [""];  lines += self._tx_lane_assignment_section()
         lines += self._reset_section()
-        lines += self._verilog(self.policies.verilog_before_algo)
         if self._service_blocks:
             lines += self._service_blocks + [""]
+        lines += self._verilog(self.policies.verilog_before_algo)
         lines += self._input_register_section()
         lines += self._drive_section()
         lines += [""];  lines += self._algo_instantiation()
