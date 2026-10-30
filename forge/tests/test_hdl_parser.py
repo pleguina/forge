@@ -380,3 +380,34 @@ def test_vhdl_unknown_constant_is_unresolved_and_generic_expressions_evaluate():
     assert decls["a"].width == 16
     assert decls["b"].width == 8
     assert decls["c"].width is None
+
+
+def test_declarations_are_read_whole():
+    decls = scan_verilog_port_decls(
+        "module m #(parameter N = 2) (\n"
+        "  input  logic [N-1:0][7:0] packed2,\n"
+        "  input[3:0] tight,\n"
+        "  output int counter,\n"
+        "  (* keep *) output logic signed [15:0] y = 0,\n"
+        "  input  my_pkg::word_t w,\n"
+        "  axi_if.slave bus,\n"
+        "  input  [7:0] arr [4]\n"
+        "); endmodule\n"
+    )
+
+    assert decls["packed2"] == PortDecl("in", 16)
+    assert decls["tight"] == PortDecl("in", 4)
+    assert decls["counter"] == PortDecl("out", 32)
+    assert decls["y"] == PortDecl("out", 16)
+    assert decls["w"] == PortDecl("in", None, "of type my_pkg::word_t")
+    assert decls["bus"] == PortDecl("inout", None, "of interface type axi_if.slave")
+    assert decls["arr"] == PortDecl("in", None, "with unpacked dimension [4]")
+
+
+def test_non_ansi_declarations_on_one_line_and_undeclared_names():
+    decls = scan_verilog_port_decls(
+        "module n(a, b, c); input [1:0][3:0] a; (* x *) output reg [7:0] b; endmodule")
+
+    assert decls["a"] == PortDecl("in", 8)
+    assert decls["b"] == PortDecl("out", 8)
+    assert decls["c"].width is None

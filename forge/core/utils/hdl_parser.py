@@ -85,8 +85,8 @@ class UnresolvedWidthError(ValueError):
         prefix = f"{where}: " if where else ""
         super().__init__(
             f"{prefix}cannot determine the width of port(s) {listed} from the "
-            f"source (the range uses a macro, package constant or function this "
-            f"scanner does not evaluate); declare them under `widths:` for the "
+            f"source (a macro, package constant, function, user-defined type or "
+            f"unpacked array this scanner does not resolve); declare them under `widths:` for the "
             f"module in forge.yml, or `port_widths:` in a hand-written module "
             f"registry"
         )
@@ -461,6 +461,83 @@ def _verilog_parameters(
     return params
 
 
+_VLOG_DIRECTIONS = {"input": "in", "output": "out", "inout": "inout"}
+_VLOG_NET_WORDS = frozenset({
+    "wire", "reg", "logic", "bit", "signed", "unsigned", "var", "tri", "tri0", "tri1",
+    "wand", "wor", "triand", "trior", "uwire", "supply0", "supply1",
+})
+_VLOG_ATOM_WIDTHS = {"byte": 8, "shortint": 16, "int": 32, "integer": 32, "longint": 64, "time": 64}
+
+
+class _DeclHead(NamedTuple):
+    """What a port declaration says before its names."""
+
+    direction: str
+    packed: List[str]
+    atom_width: Optional[int] = None
+    type_name: Optional[str] = None
+
+
+def _parse_port_names(text: str) -> List[Tuple[str, str]]:
+    """``[(name, unpacked dimensions)]`` of ``a, b [3:0], c = 1'b0``."""
+    out: List[Tuple[str, str]] = []
+    for piece in _split_top_level(text):
+        m = re.fullmatch(r"\s*(\w+)((?:\s*\[[^\]]*\])*)\s*(?:=.*)?", piece, re.S)
+        if m:
+            out.append((m.group(1), re.sub(r"\s+", "", m.group(2))))
+    return out
+
+
+def _parse_port_decl(text: str) -> Optional[Tuple[_DeclHead, List[Tuple[str, str]]]]:
+    """Parse ``input wire signed [1:0][7:0] a, b`` into its head and names.
+
+    A word in the type position that is neither a net/variable keyword nor
+    an atom type (a typedef, ``pkg::type_t``, an ``interface.modport``) is
+    kept as ``type_name``: its width is not in the declaration.
+    """
+    m = re.match(r"\s*(input|output|inout)\b", text)
+    if not m:
+        return None
+    direction = _VLOG_DIRECTIONS[m.group(1)]
+    rest = text[m.end():]
+    packed: List[str] = []
+    atom: Optional[int] = None
+    type_name: Optional[str] = None
+    while True:
+        rest = rest.lstrip()
+        dim = re.match(r"\[[^\]]*\]", rest)
+        if dim:
+            packed.append(dim.group(0))
+            rest = rest[dim.end():]
+            continue
+        word = re.match(r"\w+(?:(?:::|\.)\w+)?", rest)
+        if not word:
+            break
+        token = word.group(0)
+        if token in _VLOG_NET_WORDS:
+            rest = rest[word.end():]
+            continue
+        if token in _VLOG_ATOM_WIDTHS:
+            atom = _VLOG_ATOM_WIDTHS[token]
+            rest = rest[word.end():]
+            continue
+        after = rest[word.end():].lstrip()
+        while True:
+            more = re.match(r"\[[^\]]*\]\s*", after)
+            if not more:
+                break
+            after = after[more.end():]
+        if type_name is None and not packed and re.match(r"\w", after):
+            type_name = token
+            rest = rest[word.end():]
+            continue
+        break
+    names = _parse_port_names(rest)
+    if not names:
+        return None
+    return _DeclHead(direction, packed, atom, type_name), names
+
+
 def _verilog_module_name(vlog_path: Path, fallback: str = "") -> str:
     """Extract module name from Verilog/SystemVerilog file."""
     txt = _strip_sv_comments(vlog_path.read_text())
@@ -503,7 +580,7 @@ def scan_verilog_port_decls(
     are macros set outside the file (``+define+``), which the file's own
     ```define`` lines take precedence over.
     """
-    txt = _strip_sv_comments(source)
+    txt = re.sub(r"\(\*\s*[A-Za-z_][^*]*\*\)", " ", _strip_sv_comments(source))
     defines = dict(defines or {})
     defines.update({m.group(1): (m.group(2) or "") for m in _VLOG_DEFINE_RE.finditer(txt)})
 
@@ -559,40 +636,32 @@ def scan_verilog_port_decls(
     body = txt[mod_start:end_pos if end_pos != -1 else len(txt)]
     params = _verilog_parameters(txt[mod_match.start():mod_start] + body, defines, parameters)
 
-    def _decl(direction: str, slice_txt: Optional[str]) -> PortDecl:
-        width = _optional_width(slice_txt, params, defines)
-        return PortDecl(direction, width, "" if width is not None else (slice_txt or "").strip())
+    def _decl(head: "_DeclHead", unpacked: str = "") -> PortDecl:
+        if head.type_name:
+            return PortDecl(head.direction, None, f"of type {head.type_name}")
+        if unpacked:
+            return PortDecl(head.direction, None, f"with unpacked dimension {unpacked}")
+        if head.atom_width is not None:
+            return PortDecl(head.direction, head.atom_width)
+        width = 1
+        for dim in head.packed:
+            dim_width = _optional_width(dim, params, defines)
+            if dim_width is None:
+                return PortDecl(head.direction, None, "".join(head.packed))
+            width *= dim_width
+        return PortDecl(head.direction, width)
 
     ports: Dict[str, PortDecl] = {}
 
-    # Enhanced regex to capture parameterized widths
-    _VLOG_DECL_PARAM_RE = re.compile(
-        r'^\s*(?P<dir>input|output|inout)\s+'
-        r'(?P<attrs>(?:wire|reg|logic|signed|unsigned|\s)*)'
-        r'(?:(?P<w0>\[[^\]]+\])\s*)?'
-        r'(?P<names>[^;]+);',
-        re.M
-    )
-    _VLOG_NAME_PARAM_RE = re.compile(
-        r'^\s*(?:(?P<w>\[[^\]]+\])\s*)?(?P<name>\w+)\s*$'
-    )
-
     # Body decls (works for both styles)
     decls: Dict[str, PortDecl] = {}
-    for dm in _VLOG_DECL_PARAM_RE.finditer(body):
-        direction = dm.group('dir').lower()
-        direction = {'input': 'in', 'output': 'out'}.get(direction, 'inout')
-        names_blob = dm.group('names')
-        for raw in names_blob.split(','):
-            nm = raw.strip()
-            if not nm:
-                continue
-            nm_m = _VLOG_NAME_PARAM_RE.match(nm)
-            if not nm_m:
-                continue
-            name = nm_m.group('name')
-            if name not in decls:
-                decls[name] = _decl(direction, nm_m.group('w') or dm.group('w0'))
+    for dm in re.finditer(r"\b(?:input|output|inout)\b[^;]*;", body):
+        parsed = _parse_port_decl(dm.group(0).rstrip(";"))
+        if parsed is None:
+            continue
+        head, names = parsed
+        for name, unpacked in names:
+            decls.setdefault(name, _decl(head, unpacked))
 
     # Parse header port list - handle ANSI-style declarations
     port_entries = [entry.strip() for entry in _split_top_level(header_ports_blob)]
@@ -607,41 +676,32 @@ def scan_verilog_port_decls(
     # the non-ANSI branch and silently became ('in', 1): a real corruption
     # that turned 8-bit outputs into 1-bit inputs, invisible wherever a
     # hand-written contract happened to restate the correct values.
-    last_ansi: Optional[Tuple[str, Optional[str]]] = None
+    last_ansi: Optional[_DeclHead] = None
     for entry in port_entries:
         if not entry:
             continue
-        
-        # Try to match ANSI-style: input/output [width] name
-        trial = entry + ';'
-        decl = _VLOG_DECL_PARAM_RE.match(trial)
-        if decl:
-            direction = decl.group('dir').lower()
-            direction = {'input': 'in', 'output': 'out'}.get(direction, 'inout')
-            names_blob = decl.group('names')
-            for raw in names_blob.split(','):
-                nm = raw.strip()
-                nm_m = _VLOG_NAME_PARAM_RE.match(nm)
-                if not nm_m:
-                    continue
-                name = nm_m.group('name')
-                last_ansi = (direction, decl.group('w0'))
-                if name not in ports:
-                    ports[name] = _decl(direction, nm_m.group('w') or decl.group('w0'))
+        parsed = _parse_port_decl(entry)
+        if parsed is not None:
+            last_ansi, names = parsed
+            for name, unpacked in names:
+                ports.setdefault(name, _decl(last_ansi, unpacked))
             continue
 
         # A bare name: either the continuation of the ANSI declaration above,
         # or a non-ANSI header name whose direction/width comes from a body
         # declaration.
-        nm_m = _VLOG_NAME_PARAM_RE.match(entry)
-        if nm_m:
-            name = nm_m.group('name')
-            if name in decls:
-                ports[name] = decls[name]
-            elif last_ansi is not None:
-                direction, base_slice = last_ansi
-                ports[name] = _decl(direction, nm_m.group('w') or base_slice)
-            else:
-                ports[name] = PortDecl('in', 1)
+        bare = _parse_port_names(entry)
+        if len(bare) != 1:
+            iface = re.fullmatch(r"\s*(\w+(?:\.\w+|::\w+)?)\s+(\w+)\s*", entry)
+            if iface:
+                ports[iface.group(2)] = PortDecl("inout", None, f"of interface type {iface.group(1)}")
+            continue
+        name, unpacked = bare[0]
+        if name in decls:
+            ports[name] = decls[name]
+        elif last_ansi is not None:
+            ports[name] = _decl(last_ansi, unpacked)
+        else:
+            ports[name] = PortDecl("in", None, "with no input/output declaration")
 
     return ports
