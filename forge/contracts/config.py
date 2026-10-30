@@ -84,7 +84,7 @@ def _load_registry(registry_path: Path) -> dict[str, dict]:
     IDENTITY_FIELDS = {
         "name", "kind", "top", "src", "includes", "rtl_lang", "vhdl_library",
         "vhdl_version", "rtl_include_dirs", "verilog_defines", "rtl_packages",
-        "cflags", "stages",
+        "cflags", "stages", "port_widths",
         # Latency annotation fields — recognized pass-through keys, not
         # identity/equality semantics; converted into a typed ModuleTiming
         # by _pop_timing() at Module-construction time, not stored flat.
@@ -389,6 +389,10 @@ class Module:
     
     # RTL module parameters (e.g., for parameterized Verilog modules)
     parameters: Dict[str, Any] = field(default_factory=dict)
+
+    # Port widths the source scan cannot evaluate (a range built from a
+    # package constant, say), declared by the user: {port: bits}.
+    port_widths: Dict[str, int] = field(default_factory=dict)
 
     # HLS fields
     tb:        List[str] = field(default_factory=list)

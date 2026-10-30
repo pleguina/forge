@@ -53,6 +53,7 @@ ATG047  Module integrated as opaque (structure only, internals unmodelled)
 ATG048  HLS predicted interface differs from the built IP
 ATG049  A verification flow's simulator is not on PATH
 ATG050  A cdc: connection also declares register_stages or delay_cycles
+ATG051  A port's width cannot be determined from its source
 
 Public API
 ----------

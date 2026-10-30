@@ -31,12 +31,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 
 from forge.core.utils.hdl_parser import (
-    _scan_ports_text,
-    _scan_verilog_ports_text,
+    PortDecl,
     _strip_sv_comments,
+    apply_declared_widths,
+    scan_verilog_port_decls,
+    scan_vhdl_port_decls,
 )
 from forge.core.utils.signal_names import (
     is_active_low_reset,
@@ -111,6 +113,9 @@ class HdlUnit:
             it is a candidate list and may contain false positives.
         unsupported: Human-readable reasons this unit cannot currently be
             managed by FORGE (see :meth:`clock_ports`).
+        unresolved_widths: Ports left out of :attr:`ports` because neither
+            the source scan nor ``forge.yml`` determines their width, each
+            with its declared range.
     """
 
     name: str
@@ -119,6 +124,7 @@ class HdlUnit:
     ports: Dict[str, Port] = field(default_factory=dict)
     instantiates: Tuple[str, ...] = ()
     unsupported: Tuple[str, ...] = ()
+    unresolved_widths: Dict[str, str] = field(default_factory=dict)
     #: The user declared this module opaque: integrate it structurally,
     #: do not model its internals. Its :attr:`unsupported` reasons are then
     #: recorded as *why it is opaque* rather than as a blocker.
@@ -179,6 +185,7 @@ class HdlUnit:
             "reset_ports": self.reset_ports,
             "instantiates": list(self.instantiates),
             "unsupported": list(self.unsupported),
+            "unresolved_widths": dict(self.unresolved_widths),
             "opaque": self.opaque,
         }
 
@@ -241,7 +248,28 @@ def _verilog_instantiations(module_source: str, module_name: str) -> Tuple[str, 
     return tuple(found)
 
 
-def scan_verilog_file(path: Path) -> List[HdlUnit]:
+#: Module name -> ``{port: bits}`` declared in ``forge.yml`` ``widths:``.
+DeclaredWidths = Mapping[str, Mapping[str, int]]
+
+
+def _unit_ports(
+    name: str, decls: Dict[str, PortDecl], declared: Optional[DeclaredWidths],
+) -> Tuple[Dict[str, Port], Dict[str, str], List[str]]:
+    """Resolved ports, unresolved ``{port: range}``, and declaration errors."""
+    errors: List[str] = []
+    try:
+        decls = apply_declared_widths(decls, (declared or {}).get(name))
+    except ValueError as exc:
+        errors.append(f"forge.yml widths: {exc}")
+    ports = {
+        port_name: Port(port_name, decl.direction, decl.width)
+        for port_name, decl in decls.items() if decl.width is not None
+    }
+    unresolved = {n: d.range_text for n, d in decls.items() if d.width is None}
+    return ports, unresolved, errors
+
+
+def scan_verilog_file(path: Path, declared_widths: Optional[DeclaredWidths] = None) -> List[HdlUnit]:
     """Every module declared in a Verilog/SystemVerilog file."""
     try:
         text = path.read_text(errors="replace")
@@ -250,10 +278,8 @@ def scan_verilog_file(path: Path) -> List[HdlUnit]:
     language = "systemverilog" if path.suffix.lower() in (".sv", ".svh") else "verilog"
     units: List[HdlUnit] = []
     for name, source in split_verilog_modules(text):
-        ports = {
-            port_name: Port(port_name, direction, width)
-            for port_name, (direction, width) in _scan_verilog_ports_text(source).items()
-        }
+        ports, unresolved, errors = _unit_ports(
+            name, scan_verilog_port_decls(source), declared_widths)
         units.append(
             HdlUnit(
                 name=name,
@@ -261,7 +287,8 @@ def scan_verilog_file(path: Path) -> List[HdlUnit]:
                 language=language,
                 ports=ports,
                 instantiates=_verilog_instantiations(source, name),
-                unsupported=_unsupported_reasons(name, ports),
+                unsupported=tuple(errors) + _unsupported_reasons(name, ports, unresolved),
+                unresolved_widths=unresolved,
             )
         )
     return units
@@ -313,7 +340,7 @@ def _vhdl_instantiations(text: str, entity_name: str) -> Tuple[str, ...]:
     return tuple(found)
 
 
-def scan_vhdl_file(path: Path) -> List[HdlUnit]:
+def scan_vhdl_file(path: Path, declared_widths: Optional[DeclaredWidths] = None) -> List[HdlUnit]:
     """Every entity declared in a VHDL file."""
     try:
         text = path.read_text(errors="replace")
@@ -321,10 +348,8 @@ def scan_vhdl_file(path: Path) -> List[HdlUnit]:
         return []
     units: List[HdlUnit] = []
     for name, source in split_vhdl_entities(text):
-        ports = {
-            port_name: Port(port_name, direction, width)
-            for port_name, (direction, width) in _scan_ports_text(source).items()
-        }
+        ports, unresolved, errors = _unit_ports(
+            name, scan_vhdl_port_decls(source), declared_widths)
         units.append(
             HdlUnit(
                 name=name,
@@ -332,25 +357,28 @@ def scan_vhdl_file(path: Path) -> List[HdlUnit]:
                 language="vhdl",
                 ports=ports,
                 instantiates=_vhdl_instantiations(text, name),
-                unsupported=_unsupported_reasons(name, ports),
+                unsupported=tuple(errors) + _unsupported_reasons(name, ports, unresolved),
+                unresolved_widths=unresolved,
             )
         )
     return units
 
 
-def scan_hdl_file(path: Path) -> List[HdlUnit]:
+def scan_hdl_file(path: Path, declared_widths: Optional[DeclaredWidths] = None) -> List[HdlUnit]:
     """Dispatch on suffix. Unknown suffixes yield nothing."""
     suffix = path.suffix.lower()
     if suffix in (".v", ".sv", ".vh", ".svh"):
-        return scan_verilog_file(path)
+        return scan_verilog_file(path, declared_widths)
     if suffix in (".vhd", ".vhdl"):
-        return scan_vhdl_file(path)
+        return scan_vhdl_file(path, declared_widths)
     return []
 
 
 # ── Limits detected at scan time ──────────────────────────────────────────
 
-def _unsupported_reasons(name: str, ports: Dict[str, Port]) -> Tuple[str, ...]:
+def _unsupported_reasons(
+    name: str, ports: Dict[str, Port], unresolved: Optional[Dict[str, str]] = None,
+) -> Tuple[str, ...]:
     """FORGE limitations this unit runs into, detected from its ports alone.
 
     Reported here, during discovery, so a user learns that (say) their
@@ -366,7 +394,13 @@ def _unsupported_reasons(name: str, ports: Dict[str, Port]) -> Tuple[str, ...]:
             f"{len(clocks)} clock inputs ({', '.join(sorted(clocks))}) — FORGE "
             f"manages one functional clock domain per module"
         )
-    if not ports:
+    if unresolved:
+        listed = ", ".join(f"{port} {rng}" for port, rng in sorted(unresolved.items()))
+        reasons.append(
+            f"width of {listed} cannot be determined from the source — declare "
+            f"it under `widths:` for {name} in forge.yml"
+        )
+    elif not ports:
         reasons.append(
             "no ports could be read from the source — the declaration may use "
             "constructs this scanner does not cover"

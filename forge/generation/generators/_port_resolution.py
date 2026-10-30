@@ -38,8 +38,11 @@ from ...contracts.domains import (
     top_level_net as _domain_to_top_level_net,
 )
 from forge.core.utils.signal_names import is_clock_name, is_reset_name
-from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
-from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
+from forge.core.utils.hdl_parser import (
+    UnresolvedWidthError,
+    parse_verilog_defines,
+    scan_module_ports,
+)
 
 _re_trailing_num = re.compile(r"^(.*?)(?:_(\d+)|(\d+))$")
 
@@ -192,12 +195,16 @@ def _fetch_module_ports(mod: Module, meta: Dict, ip_root: Path) -> List[Dict]:
 
     mod_root = ip_root / mod.name
     scanned: Dict[str, Tuple[str, int]] = {}
+    defines = parse_verilog_defines(mod.verilog_defines)
     for ext in (".vhd", ".v", ".sv"):
         for p in sorted(mod_root.rglob(f"*{ext}")):
             try:
-                scanned = scan_vhdl_ports(p) if ext == ".vhd" else scan_vlog_ports(p)
+                scanned = scan_module_ports(
+                    p, mod.parameters, defines, mod.port_widths, f"module {mod.name!r} ({p})")
                 if scanned:
                     break
+            except UnresolvedWidthError:
+                raise
             except Exception:
                 continue
         if scanned:

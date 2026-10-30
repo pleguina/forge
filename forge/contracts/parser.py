@@ -15,8 +15,9 @@ from .config import resolve_declared_path
 
 # Import minimal HDL parsing utilities
 from forge.core.utils.hdl_parser import (
-    _scan_ports as _scan_vhdl_ports,         # VHDL: returns {name: (dir, width)}
-    _scan_verilog_ports as _scan_vlog_ports, # Verilog/SV: returns {name: (dir, width)}
+    UnresolvedWidthError,
+    parse_verilog_defines,
+    scan_module_ports,
     _vhdl_entity_name as _vhdl_entity_name,  # entity name from VHDL
     _verilog_module_name as _vlog_module_name, # module name from Verilog/SV
 )
@@ -99,11 +100,16 @@ def _scan_hdl_fallback(mod, src_root: Path) -> Optional[Dict[str, Any]]:
         return None
     srcs.sort(key=_score, reverse=True)
 
+    parameters = getattr(mod, "parameters", None) or {}
+    defines = parse_verilog_defines(getattr(mod, "verilog_defines", None) or [])
+    declared = getattr(mod, "port_widths", None) or {}
+    where = f"module {mod.name!r}"
+
     # Try files in priority order until we parse ports
     for f in srcs:
         try:
+            ports_map = scan_module_ports(f, parameters, defines, declared, f"{where} ({f})")
             if f.suffix.lower() == ".vhd":
-                ports_map = _scan_vhdl_ports(f)  # {name: (dir, width)}
                 if not ports_map:
                     continue
                 ent = _vhdl_entity_name(f, mod.top or mod.name)
@@ -125,7 +131,6 @@ def _scan_hdl_fallback(mod, src_root: Path) -> Optional[Dict[str, Any]]:
                     result["packages"] = [str(p) for p in pkg_files]
                 return result
             else:
-                ports_map = _scan_vlog_ports(f)
                 if not ports_map:
                     continue
                 ent = _vlog_module_name(f, mod.top or mod.name)
@@ -142,6 +147,9 @@ def _scan_hdl_fallback(mod, src_root: Path) -> Optional[Dict[str, Any]]:
                 if pkg_files:
                     result["packages"] = [str(p) for p in pkg_files]
                 return result
+        except UnresolvedWidthError:
+            # A guessed width would become the generated interface.
+            raise
         except Exception:
             # try next file
             continue

@@ -690,6 +690,14 @@ def _check_unsupported(status: ProjectStatus) -> Optional[_CheckOutput]:
         )
 
     for ambiguity in discovery.unsupported:
+        if ambiguity.action is not None and ambiguity.action.id == "declare-port-widths":
+            status.report.error(
+                "ATG051",
+                ambiguity.question,
+                action=ambiguity.action.description,
+                module=ambiguity.subject,
+            )
+            continue
         status.report.warn(
             "ATG042",
             ambiguity.question,
@@ -708,8 +716,13 @@ def _check_unsupported(status: ProjectStatus) -> Optional[_CheckOutput]:
     detail = f"{len(left_out)} module(s) left out: {', '.join(left_out)}"
     if opaque:
         detail += f"; {len(opaque)} opaque"
+    codes = tuple(sorted({
+        "ATG051" if a.action is not None and a.action.id == "declare-port-widths" else "ATG042"
+        for a in discovery.unsupported
+    }))
     return _CheckOutput(
-        StatusSection("Supported constructs", PARTIAL, detail, ("ATG042",)),
+        StatusSection(
+            "Supported constructs", FAIL if "ATG051" in codes else PARTIAL, detail, codes),
         [a.action for a in discovery.unsupported if a.action],
     )
 

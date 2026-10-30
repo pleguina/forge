@@ -92,3 +92,4 @@ never actually emitted).
 | `ATG048` | warning | An HLS module's predicted RTL interface differs from the interface the built IP actually exposes. | Run `forge explain hls:<module>` for the full reconciliation, then correct the contract to match the built IP. |
 | `ATG049` | warning | A verification flow's simulator is not on PATH, so `forge test` would skip it. | Put the simulator on PATH, or run `forge test` where it is installed. |
 | `ATG050` | error | A connection declares cdc: together with register_stages or delay_cycles, which the generator cannot place on either side of the synchronizer. | Move the stages to a connection inside one clock domain. |
+| `ATG051` | error | A port's range uses a macro, package constant or function the source scan cannot evaluate, so its width is unknown and nothing is generated for it. | Declare the width under `modules.<name>.widths` in forge.yml. |
