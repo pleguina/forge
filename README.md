@@ -152,6 +152,9 @@ site under [`docs/`](docs/) (build it locally with `pip install -e "forge[docs]"
   **[RTL Example](docs/tutorials/rtl-example.md)**, and
   **[Mixed HLS/RTL Example](docs/tutorials/mixed-hls-rtl-example.md)** —
   shorter, single-design walkthroughs.
+- **[Agent skill](skills/forge/SKILL.md)** — how an AI coding agent should
+  drive the CLI: the JSON envelope, which decisions to leave to the user,
+  and how to read verification results.
 
 Full index (mirrors the site nav):
 
