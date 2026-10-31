@@ -307,7 +307,8 @@ def _impact(args, project, design_path: Path, *, json_mode: bool) -> int:
 
     impact.sources = {m: [shown(f) for f in files] for m, files in impact.sources.items()}
     impact.sources_changed = {m: [shown(f) for f in files] for m, files in impact.sources_changed.items()}
-    targets = affected_targets(impact, _plan_targets(config, [m["name"] for m in after.get("modules") or []]))
+    targets = affected_targets(impact, _plan_targets(config, [m["name"] for m in after.get("modules") or []]),
+                               getattr(args, "variant", None))
     regenerate: list = []
     if not impact.empty:
         try:
@@ -488,6 +489,9 @@ def register(sub) -> None:
     p.add_argument("--ip-root", help="Additional IP repo root to scan (optional)")
     p.add_argument("--src-root", help="Root for resolving relative RTL src paths (optional)")
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
+    p.add_argument("--variant", default=None,
+                   help="Resolve a variant named under variants: in forge.yml instead of the project's "
+                        "design; with --impact, compared with the project's last build")
     p.add_argument("--emit-ir", help="Write the resolved IR as JSON to this path")
     p.add_argument("--diff", help="Diff against a previously --emit-ir'd IR JSON file")
     p.add_argument(

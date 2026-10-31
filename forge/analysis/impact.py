@@ -252,9 +252,12 @@ def _misaligned_merges(impact: Impact, conn0: Mapping[str, Mapping[str, Any]], c
     return merges
 
 
-def affected_targets(impact: Impact, targets: Mapping[str, Mapping[str, Any]]) -> Dict[str, str]:
+def affected_targets(impact: Impact, targets: Mapping[str, Mapping[str, Any]],
+                     variant: Optional[str] = None) -> Dict[str, str]:
     """target name -> why it needs to run again, for targets given as
-    ``{name: {scope, instances?, replay?}}`` (``forge test``'s plan levels)."""
+    ``{name: {scope, instances?, replay?, variant?}}`` (``forge test``'s plan
+    levels). The change is to the project's design, which every variant is
+    made from, or with *variant* to that variant alone."""
     if impact.empty:
         return {}
     changed_modules = set(impact.modules) | set(impact.sources_changed)
@@ -262,7 +265,10 @@ def affected_targets(impact: Impact, targets: Mapping[str, Mapping[str, Any]]) -
     out: Dict[str, str] = {}
     for name, t in targets.items():
         scope = str(t.get("scope") or "design")
-        if scope == "design":
+        if variant is not None:
+            if t.get("variant") == variant:
+                out[name] = f"variant {variant} changed"
+        elif scope == "design":
             out[name] = "the design changed"
         elif scope.startswith("module:") and scope[7:] in changed_modules:
             out[name] = f"module {scope[7:]} changed"

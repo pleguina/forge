@@ -149,10 +149,12 @@ def cmd_build(args) -> None:
 
     options = GenTopOptions.from_namespace(args)
     try:
-        ctx = compute_gen_top_plan(
-            cfg, design_path, options,
-            read_only=getattr(args, "dry_run", False), emit_progress=not json_mode,
-        )
+        # Collecting IP information on a first build narrates on stdout too.
+        with contextlib.redirect_stdout(sys.stderr) if json_mode else contextlib.nullcontext():
+            ctx = compute_gen_top_plan(
+                cfg, design_path, options,
+                read_only=getattr(args, "dry_run", False), emit_progress=not json_mode,
+            )
     except Exception as e:  # noqa: BLE001 - surfaced as a clean CLI error
         sys.exit(_guided_failure(f"Failed to compute plan: {e}", json_mode=json_mode))
         return
@@ -373,6 +375,9 @@ def register(sub) -> None:
     p.add_argument("--src-root", help="Source root for HDL files (default: design file's directory)")
     p.add_argument("--system", help="system.yml for global nets")
     p.add_argument("--output", "-o", help="Output file (same meaning as `gen-top --output`)")
+    p.add_argument("--variant", default=None,
+                   help="Build a variant named under variants: in forge.yml instead of the project's "
+                        "design, into .forge/variants/<name>/")
     p.add_argument("--top-name", default=None, help="Top entity/module name (default: algo_top)")
     p.add_argument(
         "--contracts-from", metavar="MODULES_YML",

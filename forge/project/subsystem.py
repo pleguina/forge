@@ -13,13 +13,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from forge.contracts.config import resolve_declared_path
-from forge.contracts.design_variant import load_design_document
+from forge.contracts.design_variant import load_design_document, relocate_design
 from forge.verification.auto import _Generated, subsystem_dir
-
-_DESIGN_PATH_KEYS = ("registry", "interface_metadata_file")
-_MODULE_PATH_KEYS = ("src", "tb", "includes", "rtl_include_dirs", "rtl_packages")
-
 
 def _block_of(endpoint: str) -> str:
     return re.split(r"[.\[]", str(endpoint), maxsplit=1)[0]
@@ -48,20 +43,12 @@ def subsystem_design(project: Any, instances: Sequence[str]) -> Dict[str, Any]:
             cut[gen.instances[consumer]]["external_in_ports"].add(c["consumer"]["port"])
         else:
             cut[gen.instances[producer]]["external_out_ports"].add(c["producer"]["port"])
-    base = Path(project.design).parent
-    for key in _DESIGN_PATH_KEYS:
-        if doc.get(key):
-            doc[key] = str(resolve_declared_path(doc[key], base))
+    doc = relocate_design(doc, Path(project.design).parent)
     modules = []
     for entry in doc.get("modules") or []:
         if entry.get("name") not in blocks:
             continue
         entry = dict(entry)
-        for key in _MODULE_PATH_KEYS:
-            if isinstance(entry.get(key), list):
-                entry[key] = [str(resolve_declared_path(v, base)) for v in entry[key]]
-            elif entry.get(key):
-                entry[key] = str(resolve_declared_path(entry[key], base))
         for key, ports in cut[entry["name"]].items():
             merged = sorted(set(entry.get(key) or []) | ports)
             if merged:
@@ -76,7 +63,6 @@ def subsystem_design(project: Any, instances: Sequence[str]) -> Dict[str, Any]:
         if to:
             kept.append({**conn, "to": to if isinstance(conn["to"], list) else to[0]})
     doc["connections"] = kept
-    doc.pop("variant_of", None)
     return doc
 
 

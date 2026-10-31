@@ -99,9 +99,9 @@ options:
 usage: forge build [-h] [--mode {vhdl,verilog,bd}] [--consumer-root CONSUMER_ROOT]
                    [--ip-root IP_ROOT] [--ip-info IP_INFO] [--build-dir BUILD_DIR]
                    [--hls-build-root HLS_BUILD_ROOT] [--src-root SRC_ROOT] [--system SYSTEM]
-                   [--output OUTPUT] [--top-name TOP_NAME] [--contracts-from MODULES_YML]
-                   [--rtl-resource-root RTL_RESOURCE_ROOT] [--dry-run] [--strict]
-                   [--accept-plan-hash HASH] [--provenance PROVENANCE]
+                   [--output OUTPUT] [--variant VARIANT] [--top-name TOP_NAME]
+                   [--contracts-from MODULES_YML] [--rtl-resource-root RTL_RESOURCE_ROOT]
+                   [--dry-run] [--strict] [--accept-plan-hash HASH] [--provenance PROVENANCE]
                    [--explain-staleness EXPLAIN_STALENESS] [--json]
                    [design]
 
@@ -126,6 +126,8 @@ options:
   --system SYSTEM       system.yml for global nets
   --output OUTPUT, -o OUTPUT
                         Output file (same meaning as `gen-top --output`)
+  --variant VARIANT     Build a variant named under variants: in forge.yml instead of the
+                        project's design, into .forge/variants/<name>/
   --top-name TOP_NAME   Top entity/module name (default: algo_top)
   --contracts-from MODULES_YML
                         modules.yml with interface_contract paths; enables contract-driven wiring
@@ -1247,7 +1249,7 @@ options:
 ```text
 usage: forge inspect [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                      [--build-dir BUILD_DIR] [--ip-root IP_ROOT] [--src-root SRC_ROOT] [--json]
-                     [--emit-ir EMIT_IR] [--diff DIFF] [--impact [IR_JSON]]
+                     [--variant VARIANT] [--emit-ir EMIT_IR] [--diff DIFF] [--impact [IR_JSON]]
                      [--provenance PROVENANCE] [--explain-staleness EXPLAIN_STALENESS] [--dot DOT]
                      [--svg SVG] [--explorer EXPLORER] [--verify-design VERIFY_DESIGN]
                      [--results-json RESULTS_JSON]
@@ -1268,6 +1270,8 @@ options:
   --ip-root IP_ROOT     Additional IP repo root to scan (optional)
   --src-root SRC_ROOT   Root for resolving relative RTL src paths (optional)
   --json                Machine-readable JSON output
+  --variant VARIANT     Resolve a variant named under variants: in forge.yml instead of the
+                        project's design; with --impact, compared with the project's last build
   --emit-ir EMIT_IR     Write the resolved IR as JSON to this path
   --diff DIFF           Diff against a previously --emit-ir'd IR JSON file
   --impact [IR_JSON]    Report what changed since IR_JSON (default: the last build), what it

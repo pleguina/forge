@@ -25,7 +25,9 @@ decision, not a placeholder pending one).
    check the structural top. See [bring your own RTL](getting-started/bring-your-own-rtl.md).
 3. **Change or replace a processing stage** — see what it affects, which
    merges it misaligns and which checks to rerun: [change a processing stage](how-to/change-a-processing-stage.md).
-4. **Start a new design from scratch** — see the [quickstart](getting-started/quickstart.md).
+4. **Assemble and maintain a payload of many copies** — define a chain once,
+   name board and simulation variants: [repeat a chain and name variants](how-to/repeat-a-chain-and-name-variants.md).
+5. **Start a new design from scratch** — see the [quickstart](getting-started/quickstart.md).
 
 ## Current scope
 
