@@ -334,6 +334,10 @@ class ForgeConfig:
     #: Connections the user has decided on, where discovery found more than
     #: one equally valid reading. See :class:`DeclaredConnection`.
     connections: List[DeclaredConnection] = field(default_factory=list)
+    #: Named variants of the design: a design file written with
+    #: ``variant_of:``, or the changes themselves (``remove``, ``modules``,
+    #: ``add`` and top-level keys), applied to the project's design.
+    variants: Dict[str, Any] = field(default_factory=dict)
     schema_version: str = FORGE_YML_SCHEMA_VERSION
 
     @property
@@ -435,6 +439,15 @@ class ForgeConfig:
                 consumer=_endpoint(entry["to"], field_name="to", source=config_path),
             ))
 
+        variants_raw = raw.get("variants") or {}
+        if not isinstance(variants_raw, dict) or not all(
+                isinstance(v, (str, dict)) and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", str(k))
+                for k, v in variants_raw.items()):
+            raise ValueError(
+                f"{config_path}: 'variants' maps a name (letters, digits, '_', '.', '-') to a design "
+                f"file written with variant_of:, or to the changes, e.g. `sim: {{remove: {{modules: [mon]}}}}`"
+            )
+
         return cls(
             project=str(raw.get("project") or config_path.parent.name),
             root=config_path.parent,
@@ -461,6 +474,7 @@ class ForgeConfig:
             build={str(k): str(v) for k, v in build_raw.items() if v is not None},
             modules=modules,
             connections=connections,
+            variants={str(k): v for k, v in variants_raw.items()},
             schema_version=str(raw.get("schema_version") or FORGE_YML_SCHEMA_VERSION),
         )
 
@@ -510,6 +524,8 @@ class ForgeConfig:
             }
         if self.connections:
             out["connections"] = [c.to_dict() for c in self.connections]
+        if self.variants:
+            out["variants"] = dict(self.variants)
         return out
 
     def to_yaml(self) -> str:

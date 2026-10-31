@@ -108,6 +108,14 @@ def resolve_project_args(args):
 
     project = resolve_project(Path.cwd())
     args.design = str(project.design)
+    variant = getattr(args, "variant", None)
+    if variant:
+        from forge.project.variants import variant_design, variant_dir
+
+        args.design = str(variant_design(project.config, project.design, variant))
+        if hasattr(args, "output") and args.output is None:
+            top = getattr(args, "top_name", None) or "algo_top"
+            args.output = str(variant_dir(project.paths, variant) / "generated" / f"{top}.v")
     if getattr(args, "contracts_from", None) is None and project.registry is not None:
         args.contracts_from = str(project.registry)
     if hasattr(args, "consumer_root") and args.consumer_root is None:
