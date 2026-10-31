@@ -1247,9 +1247,9 @@ options:
 ```text
 usage: forge inspect [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
                      [--build-dir BUILD_DIR] [--ip-root IP_ROOT] [--src-root SRC_ROOT] [--json]
-                     [--emit-ir EMIT_IR] [--diff DIFF] [--provenance PROVENANCE]
-                     [--explain-staleness EXPLAIN_STALENESS] [--dot DOT] [--svg SVG]
-                     [--explorer EXPLORER] [--verify-design VERIFY_DESIGN]
+                     [--emit-ir EMIT_IR] [--diff DIFF] [--impact [IR_JSON]]
+                     [--provenance PROVENANCE] [--explain-staleness EXPLAIN_STALENESS] [--dot DOT]
+                     [--svg SVG] [--explorer EXPLORER] [--verify-design VERIFY_DESIGN]
                      [--results-json RESULTS_JSON]
                      [design]
 
@@ -1270,6 +1270,9 @@ options:
   --json                Machine-readable JSON output
   --emit-ir EMIT_IR     Write the resolved IR as JSON to this path
   --diff DIFF           Diff against a previously --emit-ir'd IR JSON file
+  --impact [IR_JSON]    Report what changed since IR_JSON (default: the last build), what it
+                        affects, which merges it misaligns, which verification to rerun and what
+                        to regenerate
   --provenance PROVENANCE
                         Write a content-hash provenance manifest to this path
   --explain-staleness EXPLAIN_STALENESS

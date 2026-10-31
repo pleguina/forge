@@ -261,6 +261,7 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | `forge test --input F --expected F --json` | one-off data without editing `forge.yml` |
 | `forge report --json` | collect results into `.forge/reports/` |
 | `forge inspect --json [--emit-ir F]` | the resolved design (canonical IR) |
+| `forge inspect --impact [OLD_IR] --json` | what changed since the last build (or a snapshot), what it affects, misaligned merges, targets to rerun, files to regenerate |
 | `forge explain <target> --json` | why FORGE decided (or refused to decide) something |
 | `forge fix --json [--apply]` | source-proven repairs, previewed as a diff |
 | `forge connect a.port b.port --json` | record one connection in `forge.yml` |
