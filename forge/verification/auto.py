@@ -980,6 +980,32 @@ def _event_names(ref: DataRef, count: int) -> List[str]:
     return names
 
 
+def _events_from_layout(ref: DataRef, board: Any, listed: Sequence[Mapping[str, Any]],
+                        links: Sequence[int]) -> List[Dict[int, Tuple[int, int, List[Any]]]]:
+    """Each event's packet on each of *links*, read from the frames its
+    ``events:`` entry gives it (``links: {link: [first, last]}``, as the CMSSW
+    sidecar writes from the writer's own layout). Event identity then rests on
+    where the writer put each event; a time-multiplexed event that uses one
+    link of several is on that link only, and an event with no valid word in
+    its frames is an error, as the writer allows no empty packet."""
+    out: List[Dict[int, Tuple[int, int, List[Any]]]] = []
+    for k, entry in enumerate(listed):
+        grouped: Dict[int, Tuple[int, int, List[Any]]] = {}
+        for link in links:
+            frames = entry["links"].get(str(link))
+            if frames is None:
+                continue
+            first, last = int(frames[0]), int(frames[1])
+            words = board.links[link][first:last + 1]
+            valid = [i for i, w in enumerate(words) if w.valid]
+            if not valid:
+                raise ValueError(f"{ref.path}: event {k} of {ref.events.name if ref.events else 'the events'} has "
+                                 f"no valid word on link {link} in frames {first}..{last}")
+            grouped[link] = (first + valid[0], first + valid[-1], [words[i] for i in range(valid[0], valid[-1] + 1)])
+        out.append(grouped)
+    return out
+
+
 def _emp_dict(w: Any) -> Dict[str, Any]:
     return {"data": w.data, "valid": w.valid, "start": w.start, "last": w.last,
             "start_of_orbit": w.start_of_orbit, "strobe": w.strobe}
@@ -1009,13 +1035,19 @@ def _from_dataset(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) ->
         for name, link in wanted.items():
             if link not in board.links:
                 raise ValueError(f"{ref.path}: no link {link} (for {name})")
-        events = associate_events(board, sorted(set(wanted.values())),
-                                  max_skew=int(ref.association.get("max_skew", 0)),
-                                  missing=str(ref.association.get("missing", "error")))
+        listed = json.loads(ref.events.read_text()) if ref.events is not None else []
+        if listed and all(isinstance(e, Mapping) and e.get("links") for e in listed):
+            events = _events_from_layout(ref, board, listed, sorted(set(wanted.values())))
+        else:
+            events = associate_events(board, sorted(set(wanted.values())),
+                                      max_skew=int(ref.association.get("max_skew", 0)),
+                                      missing=str(ref.association.get("missing", "error")))
         names = _event_names(ref, len(events))
         for name, link in wanted.items():
             frame_event: Dict[int, str] = {}
             for event_name, grouped in zip(names, events):
+                if link not in grouped:
+                    continue
                 first, last, _ = grouped[link]
                 for frame in range(first, last + 1):
                     frame_event[frame] = event_name
@@ -1876,6 +1908,33 @@ def compare_capture(level: Level, capture: DataRef, *, input_offset: Optional[in
                      input_offset=input_offset, links=used,
                      checks={**sb.checks(level.compare, results, True), "no_x_on_outputs": "not_checked"},
                      interfaces=[r.to_dict() for r in results], **extra)
+
+
+IMPLEMENTATION = "implementation"
+
+
+def implementation_evidence(level: Level, report: Path, constraints: Sequence[Path] = (),
+                            build: Optional[Mapping[str, Any]] = None) -> Evidence:
+    """A Vivado ``report_timing_summary`` of *level*'s build, as its
+    ``implementation`` result: VERIFIED when timing is met (WNS >= 0 and TNS
+    = 0), FAILED otherwise. The report, the *constraints* and the tool version
+    the report names are recorded by content, with the plan (and so the
+    clock period), so a constraints or clock change makes the result out of
+    date although the logical results still match. FORGE only reads the
+    report; the implementation is the build system's."""
+    from forge.integration.floorplan_report import timing_summary
+
+    text = Path(report).read_text(errors="replace")
+    timing = timing_summary(text)
+    tool = re.search(r"Tool Version\s*:\s*(.+)", text)
+    met = timing["wns_ns"] >= 0 and timing["tns_ns"] == 0
+    return _evidence(level, IMPLEMENTATION, sb.VERIFIED if met else sb.FAILED,
+                     implementation={"report": _hashed([Path(report)])[0], **timing,
+                                     "tool": tool.group(1).strip() if tool else None},
+                     constraints=_hashed([Path(c) for c in constraints]),
+                     build=dict(build or {}),
+                     checks={"timing": "passed" if met else "failed", "values": "not_checked"},
+                     reason="" if met else f"timing not met: WNS {timing['wns_ns']} ns, TNS {timing['tns_ns']} ns")
 
 
 def summary(evidence: Sequence[Evidence]) -> str:

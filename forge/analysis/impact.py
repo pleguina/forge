@@ -7,6 +7,14 @@ domain) and connection (its endpoints' widths, its pipeline registers and
 delays), which instances that makes behave or connect differently, what lies
 downstream of them, and every merge point whose inputs are no longer aligned
 the way they were: one branch into it changed timing and another did not.
+A merge whose every branch changed, one of them by a resized alignment delay,
+is reported as realigned.
+
+The analysis is static and conservative: instances whose timing is not a
+fixed declared number (undeclared, bounded, elastic, opaque) are listed as
+not analysed, since alignment through them is unknown, and an empty result
+is a reason to rerun the named targets first, not to skip the others before
+a release.
 
 Facts only knowable after generation (top-level ports, tie-offs) are left
 out of both sides, so a built snapshot compares cleanly with a design that
@@ -39,6 +47,8 @@ class Impact:
     affected: List[str] = field(default_factory=list)
     downstream: List[str] = field(default_factory=list)
     merges: List[Dict[str, Any]] = field(default_factory=list)
+    realigned: List[Dict[str, Any]] = field(default_factory=list)
+    unanalysed: Dict[str, str] = field(default_factory=dict)             # instance -> why its timing is unknown
     sources: Dict[str, List[str]] = field(default_factory=dict)          # module -> its files
 
     @property
@@ -58,6 +68,8 @@ class Impact:
             "affected": self.affected,
             "downstream": self.downstream,
             "merges": self.merges,
+            "realigned": self.realigned,
+            "unanalysed": self.unanalysed,
         }
 
 
@@ -219,15 +231,34 @@ def compare(before: Mapping[str, Any], after: Mapping[str, Any],
                 reach.add(nxt)
                 todo.append(nxt)
     impact.downstream = sorted(reach)
-    impact.merges = _misaligned_merges(impact, conn0, conn1, inst1, mods0, mods1)
+    impact.merges, impact.realigned = _misaligned_merges(impact, conn0, conn1, inst1, mods0, mods1)
+    for iid in sorted(set(impact.affected) | set(impact.downstream)):
+        why = _unknown_timing(mods1.get(module_of(iid) or "") or {})
+        if why:
+            impact.unanalysed[iid] = why
     return impact
+
+
+def _unknown_timing(module: Mapping[str, Any]) -> str:
+    """Why *module*'s latency is not a fixed number, or ``""``."""
+    if module.get("kind") in ("opaque", "blackbox"):
+        return "opaque module"
+    latency = _latency(module)
+    if latency is None:
+        return "latency undeclared"
+    if isinstance(latency, Mapping):
+        kind = latency.get("kind", "fixed")
+        if kind != "fixed" or latency.get("cycles") is None:
+            return f"latency {kind}" + (f" {_say_latency(latency)}" if kind == "bounded" else "")
+    return ""
 
 
 def _misaligned_merges(impact: Impact, conn0: Mapping[str, Mapping[str, Any]], conn1: Mapping[str, Mapping[str, Any]],
                        inst1: Mapping[str, Mapping[str, Any]], mods0: Mapping[str, Any],
-                       mods1: Mapping[str, Any]) -> List[Dict[str, Any]]:
+                       mods1: Mapping[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Instances fed by several producers where the timing of some branches
-    changed and of others did not."""
+    changed and of others did not; and those where every branch changed and
+    an alignment delay into it was resized to match."""
     retimed = {i for i, inst in inst1.items()
                if inst["module"] in mods0 and inst["module"] in mods1
                and _latency(mods0[inst["module"]]) != _latency(mods1[inst["module"]])}
@@ -247,6 +278,7 @@ def _misaligned_merges(impact: Impact, conn0: Mapping[str, Mapping[str, Any]], c
                 dirty.add(node)
                 grew = True
     merges: List[Dict[str, Any]] = []
+    realigned: List[Dict[str, Any]] = []
     for node, edges in sorted(into.items()):
         branches: Dict[str, bool] = {}
         for e in edges:
@@ -256,7 +288,14 @@ def _misaligned_merges(impact: Impact, conn0: Mapping[str, Mapping[str, Any]], c
             merges.append({"instance": node,
                            "changed": sorted(p for p, d in branches.items() if d),
                            "unchanged": sorted(p for p, d in branches.items() if not d)})
-    return merges
+        elif len(branches) > 1 and all(branches.values()):
+            delays = sorted(e["id"] for e in edges if e["id"] in conn0 and e["id"] in retimed_edges
+                            and any(k == "latency_delay" for k, _, _ in _timing(conn1[e["id"]]))
+                            and e["producer"]["instance_id"] not in retimed)
+            if delays:
+                realigned.append({"instance": node, "branches": sorted(branches),
+                                  "delays": [f"{d}: {_say_timing(conn0[d])} -> {_say_timing(conn1[d])}" for d in delays]})
+    return merges, realigned
 
 
 def affected_targets(impact: Impact, targets: Mapping[str, Mapping[str, Any]],
@@ -290,6 +329,13 @@ def affected_targets(impact: Impact, targets: Mapping[str, Mapping[str, Any]],
         if name not in out and source and source in out:
             out[name] = f"the traffic {source} records will change once it runs again"
     return out
+
+
+def _by_reason(rows: Mapping[str, str]) -> List[Tuple[str, List[str]]]:
+    out: Dict[str, List[str]] = {}
+    for name, why in rows.items():
+        out.setdefault(why, []).append(name)
+    return sorted(out.items())
 
 
 def _brief(names: Sequence[str]) -> str:
@@ -368,8 +414,20 @@ def render_markdown(impact: Impact, targets: Mapping[str, str], artifacts: Seque
             lines.append(f"- **{m['instance']}**: the branch from {_brief(m['changed'])} changed timing, "
                          f"the one from {_brief(m['unchanged'])} did not")
         lines.append("")
+    if impact.realigned:
+        lines += ["## Merges realigned by a resized delay", ""]
+        for m in impact.realigned:
+            lines.append(f"- **{m['instance']}** (from {_brief(m['branches'])}): " + "; ".join(m["delays"]))
+        lines += ["", "The payload and every signal on those connections (valid, event tags) move by the same "
+                  "delay; the alignment holds at the declared latencies, which is not a post-route result.", ""]
+    if impact.unanalysed:
+        lines += ["## Timing not analysed", ""]
+        lines += [f"- **{_brief(names)}**: {why}" for why, names in _by_reason(impact.unanalysed)]
+        lines += ["", "Alignment through these instances is unknown, not assumed.", ""]
     if targets:
         lines += ["## Verification to run again", ""] + [f"- `{n}`: {why}" for n, why in targets.items()] + [""]
+        lines += ["These cover the change as far as the static graph sees it; a release still runs every "
+                  "required target.", ""]
     if artifacts:
         lines += ["## To regenerate", ""] + [f"- {a}" for a in artifacts] + [""]
     return "\n".join(lines)

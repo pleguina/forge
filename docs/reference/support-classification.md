@@ -1,45 +1,52 @@
 # Support Classification
 
-This inventory defines the support status for maintained surfaces referenced by the active reading path.
+Every FORGE capability is classified twice, on independent axes:
 
-## Support Classes
+- **Audience.** *Task*: a supported user operation (`forge init`, `check`,
+  `build`, `test`, `report`, `inspect`). *Expert*: a stage-level operation
+  under `forge dev` or a Python API, for provider and extension authors.
+- **Evidence.** *Tested*: covered by the test suite, against the named tool
+  versions where a tool is involved. *Experimental*: implemented, without
+  the validation a result would need to be trusted. *Unsupported*: outside
+  the product; import another tool's result instead.
 
-| Class | Meaning |
-|---|---|
-| Public framework API | Implemented, documented, intentional, and verification-backed framework surface |
-| Supported proof consumer | Maintained non-OMTF consumer used to prove the public framework path and release-readiness story |
-| Supported optional tooling | Supported Layer 2 tooling that is optional for basic framework adoption |
-| Supported convenience only | Maintained helper surface for repo-local productivity; not the primary contract |
-| Downstream consumer only | Plugin-specific surface that demonstrates one consumer pattern, not framework API |
-| Internal / not supported | Maintainer-only or repo-local implementation surface; external consumers must not depend on it |
-| Historical / archived | Retained for history only; not part of the active route or supported contract |
+An expert primitive can be tested and stable; a task-level command can be
+incomplete and says so in its output. Neither where a command sits in the
+CLI nor how its report looks establishes that a result is correct.
 
 ## Inventory
 
-| Surface | Class | Why |
+| Capability | Audience | Evidence |
 |---|---|---|
-| `forge` CLI (`forge dev topgen validate`, `forge dev topgen gen-top`, `forge dev topgen ip-summary`, `forge dev topgen match-ports`, `forge dev topgen unpack-ips`, `forge dev core resources`, `forge dev core verify-contract`) | Public framework API | primary installed framework entrypoint |
-| `forge.verification` Python package (`forge/verification/`) | Public framework API | installed verification package boundary; `verify/src/xsi_loader.cpp` at repo root is a standalone XSI loader, not a built/linked library — plugins own their own C++ verify headers/sources under `plugins/<plugin>/forge/verify/include` and `.../src` |
-| `docs/concepts/core-interface.md` | Public framework API | defines Layer 1 contract |
-| `docs/getting-started/quickstart.md` | Public framework API | shortest supported adoption path |
-| downstream plugin guides | Downstream consumer only | plugin-specific integration guides belong in plugin repositories, not FORGE core |
-| `plugins/trigger_demo/README.md` | Supported proof consumer | multi-flow non-OMTF consumer documentation |
-| `plugins/trigger_demo/forge/verify/` | Supported proof consumer | supported proof that topology contracts plus framework-owned csim/xsim/full-chip flows work for a non-OMTF plugin |
-| `forge dev hls gen-tcl` | Supported optional tooling | preferred Layer 2 TCL-generation interface |
-| `forge dev hls run` | Supported optional tooling | preferred Layer 2 batch execution interface |
-| `forge/hls/generate_hls_tcl.py` | Supported optional tooling | implementation behind `forge dev hls gen-tcl` |
-| `forge/hls/extract_hls_metrics.py` | Supported optional tooling | structured metrics extraction surface |
-| `docs/concepts/tooling-interface.md` | Supported optional tooling | defines Layer 2 contract |
-| `run_trigger_demo.sh` | Supported proof consumer | the actual hardware-toolchain-dependent release gate (`ci/framework-release.yml`); validate → gen-top → verify generate → doctor → HLS csim/synth → all 9 verification flows |
-| `ci/fresh_user_check.sh` | Supported convenience only | framework package-install and onboarding validation path; also the agnosticism regression guard (scaffolds and doctors a generically-named plugin via `init-plugin`) |
-| `ci/agnosticism_check.sh` | Supported convenience only | source-level guard against hardcoded CMS/OMTF vocabulary creeping back into `forge/` core |
-| downstream compatibility gates | Downstream consumer only | plugin-specific compatibility gates belong in plugin repositories or external integration CI |
-| `forge/hls/visualize_hls_pipeline.py` | Supported convenience only | optional visualization helper |
-| `plugins/<plugin>/` local mounts | Downstream consumer only | optional local mounts for development; not committed FORGE core |
-| plugin-specific regression scripts | Downstream consumer only | plugin-owned verification gates |
-| `forge/contracts/`/`forge/generation/` Python internals | Internal / not supported | implementation detail behind installed CLI |
-| `build/`, `build_hls/`, `build_targeted/`, `out/`, `ips/`, `ip_packages/` | Internal / not supported | generated working directories |
+| `forge init`: forge.yml for existing firmware | Task | Tested |
+| `forge init --example`: example plugin scaffold | Task (extension authors) | Tested |
+| Existing top simulated against reference data (`verification.target: existing`) | Task | Tested: XSim 2024.1, Verilator 5.022 |
+| Source descriptions: `.f`, Hog list files, ipbb dep trees (`verification.sources`) | Task | Tested for `.f` and Hog (XSim, mixed VHDL-2008/SystemVerilog); ipbb through ipbb's own parser, tested with a stub parser |
+| Comparison: strict, `order: event` by value, `order: event` with a latency window, fields and codecs, framing | Task | Tested |
+| Event association from pattern-file packets, or from the frames of a CMSSW `BoardDataWriter` sidecar | Task | Tested on generated files; no `BoardDataWriter` output from a CMSSW job is in the suite |
+| `forge/integration/cmssw_sidecar.py` | Task (run in the CMSSW environment) | Tested |
+| Focused runs (`--event-id`, `--pre-roll`) | Task | Tested |
+| Evidence applicability (compile, run, comparison parts; memory, decoder, constraints files; simulator version) | Task | Tested |
+| Board capture comparison (`forge test --capture`), firmware identity from a readback file | Task | Tested on captures written by the suite; no board was reachable |
+| Implementation results from a Vivado timing summary (`--implementation`) | Task | Tested on report text |
+| Replay and failure packages (`forge report --package`) | Task | Tested |
+| Structural generation (`forge build`), subsystems, variants | Task | Tested |
+| Latency alignment at declared latencies, `delay_cycles: auto`, refusal of a known misalignment | Task | Tested; declared latencies only, not post-route timing |
+| Change impact (`forge inspect --impact`) | Task | Tested; static and conservative, unknown timing listed |
+| Clock-domain checks of the declared model | Task | Tested; structural only, never CDC signoff |
+| EMP payload wrapper, Blobfish payload, ipbb component export | Expert (provider) | Tested on entity declarations and manifests in the suite; a framework release is supported once its own build of the wrapper has run |
+| Register maps, link maps | Expert | Tested |
+| Raw topgen, analyze and verify stages (`forge dev ...`) | Expert | Tested |
+| HLS Tcl generation, runs and port prediction (`forge dev hls`) | Expert | Tested; the port predictor per Vitis version, an untested version reported as such |
+| `hls_cosim` verification kind | Expert | A legacy name for HLS C simulation; not C/RTL co-simulation |
+| SLR assignment proposals and floorplan search | Expert | Experimental |
+| Retiming and architecture search | Expert | Experimental: no equivalence guarantee |
+| Board control, transceivers, timing distribution, online control | — | Unsupported: the board framework's |
+| Package or dependency management, general CI | — | Unsupported: Hog, ipbb, FuseSoC |
+| Conversion of arbitrary CMSSW collections to reference words | — | Unsupported: the subsystem's packer or codec |
+| Timing closure or metastability from declarations | — | Unsupported: import the implementation tools' results |
 
 ## Enforcement Rule
 
-If a surface does not satisfy its class definition, it must be reclassified, implemented, demoted, archived, or removed in the same remediation program.
+A capability whose evidence no longer matches its row is reclassified,
+fixed or removed in the same change.

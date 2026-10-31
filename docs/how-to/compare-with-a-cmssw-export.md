@@ -64,6 +64,47 @@ A payload bug is reported per event with the decoded fields on both sides;
 `--event-id` runs one event; a packet missing on one link is an error naming
 the event and link.
 
+## Pattern files CMSSW already writes
+
+A subsystem whose emulator writes its board patterns with
+`L1Trigger/DemonstratorTools`' `BoardDataWriter` needs no export and no
+codec for packing: FORGE reads those EMPv2 files as they are. What the files
+do not say is which event each packet is. `BoardDataWriter` places events by
+fixed rules (TMUX rotation over a channel's indices, offset, gap, a new file
+when the buffer would overrun), so `forge/integration/cmssw_sidecar.py`
+recomputes the placement from the writer's settings and the order the job
+processed the events. It needs only Python 3, so it runs in the CMSSW
+environment, after the job:
+
+```bash
+python3 cmssw_sidecar.py --writer writer.json --log cmsRun.log \
+    --config my_cfg.py --provenance sample.json
+```
+
+`writer.json` repeats the writer's arguments (`path`, `ext`,
+`frames_per_bx`, `board_tmux`, `max_frames_per_file`, and per channel
+`tmux`, `gap`, `offset`, `indices`). For each file it writes
+`<file>.events.json` (each event's run, lumi and event number and its frames
+on every channel) and `<file>.provenance.json` (CMSSW release and commit
+from the environment, the configuration's checksum, and what
+`sample.json` adds: GlobalTag, firmware configuration, LUT hashes). Point the
+data spec at them:
+
+```yaml
+verification:
+  expected: {path: patterns/tx_0.txt, format: empv2, events: patterns/tx_0.txt.events.json,
+             provenance: patterns/tx_0.txt.provenance.json}
+```
+
+With frames in the events file, FORGE takes each event's packets from the
+frames the writer gave it rather than grouping packets that overlap in time,
+so time-multiplexed events on different links keep their identity, and a
+file that does not match the layout (an event missing, another writer
+setting) is refused. The event order comes from the job's log, which is the
+writer's order for a job on one stream; with several streams, give the order
+with `--events` instead. Each file the writer splits off is its own
+reference: name the one a target plays.
+
 ## A full-chip payload: OMTF
 
 The OMTF payload (Phase-2 Overlap Muon Track Finder) is the same comparison

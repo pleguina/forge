@@ -1443,6 +1443,7 @@ usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_L
                   [--target TARGET] [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE]
                   [--record-modules] [--capture CAPTURE] [--capture-format CAPTURE_FORMAT]
                   [--capture-offset CAPTURE_OFFSET] [--package PACKAGE]
+                  [--implementation TIMING_SUMMARY] [--constraints XDC [XDC ...]]
                   [--firmware-id FIRMWARE_ID] [--plan] [--require-verified] [--json]
                   MODE ...
 
@@ -1504,6 +1505,11 @@ without a verification config:
                         modes)
   --package PACKAGE     With --capture: the replay package the board ran (forge report --package);
                         its reference must still be forge.yml's
+  --implementation TIMING_SUMMARY
+                        Record this Vivado report_timing_summary of the target's build as its
+                        implementation result, instead of simulating
+  --constraints XDC [XDC ...]
+                        With --implementation: the constraints the build used, recorded by content
   --firmware-id FIRMWARE_ID
                         With --capture: JSON of the firmware identity read back from the board
                         (git_sha, bitfile_sha256, ID registers); without it the capture's firmware

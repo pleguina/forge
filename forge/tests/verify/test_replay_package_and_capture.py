@@ -224,3 +224,50 @@ def test_a_capture_says_whether_its_firmware_was_the_intended_one(payload, capsy
     assert code == 0, err
     assert doc["metrics"]["firmware"] == status
     assert doc["status"] == ("pass" if status == "confirmed" else "warn")
+
+
+# ── Implementation results ──────────────────────────────────────────────────
+
+SUMMARY = """Tool Version : Vivado v.2024.1 (lin64) Build 5076996
+| Design Timing Summary
+| ---------------------
+
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)
+    -------      -------  ---------------------  -------------------      -------
+     {wns}        {tns}                    0               812345        0.010
+"""
+
+
+def test_an_implementation_result_goes_out_of_date_with_its_constraints_or_clock(payload, capsys):
+    (payload / "timing.rpt").write_text(SUMMARY.format(wns="0.120", tns="0.000"))
+    (payload / "top.xdc").write_text("create_clock -period 4.0 [get_ports clk]\n")
+
+    code, doc, err = _run(capsys, "test", "--implementation", "timing.rpt", "--constraints", "top.xdc", "--json")
+
+    assert code == 0, err
+    assert doc["metrics"] == {"implementation": "VERIFIED", "wns_ns": 0.12, "tns_ns": 0.0}
+    (record,) = [r for r in latest_results(payload / ".forge/reports") if r.name == "payload[implementation]"]
+    assert record.payload["implementation"]["tool"].startswith("Vivado v.2024.1") and not record.stale
+
+    (payload / "top.xdc").write_text("create_clock -period 3.0 [get_ports clk]\n")
+    (record,) = [r for r in latest_results(payload / ".forge/reports") if r.name == "payload[implementation]"]
+    assert record.stale == "the constraints top.xdc"
+
+    from forge.project.config import ForgeConfig
+    from forge.project.verification_state import current_plans
+    config = yaml.safe_load((payload / "forge.yml").read_text())
+    config["clock"]["frequency"] = "320MHz"
+    (payload / "forge.yml").write_text(yaml.safe_dump(config))
+    (record,) = [r for r in latest_results(payload / ".forge/reports", current_plans(ForgeConfig.load(payload)))
+                 if r.name == "payload[implementation]"]
+    assert "its compile inputs" in record.stale
+
+
+def test_unmet_timing_is_a_failed_implementation(payload, capsys):
+    (payload / "timing.rpt").write_text(SUMMARY.format(wns="-0.215", tns="-12.480"))
+
+    code, doc, _ = _run(capsys, "test", "--implementation", "timing.rpt", "--json")
+
+    assert code == 1 and doc["metrics"]["implementation"] == "FAILED"
+    assert any("timing not met" in d["message"] for d in doc["diagnostics"])
+    assert any("no --constraints" in d["message"] for d in doc["diagnostics"])

@@ -162,6 +162,12 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, Any]] = N
         names = (ref or {}).get("events")
         if names and _sha256(Path(names["path"])) != names.get("sha256"):
             changed.append(f"the {key} event names {Path(names['path']).name}")
+    for f in doc.get("constraints") or []:
+        if _sha256(Path(f["path"])) != f.get("sha256"):
+            changed.append(f"the constraints {Path(f['path']).name}")
+    report = (doc.get("implementation") or {}).get("report")
+    if report and _sha256(Path(report["path"])) != report.get("sha256"):
+        changed.append(f"the implementation report {Path(report['path']).name}")
     capture = doc.get("capture")
     if capture and _sha256(Path(capture["path"])) != capture.get("sha256"):
         changed.append(f"the capture {Path(capture['path']).name}")

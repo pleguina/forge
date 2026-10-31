@@ -165,6 +165,13 @@ def cmd_build(args) -> None:
             json_mode=json_mode,
         ))
 
+    if ctx.misaligned:
+        from forge.generation.pipeline import MISALIGNED_HINT
+
+        sys.exit(_guided_failure(
+            "merge inputs out of alignment at the declared latencies: " + "; ".join(ctx.misaligned)
+            + "\n" + MISALIGNED_HINT.strip(), json_mode=json_mode))
+
     output_artifacts = planned_output_artifacts(ctx, options)
     plan = build_generation_plan(
         ctx.project, ctx.match_report,

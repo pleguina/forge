@@ -266,6 +266,8 @@ def cmd_auto_test(args, project) -> None:
                                      if isinstance(exc, KeyError) else None))
     if getattr(args, "capture", None) and not getattr(args, "plan", False):
         sys.exit(_compare_capture(args, project, plan, json_mode))
+    if getattr(args, "implementation", None) and not getattr(args, "plan", False):
+        sys.exit(_import_implementation(args, project, plan, json_mode))
     if getattr(args, "plan", False):
         if json_mode:
             print(json.dumps(plan.to_dict(), indent=2))
@@ -424,6 +426,47 @@ def _compare_capture(args, project, plan, json_mode: bool) -> int:
         artifacts=[str(out_dir / name), str(run_dir)],
         metrics={"verification": evidence.status, "levels": {f"{level.name}[board]": evidence.status},
                  "build": build["id"], "firmware": fw["status"], "capture": str(capture.path)},
+    ), json_mode=json_mode)
+
+
+def _import_implementation(args, project, plan, json_mode: bool) -> int:
+    """`forge test --implementation`: a timing summary of the build, recorded
+    as a design target's ``implementation`` result."""
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.project.replay_package import firmware_intent
+    from forge.project.verification_state import evidence_dir
+    from forge.verification import auto
+
+    levels = [lv for lv in plan.levels if lv.scope == "design" and lv.bench is not None]
+    if len(levels) != 1:
+        return _guided_run_failure(
+            "--implementation records one design target's build: name it with --target "
+            f"(have {', '.join(lv.name for lv in levels) or 'none'})", json_mode=json_mode)
+    level = levels[0]
+    generated = next((f.parent for f in level.sources if (f.parent / "provenance.json").is_file()), None)
+    build = {**auto.build_identity(level, generated), "firmware": firmware_intent(project.root)}
+    try:
+        evidence = auto.implementation_evidence(level, Path(args.implementation).resolve(),
+                                                [Path(c).resolve() for c in args.constraints or []], build)
+    except (OSError, ValueError) as exc:
+        return _guided_run_failure(str(exc), json_mode=json_mode)
+    out_dir = evidence_dir(project.paths.report_root)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{level.name.replace(':', '_')}.{auto.IMPLEMENTATION}.evidence.json"
+    evidence.write(path)
+    impl = evidence.doc["implementation"]
+    if not json_mode:
+        print(f"  {_STATUS_ICON[evidence.status]} {level.name} [implementation]: {evidence.status} "
+              f"(WNS {impl['wns_ns']} ns, TNS {impl['tns_ns']} ns)")
+    diagnostics = [] if evidence.status == "VERIFIED" else [{"severity": "error", "message": evidence.doc["reason"]}]
+    if not args.constraints:
+        diagnostics.append({"severity": "warning", "message":
+                            "no --constraints given: a constraints change will not make this result out of date"})
+    return emit(CommandEnvelope(
+        status="pass" if evidence.status == "VERIFIED" else "fail",
+        diagnostics=diagnostics,
+        artifacts=[str(path)],
+        metrics={"implementation": evidence.status, "wns_ns": impl["wns_ns"], "tns_ns": impl["tns_ns"]},
     ), json_mode=json_mode)
 
 
@@ -832,6 +875,11 @@ def register(sub) -> None:
     auto.add_argument("--package", default=None,
                       help="With --capture: the replay package the board ran (forge report --package); "
                            "its reference must still be forge.yml's")
+    auto.add_argument("--implementation", default=None, metavar="TIMING_SUMMARY",
+                      help="Record this Vivado report_timing_summary of the target's build as its implementation "
+                           "result, instead of simulating")
+    auto.add_argument("--constraints", nargs="+", default=None, metavar="XDC",
+                      help="With --implementation: the constraints the build used, recorded by content")
     auto.add_argument("--firmware-id", dest="firmware_id", default=None,
                       help="With --capture: JSON of the firmware identity read back from the board (git_sha, "
                            "bitfile_sha256, ID registers); without it the capture's firmware is unconfirmed")

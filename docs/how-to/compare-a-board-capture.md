@@ -77,3 +77,20 @@ but `confirmed` is a warning. FORGE reads no registers itself.
 A latency mode measures from the input, so it needs `--capture-offset N`:
 the capture frame at which the input's frame 0 was played. Only the board
 setup knows it; FORGE does not assume one.
+
+## Implementation results
+
+A timing summary of the build is evidence too, and goes out of date like
+the rest:
+
+```bash
+forge test --target payload --implementation timing_summary.rpt --constraints top.xdc
+```
+
+It is recorded as the target's `implementation` result: `VERIFIED` when
+timing is met (WNS >= 0, TNS = 0), `FAILED` otherwise, with WNS, TNS and the
+Vivado version the report names, the report and every constraints file by
+content, and the plan with its clock period. A changed constraints file or
+clock period makes it out of date even though the simulated results still
+match. FORGE only reads the report; your build system implements the design.
+
