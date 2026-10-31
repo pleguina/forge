@@ -82,7 +82,7 @@ class DataRef:
                    dict(association or {}), provenance)
 
     def sha256(self) -> str:
-        return hashlib.sha256(self.path.read_bytes()).hexdigest()
+        return path_sha256(self.path)
 
     def identity(self) -> Dict[str, Any]:
         """Everything about the reference other than file contents that
@@ -97,8 +97,7 @@ class DataRef:
         if self.links:
             out["links"] = dict(self.links)
         if self.events is not None:
-            out["events"] = {"path": str(self.events),
-                             "sha256": hashlib.sha256(self.events.read_bytes()).hexdigest()}
+            out["events"] = {"path": str(self.events), "sha256": path_sha256(self.events)}
         if self.association:
             out["association"] = dict(self.association)
         if self.provenance is not None:
@@ -108,6 +107,77 @@ class DataRef:
             if isinstance(doc, dict) and isinstance(doc.get("provenance"), dict):
                 out["provenance"] = doc["provenance"]
         return out
+
+
+def path_sha256(path: Path) -> str:
+    """sha256 of a file, or of a directory: every file under it, by relative
+    path and content."""
+    path = Path(path)
+    if not path.is_dir():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    h = hashlib.sha256()
+    for f in sorted(p for p in path.rglob("*") if p.is_file()):
+        h.update(str(f.relative_to(path)).encode() + b"\0")
+        h.update(hashlib.sha256(f.read_bytes()).digest())
+    return h.hexdigest()
+
+
+class ProjectFormat:
+    """A dataset format a project reads with its own function
+    (``verification.formats``): ``function(path)`` returns a
+    :class:`~forge.verification.dataset_format.SerializedDataset`, or the
+    events as a list of mappings (``id`` naming each, interface names keying
+    its words), and *path* may be a file or a directory."""
+
+    def __init__(self, name: str, function: Any) -> None:
+        self.name = name
+        self.function = function
+
+    def identity(self) -> Dict[str, Any]:
+        return {"function": f"{getattr(self.function, '__module__', '')}."
+                            f"{getattr(self.function, '__qualname__', '')}",
+                "files": [str(f) for f in getattr(self.function, "forge_files", [])]}
+
+    def load(self, path: Path) -> Any:
+        from datetime import datetime, timezone
+
+        from forge.verification.dataset_format import (
+            DATASET_SCHEMA, DatasetMetadata, EnvironmentMetadata, SemanticMetadata, SerializedDataset,
+            compute_events_content_hash,
+        )
+
+        got = self.function(Path(path))
+        if isinstance(got, SerializedDataset):
+            return got
+        events = [dict(e) for e in got]
+        if not all(isinstance(e, dict) for e in events):
+            raise ValueError(f"verification.formats.{self.name}: the function returns a list of event mappings")
+        return SerializedDataset(events=events, metadata=DatasetMetadata(
+            schema=DATASET_SCHEMA, event_ids=[str(e.get("id", k)) for k, e in enumerate(events)],
+            semantic=SemanticMetadata(source_content_hash=compute_events_content_hash(events),
+                                      adapter_id=self.name),
+            environment=EnvironmentMetadata(source_path=str(path),
+                                            generated_at=datetime.now(timezone.utc).isoformat())))
+
+
+def register_project_formats(spec: Mapping[str, Any], root: Path) -> Dict[str, ProjectFormat]:
+    """Register the formats ``verification.formats`` names
+    (``{name: path/to/file.py:function}``); a name FORGE already reads is
+    refused rather than replaced."""
+    from forge.verification.dataset_format import _NAMED_LOADERS, register_named_format
+
+    formats = spec.get("formats") or {}
+    if not isinstance(formats, Mapping):
+        raise ValueError("verification.formats: want {format name: path/to/file.py:function}")
+    out: Dict[str, ProjectFormat] = {}
+    for name, where in formats.items():
+        name = str(name).lower()
+        current = _NAMED_LOADERS.get(name)
+        if current is not None and not isinstance(current, ProjectFormat):
+            raise ValueError(f"verification.formats.{name}: FORGE already reads a format of that name")
+        out[name] = ProjectFormat(name, load_function(where, root, f"verification.formats.{name}"))
+        register_named_format(name, out[name])
+    return out
 
 
 def _guess_format(path: Path) -> str:
@@ -151,6 +221,7 @@ class Level:
     simulation: Dict[str, Any] = field(default_factory=dict)       # verification.xsim
     pre_roll: int = 0                       # events replayed before each selected one, for their history
     compile_units: Dict[str, Dict[str, Any]] = field(default_factory=dict)   # path -> language, library, standard
+    formats: Dict[str, Dict[str, Any]] = field(default_factory=dict)         # project formats its data is read with
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"level": self.name, "top": self.top, "required": self.required}
@@ -670,6 +741,7 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
         raise ValueError(f"verification.target: {kind!r}, want generated or existing")
     if spec.get("decoder") and spec.get("codecs"):
         raise ValueError("verification.decoder and verification.codecs both read output words; give one")
+    formats = register_project_formats(spec, root)
     decoder = load_decoder(spec["decoder"], root) if spec.get("decoder") else None
     if spec.get("codecs"):
         from forge.integration.objects import codec_decoder, load_codecs
@@ -720,6 +792,8 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     for level in levels:
         level.decoder = decoder
         level.simulation = xsim
+        level.formats = {ref.format: formats[ref.format].identity() for ref in (level.input, level.expected)
+                         if ref is not None and ref.format in formats}
         t = (targets.get(level.name) or {}) if isinstance(targets, Mapping) else {}
         drain = t.get("drain", spec.get("drain"))
         level.drain = None if drain is None else int(drain)
@@ -1410,19 +1484,30 @@ def _event_cycles(tagged: Tagged, driven: Mapping[str, Sequence[Tuple[int, int]]
 def load_decoder(spec: Any, root: Path) -> Any:
     """The project's word decoder, ``path/to/file.py:function``: called as
     ``function(interface, word)`` and returning ``{field: value}``."""
+    return load_function(spec, root, "verification.decoder")
+
+
+def load_function(spec: Any, root: Path, where: str) -> Any:
+    """The function ``path/to/file.py:function`` names, with ``forge_files``:
+    its file and the project modules it imports, whose contents decide what
+    it computes."""
     import importlib.util
 
     file, _, func = str(spec).partition(":")
     path = (root / file).resolve()
-    module_spec = importlib.util.spec_from_file_location(f"forge_decoder_{path.stem}", path)
-    if module_spec is None or module_spec.loader is None or not func:
-        raise ValueError(f"verification.decoder {spec!r}: want path/to/file.py:function")
+    if not path.is_file() or not func:
+        raise ValueError(f"{where} {spec!r}: want path/to/file.py:function")
+    module_spec = importlib.util.spec_from_file_location(f"forge_project_{path.stem}", path)
+    if module_spec is None or module_spec.loader is None:
+        raise ValueError(f"{where} {spec!r}: want path/to/file.py:function")
     import sys
 
     module = importlib.util.module_from_spec(module_spec)
     before = set(sys.modules)
     module_spec.loader.exec_module(module)
-    function = getattr(module, func)
+    function = getattr(module, func, None)
+    if not callable(function):
+        raise ValueError(f"{where} {spec!r}: {path.name} has no function {func}")
     local = [path]
     imported = [sys.modules[m] for m in set(sys.modules) - before]
     imported += [v for v in vars(module).values() if type(v) is type(sys)]
@@ -1464,7 +1549,7 @@ def decoder_identity(decoder: Any) -> Optional[Dict[str, Any]]:
 PLAN_PARTS = {
     "target": "its scope",
     "compile": "its compile inputs (source list, libraries, defines, testbench)",
-    "run": "its run inputs (input data mapping, event selection, replay, memory files)",
+    "run": "its run inputs (input data mapping and format, event selection, replay, memory files)",
     "compare": "its comparison (reference mapping, decoder or codecs, compare settings)",
 }
 
@@ -1496,7 +1581,8 @@ def plan_parts(level: Level) -> Dict[str, str]:
     run_ = {"input": level.input.identity() if level.input else None, "gap": level.gap, "drain": level.drain,
             "settle": level.settle, "events": level.events, "pre_roll": level.pre_roll,
             "replay": {"source": level.replay.source, "instances": level.replay.instances} if level.replay else None,
-            "memory_files": [str(f) for f in _memory_files(level)] if level.sources else []}
+            "memory_files": [str(f) for f in _memory_files(level)] if level.sources else [],
+            "formats": dict(sorted(level.formats.items()))}
     compare_ = {"expected": level.expected.identity() if level.expected else None,
                 "compare": level.compare.to_dict(), "outputs": level.outputs,
                 "streams": {k: list(v) for k, v in level.streams.items()},
@@ -1541,6 +1627,7 @@ def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence
         "headers": _headers(level),
         "memory_files": _hashed(_memory_files(level)) if level.sources else [],
         "decoder_files": _hashed([Path(f) for f in (decoder_identity(level.decoder) or {}).get("files", [])]),
+        "format_files": _hashed(sorted({Path(f) for fmt in level.formats.values() for f in fmt.get("files", [])})),
         "plan_sha256": identity_of(parts),
         "plan_parts": parts,
         "input": level.input.to_dict() if level.input else None,

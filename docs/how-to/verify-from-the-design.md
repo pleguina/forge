@@ -159,6 +159,21 @@ verification:
   compare: {fields: [pt, eta, phi], order: event}
 ```
 
+Data in a format FORGE does not read is read by the project's own function:
+
+```yaml
+verification:
+  formats: {l1tk-memprint: tools/memprint.py:load}
+  input: {path: MemPrints/InputStubs, format: l1tk-memprint}
+```
+
+`load(path)` returns the events, each a mapping with an `id` and the words
+of each interface (or a `SerializedDataset`); the path may be a file or a
+directory, hashed over every file in it. The reader file and the project
+modules it imports are recorded by content, so editing the reader makes a
+result out of date; a name FORGE already reads cannot be taken
+([example](https://github.com/pleguina/forge/tree/forge_devel/examples/l1tk_memprints)).
+
 A field layout can stand in for the decoder: `verification.codecs` maps
 an output (or a glob of outputs) to a codec file, whose fields name the bits
 of each word. Packing an object that lacks a field is an error unless the

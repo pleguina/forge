@@ -130,8 +130,10 @@ class ResultRecord:
 
 
 def _sha256(path: Path) -> Optional[str]:
+    from forge.verification.auto import path_sha256
+
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return path_sha256(path) if path.exists() else None
     except OSError:
         return None
 
@@ -148,7 +150,8 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, Any]] = N
     for src in [*(doc.get("sources") or []), *(doc.get("headers") or [])]:
         if _sha256(Path(src["path"])) != src.get("sha256"):
             changed.append(Path(src["path"]).name)
-    for key, what in (("memory_files", "the memory file"), ("decoder_files", "the decoder file")):
+    for key, what in (("memory_files", "the memory file"), ("decoder_files", "the decoder file"),
+                      ("format_files", "the format reader")):
         for f in doc.get(key) or []:
             if _sha256(Path(f["path"])) != f.get("sha256"):
                 changed.append(f"{what} {Path(f['path']).name}")

@@ -106,7 +106,7 @@ def write_package(config: Any, target: str, out: Optional[Path] = None, *, event
     for key, entry in reference.items():
         ref = getattr(level, key)
         if entry["file"] is not None:
-            shutil.copyfile(ref.path, out / entry["file"])
+            (shutil.copytree if ref.path.is_dir() else shutil.copyfile)(ref.path, out / entry["file"])
         if ref.events is not None:
             shutil.copyfile(ref.events, out / entry["events"]["file"])
     derived = (level.expected.path.parent / auto.DERIVED).is_file()
