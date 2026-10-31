@@ -35,6 +35,7 @@ clock and reset, its interfaces and their protocols, the checks it will run.
 | `x_data` with `x_valid` and two of `x_start`, `x_last`, `x_start_of_orbit`, `x_strobe` | `emp_lword` |
 | `x` and HLS's `x_ap_vld` | `valid` |
 | HLS block control `ap_start`, `ap_ready`, `ap_done` (`ap_ctrl_hs`) | the scalar inputs are one `call` (`ready_valid`: held with `ap_start` until `ap_ready`), the scalar outputs its `result` (`valid` at `ap_done`) |
+| HLS `ap_memory` ports `x_address0`, `x_ce0` with `x_q0` (read) or `x_we0`, `x_d0` (write), and the same with `1` | `memory`: an input if the design only reads it, else an output |
 | any other data port, or a valid or ready that pairs with no data port | `scalar`: a value every cycle |
 
 Names that do not follow these are declared in `forge.yml`:
@@ -44,6 +45,29 @@ verification:
   protocols:
     hit: {protocol: valid, data: [hit_lo, hit_hi], valid: hit_strobe}
 ```
+
+A `memory` is held by the testbench, zero at the start as a BRAM is after
+configuration. An input memory's transaction is one call's contents: the
+testbench writes it into page `call % pages` just before the call starts.
+An output memory's every write is one observed word. A block with memories
+runs its calls one after another, the next after `ap_done`, so each word
+written belongs to the call it was written in. Read latency and pages are
+declared, by name or glob, because the ports do not carry them:
+
+```yaml
+verification:
+  protocols:
+    "inputStubs_dataarray_*": {protocol: memory, latency: 1, pages: 4}
+  compare: {order: event, mode: latency_window, latency: {min: 0, max: next}}
+```
+
+`latency: {min: 0, max: next}` gives each event the cycles from its call
+until the next call starts. The declared latency must be what HLS built: a
+latency directive that HLS dropped or changed shows as every word arriving
+one place late, the first one X. The values a call passes (`bx`, per-page
+entry counts) are fields of `call` in the data, named by port.
+[An L1 track finder module](https://github.com/pleguina/forge/tree/forge_devel/examples/l1tk_memprints)
+is checked this way against the CMSSW emulation's memory printouts.
 
 What the ports cannot give is the design's function. A level is checked
 against an expected output only where one is given; every level is still

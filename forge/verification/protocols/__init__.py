@@ -10,7 +10,13 @@ with none of these, or a valid or ready that pairs with no data port, is ``scala
 with HLS's ``ap_start``/``ap_ready``/``ap_done`` (``ap_ctrl_hs``): there the
 scalar inputs are one call, held with ``ap_start`` until ``ap_ready``
 (``ready_valid``), and the scalar outputs its result, taken at ``ap_done``
-(``valid``). What the ports cannot say (a different name for the valid, a port that
+(``valid``). Vitis HLS's ``ap_memory`` ports, ``x_address0``, ``x_ce0`` and
+``x_q0`` (read) or ``x_we0``/``x_d0`` (write), and the same with ``1`` for a
+second port, are a ``memory``: an input when the design only reads it, else
+an output. Its read latency (``latency``, 1 by default) and the number of
+pages one call's data is written to in turn (``pages``, 1 by default) are
+declared under ``protocols`` by name or glob: ``{protocol: memory, latency:
+2, pages: 4}``. What the ports cannot say (a different name for the valid, a port that
 only looks like a stream) is given in the plan's ``protocols``.
 
 Each protocol is versioned: evidence records the version a result was
@@ -19,10 +25,13 @@ obtained with.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from fnmatch import fnmatchcase
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-PROTOCOLS = {"scalar": 1, "valid": 1, "ready_valid": 1, "emp_lword": 1}
+PROTOCOLS = {"scalar": 1, "valid": 1, "ready_valid": 1, "emp_lword": 1, "memory": 1}
+MEMORY_PORTS = ("address", "ce", "we", "d", "q")
 HLS_CONTROL = ("ap_start", "ap_ready", "ap_done")
 EMP_FIELDS = ("valid", "start", "last", "start_of_orbit", "strobe")
 
@@ -45,8 +54,9 @@ class Interface:
     data: List[Port]
     valid: Optional[Port] = None
     ready: Optional[Port] = None
-    # emp_lword: field -> port
+    # emp_lword: field -> port; memory: address0, ce0, we0, d0, q0 (and 1); a block's call: done
     fields: Dict[str, Port] = field(default_factory=dict)
+    options: Dict[str, Any] = field(default_factory=dict)   # memory: latency, pages
 
     @property
     def width(self) -> int:
@@ -93,7 +103,11 @@ def infer(ports: Sequence[Port], *, exclude: Sequence[str] = (),
         used.add(name)
         return by_name[name]
 
+    memory_options = {k: v for k, v in (declared or {}).items()
+                      if str(v.get("protocol")) == "memory" and not v.get("data")}
     for iname, spec in (declared or {}).items():
+        if iname in memory_options:
+            continue
         protocol = str(spec.get("protocol", "valid"))
         if protocol not in PROTOCOLS:
             raise InterfaceError(f"{iname}: protocol {protocol!r}, want one of {', '.join(PROTOCOLS)}")
@@ -109,6 +123,7 @@ def infer(ports: Sequence[Port], *, exclude: Sequence[str] = (),
             raise InterfaceError(f"{iname}: a ready_valid interface needs its ready port")
         out.append(Interface(iname, protocol, dirs.pop(), dports, valid, ready))
 
+    out += _memories(by_name, used, take, memory_options)
     names = [n for n in by_name if n not in used]
     # emp_lword: <base>_data plus at least valid among the EMP fields
     for n in list(names):
@@ -150,6 +165,34 @@ def infer(ports: Sequence[Port], *, exclude: Sequence[str] = (),
     return sorted(out, key=lambda i: order[i.ports()[0].name])
 
 
+_MEMORY_PORT = re.compile(r"^(.+)_(address|ce|we|d|q)([01])$")
+
+
+def _memories(by_name: Mapping[str, Port], used: set, take, options: Mapping[str, Mapping]) -> List[Interface]:
+    """``ap_memory`` port groups: a base name with an ``address0`` port."""
+    groups: Dict[str, Dict[str, str]] = {}
+    for n in by_name:
+        m = _MEMORY_PORT.match(n)
+        if m and n not in used:
+            groups.setdefault(m.group(1), {})[m.group(2) + m.group(3)] = n
+    out: List[Interface] = []
+    for base, ports in groups.items():
+        if "address0" not in ports or not ({"q0", "d0"} & set(ports)):
+            continue
+        fields = {role: take(n) for role, n in sorted(ports.items())}
+        writes = any(r.startswith(("we", "d")) for r in fields)
+        data = fields.get("d0") if writes else fields.get("q0")
+        assert data is not None
+        spec = next((dict(v) for k, v in options.items() if fnmatchcase(base, k)), {})
+        opts = {"latency": int(spec.get("latency", 1)), "pages": int(spec.get("pages", 1)),
+                "depth": 1 << fields["address0"].width}
+        if opts["latency"] < 1 or opts["pages"] < 1 or opts["depth"] % opts["pages"]:
+            raise InterfaceError(f"{base}: memory latency and pages must be >= 1, pages dividing the depth "
+                                 f"{opts['depth']}")
+        out.append(Interface(base, "memory", "out" if writes else "in", [data], fields=fields, options=opts))
+    return out
+
+
 def _hls_call(ifaces: List[Interface], take, by_name: Mapping[str, Port]) -> List[Interface]:
     """The scalar interfaces of an ``ap_ctrl_hs`` block, as its call and its result."""
     start, ready, done = (take(c) for c in HLS_CONTROL)
@@ -158,8 +201,10 @@ def _hls_call(ifaces: List[Interface], take, by_name: Mapping[str, Port]) -> Lis
     ins = [i for i in ifaces if i.protocol == "scalar" and i.direction == "in"]
     outs = [i for i in ifaces if i.protocol == "scalar" and i.direction == "out"]
     rest = [i for i in ifaces if i not in ins and i not in outs]
-    if ins:
-        rest.append(Interface("call", "ready_valid", "in", [p for i in ins for p in i.data], start, ready))
+    memories = any(i.protocol == "memory" for i in ifaces)
+    if ins or memories:
+        rest.append(Interface("call", "ready_valid", "in", [p for i in ins for p in i.data], start, ready,
+                              fields={"done": done} if memories else {}))
     if outs:
         rest.append(Interface("result", "valid", "out", [p for i in outs for p in i.data], done))
     return rest

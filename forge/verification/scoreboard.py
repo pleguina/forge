@@ -31,8 +31,10 @@ cycle. Values are then matched in any order within that event, so a word
 moved into a neighbouring event's window fails even when its value is right,
 an event with no expected words must stay empty, and a word in no window or
 in two is reported, never matched by value. Without event names in the input
-there is no attribution and the comparison fails saying so. ``any`` and
-``exact_cycle`` take no reordering. Every expected word is matched, missing or wrong;
+there is no attribution and the comparison fails saying so. ``latency: {min: N,
+max: next}`` makes each event's window end where the next event's begins,
+for designs called once per event. ``any`` and ``exact_cycle`` take no
+reordering. Every expected word is matched, missing or wrong;
 every observed word beyond the expected ones is extra, and an extra word
 equal to the one before it is reported as a duplicate. A word found at
 another position is reported as out of order.
@@ -74,6 +76,7 @@ class Compare:
     fields: Optional[List[str]] = None
     order: str = "strict"
     framing: bool = False
+    until_next: bool = False     # an event's window ends where the next event's begins
 
     @classmethod
     def from_dict(cls, d: Optional[Mapping[str, Any]]) -> "Compare":
@@ -83,14 +86,19 @@ class Compare:
             raise ValueError(f"compare.mode {mode!r}: want one of {', '.join(MODES)}")
         lat = d.get("latency")
         lo = hi = None
+        until_next = False
         if isinstance(lat, Mapping):
-            lo, hi = int(lat["min"]), int(lat["max"])
+            until_next = str(lat.get("max")) == "next"
+            lo, hi = int(lat["min"]), (None if until_next else int(lat["max"]))
         elif lat is not None:
             lo = hi = int(lat)
         if mode in ("fixed_latency", "latency_window") and lo is None:
             raise ValueError(f"compare.mode {mode} needs compare.latency")
         if mode == "fixed_latency" and lo != hi:
             raise ValueError("compare.mode fixed_latency takes one latency; use latency_window for a range")
+        if until_next and (mode != "latency_window" or str(d.get("order")) != "event"):
+            raise ValueError("compare.latency max: next (each event until the next one starts) is for "
+                             "mode latency_window with order event")
         fields = d.get("fields")
         if fields is not None and (not isinstance(fields, list) or not fields):
             raise ValueError("compare.fields: want a list of the decoder's field names")
@@ -108,12 +116,12 @@ class Compare:
             raise ValueError(f"compare: unknown key {', '.join(unknown)} "
                              "(want mode, latency, tolerance, fields, order, framing)")
         return cls(mode, lo, hi, int(d.get("tolerance", 0)), [str(f) for f in fields] if fields else None, order,
-                   bool(d.get("framing", False)))
+                   bool(d.get("framing", False)), until_next)
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"mode": self.mode}
         if self.latency_min is not None:
-            out["latency"] = {"min": self.latency_min, "max": self.latency_max}
+            out["latency"] = {"min": self.latency_min, "max": "next" if self.until_next else self.latency_max}
         if self.tolerance:
             out["tolerance"] = self.tolerance
         if self.fields:
@@ -317,7 +325,7 @@ def _by_event_window(res: InterfaceResult, expected: Sequence[Expected], observe
     event whose window ``[first input + latency min, first input + latency
     max]`` holds its cycle; values are matched in any order within an event.
     The value of a word never decides its event."""
-    assert cmp.latency_min is not None and cmp.latency_max is not None
+    assert cmp.latency_min is not None and (cmp.latency_max is not None or cmp.until_next)
     if not event_cycles or any(e.event is None for e in expected):
         res.rows.append({"kind": "no_event_timing",
                          "reason": "compare.order event with a latency mode needs the input to name its events "
@@ -325,10 +333,17 @@ def _by_event_window(res: InterfaceResult, expected: Sequence[Expected], observe
                                    "belong to one; without them the words cannot be attributed by time"})
         return
     starts = sorted(event_cycles.items(), key=lambda kv: kv[1])
-    lo, hi = cmp.latency_min, cmp.latency_max
+    lo = cmp.latency_min
+    if cmp.until_next:
+        ends = {name: (starts[k + 1][1] + lo - 1 if k + 1 < len(starts) else float("inf"))
+                for k, (name, _) in enumerate(starts)}
+    else:
+        assert cmp.latency_max is not None
+        ends = {name: start + cmp.latency_max for name, start in starts}
+    hi = cmp.latency_max if cmp.latency_max is not None else "next"
     home: Dict[str, List[int]] = {name: [] for name, _ in starts}
     for j, (cycle, value) in enumerate(observed):
-        owners = [name for name, start in starts if start + lo <= cycle <= start + hi]
+        owners = [name for name, start in starts if start + lo <= cycle <= ends[name]]
         if len(owners) == 1:
             home[owners[0]].append(j)
             continue

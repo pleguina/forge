@@ -1142,8 +1142,12 @@ def _from_dataset(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) ->
     per_cycle = [n for n, i in by.items() if inputs and i.protocol == "scalar"
                  and any(n in e for e in dataset.events)]
     held: Dict[str, Any] = {n: 0 for n in per_cycle}
+    pages = [n for n, i in by.items() if inputs and i.protocol == "memory"]
     for tag, event in zip(ids, dataset.events):
         given = {n: (event[n] if isinstance(event[n], list) else [event[n]]) for n in by if n in event}
+        # an input memory's transaction is the whole of one call's contents, empty or not
+        for n in pages:
+            given[n] = [list(given.get(n, []))]
         _align_cycles(ref, tag, given, per_cycle, held)
         for name, values in given.items():
             out.setdefault(name, []).extend((tag, x) for x in values)
@@ -1798,6 +1802,10 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
         tagged, expected, how = _select_events(level, tagged, expected)
         replayed.update(how)
     values = {k: [v for _, v in rows] for k, rows in tagged.items()}
+    memories = [i.name for i in bench.interfaces if i.protocol == "memory" and i.direction == "in"]
+    call = next((i for i in bench.interfaces if "done" in i.fields), None)
+    if memories and call is not None and not values.get(call.name):
+        values[call.name] = [0] * len(values.get(memories[0], []))
     plusargs = write_inputs(bench, values, work / "data", gap=level.gap)
     trace = work / "trace.txt"
     plusargs.update({"TRACE": str(trace), "SEED": str(seed), "MAX_CYCLES": str(max_cycles)})
