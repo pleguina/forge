@@ -151,6 +151,9 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = N
         names = (ref or {}).get("events")
         if names and _sha256(Path(names["path"])) != names.get("sha256"):
             changed.append(f"the {key} event names {Path(names['path']).name}")
+    capture = doc.get("capture")
+    if capture and _sha256(Path(capture["path"])) != capture.get("sha256"):
+        changed.append(f"the capture {Path(capture['path']).name}")
     replay = doc.get("replay") or {}
     if any(_sha256(Path(f["path"])) != f.get("sha256") for f in replay.get("files") or []):
         changed.append(f"the traffic {replay.get('source')} recorded")
@@ -161,6 +164,12 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = N
         elif doc.get("plan_sha256") != plans[level]:
             changed.append("its verification settings")
     return ", ".join(changed)
+
+
+def current_plan(config: Any) -> Any:
+    """The data-driven plan of a loaded ``forge.yml`` and its last build; raises
+    what :func:`forge.verification.auto.plan` raises."""
+    return _plan(config)
 
 
 def _plan(config: Any) -> Any:

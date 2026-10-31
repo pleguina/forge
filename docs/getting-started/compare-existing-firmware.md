@@ -76,6 +76,13 @@ fine` checks it alone against that traffic; `--event-id` restricts the
 payload run, and so the recording, to one event. See
 [targets](../how-to/verify-from-the-design.md#targets).
 
+## On the board
+
+The same reference, packaged with its link mapping and the build's identity
+(`forge report --package payload`), is what the board plays; `forge test
+--capture` compares what it captured with the same scoreboard. See
+[compare a board capture](../how-to/compare-a-board-capture.md).
+
 ## Then
 
 When you want FORGE to assemble the payload instead, `forge adopt` starts

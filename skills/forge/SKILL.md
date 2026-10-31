@@ -266,6 +266,8 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | `forge test --json [--plan] [--target T] [--event-list E] [--backend B] [--require-verified]` | simulate and compare |
 | `forge test --input F --expected F --json` | one-off data without editing `forge.yml` |
 | `forge report --json` | collect results into `.forge/reports/` |
+| `forge report --package T --json` | replay package of target T for the board: reference files, links, comparison, build identity |
+| `forge test --target T --capture F [--package DIR] [--capture-offset N] --json` | compare a board capture (pattern file) with T's expected output; recorded as `T[board]` |
 | `forge inspect --json [--emit-ir F]` | the resolved design (canonical IR) |
 | `forge inspect --impact [OLD_IR] --json` | what changed since the last build (or a snapshot), what it affects, misaligned merges, targets to rerun, files to regenerate |
 | `forge explain <target> --json` | why FORGE decided (or refused to decide) something |
