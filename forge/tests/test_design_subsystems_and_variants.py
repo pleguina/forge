@@ -169,9 +169,12 @@ def test_a_named_variant_is_built_and_compared_with_the_project_build(lanes, cap
     assert "lane_1__post" in top and "lane_2__pre" not in top
     assert "lane_2__pre" in (lanes / ".forge/generated/algo_top.v").read_text()
 
-    code, doc, _ = _run(capsys, "inspect", "--variant", "sim", "--impact", "--json")
+    code, doc, _ = _run(capsys, "inspect", "--variant", "sim", "--impact", ".forge/generated/design.ir.json", "--json")
     assert doc["metrics"]["impact"]["instances"]["removed"] == ["lane_2__post", "lane_2__pre"]
     assert doc["metrics"]["impact"]["instances"]["changed"] == {}
+
+    code, doc, _ = _run(capsys, "inspect", "--variant", "sim", "--impact", "--json")
+    assert doc["metrics"]["impact"]["instances"]["removed"] == []
 
 
 def test_variants_survive_rewriting_forge_yml(lanes):

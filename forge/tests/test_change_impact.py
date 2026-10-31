@@ -140,3 +140,30 @@ def test_forge_inspect_impact_compares_with_the_last_build(tmp_path, monkeypatch
     assert doc["metrics"]["rerun"]["design"] == "the design changed"
     assert ".forge/generated/algo_top.v" in doc["metrics"]["regenerate"]
     assert "## Merges" not in (root / ".forge/reports/impact.md").read_text()
+
+
+def test_a_change_to_many_numbered_copies_reads_as_one_line():
+    from forge.analysis.impact import render_markdown
+
+    before = {"modules": [_module("link", d=("in", 8)), _module("merge", d=("in", 8))],
+              "instances": [{"id": f"link_{k}", "module": "link"} for k in range(12)] + [{"id": "merge", "module": "merge"}],
+              "connections": [_wire(f"link_{k}", "merge", f"in_{k}") for k in range(12)]}
+    after = copy.deepcopy(before)
+    for k in range(12):
+        after["connections"][k] = _wire(f"link_{k}", "merge", f"in_{k}", stages=1)
+
+    text = render_markdown(compare(before, after), {}, [], "the last build")
+
+    assert "- **link_*.in_*->merge.in_*** (12): timing: none -> pipeline_register 1 cycle(s)" in text
+    assert "- Changed: link_0..11" in text
+
+
+def test_an_input_left_without_its_driver_is_named():
+    before = _fork_and_merge()
+    after = copy.deepcopy(before)
+    del after["instances"][2], after["connections"][3], after["connections"][1]   # slow and its wires
+
+    impact = compare(before, after)
+
+    assert impact.instances_removed == ["slow"]
+    assert impact.instances_changed == {"join": ["input b: no longer driven (tied off)"]}

@@ -164,7 +164,13 @@ verification:
     hit: {protocol: valid, data: [hit_lo, hit_hi], valid: hit_strobe}
   links: {l0: 0, q: 1}               # interface -> link, for pattern files
   association: {max_skew: 0, missing: error}   # grouping pattern-file packets into events
-  decoder: tools/decode.py:decode    # decode(interface, word) -> {field: value}
+  decoder: tools/decode.py:decode    # decode(interface, word) -> {field: value}, None = no object
+  # compare: {fields: [pt, eta, phi], order: event}   # decoded fields only; any order within an event
+  streams: {gmt: "gmt_out_*"}        # several output ports read as one stream, in cycle order
+  outputs: [gmt]                     # outputs the reference covers; the others are traced only
+  drain: 400                         # cycles after the last input (free-running designs)
+  settle: 200                        # cycles after reset in which X on an output is not an error
+  xsim: {elab_libs: [unisims_ver], extra_top_modules: [glbl], extra_sources: [...]}
   targets:                           # instead of input/expected: named things to check
     payload: {input: data/in.json, expected: data/exp.json}   # scope: design
     sorter: {scope: "instance:sorter_3", replay: payload}     # traffic payload recorded
@@ -194,7 +200,13 @@ JSON keyed by interface name, one entry per transaction, in order:
 {"decimator_sample_in": [4660, "0x1a2b", 7]}
 ```
 
-A value is a number or a mapping from data port to value. Interfaces are
+A value is a number or a mapping from data port to value. A dataset of
+events (`{"events": [{"id": "442:1", "<port>": [...]}, ...]}`) names each
+event; an entry with `"id": null` holds words of no event (configuration
+before the first event, idle words after the last), kept by `--event-id`.
+Per-cycle (`scalar`) inputs are aligned at every entry; an event whose
+per-cycle inputs give different numbers of words is an error. A
+`provenance` mapping in the expected file shows in the report. Interfaces are
 found from port names: `x` + `x_valid` is `valid`; adding `x_ready` makes it
 `ready_valid`; `x_tdata/x_tvalid/x_tready` is AXI4-Stream; `x_data` + `x_valid`
 + two of `x_start/x_last/x_start_of_orbit/x_strobe` is `emp_lword`;
@@ -252,6 +264,7 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | FAILED, compile or simulation error | the evidence's `reason` names its `compile.log` or `sim.log` |
 | FAILED, rows | report the first rows (interface, index, cycle, expected, observed, event) to the user |
 | Only design-level reference | `forge test --record-modules` records each instance's I/O as a derived module reference |
+| The reference is a CMSSW (or other emulator) export | a project adapter writes the dataset of events and the expected objects with their `provenance`; `decoder` + `compare: {fields, order: event}`; `streams` for time-multiplexed links (docs/how-to/compare-with-a-cmssw-export.md) |
 | One instance or event is wrong in a slow payload | declare an `instance:` target with `replay: <design target>`; `forge test --target <design> --event-id N`, then `forge test --target <instance>` after each edit |
 
 ## Commands

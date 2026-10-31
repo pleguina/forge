@@ -1248,8 +1248,9 @@ options:
 
 ```text
 usage: forge inspect [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
-                     [--build-dir BUILD_DIR] [--ip-root IP_ROOT] [--src-root SRC_ROOT] [--json]
-                     [--variant VARIANT] [--emit-ir EMIT_IR] [--diff DIFF] [--impact [IR_JSON]]
+                     [--build-dir BUILD_DIR] [--ip-root IP_ROOT] [--src-root SRC_ROOT]
+                     [--hls-build-root HLS_BUILD_ROOT] [--json] [--variant VARIANT]
+                     [--emit-ir EMIT_IR] [--diff DIFF] [--impact [IR_JSON]]
                      [--provenance PROVENANCE] [--explain-staleness EXPLAIN_STALENESS] [--dot DOT]
                      [--svg SVG] [--explorer EXPLORER] [--verify-design VERIFY_DESIGN]
                      [--results-json RESULTS_JSON]
@@ -1269,6 +1270,9 @@ options:
                         HLS/RTL build root to scan for component.xml (optional)
   --ip-root IP_ROOT     Additional IP repo root to scan (optional)
   --src-root SRC_ROOT   Root for resolving relative RTL src paths (optional)
+  --hls-build-root HLS_BUILD_ROOT
+                        HLS build root whose reports size delay_cycles: auto, as forge build does
+                        (default: forge.yml's build: hls_build_root)
   --json                Machine-readable JSON output
   --variant VARIANT     Resolve a variant named under variants: in forge.yml instead of the
                         project's design; with --impact, compared with the project's last build
