@@ -55,7 +55,8 @@ emits the same {schema_version, status, diagnostics, artifacts, metrics,
 next_actions} envelope (docs/development/cli_exit_codes.md).
 
 Examples:
-  forge init my_plugin
+  forge init
+  forge init --example my_plugin
   forge adopt .
   forge check
   forge build
@@ -1221,15 +1222,21 @@ options:
 ### `forge init`
 
 ```text
-usage: forge init [-h] [--plugins-root PLUGINS_ROOT] [--algo-root ALGO_ROOT]
-                  [--consumer-root CONSUMER_ROOT] [--dry-run] [--verbose] [--json]
-                  plugin_id
+usage: forge init [-h] [--example PLUGIN_ID] [--top TOP] [--clock CLOCK] [--reset RESET]
+                  [--input INPUT] [--expected EXPECTED] [--hog-project HOG_PROJECT]
+                  [--filelist FILELIST] [--force] [--plugins-root PLUGINS_ROOT]
+                  [--algo-root ALGO_ROOT] [--consumer-root CONSUMER_ROOT] [--dry-run] [--verbose]
+                  [--json]
 
-positional arguments:
-  plugin_id             Plugin identifier (e.g. 'my_algo')
+Write one forge.yml that compares the firmware already in this repository with reference data: its
+top, clock, reset and source description; nothing else is written. --example scaffolds the full
+example plugin for extension authors and chains validate -> build -> test -> report.
 
 options:
   -h, --help            show this help message and exit
+  --example PLUGIN_ID   Scaffold the example plugin PLUGIN_ID (topology, contracts, RTL stub,
+                        verification flow) and chain validate -> build -> test -> report, for
+                        extension authors
   --plugins-root PLUGINS_ROOT
                         Root directory under which to create <plugin_id>/forge/ (default:
                         plugins/)
@@ -1242,6 +1249,17 @@ options:
                         entirely
   --verbose, -v         Print each underlying command's full output instead of one line per stage
   --json                Machine-readable JSON output
+
+existing firmware:
+  --top TOP             The top-level module (default: the one discovery finds)
+  --clock CLOCK         Its clock port
+  --reset RESET         Its reset port
+  --input INPUT         Input data (JSON, EMP or APx pattern file)
+  --expected EXPECTED   The output the firmware should produce
+  --hog-project HOG_PROJECT
+                        Read the sources from this Hog project (Top/<name>/list)
+  --filelist FILELIST   Read the sources from this .f compile list
+  --force               Replace an existing forge.yml
 ```
 
 ### `forge inspect`

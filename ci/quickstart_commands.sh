@@ -55,7 +55,7 @@ forge doctor
 #    The simulation stage is skipped with a note if no simulator (Vivado
 #    xsim) is on PATH — everything else still runs, so this works on a
 #    machine that has never had an EDA tool installed.
-forge init "${PLUGIN_ID}" --plugins-root "${PLUGINS_ROOT}"
+forge init --example "${PLUGIN_ID}" --plugins-root "${PLUGINS_ROOT}"
 
 # 4. Read back what was generated, straight from the canonical IR.
 forge inspect "${PLUGINS_ROOT}/${PLUGIN_ID}/forge/designs/design.yml" \

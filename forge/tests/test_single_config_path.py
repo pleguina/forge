@@ -236,7 +236,7 @@ def test_init_without_a_simulator_does_not_report_a_pass(
     monkeypatch.setattr(toolchain, "tool_present", lambda name: False)
 
     code, out, err = _run(capsys, [
-        "init", "throwaway_plugin",
+        "init", "--example", "throwaway_plugin",
         "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path),
         "--json",
     ])

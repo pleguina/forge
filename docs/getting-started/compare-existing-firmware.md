@@ -17,6 +17,9 @@ question first.
 
 ## forge.yml
 
+`forge init` writes it from what it finds (`--top`, `--clock`, `--reset`,
+`--input`, `--expected` say what it cannot find); it looks like this:
+
 ```yaml title="forge.yml"
 project: my_payload
 top: payload_top

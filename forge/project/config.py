@@ -538,6 +538,19 @@ class ForgeConfig:
         import yaml
 
         body = yaml.safe_dump(self.to_dict(), sort_keys=False, default_flow_style=False)
+        if (self.verification_spec or {}).get("target") == "existing":
+            return (
+                f"# {self.project} — FORGE project\n"
+                f"#\n"
+                f"# Your own top, compiled from the sources named here, is simulated\n"
+                f"# as it is written and compared with verification.expected;\n"
+                f"# nothing is generated or moved. Results go under .forge/.\n"
+                f"#\n"
+                f"#   forge check    what is missing or inconsistent\n"
+                f"#   forge test     simulate the top and compare its outputs\n"
+                f"#   forge report   collect the results\n"
+                f"#\n"
+            ) + body
         if self.authored:
             return (
                 f"# {self.project} — FORGE project\n"
