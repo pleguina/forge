@@ -165,6 +165,7 @@ verification:
   links: {l0: 0, q: 1}               # interface -> link, for pattern files
   association: {max_skew: 0, missing: error}   # grouping pattern-file packets into events
   decoder: tools/decode.py:decode    # decode(interface, word) -> {field: value}, None = no object
+  # codecs: {"q*": codecs/muon.yml}  # field layouts instead of a decoder (forge.integration.objects)
   # compare: {fields: [pt, eta, phi], order: event}   # decoded fields only; any order within an event
   streams: {gmt: "gmt_out_*"}        # several output ports read as one stream, in cycle order
   outputs: [gmt]                     # outputs the reference covers; the others are traced only
@@ -264,7 +265,7 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | FAILED, compile or simulation error | the evidence's `reason` names its `compile.log` or `sim.log` |
 | FAILED, rows | report the first rows (interface, index, cycle, expected, observed, event) to the user |
 | Only design-level reference | `forge test --record-modules` records each instance's I/O as a derived module reference |
-| The reference is a CMSSW (or other emulator) export | a project adapter writes the dataset of events and the expected objects with their `provenance`; `decoder` + `compare: {fields, order: event}`; `streams` for time-multiplexed links (docs/how-to/compare-with-a-cmssw-export.md) |
+| The reference is a CMSSW (or other emulator) export | a project adapter writes the dataset of events and the expected objects with their `provenance`; `decoder` + `compare: {fields, order: event}`; `streams` for time-multiplexed links; start from examples/cmssw_reference (docs/how-to/compare-with-a-cmssw-export.md) |
 | One instance or event is wrong in a slow payload | declare an `instance:` target with `replay: <design target>`; `forge test --target <design> --event-id N`, then `forge test --target <instance>` after each edit |
 
 ## Commands

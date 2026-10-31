@@ -156,6 +156,14 @@ verification:
   compare: {fields: [pt, eta, phi], order: event}
 ```
 
+A field layout can stand in for the decoder: `verification.codecs` maps
+an output (or a glob of outputs) to a codec file, whose fields name the bits
+of each word; a word with no data bits set is no object. The same codec packs
+a reference export into pattern files
+([compare with a CMSSW export](compare-with-a-cmssw-export.md)). A data spec's
+`provenance:` names a JSON file of where the data came from, for pattern
+files, which cannot carry one.
+
 An observed word belongs to the event an alignment of the observed and
 expected sequences puts it against, so a word missing or extra in one event
 is reported there and does not displace the later events. A mismatch pairs

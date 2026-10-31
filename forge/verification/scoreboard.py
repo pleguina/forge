@@ -130,6 +130,8 @@ def compare(interface: str, expected: Optional[Sequence[Expected]], observed: Se
     for a word that carries no object."""
     if key is not None:
         observed = [(c, v) for c, v in observed if key(v) is not None]
+        if expected is not None:
+            expected = [e for e in expected if key(e.value) is not None]
     res = InterfaceResult(interface, NOT_VERIFIED_NO_ORACLE, observed=len(observed))
     for c in unknown:
         res.rows.append({"kind": "unknown", "cycle": c})
@@ -145,10 +147,6 @@ def compare(interface: str, expected: Optional[Sequence[Expected]], observed: Se
             return key(a) == key(b)
         return abs(a - b) <= cmp.tolerance
 
-    if key is not None:
-        for k, exp in enumerate(expected):
-            if key(exp.value) is None:
-                res.rows.append({"kind": "no_object", "index": k, "expected": hex(exp.value), "event": exp.event})
     if cmp.order != "strict":
         _unordered(res, expected, observed, same, key if key is not None else _whole, cmp.order == "event")
         res.status = VERIFIED if not res.rows else FAILED

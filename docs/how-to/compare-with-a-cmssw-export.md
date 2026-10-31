@@ -6,12 +6,66 @@ produced. FORGE runs the payload, compares, and names each object that
 differs by its event and its fields; the project supplies the one thing only
 it knows, how its export maps onto its ports and words.
 
-The worked example is the OMTF payload (Phase-2 Overlap Muon Track Finder):
-the full chip, a design FORGE generates from 32 modules and about 500 top
-ports, against CMSSW's `L1TMuonOverlapPhase2` emulator. Its adapter and
-decoder live in the OMTF firmware repository; this page shows their shape.
+## Start from the example
 
-## What the project writes
+`examples/cmssw_reference` in the repository is a working comparison you
+adapt: 100 events of a real CMSSW sample (the OMTF emulator's candidates and
+the GMT muons it made of them, with their provenance), a small payload, and
+the files that connect them.
+
+```bash
+cd examples/cmssw_reference
+python3 make_patterns.py   # export -> pattern files, one packet per link and event
+forge test
+```
+
+For another algorithm, replace four things and keep the rest:
+
+| Replace | With |
+|---|---|
+| `export/*.json` | your subsystem's collections: `{"provenance": {...}, "events": [{"id": ..., "<collection>": [{field: value, "link": n}]}]}` |
+| `codecs/*.yml` | where each field sits in your input and output link words |
+| `rtl/` | your algorithm, its top in `forge.yml` |
+| `forge.yml` `links`, `compare.fields` | the links your interfaces are on, the fields CMSSW defines |
+
+A codec is a field layout; the same file packs the export into the input
+and expected pattern files (`forge.integration.objects.write_patterns`) and
+reads the payload's output words back (`verification.codecs`), so the two
+cannot disagree:
+
+```yaml
+width: 64
+fields:
+  valid:  {low: 0, bits: 1, value: 1}
+  charge: {low: 1, bits: 1}
+  pt:     {low: 2, bits: 13}
+  phi:    {low: 15, bits: 13, signed: true}
+```
+
+```yaml
+verification:
+  input:    {path: data/input.txt, format: empv2, events: data/input.events.json}
+  expected: {path: data/expected.txt, format: empv2, events: data/expected.events.json,
+             provenance: data/provenance.json}
+  links: {l0: 0, q0: 0}
+  codecs: {"q*": codecs/samuon.yml}
+  compare: {fields: [pt, eta, phi, charge, qual], order: event}
+```
+
+A payload bug is reported per event with the decoded fields on both sides;
+`--event-id` runs one event; a packet missing on one link is an error naming
+the event and link.
+
+## A full-chip payload: OMTF
+
+The OMTF payload (Phase-2 Overlap Muon Track Finder) is the same comparison
+at full scale: the whole chip, a design FORGE generates from 32 modules and
+about 500 top ports, against CMSSW's `L1TMuonOverlapPhase2` emulator. Its
+inputs are per-cycle port values rather than pattern files, and its outputs
+are 18 time-multiplexed links. Its adapter and decoder live in the OMTF
+firmware repository; the rest of this page shows their shape.
+
+### What the project writes
 
 | Piece | What it does | OMTF |
 |---|---|---|
@@ -22,7 +76,7 @@ decoder live in the OMTF firmware repository; this page shows their shape.
 Everything else (testbench, simulator invocation, scoreboard, event
 bookkeeping, evidence, reports) is FORGE's.
 
-## The data
+### The data
 
 The adapter writes a dataset of events (see [the data a level
 takes](verify-from-the-design.md#data)). Each event is named the way the
@@ -50,7 +104,7 @@ payload's word format, and the provenance of the export:
  "events": [{"id": "442:1", "gmt": ["0x..."]}, ...]}
 ```
 
-## The target
+### The target
 
 ```yaml
 variants:
@@ -84,7 +138,7 @@ is not CMSSW's), `order: event` lets the muons of one event come in any
 order, and the stream reads the 18 output links in cycle order, so the
 comparison does not depend on which link a BX lands on.
 
-## Running it
+### Running it
 
 ```bash
 python3 -m tools.forge_reference --xml TestEvents_part000.xml --board OMTFp2 --count 150 \

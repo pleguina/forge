@@ -65,6 +65,7 @@ class DataRef:
     links: Dict[str, int] = field(default_factory=dict)   # interface -> link, for pattern files
     events: Optional[Path] = None      # names of the events the file holds, in order
     association: Dict[str, Any] = field(default_factory=dict)   # max_skew, missing
+    provenance: Optional[Path] = None  # where the data came from (software, configuration), as JSON
 
     @classmethod
     def from_spec(cls, spec: Any, root: Path, links: Optional[Mapping[str, int]] = None,
@@ -76,8 +77,9 @@ class DataRef:
         if fmt not in data_formats():
             raise ValueError(f"{path}: format {fmt!r}, want one of {', '.join(data_formats())}")
         events = (root / str(spec["events"])).resolve() if spec.get("events") else None
+        provenance = (root / str(spec["provenance"])).resolve() if spec.get("provenance") else None
         return cls(path, fmt, {str(k): int(v) for k, v in (links or {}).items()}, events,
-                   dict(association or {}))
+                   dict(association or {}), provenance)
 
     def sha256(self) -> str:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
@@ -91,7 +93,9 @@ class DataRef:
                              "sha256": hashlib.sha256(self.events.read_bytes()).hexdigest()}
         if self.association:
             out["association"] = dict(self.association)
-        if self.format == "json":
+        if self.provenance is not None:
+            out["provenance"] = json.loads(self.provenance.read_text())
+        elif self.format == "json":
             doc = json.loads(self.path.read_text())
             if isinstance(doc, dict) and isinstance(doc.get("provenance"), dict):
                 out["provenance"] = doc["provenance"]
@@ -623,7 +627,12 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     kind = str(spec.get("target") or "generated")
     if kind not in ("generated", "existing"):
         raise ValueError(f"verification.target: {kind!r}, want generated or existing")
+    if spec.get("decoder") and spec.get("codecs"):
+        raise ValueError("verification.decoder and verification.codecs both read output words; give one")
     decoder = load_decoder(spec["decoder"], root) if spec.get("decoder") else None
+    if spec.get("codecs"):
+        from forge.integration.objects import codec_decoder, load_codecs
+        decoder = codec_decoder(load_codecs(spec["codecs"], root))
     links = spec.get("links") or {}
 
     def data(value: Any) -> Optional[DataRef]:
