@@ -54,6 +54,8 @@ class Bench:
     depth: int = 1 << 16
     # (instance, interface of its module): traffic recorded inside the DUT
     probes: List[Tuple[str, Interface]] = field(default_factory=list)
+    # parameter overrides of the DUT, as Verilog expressions
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
 
 def word_width(iface: Interface) -> int:
@@ -162,7 +164,8 @@ def testbench(b: Bench) -> str:
     ]
     for i in b.interfaces:
         L += [_decl(p.direction, p.width, p.name) for p in i.ports()]
-    L.append(f"  {b.top} dut (")
+    overrides = ", ".join(f".{k}({v})" for k, v in b.parameters.items())
+    L.append(f"  {b.top} #({overrides}) dut (" if overrides else f"  {b.top} dut (")
     conns = [f"    .{b.clock}({b.clock})", f"    .{b.reset}({b.reset})"]
     conns += [f"    .{p.name}({p.name})" for i in b.interfaces for p in i.ports()]
     L += [",\n".join(conns), "  );", ""]

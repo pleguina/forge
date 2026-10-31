@@ -165,7 +165,16 @@ verification:
   links: {l0: 0, q: 1}               # interface -> link, for pattern files
   association: {max_skew: 0, missing: error}   # grouping pattern-file packets into events
   decoder: tools/decode.py:decode    # decode(interface, word) -> {field: value}
+  targets:                           # instead of input/expected: named things to check
+    payload: {input: data/in.json, expected: data/exp.json}   # scope: design
+    sorter: {scope: "instance:sorter_3", replay: payload}     # traffic payload recorded
+    front: {scope: subsystem, instances: [unpacker, sorter], replay: payload}
+    packer: {scope: "module:packer", input: p_in.json, expected: p_out.json, required: false}
 ```
+
+Only required targets (default) decide the status and `--require-verified`.
+Without `targets`, the design is required and a module only when it has its
+own expected output.
 
 A project with a hand-written design keeps it: `design: path/design.yml`,
 `registry: path/modules.yml`, `verification.config: path/design.verification.yml`
@@ -194,7 +203,10 @@ mismatch rows.
 ## Reading results
 
 `forge test --json`: `metrics.levels` maps `level[backend]` to a status;
-`metrics.verification` is the overall one. Per level and simulator the
+`metrics.targets` gives each target's `scope`, `required`, `reference`
+(`functional`: an expected output was given; `derived`: recorded traffic, a
+regression reference only; `none`) and `status`; `metrics.verification` is
+the overall status of the required ones. Per level and simulator the
 evidence is `.forge/reports/test/auto/<level>.<backend>.evidence.json`:
 
 ```json
@@ -215,7 +227,7 @@ name; with a decoder, `expected_fields`/`observed_fields`.
 | `NOT_VERIFIED_NO_ORACLE` | ran cleanly, no expected output to compare with |
 | `BLOCKED_MISSING_TOOL` | simulator not installed |
 | `SKIPPED` | level cannot be simulated |
-| `PARTIAL` | some levels verified, others not |
+| `PARTIAL` | some required levels verified, others not |
 | `OUT_OF_DATE` | a source, included header, data file or verification setting changed since the run |
 
 Every run is kept under `.forge/reports/test/runs/<id>/`. `forge report --json`
@@ -234,6 +246,7 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | FAILED, compile or simulation error | the evidence's `reason` names its `compile.log` or `sim.log` |
 | FAILED, rows | report the first rows (interface, index, cycle, expected, observed, event) to the user |
 | Only design-level reference | `forge test --record-modules` records each instance's I/O as a derived module reference |
+| One instance or event is wrong in a slow payload | declare an `instance:` target with `replay: <design target>`; `forge test --target <design> --event-id N`, then `forge test --target <instance>` after each edit |
 
 ## Commands
 
@@ -244,7 +257,7 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | `forge check --json [--strict]` | project status, every blocker with its action |
 | `forge next --json` | the single most urgent step |
 | `forge build --json [--dry-run]` | generate the top level into `.forge/generated/` |
-| `forge test --json [--plan] [--backend B] [--level L] [--require-verified]` | simulate and compare |
+| `forge test --json [--plan] [--target T] [--event-list E] [--backend B] [--require-verified]` | simulate and compare |
 | `forge test --input F --expected F --json` | one-off data without editing `forge.yml` |
 | `forge report --json` | collect results into `.forge/reports/` |
 | `forge inspect --json [--emit-ir F]` | the resolved design (canonical IR) |

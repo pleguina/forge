@@ -1398,8 +1398,8 @@ usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_L
                   [--expected EXPECTED] [--expected-format EXPECTED_FORMAT]
                   [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
                   [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
-                  [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE] [--record-modules]
-                  [--plan] [--require-verified] [--json]
+                  [--target TARGET] [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE]
+                  [--record-modules] [--plan] [--require-verified] [--json]
                   MODE ...
 
 positional arguments:
@@ -1438,6 +1438,9 @@ without a verification config:
                         Only this simulator
   --level {design,modules}
                         Only this level
+  --target TARGET       Only this target (repeatable, or comma-separated): a name under
+                        verification.targets, or design / module:<name>. --event-id/--event-list
+                        replay some events of its data
   --seed SEED           Seed of the stall and backpressure patterns
   --stall STALL         Percent of cycles a ready_valid input withholds a word
   --backpressure BACKPRESSURE
