@@ -150,6 +150,7 @@ class Level:
     settle: int = 0                         # cycles after reset in which X on an output is not an error
     simulation: Dict[str, Any] = field(default_factory=dict)       # verification.xsim
     pre_roll: int = 0                       # events replayed before each selected one, for their history
+    compile_units: Dict[str, Dict[str, Any]] = field(default_factory=dict)   # path -> language, library, standard
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"level": self.name, "top": self.top, "required": self.required}
@@ -164,6 +165,8 @@ class Level:
             return out
         if self.defines:
             out["defines"] = dict(self.defines)
+        if self.compile_units:
+            out["libraries"] = sorted({u["library"] for u in self.compile_units.values()})
         if self.decoder is not None:
             out["decoder"] = decoder_identity(self.decoder)
         assert self.bench is not None
@@ -424,12 +427,27 @@ class _Existing:
         if not self.top:
             raise ValueError("verification.target: existing needs the top to simulate: set top: (or "
                              "verification.top) in forge.yml to the name of your existing top-level module")
-        if spec.get("filelist"):
+        self.compile_units: Dict[str, Dict[str, Any]] = {}
+        self.unresolved: List[str] = []
+        self.provenance: Dict[str, Any] = {}
+        if spec.get("sources") and spec.get("filelist"):
+            raise ValueError("verification.sources and verification.filelist both name the sources; give one")
+        if spec.get("sources"):
+            from forge.integration.compile_list import resolve as resolve_sources
+
+            if not isinstance(spec["sources"], Mapping):
+                raise ValueError("verification.sources: want {provider: filelist|ipbb|hog, ...}")
+            described = resolve_sources(spec["sources"], root)
+            sources, incs, defines = described.sources, list(described.include_dirs), dict(described.defines)
+            self.compile_units, self.unresolved = described.described(), described.unresolved
+            self.provenance = described.provenance
+        elif spec.get("filelist"):
             sources, incs, defines = read_filelist(root / str(spec["filelist"]))
         else:
             sources, incs, defines = list(config.resolve_sources("rtl")), [], {}
         if not sources:
-            raise ValueError("verification.target: existing found no sources: set sources.rtl or verification.filelist")
+            raise ValueError("verification.target: existing found no sources: set sources.rtl, "
+                             "verification.sources or verification.filelist")
         raw_defines = spec.get("defines") or {}
         defines.update(parse_verilog_defines(raw_defines) if isinstance(raw_defines, list)
                        else {str(k): str(v) for k, v in raw_defines.items()})
@@ -447,8 +465,15 @@ class _Existing:
                 self.verilog.update(split_verilog_modules(src.read_text(errors="replace")))
         if self.top not in self.units:
             raise ValueError(f"no module or entity named {self.top!r} in the {len(sources)} source(s) of "
-                             + ("verification.filelist" if spec.get("filelist") else "sources.rtl"))
+                             + ("verification.sources" if spec.get("sources") else
+                                "verification.filelist" if spec.get("filelist") else "sources.rtl"))
+        self.parameters: Dict[str, Any] = dict(spec.get("parameters") or {})
         self.notes: List[str] = []
+        if self.provenance:
+            self.notes.append(f"sources from {self.provenance['provider']}: {len(sources)} file(s)"
+                              + (f", {len(self.compile_units)} with a library or standard" if self.compile_units else "")
+                              + (f"; not compiled: {', '.join(Path(u).name for u in self.unresolved)}"
+                                 if self.unresolved else ""))
 
     def protocols(self, module: str) -> Optional[Mapping[str, Any]]:
         return (self.per_module.get(module) or {}).get("protocols")
@@ -481,19 +506,20 @@ class _Existing:
                      infer(ports, exclude=[clock, reset], declared=want.protocols),
                      period_ns=self.period, depth=want.depth, parameters=dict(parameters or {}))
 
+    def _extra(self) -> Dict[str, Any]:
+        return {"defines": dict(self.defines), "compile_units": dict(self.compile_units)}
+
     def design(self, name: str, want: Want) -> Level:
         bench = self._bench(self.top, self.config.clock.port, self.config.reset.port,
-                            self.config.reset.active == "high", want)
-        return _level(name, "design", self.top, self.sources, list(self.incs), bench, want,
-                      defines=dict(self.defines))
+                            self.config.reset.active == "high", want, self.parameters or None)
+        return _level(name, "design", self.top, self.sources, list(self.incs), bench, want, **self._extra())
 
     def module(self, name: str, module: str, want: Want) -> Level:
         if module not in self.units:
             raise ValueError(f"no module {module!r} in the sources (have {', '.join(sorted(self.units))})")
         reset = self.config.reset.port
         bench = self._bench(module, self.config.clock.port, reset, self.config.reset.active == "high", want)
-        return _level(name, f"module:{module}", module, self.sources, list(self.incs), bench, want,
-                      defines=dict(self.defines))
+        return _level(name, f"module:{module}", module, self.sources, list(self.incs), bench, want, **self._extra())
 
     def resolve(self, path: str) -> Tuple[str, Dict[str, Any], str, str, bool]:
         """``(module, parameters, clock, reset, reset_active_high)`` of the
@@ -552,8 +578,7 @@ class _Existing:
         bench = self._bench(module, clock, reset, active_high, want, overrides)
         self.notes.append(f"{name}: {module} at {path}, clock {clock}, reset {reset} "
                           f"(active {'high' if active_high else 'low'})")
-        return _level(name, f"instance:{path}", module, self.sources, list(self.incs), bench, want,
-                      defines=dict(self.defines))
+        return _level(name, f"instance:{path}", module, self.sources, list(self.incs), bench, want, **self._extra())
 
     def all_instances(self) -> List[str]:
         from forge.project.hdl_scan import verilog_instances
@@ -1075,12 +1100,30 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
     if backend == "xsim":
         sim = level.simulation
         cmds = []
-        if vhdl:
-            cmds.append(["xvhdl", *vhdl])
-        cmds.append(["xvlog", "-sv", *[a for d in incs for a in ("-i", d)], *[a for d in defs for a in ("-d", d)],
-                     *vlog, *[str(f) for f in sim.get("extra_sources") or []], str(tb)])
+        units = level.compile_units
+        groups: List[Tuple[Tuple[str, Optional[str]], List[str]]] = []
+        for f in vhdl:
+            unit = units.get(f) or {}
+            head = (str(unit.get("library", "work")), unit.get("standard"))
+            if groups and groups[-1][0] == head:
+                groups[-1][1].append(f)
+            else:
+                groups.append((head, [f]))
+        for (lib, standard), files in groups:
+            cmds.append(["xvhdl", *(["--2008"] if standard == "2008" else []),
+                         *(["-work", lib] if lib != "work" else []), *files])
+        vlog_libs: Dict[str, List[str]] = {}
+        for f in vlog:
+            vlog_libs.setdefault(str((units.get(f) or {}).get("library", "work")), []).append(f)
+        options = [*[a for d in incs for a in ("-i", d)], *[a for d in defs for a in ("-d", d)]]
+        for lib, files in vlog_libs.items():
+            if lib != "work":
+                cmds.append(["xvlog", "-sv", "-work", lib, *options, *files])
+        cmds.append(["xvlog", "-sv", *options, *vlog_libs.get("work", []),
+                     *[str(f) for f in sim.get("extra_sources") or []], str(tb)])
+        libs = [lib for lib in dict.fromkeys([*(g[0][0] for g in groups), *vlog_libs]) if lib != "work"]
         cmds.append(["xelab", TB_CLOCKED, *[str(t) for t in sim.get("extra_top_modules") or []],
-                     *[a for lib in sim.get("elab_libs") or [] for a in ("-L", str(lib))],
+                     *[a for lib in [*libs, *(sim.get("elab_libs") or [])] for a in ("-L", str(lib))],
                      "-s", "forge_tb_snap", "-timescale", "1ns/1ps"])
         return cmds
     if vhdl:
@@ -1409,6 +1452,7 @@ def plan_parts(level: Level) -> Dict[str, str]:
     compile_: Dict[str, Any] = {
         "sources": [str(f) for f in level.sources], "include_dirs": [str(d) for d in level.include_dirs],
         "defines": dict(sorted(level.defines.items())), "xsim": level.simulation,
+        "units": dict(sorted(level.compile_units.items())),
         "testbench_generator": TB_GENERATOR_VERSION}
     if bench is not None:
         compile_["bench"] = {

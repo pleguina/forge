@@ -8,7 +8,8 @@ question first.
 ## What you need
 
 - The name of your top-level module, and the sources it compiles from: a
-  glob under `sources:` or the compile list (`.f`) you already use.
+  glob under `sources:`, or the description your build already keeps (a
+  `.f` compile list, an ipbb dep tree, Hog list files).
 - Its clock and reset port names.
 - An input and the output you expect for it, as JSON keyed by interface, or
   as EMPv2/APx pattern files (any format in the
@@ -27,6 +28,32 @@ verification:
   input: data/input.json
   expected: data/expected.json
 ```
+
+Instead of `filelist`, `verification.sources` reads the description your
+build system keeps, so there is no second source list to maintain:
+
+```yaml
+verification:
+  sources: {provider: hog, project: algo}       # Top/algo/list/*.src, as Hog reads them
+  # sources: {provider: ipbb, src: src, component: "my-pkg:payload", dep: top.dep}
+  # sources: {provider: filelist, path: sim/files.f}
+  defines: {BIAS: "100"}
+  parameters: {OFFSET: 5}                       # the top's parameters or generics
+```
+
+Each file keeps its language, logical library and VHDL standard: a Hog
+`.src` file is a library named after it (or `lib=`), VHDL is 2008 unless a
+line says `93`, `SystemVerilog` marks SystemVerilog, `nosim` files are left
+out, and nested lists and wildcards are followed; ipbb's dep tree is parsed
+by ipbb, which keeps its libraries and VHDL-2008 flags. XSim then compiles
+each library and standard with `xvhdl --2008 -work <lib>` and elaborates
+with `-L <lib>`. An IP (`.xci`) or script is not compiled: `forge test
+--plan` lists it, and a design that needs its simulation model needs
+`verification.xsim.extra_sources` for it. A change to a list (a file added,
+a library or standard changed), a parameter, a define or a ROM (`.dat`)
+makes the last result out of date. VHDL records and complex SystemVerilog
+port types at the top are not flattened: give such a top a small wrapper
+with plain ports.
 
 `forge check` confirms the top is found, every port width is known (a width
 a define in the compile list sets is evaluated with it) and the clock and
