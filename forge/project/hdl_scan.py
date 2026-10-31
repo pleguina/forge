@@ -35,6 +35,7 @@ from typing import Dict, List, Mapping, Optional, Tuple
 
 from forge.core.utils.hdl_parser import (
     PortDecl,
+    _split_top_level,
     _strip_sv_comments,
     apply_declared_widths,
     scan_verilog_port_decls,
@@ -246,6 +247,71 @@ def _verilog_instantiations(module_source: str, module_name: str) -> Tuple[str, 
         seen_labels.add(label)
         found.append(candidate)
     return tuple(found)
+
+
+@dataclass(frozen=True)
+class Instantiation:
+    """One instantiation inside a module: its label, and its parameter and
+    port connections as written (``{name: expression}``). ``positional`` is
+    set when either list is given by position, which names nothing."""
+
+    module: str
+    label: str
+    parameters: Dict[str, str]
+    ports: Dict[str, str]
+    positional: bool = False
+
+
+def _balanced(text: str, start: int) -> int:
+    """Index just past the ``)`` closing the ``(`` at *start*."""
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return len(text)
+
+
+def _named_associations(text: str) -> Tuple[Dict[str, str], bool]:
+    named: Dict[str, str] = {}
+    positional = False
+    for piece in _split_top_level(text):
+        piece = piece.strip()
+        if not piece:
+            continue
+        m = re.fullmatch(r"\.(\w+)\s*\((.*)\)", piece, re.S)
+        if m:
+            named[m.group(1)] = m.group(2).strip()
+        else:
+            positional = True
+    return named, positional
+
+
+def verilog_instances(module_source: str, module_name: str) -> List[Instantiation]:
+    """Every instantiation in one module's source (a slice from
+    :func:`split_verilog_modules`), with its label and connections."""
+    found: List[Instantiation] = []
+    for match in _VLOG_INSTANCE_RE.finditer(module_source):
+        candidate = match.group("module")
+        if candidate in _VLOG_STATEMENT_KEYWORDS or candidate == module_name:
+            continue
+        if module_source[: match.start()].rstrip().endswith("module"):
+            continue
+        head = module_source[match.start():match.end()]
+        params: Dict[str, str] = {}
+        positional = False
+        hash_at = head.find("#")
+        if hash_at != -1:
+            open_at = match.start() + head.index("(", hash_at)
+            params, positional = _named_associations(
+                module_source[open_at + 1:_balanced(module_source, open_at) - 1])
+        open_at = match.end() - 1
+        ports, by_position = _named_associations(module_source[open_at + 1:_balanced(module_source, open_at) - 1])
+        found.append(Instantiation(candidate, match.group("instance"), params, ports, positional or by_position))
+    return found
 
 
 #: Module name -> ``{port: bits}`` declared in ``forge.yml`` ``widths:``.

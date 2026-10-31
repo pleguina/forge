@@ -51,6 +51,31 @@ headers they include, the data and the verification settings are unchanged;
 after an edit it is shown as out of date until `forge test` runs again. In
 CI, run `forge test --require-verified`.
 
+## One instance at a time
+
+A payload of many processors is slow to simulate. Name a payload target, and
+one for the instance you are working on, replaying what the payload run
+recorded at it:
+
+```yaml title="forge.yml"
+verification:
+  target: existing
+  filelist: sim/files.f
+  targets:
+    payload:
+      input: data/input.json
+      expected: data/expected.json
+    fine:
+      scope: instance:u_fine        # labels from your top down
+      replay: payload
+```
+
+The instance is simulated with the parameters your top gives it, its clock
+and reset found through the port map. After an edit, `forge test --target
+fine` checks it alone against that traffic; `--event-id` restricts the
+payload run, and so the recording, to one event. See
+[targets](../how-to/verify-from-the-design.md#targets).
+
 ## Then
 
 When you want FORGE to assemble the payload instead, `forge adopt` starts
