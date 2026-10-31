@@ -40,7 +40,15 @@ fields:
   charge: {low: 1, bits: 1}
   pt:     {low: 2, bits: 13}
   phi:    {low: 15, bits: 13, signed: true}
+  d0:     {low: 41, bits: 7, default: 0}    # the export gives none
 ```
+
+An object missing a field without a `default` is an error, so `pT` in the
+export is not packed as `pt = 0`. A layout shared by packing and reading
+cannot catch its own mistake: check it once against a word written down
+independently (the subsystem's own packer, or a word from its firmware
+documentation), as `forge/tests/test_integration_objects.py` does for the
+SAMuon word.
 
 ```yaml
 verification:

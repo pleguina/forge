@@ -162,3 +162,65 @@ def test_the_package_records_the_simulation_of_the_same_reference(payload, capsy
     _, doc, _ = _run(capsys, "report", "--package", "payload", "--json")
 
     assert doc["metrics"]["simulated"]["payload[verilator]"]["status"] == "VERIFIED"
+
+
+# ── Failure packages and firmware identity ──────────────────────────────────
+
+def test_a_package_reproduces_one_boundary_with_its_history(payload, capsys):
+    code, doc, err = _run(capsys, "report", "--package", "payload", "--package-events", "1", "--pre-roll", "1",
+                          "--json")
+    assert code == 0, err
+    package = Path(doc["metrics"]["package"])
+    manifest = json.loads((package / "manifest.json").read_text())
+
+    assert manifest["focus"] == {"events": ["1"], "pre_roll": 1,
+                                 "command": "forge test --target payload --event-list 1 --pre-roll 1"}
+    assert set(manifest["plan"]["parts"]) == {"target", "compile", "run", "compare"}
+    assert manifest["decoder"]["files"][0].endswith("decode.py") and manifest["decoder_files"]
+    assert manifest["reference_kind"] == "functional"
+    assert "--event-list 1 --pre-roll 1" in (package / "README.md").read_text()
+
+
+def test_large_reference_data_can_stay_outside_the_package(payload, capsys):
+    _, doc, _ = _run(capsys, "report", "--package", "payload", "--external-data", "--json")
+    package = Path(doc["metrics"]["package"])
+    manifest = json.loads((package / "manifest.json").read_text())
+
+    assert manifest["reference"]["expected"]["file"] is None
+    assert manifest["reference"]["expected"]["path"] == str(payload / "sink.txt")
+    assert not (package / "data/expected.txt").exists()
+
+
+def test_a_package_whose_decoder_changed_is_refused(payload, capsys):
+    _, doc, _ = _run(capsys, "report", "--package", "payload", "--json")
+    (payload / "decode.py").write_text("def decode(interface, word):\n    return {'pt': word & 0xf}\n")
+
+    code, _, err = _run(capsys, "test", "--capture", str(_capture(payload / "cap.txt", [0x11, 0x21])),
+                        "--package", doc["metrics"]["package"])
+
+    assert code != 0 and "decoder files" in err
+
+
+@pytest.mark.parametrize("readback, status", [
+    (None, "unconfirmed"),
+    ({"bitfile_sha256": "BIT"}, "confirmed"),
+    ({"bitfile_sha256": "OTHER"}, "differs"),
+    ({"fw_id_register": "0x1234"}, "not_comparable"),
+])
+def test_a_capture_says_whether_its_firmware_was_the_intended_one(payload, capsys, readback, status):
+    (payload / "top.bit").write_bytes(b"bitstream")
+    _, doc, _ = _run(capsys, "report", "--package", "payload", "--bitfile", "top.bit", "--json")
+    package = doc["metrics"]["package"]
+    argv = ["test", "--capture", str(_capture(payload / "cap.txt", [0x11, 0x21])), "--package", package]
+    if readback is not None:
+        import hashlib
+        sha = hashlib.sha256(b"bitstream").hexdigest()
+        (payload / "readback.json").write_text(json.dumps(
+            {k: sha if v == "BIT" else v for k, v in readback.items()}))
+        argv += ["--firmware-id", "readback.json"]
+
+    code, doc, err = _run(capsys, *argv, "--json")
+
+    assert code == 0, err
+    assert doc["metrics"]["firmware"] == status
+    assert doc["status"] == ("pass" if status == "confirmed" else "warn")

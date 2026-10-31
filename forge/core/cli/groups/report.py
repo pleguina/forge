@@ -81,7 +81,7 @@ def _verification_only_report(config, output: Optional[str]):
     )
 
 
-def _package(target: str, output: Optional[str]):
+def _package(target: str, output: Optional[str], args: Any = None):
     """`forge report --package <target>`: the target's replay package."""
     from forge.core.cli.envelope import CommandEnvelope
     from forge.project.config import ForgeConfig
@@ -93,7 +93,11 @@ def _package(target: str, output: Optional[str]):
         return CommandEnvelope(status="fail", diagnostics=[
             {"severity": "error", "message": "--package needs a forge.yml project"}])
     try:
-        out = write_package(ForgeConfig.load(root), target, Path(output).resolve() if output else None)
+        events = [e.strip() for e in (getattr(args, "package_events", None) or "").split(",") if e.strip()]
+        out = write_package(ForgeConfig.load(root), target, Path(output).resolve() if output else None,
+                            events=events or None, pre_roll=int(getattr(args, "pre_roll", 0) or 0),
+                            external=bool(getattr(args, "external_data", False)),
+                            bitfile=Path(args.bitfile).resolve() if getattr(args, "bitfile", None) else None)
     except (OSError, ValueError, KeyError) as exc:
         return CommandEnvelope(status="fail", diagnostics=[{"severity": "error", "message": str(exc)}],
                                next_actions=["Run `forge build` (or `forge test`) first"]
@@ -102,7 +106,8 @@ def _package(target: str, output: Optional[str]):
     return CommandEnvelope(
         status="pass", artifacts=[str(p) for p in sorted(out.rglob("*")) if p.is_file()],
         metrics={"package": str(out), "build": manifest["build"]["id"], "simulated": manifest["simulated"]},
-        next_actions=[f"Play {out / manifest['reference']['input']['file']} on the board, then "
+        next_actions=[f"Play {manifest['reference']['input'].get('path') or out / manifest['reference']['input']['file']} "
+                      "on the board, then "
                       f"`forge test --target {target} --capture <capture> --package {out}`"],
     )
 
@@ -113,7 +118,7 @@ def cmd_report(args) -> None:
     json_mode = getattr(args, "json", False)
     output = args.output
     if getattr(args, "package", None):
-        sys.exit(emit(_package(args.package, output), json_mode=json_mode))
+        sys.exit(emit(_package(args.package, output, args), json_mode=json_mode))
     if args.design is None:
         from forge.core.cli._shared import resolve_project_args
 
@@ -657,6 +662,15 @@ def register(sub) -> None:
     p.add_argument("--package", metavar="TARGET", default=None,
                    help="Write TARGET's replay package (reference data, link mapping, comparison, build "
                         "identity) under .forge/reports/packages/, or --output")
+    p.add_argument("--package-events", dest="package_events", default=None, metavar="EVENTS",
+                   help="With --package: the event(s) the package reproduces (names or positions, comma-separated)")
+    p.add_argument("--pre-roll", dest="pre_roll", type=int, default=0,
+                   help="With --package-events: events of history replayed before each one")
+    p.add_argument("--external-data", dest="external_data", action="store_true", default=False,
+                   help="With --package: name the reference files by path and checksum instead of copying them")
+    p.add_argument("--bitfile", default=None,
+                   help="With --package: the bitstream built from this source, recorded by checksum as the "
+                        "firmware a capture should come from")
     p.add_argument("--ip-info", help="Path to a pre-built ip_info.yaml (optional)")
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
     p.add_argument(

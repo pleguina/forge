@@ -7,5 +7,5 @@ fields:
   pt:     {low: 2, bits: 13}
   phi:    {low: 15, bits: 13, signed: true}
   eta:    {low: 28, bits: 13, signed: true}
-  d0:     {low: 41, bits: 7}
+  d0:     {low: 41, bits: 7, default: 0}    # the OMTF export gives no displacement
   qual:   {low: 48, bits: 8}

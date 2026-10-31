@@ -141,8 +141,11 @@ verification:
 | `fixed_latency`, `latency_window` | and each word leaves `latency` cycles after its input transaction (`source`, by default its own index) |
 
 Every result row names what went wrong: `mismatch`, `missing`, `extra`,
-`duplicate`, `out_of_order`, `wrong_cycle`, `latency`, `unknown` (X or Z).
-`tolerance` allows a numeric difference in the data only.
+`duplicate`, `out_of_order`, `wrong_cycle`, `latency`, `unknown` (X or Z),
+`framing`. `tolerance` allows a numeric difference in the data only.
+`framing: true` checks the packet boundaries of a link-word (`emp_lword`)
+output: a run of valid words on consecutive cycles is one packet, with
+`start` on its first word and `last` on its final one only.
 
 A reference often defines fewer bits than the firmware writes, and fixes no
 order among the objects of one event. `fields` compares words by the fields
@@ -158,16 +161,45 @@ verification:
 
 A field layout can stand in for the decoder: `verification.codecs` maps
 an output (or a glob of outputs) to a codec file, whose fields name the bits
-of each word; a word with no data bits set is no object. The same codec packs
+of each word. Packing an object that lacks a field is an error unless the
+field has a `default`; `unknown: error` also refuses keys the codec does not
+name; `empty` says which words carry no object (`zero`, the default: no data
+bit set; the name of a constant field such as `valid`: that field not at its
+constant; `never`). The same codec packs
 a reference export into pattern files
 ([compare with a CMSSW export](compare-with-a-cmssw-export.md)). A data spec's
 `provenance:` names a JSON file of where the data came from, for pattern
 files, which cannot carry one.
 
-An observed word belongs to the event an alignment of the observed and
-expected sequences puts it against, so a word missing or extra in one event
-is reported there and does not displace the later events. A mismatch pairs
-the expected word with the observed one that shares most fields with it.
+With `order: event` alone the comparison is of values only: an observed word
+belongs to the event an alignment of the observed and expected sequences
+puts it against, so a word missing or extra in one event is reported there
+and does not displace the later events, but a whole event arriving a bunch
+crossing late still matches. A mismatch pairs the expected word with the
+observed one that shares most fields with it.
+
+To check timing as well, give `order: event` a latency mode. Each observed
+word then belongs to the event whose window (its first input word plus
+`latency`) holds its cycle, whatever its value, and values are matched in
+any order within that event:
+
+```yaml
+verification:
+  compare: {fields: [pt, eta, phi], order: event, mode: latency_window, latency: {min: 12, max: 17}}
+```
+
+The same object moved into a neighbouring event's window fails (`missing`
+in one event, `extra` in the other); an object in an event the reference
+leaves empty is `extra`; repeated identical objects in neighbouring events
+are each needed; a word in no window is `extra` with its latency, and a word
+in two overlapping windows is `ambiguous_event`. The input must name its
+events (packets of a pattern file, or an `events:` file); without them the
+comparison fails with `no_event_timing` rather than guessing.
+
+Each evidence file has `checks`: `passed`, `failed`, `not_checked` or
+`unavailable` for `values`, `event_association`, `latency`, `cycle`,
+`framing` and `no_x_on_outputs`. A property the settings did not ask for is
+`not_checked`, never passed.
 
 `--stall N` and `--backpressure N` make `ready_valid` inputs withhold a word,
 and `ready_valid` outputs drop ready, in N percent of cycles (`--seed` fixes
@@ -274,6 +306,18 @@ forge test --target sorter
 A run of some events is kept under `.forge/reports/test/runs/` and does not
 replace the latest results, which stay those of every event.
 
+Such a run starts each selected event after the setup alone, without the
+events before it; a design that keeps state across events (a running sum,
+an orbit counter, a pipeline that is never flushed) may then differ from the
+full run, and the evidence says so (`replay_policy: independent`).
+`--pre-roll N` (or `pre_roll:` on the target) replays the N events before
+each selected one first: their outputs are reported under `context_rows`,
+not judged, since the first of them still ran without its own history.
+
+```bash
+forge test --target payload --event-id 7 --pre-roll 4
+```
+
 ## Statuses and evidence
 
 | Status | Meaning |
@@ -295,9 +339,21 @@ checker versions, the seed, and every interface's result rows; and an
 `derived` (recorded traffic) or `none`. `junit.xml` next to them has one case
 per level and simulator.
 
+A result applies while what decided it is unchanged. The evidence records
+by content every source and header, the memory (`.dat`) files the
+simulation reads, the decoder file and the project modules it imports, and
+the plan in four parts: the scope; the compile inputs (source list in order,
+include directories, defines, libraries, testbench); the run inputs (input
+data mapping, links, event names and association, event selection and
+pre-roll, replay); and the comparison (reference mapping, codec layouts or
+decoder, compare settings). `forge check` and `forge report` mark a result
+out of date when any of them, or the simulator's version, changes, and name
+the part.
+
 ## Compile once, run many
 
 The testbench reads its words at run time, so new data reuses the build. The
-build is reused only when its compile key (every source, header, the
-testbench, the commands and the simulator's version) is unchanged; any
-change rebuilds it.
+build is reused only when its compile key (every source, header and
+`verification.xsim.extra_sources` file by content, the testbench, the
+commands and the simulator's version) is unchanged; any change rebuilds it.
+A new dataset changes the run inputs only.

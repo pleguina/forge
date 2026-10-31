@@ -258,7 +258,8 @@ def cmd_auto_test(args, project) -> None:
             if not getattr(args, "plan", False):
                 _build_variants_and_subsystems(project, spec, select, json_mode)
         plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
-                         expected_override=ref(args.expected, args.expected_format), select=select, events=events)
+                         expected_override=ref(args.expected, args.expected_format), select=select, events=events,
+                         pre_roll=getattr(args, "pre_roll", None))
     except (OSError, ValueError, KeyError) as exc:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode,
                                      action="Declare the interfaces under verification.protocols in forge.yml"
@@ -370,12 +371,22 @@ def _compare_capture(args, project, plan, json_mode: bool) -> int:
         if getattr(args, "package", None):
             build = {**check_package(Path(args.package).resolve(), level)["build"], "package": str(Path(args.package).resolve())}
         else:
+            from forge.project.replay_package import firmware_intent
+
             generated = next((f.parent for f in level.sources if (f.parent / "provenance.json").is_file()), None)
-            build = {**auto.build_identity(level, generated), "package": None}
+            build = {**auto.build_identity(level, generated), "firmware": firmware_intent(project.root),
+                     "package": None}
+        firmware = None
+        if getattr(args, "firmware_id", None):
+            firmware = json.loads(Path(args.firmware_id).read_text())
+            if not isinstance(firmware, dict):
+                raise ValueError(f"{args.firmware_id}: want a JSON object of the identity fields read back "
+                                 "(git_sha, bitfile_sha256, a firmware ID register, ...)")
         capture = auto.DataRef.from_spec(
             {"path": str(Path(args.capture).resolve()), **({"format": args.capture_format} if args.capture_format else {})},
             project.root)
-        evidence = auto.compare_capture(level, capture, input_offset=getattr(args, "capture_offset", None), build=build)
+        evidence = auto.compare_capture(level, capture, input_offset=getattr(args, "capture_offset", None),
+                                        build=build, firmware=firmware)
     except (OSError, ValueError, KeyError) as exc:
         return _guided_run_failure(str(exc), json_mode=json_mode)
     name = f"{level.name.replace(':', '_')}.{auto.BOARD}.evidence.json"
@@ -397,12 +408,22 @@ def _compare_capture(args, project, plan, json_mode: bool) -> int:
             print(f"      {iface} {row.get('kind')}" + "".join(
                 f" {k}={row[k]}" for k in ("event", "index", "cycle", "expected", "observed") if k in row))
     status = {"VERIFIED": "pass", "FAILED": "fail"}.get(evidence.status, "warn")
+    fw = evidence.doc["firmware"]
+    diagnostics = [{"severity": "error", "message": f"{level.name} [board]: {detail}"}] if status == "fail" else []
+    if fw["status"] != "confirmed":
+        diagnostics.append({"severity": "warning", "message": f"{level.name} [board]: firmware {fw['status']}"
+                            + (f": {fw['reason']}" if fw.get("reason") else
+                               f": {', '.join(fw.get('differ', {}))} differ" if fw.get("differ") else "")})
+        if status == "pass":
+            status = "warn"
+    if not json_mode:
+        print(f"      firmware: {fw['status']}")
     return emit(CommandEnvelope(
         status=status,
-        diagnostics=[{"severity": "error", "message": f"{level.name} [board]: {detail}"}] if status == "fail" else [],
+        diagnostics=diagnostics,
         artifacts=[str(out_dir / name), str(run_dir)],
         metrics={"verification": evidence.status, "levels": {f"{level.name}[board]": evidence.status},
-                 "build": build["id"], "capture": str(capture.path)},
+                 "build": build["id"], "firmware": fw["status"], "capture": str(capture.path)},
     ), json_mode=json_mode)
 
 
@@ -770,6 +791,11 @@ def register(sub) -> None:
         "--all-events", dest="all_events", action="store_true", default=False,
         help="Run every event in the dataset",
     )
+    p_test.add_argument(
+        "--pre-roll", dest="pre_roll", type=int, default=None,
+        help="With --event-id/--event-list: also replay and compare this many events before each one, "
+             "for a design that keeps state across events (default: the target's pre_roll, else 0)",
+    )
     p_test.add_argument("--plugin", help="Plugin ID to bootstrap (when flow.plugin is absent from YAML)")
     auto = p_test.add_argument_group(
         "without a verification config",
@@ -806,6 +832,9 @@ def register(sub) -> None:
     auto.add_argument("--package", default=None,
                       help="With --capture: the replay package the board ran (forge report --package); "
                            "its reference must still be forge.yml's")
+    auto.add_argument("--firmware-id", dest="firmware_id", default=None,
+                      help="With --capture: JSON of the firmware identity read back from the board (git_sha, "
+                           "bitfile_sha256, ID registers); without it the capture's firmware is unconfirmed")
     auto.add_argument("--plan", action="store_true", default=False,
                       help="Print what would be verified, and what was inferred, without simulating")
     p_test.add_argument(

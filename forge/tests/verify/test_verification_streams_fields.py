@@ -278,7 +278,8 @@ def test_a_word_with_no_object_is_not_a_transaction():
 
 @pytest.mark.parametrize("d, message", [
     ({"order": "sideways"}, "compare.order 'sideways'"),
-    ({"order": "event", "mode": "fixed_latency", "latency": 3}, "needs order strict"),
+    ({"order": "any", "mode": "fixed_latency", "latency": 3}, "needs order strict"),
+    ({"order": "event", "mode": "exact_cycle"}, "give the timing as a latency"),
     ({"fields": []}, "compare.fields: want a list"),
 ])
 def test_a_wrong_compare_is_named(d, message):

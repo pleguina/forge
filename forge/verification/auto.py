@@ -84,6 +84,14 @@ class DataRef:
     def sha256(self) -> str:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
 
+    def identity(self) -> Dict[str, Any]:
+        """Everything about the reference other than file contents that
+        decides how it is read: path, format, link map, event names, event
+        association."""
+        return {"path": str(self.path), "format": self.format, "links": dict(sorted(self.links.items())),
+                "events": str(self.events) if self.events is not None else None,
+                "association": dict(sorted(self.association.items()))}
+
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"path": str(self.path), "format": self.format, "sha256": self.sha256()}
         if self.links:
@@ -141,6 +149,7 @@ class Level:
     drain: Optional[int] = None             # cycles simulated after the last input
     settle: int = 0                         # cycles after reset in which X on an output is not an error
     simulation: Dict[str, Any] = field(default_factory=dict)       # verification.xsim
+    pre_roll: int = 0                       # events replayed before each selected one, for their history
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"level": self.name, "top": self.top, "required": self.required}
@@ -156,7 +165,7 @@ class Level:
         if self.defines:
             out["defines"] = dict(self.defines)
         if self.decoder is not None:
-            out["decoder"] = f"{getattr(self.decoder, '__module__', '')}.{getattr(self.decoder, '__qualname__', '')}"
+            out["decoder"] = decoder_identity(self.decoder)
         assert self.bench is not None
         out["clock"] = self.bench.clock
         out["clock_period_ns"] = self.bench.period_ns
@@ -174,6 +183,10 @@ class Level:
             out["expected"] = str(self.expected.path) if self.expected else None
         if self.events:
             out["events"] = list(self.events)
+            out["pre_roll"] = self.pre_roll
+        for key, ref in (("input_mapping", self.input), ("expected_mapping", self.expected)):
+            if ref is not None and (ref.links or ref.association or ref.events):
+                out[key] = {k: v for k, v in ref.identity().items() if k not in ("path", "format")}
         checked = self.expected is not None or self.replay is not None
         out["checks"] = ["compile", "reset", "no_x_on_outputs"] + (["function"] if checked else [])
         if not checked:
@@ -589,7 +602,7 @@ def plan_existing(config: Any, spec: Mapping[str, Any], input_override: Optional
 _TARGET_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 _TARGET_KEYS = frozenset({"scope", "instances", "input", "expected", "compare", "gap", "protocols",
                           "backends", "required", "replay", "record", "depth", "variant", "outputs", "drain",
-                          "settle"})
+                          "settle", "pre_roll"})
 _XSIM_KEYS = frozenset({"elab_libs", "extra_top_modules", "extra_sources"})
 
 
@@ -605,7 +618,8 @@ def variant_generated_dir(project: Any, name: str) -> Path:
 
 def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
          input_override: Optional[Any] = None, expected_override: Optional[Any] = None,
-         select: Optional[Sequence[str]] = None, events: Optional[Sequence[str]] = None) -> VerificationPlan:
+         select: Optional[Sequence[str]] = None, events: Optional[Sequence[str]] = None,
+         pre_roll: Optional[int] = None) -> VerificationPlan:
     """The plan of a ``forge.yml`` project: a built one
     (``forge.project.resolve.ResolvedProject``), or one whose own top is
     simulated (``verification.target: existing``).
@@ -614,7 +628,9 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     the levels are the design and each module; the design's result is the
     one required, a module's only when it has an expected output of its own.
     *select* keeps only the named levels; *events* (names or positions)
-    restricts every level with data of its own to those events.
+    restricts every level with data of its own to those events, each after
+    *pre_roll* events of history (default: the target's or the
+    verification's ``pre_roll``, else none).
     *input_override* and *expected_override* (``--input``, ``--expected``)
     replace the data of the design level, or of the one selected target.
     """
@@ -655,8 +671,13 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
         own = [lv for lv in levels if lv.replay is None and lv.input is not None]
         if not own:
             raise ValueError("--event-id/--event-list: no selected level has input data of its own to select from")
+        targets_spec = spec.get("targets") if isinstance(spec.get("targets"), Mapping) else {}
         for lv in own:
             lv.events = [str(e) for e in events]
+            t = (targets_spec or {}).get(lv.name) or {}
+            lv.pre_roll = int(pre_roll if pre_roll is not None else t.get("pre_roll", spec.get("pre_roll", 0)))
+            if lv.pre_roll < 0:
+                raise ValueError(f"{lv.name}: pre_roll is a number of events, not {lv.pre_roll}")
     notes = list(design.notes)
     if isinstance(design, _Existing):
         notes.append(f"existing:{design.top}: the project's own top, as written; nothing generated")
@@ -1036,8 +1057,13 @@ def missing_tools(backend: str) -> List[str]:
     return [t for t in BACKENDS[backend] if shutil.which(t) is None]
 
 
+def _extra_sources(level: Level) -> List[Path]:
+    return [Path(f) for f in level.simulation.get("extra_sources") or []]
+
+
 def _list_file(level: Level, generated: Sequence[Path], path: Path) -> None:
-    lines = [f'-I"{d}"' for d in level.include_dirs] + [f'"{f}"' for f in [*level.sources, *generated]]
+    lines = [f'-I"{d}"' for d in level.include_dirs] + [
+        f'"{f}"' for f in [*level.sources, *_extra_sources(level), *generated]]
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1066,16 +1092,26 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
              *[f"-I{d}" for d in incs], *[f"-D{d}" for d in defs], *vlog, str(tb), str(work / "forge_tb_main.cpp")]]
 
 
-def _stage_memory_files(level: Level, work: Path) -> int:
-    """Link the ``.dat`` files next to *level*'s sources into *work*: HLS
-    writes ROM contents there and reads them from the simulator's directory."""
-    linked = 0
+def _memory_files(level: Level) -> List[Path]:
+    """The ``.dat`` files next to *level*'s sources: HLS writes ROM contents
+    there and the simulation reads them from its own directory."""
+    found: Dict[str, Path] = {}
     for d in dict.fromkeys([*(f.parent for f in level.sources), *level.include_dirs]):
         for dat in sorted(d.glob("*.dat")) if d.is_dir() else []:
-            dst = work / dat.name
-            if not dst.exists():
-                dst.symlink_to(dat.resolve())
-                linked += 1
+            found.setdefault(dat.name, dat.resolve())
+    return list(found.values())
+
+
+def _stage_memory_files(level: Level, work: Path) -> int:
+    """Link :func:`_memory_files` into *work*."""
+    linked = 0
+    for dat in _memory_files(level):
+        dst = work / dat.name
+        if dst.is_symlink() and dst.resolve() != dat:
+            dst.unlink()
+        if not dst.exists():
+            dst.symlink_to(dat)
+            linked += 1
     return linked
 
 
@@ -1119,6 +1155,35 @@ def _field_key(level: Level, name: str) -> Optional[sb.Key]:
                              f"(compare.fields of {level.name}); it gives {', '.join(got)}")
         return tuple(got[f] for f in fields)
     return key
+
+
+def compare_outputs(level: Level, compared: Sequence[Interface], expected: Optional[Mapping[str, List[sb.Expected]]],
+                    observed_of: Any, input_cycles: Sequence[int],
+                    event_cycles: Optional[Mapping[str, int]],
+                    context: Sequence[str] = ()) -> List[sb.InterfaceResult]:
+    """Each compared output of *level* against its expected words: one
+    comparison for a simulation trace and a board capture alike, with the
+    level's compare settings, decoder fields and event timing.
+    *observed_of(name)* gives ``(observed, unknown cycles)`` of an output;
+    differences in the *context* events (a pre-roll) do not fail it."""
+    results = []
+    for o in compared:
+        observed, unknown = observed_of(o.name)
+        result = sb.compare(o.name, None if expected is None else expected.get(o.name), observed, level.compare,
+                            input_cycles=input_cycles, unknown=unknown, event_cycles=event_cycles,
+                            key=_field_key(level, o.name))
+        if level.compare.framing:
+            if o.protocol != "emp_lword":
+                raise ValueError(f"{level.name}: compare.framing checks link-word packets; {o.name} is {o.protocol}")
+            sb.framing(result, observed, lambda w, o=o: unpack(o, w), [f for f in ("start", "last") if f in o.fields])
+            if result.rows:
+                result.status = sb.FAILED
+        result.set_aside(context)
+        if level.decoder is not None:
+            _decode_rows(level.decoder, o, result.rows)
+            _decode_rows(level.decoder, o, result.context_rows)
+        results.append(result)
+    return results
 
 
 def _sim_command(backend: str, work: Path, plusargs: Mapping[str, str]) -> List[str]:
@@ -1277,9 +1342,25 @@ def load_decoder(spec: Any, root: Path) -> Any:
     module_spec = importlib.util.spec_from_file_location(f"forge_decoder_{path.stem}", path)
     if module_spec is None or module_spec.loader is None or not func:
         raise ValueError(f"verification.decoder {spec!r}: want path/to/file.py:function")
+    import sys
+
     module = importlib.util.module_from_spec(module_spec)
+    before = set(sys.modules)
     module_spec.loader.exec_module(module)
-    return getattr(module, func)
+    function = getattr(module, func)
+    local = [path]
+    imported = [sys.modules[m] for m in set(sys.modules) - before]
+    imported += [v for v in vars(module).values() if type(v) is type(sys)]
+    imported += [sys.modules.get(getattr(v, "__module__", "") or "") for v in vars(module).values() if callable(v)]
+    for mod in imported:
+        file = getattr(mod, "__file__", None)
+        if file and root.resolve() in Path(file).resolve().parents and Path(file).resolve() not in local:
+            local.append(Path(file).resolve())
+    try:
+        function.forge_files = sorted(local)
+    except AttributeError:
+        pass
+    return function
 
 
 def _decode_rows(decoder: Any, iface: Interface, rows: List[Dict[str, Any]]) -> None:
@@ -1292,13 +1373,74 @@ def _decode_rows(decoder: Any, iface: Interface, rows: List[Dict[str, Any]]) -> 
                     row[f"{key}_fields"] = {"decoder_error": str(exc)}
 
 
+def decoder_identity(decoder: Any) -> Optional[Dict[str, Any]]:
+    """What decides a decoder's reading: a codec decoder's layouts, or a
+    project function's name and the files it was loaded from."""
+    if decoder is None:
+        return None
+    codecs = getattr(decoder, "forge_identity", None)
+    if codecs is not None:
+        return {"codecs": codecs}
+    return {"function": f"{getattr(decoder, '__module__', '')}.{getattr(decoder, '__qualname__', '')}",
+            "files": [str(f) for f in getattr(decoder, "forge_files", [])]}
+
+
+#: What each part of a level's identity covers, for an out-of-date message.
+PLAN_PARTS = {
+    "target": "its scope",
+    "compile": "its compile inputs (source list, libraries, defines, testbench)",
+    "run": "its run inputs (input data mapping, event selection, replay, memory files)",
+    "compare": "its comparison (reference mapping, decoder or codecs, compare settings)",
+}
+
+
+def _sha(body: Any) -> str:
+    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def plan_parts(level: Level) -> Dict[str, str]:
+    """sha256 per part (:data:`PLAN_PARTS`) of everything about *level* other
+    than file contents that decides its result. File contents are recorded
+    by hash in the evidence; together they say whether a result still
+    applies, and which part of it changed."""
+    bench = level.bench
+    target = {"top": level.top, "scope": level.scope or level.name, "instances": level.members,
+              "backends": level.backends, "skipped": level.skip}
+    compile_: Dict[str, Any] = {
+        "sources": [str(f) for f in level.sources], "include_dirs": [str(d) for d in level.include_dirs],
+        "defines": dict(sorted(level.defines.items())), "xsim": level.simulation,
+        "testbench_generator": TB_GENERATOR_VERSION}
+    if bench is not None:
+        compile_["bench"] = {
+            "clock": bench.clock, "reset": bench.reset, "reset_active_high": bench.reset_active_high,
+            "period_ns": bench.period_ns, "depth": bench.depth, "parameters": dict(bench.parameters),
+            "interfaces": [{"name": i.name, "direction": i.direction, "protocol": i.version,
+                            "ports": [(p.name, p.width) for p in i.ports()]} for i in bench.interfaces],
+            "probes": [(inst, i.name) for inst, i in bench.probes]}
+    run_ = {"input": level.input.identity() if level.input else None, "gap": level.gap, "drain": level.drain,
+            "settle": level.settle, "events": level.events, "pre_roll": level.pre_roll,
+            "replay": {"source": level.replay.source, "instances": level.replay.instances} if level.replay else None,
+            "memory_files": [str(f) for f in _memory_files(level)] if level.sources else []}
+    compare_ = {"expected": level.expected.identity() if level.expected else None,
+                "compare": level.compare.to_dict(), "outputs": level.outputs,
+                "streams": {k: list(v) for k, v in level.streams.items()},
+                "decoder": decoder_identity(level.decoder), "checker": sb.CHECKER_VERSION}
+    return {"target": _sha(target), "compile": _sha(compile_), "run": _sha(run_), "compare": _sha(compare_)}
+
+
+def identity_of(parts: Mapping[str, str]) -> str:
+    """The single plan identity of :func:`plan_parts`."""
+    return _sha(dict(parts))
+
+
 def plan_identity(level: Level) -> str:
     """sha256 of everything about *level* other than file contents that decides
-    its result: interfaces and protocols, clock, reset, data references, compare
-    settings, checker and testbench generator versions."""
-    body = {**level.to_dict(), "checker": sb.CHECKER_VERSION, "testbench_generator": TB_GENERATOR_VERSION}
-    body.pop("required")
-    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+    its result (:func:`plan_parts`, as one hash)."""
+    return identity_of(plan_parts(level))
+
+
+def _hashed(paths: Sequence[Path]) -> List[Dict[str, str]]:
+    return [{"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()} for f in paths if f.is_file()]
 
 
 def _headers(level: Level) -> List[Dict[str, str]]:
@@ -1312,16 +1454,19 @@ def _headers(level: Level) -> List[Dict[str, str]]:
 
 
 def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence:
+    parts = plan_parts(level)
     doc: Dict[str, Any] = {
         "schema": EVIDENCE_SCHEMA,
         "level": level.name,
         "top": level.top,
         "backend": backend,
         "status": status,
-        "sources": [{"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
-                    for f in level.sources if f.is_file()],
+        "sources": _hashed([*level.sources, *_extra_sources(level)]),
         "headers": _headers(level),
-        "plan_sha256": plan_identity(level),
+        "memory_files": _hashed(_memory_files(level)) if level.sources else [],
+        "decoder_files": _hashed([Path(f) for f in (decoder_identity(level.decoder) or {}).get("files", [])]),
+        "plan_sha256": identity_of(parts),
+        "plan_parts": parts,
         "input": level.input.to_dict() if level.input else None,
         "expected": _expected_ref(level),
         "checker": {"version": sb.CHECKER_VERSION, **level.compare.to_dict()},
@@ -1376,10 +1521,17 @@ def _replayed(level: Level, backend: str, work: Path, recorded: Path) -> Union[s
 
 
 def _select_events(level: Level, tagged: Tagged,
-                   expected: Optional[Dict[str, List[sb.Expected]]]) -> Tuple[Tagged, Optional[Dict[str, List[sb.Expected]]], List[str]]:
+                   expected: Optional[Dict[str, List[sb.Expected]]]) -> Tuple[Tagged, Optional[Dict[str, List[sb.Expected]]], Dict[str, Any]]:
     """*tagged* and *expected* restricted to the events *level* selects, by
-    name or by position (``7``, ``10-12``). Words of no event (a setup, the
-    idle frames of a pattern file) are kept."""
+    name or by position (``7``, ``10-12``), and how they were replayed. Words
+    of no event (a setup, the idle frames of a pattern file) are kept.
+
+    With ``pre_roll`` N the N events before each selected one are replayed
+    as well, so a design that keeps state across events reaches the selected
+    one with that history; their own outputs are reported, not judged (the
+    first of them ran without its history). Without it each selected event runs
+    after nothing but the setup: a stateful design may then differ from the
+    full run, and the result says so."""
     assert level.events and level.input is not None
     if level.compare.mode == "exact_cycle":
         raise ValueError("--event-id/--event-list with compare mode exact_cycle: the expected cycles are "
@@ -1405,11 +1557,24 @@ def _select_events(level: Level, tagged: Tagged,
             if k >= len(order):
                 raise ValueError(f"event position {k}: {level.input.path} holds {len(order)} events")
             chosen.append(order[k])
-    keep = set(chosen)
+    focus = set(chosen)
+    keep = set(focus)
+    for name in chosen:
+        k = order.index(name)
+        keep.update(order[max(0, k - level.pre_roll):k])
     tagged = {k: [(e, v) for e, v in rows if e is None or e in keep] for k, rows in tagged.items()}
     if expected is not None:
         expected = {k: [x for x in rows if x.event in keep] for k, rows in expected.items()}
-    return tagged, expected, [e for e in order if e in keep]
+    how: Dict[str, Any] = {"events": [e for e in order if e in focus]}
+    if level.pre_roll:
+        how["replay_policy"] = {"pre_roll": level.pre_roll}
+        how["context_events"] = [e for e in order if e in keep and e not in focus]
+    else:
+        how["replay_policy"] = "independent"
+        how["replay_note"] = ("each selected event ran after the setup alone, without the events before it: "
+                              "a design that keeps state across events may differ from the full run "
+                              "(give a pre-roll to replay its history)")
+    return tagged, expected, how
 
 
 def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0, backpressure: int = 0,
@@ -1467,8 +1632,8 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     compared = _compared(level)
     expected = load_expected(level.expected, bench, compared) if level.expected else None
     if level.events:
-        tagged, expected, chosen = _select_events(level, tagged, expected)
-        replayed["events"] = chosen
+        tagged, expected, how = _select_events(level, tagged, expected)
+        replayed.update(how)
     values = {k: [v for _, v in rows] for k, rows in tagged.items()}
     plusargs = write_inputs(bench, values, work / "data", gap=level.gap)
     trace = work / "trace.txt"
@@ -1497,16 +1662,12 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     first_in = next((i.name for i in bench.interfaces if i.direction == "in"), None)
     input_cycles = [c for c, _ in t["inputs"].get(first_in, [])] if first_in else []
     event_cycles = _event_cycles(tagged, t["inputs"])
-    results = []
-    for o in compared:
-        exp = None if expected is None else expected.get(o.name)
-        observed, unknown = _observed(level, o.name, t)
-        unknown = [c for c in unknown if c >= level.settle]
-        result = sb.compare(o.name, exp, observed, level.compare, input_cycles=input_cycles, unknown=unknown,
-                            event_cycles=event_cycles, key=_field_key(level, o.name))
-        if level.decoder is not None:
-            _decode_rows(level.decoder, o, result.rows)
-        results.append(result)
+    def observed_of(name: str) -> Tuple[List[Tuple[int, int]], List[int]]:
+        observed, unknown = _observed(level, name, t)
+        return observed, [c for c in unknown if c >= level.settle]
+
+    results = compare_outputs(level, compared, expected, observed_of, input_cycles, event_cycles,
+                              replayed.get("context_events", ()))
     status = sb.combine([r.status for r in results])
     if expected is None and status != sb.FAILED:
         status = sb.NOT_VERIFIED_NO_ORACLE
@@ -1518,6 +1679,8 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
             "note": "recorded from the design level: a regression reference, not an independent oracle"})
     return _evidence(level, backend, status, **ident,
                      inputs_driven={k: len(v) for k, v in t["inputs"].items()},
+                     checks={"compile": "passed", "reset": "passed",
+                             **sb.checks(level.compare, results, expected is not None)},
                      interfaces=[r.to_dict() for r in results])
 
 
@@ -1570,8 +1733,27 @@ def build_identity(level: Level, generated: Optional[Path] = None) -> Dict[str, 
     return identity
 
 
+def firmware_status(intended: Mapping[str, Any], observed: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Whether the firmware a capture came from is the intended one:
+    ``unconfirmed`` without a readback, ``confirmed`` when every field the
+    readback shares with the intended identity (``git_sha``,
+    ``bitfile_sha256``, ...) agrees, ``differs`` when one does not, and
+    ``not_comparable`` when they share none."""
+    if not observed:
+        return {"status": "unconfirmed", "reason": "no firmware identity was read back from the board"}
+    shared = sorted(k for k in observed if k in intended)
+    if not shared:
+        return {"status": "not_comparable", "observed": dict(observed),
+                "reason": f"the readback gives {', '.join(map(str, observed))}; the intended identity "
+                          f"{', '.join(map(str, intended)) or 'nothing'}"}
+    differ = [k for k in shared if str(observed[k]) != str(intended[k])]
+    return {"status": "differs" if differ else "confirmed", "observed": dict(observed), "compared": shared,
+            **({"differ": {k: {"intended": intended[k], "observed": observed[k]} for k in differ}} if differ else {})}
+
+
 def compare_capture(level: Level, capture: DataRef, *, input_offset: Optional[int] = None,
-                    build: Optional[Mapping[str, Any]] = None) -> Evidence:
+                    build: Optional[Mapping[str, Any]] = None,
+                    firmware: Optional[Mapping[str, Any]] = None) -> Evidence:
     """A board capture of *level*'s outputs compared with its expected output
     by the scoreboard simulation uses, as evidence on backend ``board``.
 
@@ -1580,7 +1762,8 @@ def compare_capture(level: Level, capture: DataRef, *, input_offset: Optional[in
     it to, and a capture's cycles are its frames. A latency mode measures
     from the input: *input_offset* is the capture frame at which the input's
     frame 0 was played, which only the board setup knows. *build* is the
-    identity of the firmware the capture came from."""
+    identity the firmware should have; *firmware* the identity read back from
+    the board, when one was."""
     from forge.verification.dataset_format import get_format_loader
 
     if level.skip or level.bench is None:
@@ -1592,19 +1775,31 @@ def compare_capture(level: Level, capture: DataRef, *, input_offset: Optional[in
     if not hasattr(loader, "read"):
         raise ValueError(f"{capture.path}: a capture is a pattern file ({capture.format} carries no link words)")
     links = level.expected.links
-    outputs = [i for i in bench.interfaces if i.direction == "out"]
-    unmapped = [o.name for o in outputs if o.name not in links]
+    compared = _compared(level)
+    by_name = {i.name: i for i in bench.interfaces}
+
+    def carriers(name: str) -> Optional[List[str]]:
+        """The interfaces whose links carry compared output *name*: a stream's
+        members when every one is mapped (the board's own output ports),
+        else the output itself."""
+        members = level.streams.get(name)
+        if members and all(m in links for m in members):
+            return list(members)
+        return [name] if name in links else None
+
+    unmapped = [o.name for o in compared if carriers(o.name) is None]
     if unmapped:
         raise ValueError(f"verification.links maps no link to {', '.join(unmapped)}, so the capture cannot be read for it")
     if level.compare.mode in ("fixed_latency", "latency_window") and input_offset is None:
         raise ValueError(f"compare mode {level.compare.mode} measures latency from the input: give the capture "
                          "frame at which the input's frame 0 was played (--capture-offset)")
     board = loader.read(capture.path)
-    expected: Optional[Dict[str, List[sb.Expected]]] = load_expected(level.expected, bench)
+    expected: Optional[Dict[str, List[sb.Expected]]] = load_expected(level.expected, bench, compared)
     tagged: Tagged = load_tagged(level.input, bench, inputs=True) if level.input is not None else {}
     extra: Dict[str, Any] = {}
     if level.events:
-        tagged, expected, extra["events"] = _select_events(level, tagged, expected)
+        tagged, expected, how = _select_events(level, tagged, expected)
+        extra.update(how)
     driven: Dict[str, List[Tuple[int, int]]] = {}
     if input_offset is not None and level.input is not None:
         source = get_format_loader(level.input.path, level.input.format)
@@ -1617,17 +1812,25 @@ def compare_capture(level: Level, capture: DataRef, *, input_offset: Optional[in
     first_in = next((i.name for i in bench.interfaces if i.direction == "in" and i.name in driven), None)
     input_cycles = [c for c, _ in driven.get(first_in, [])] if first_in else []
     event_cycles = _event_cycles(tagged, driven) if driven else None
-    results = []
-    for o in outputs:
-        observed = _link_frames(capture, o, links[o.name], board)
-        result = sb.compare(o.name, None if expected is None else expected.get(o.name), observed, level.compare,
-                            input_cycles=input_cycles, unknown=[], event_cycles=event_cycles)
-        if level.decoder is not None:
-            _decode_rows(level.decoder, o, result.rows)
-        results.append(result)
+    compared_by = {o.name: o for o in compared}
+
+    def observed_of(name: str) -> Tuple[List[Tuple[int, int]], List[int]]:
+        names = carriers(name)
+        assert names is not None
+        if names == [name]:
+            return _link_frames(capture, compared_by[name], links[name], board), []
+        trace = {"outputs": {m: _link_frames(capture, by_name[m], links[m], board) for m in names}, "unknown": {}}
+        return _observed(level, name, trace)
+
+    results = compare_outputs(level, compared, expected, observed_of, input_cycles, event_cycles,
+                              extra.get("context_events", ()))
     status = sb.combine([r.status for r in results])
+    used = {n: links[n] for o in compared for n in carriers(o.name) or []}
+    intended = dict((build or {}).get("firmware") or {})
     return _evidence(level, BOARD, status, capture=capture.to_dict(), build=dict(build or {}),
-                     input_offset=input_offset, links={o.name: links[o.name] for o in outputs},
+                     firmware=firmware_status(intended, firmware),
+                     input_offset=input_offset, links=used,
+                     checks={**sb.checks(level.compare, results, True), "no_x_on_outputs": "not_checked"},
                      interfaces=[r.to_dict() for r in results], **extra)
 
 
