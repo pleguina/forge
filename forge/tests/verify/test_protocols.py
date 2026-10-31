@@ -31,8 +31,15 @@ def test_valid_ready_valid_axis_and_scalar_are_found():
 
 
 def test_a_ready_in_the_same_direction_as_the_data_is_not_its_handshake():
-    with pytest.raises(InterfaceError, match="ports in no interface: x_ready"):
-        infer(_p(("x", "in", 4), ("x_valid", "in", 1), ("x_ready", "in", 1)))
+    ifaces = infer(_p(("x", "in", 4), ("x_valid", "in", 1), ("x_ready", "in", 1)))
+
+    assert [(i.name, i.protocol) for i in ifaces] == [("x", "valid"), ("x_ready", "scalar")]
+
+
+def test_a_valid_that_pairs_with_no_data_port_is_a_signal_of_its_own():
+    ifaces = infer(_p(("cfg64", "in", 64), ("cfg_valid", "in", 1)))
+
+    assert [(i.name, i.protocol) for i in ifaces] == [("cfg64", "scalar"), ("cfg_valid", "scalar")]
 
 
 def test_emp_link_word_fields_form_one_interface():

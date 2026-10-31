@@ -27,7 +27,10 @@ decision, not a placeholder pending one).
    merges it misaligns and which checks to rerun: [change a processing stage](how-to/change-a-processing-stage.md).
 4. **Assemble and maintain a payload of many copies** — define a chain once,
    name board and simulation variants: [repeat a chain and name variants](how-to/repeat-a-chain-and-name-variants.md).
-5. **Start a new design from scratch** — see the [quickstart](getting-started/quickstart.md).
+5. **Compare a trigger payload with CMSSW** — consume the emulator's export
+   through a small project adapter, compare objects by their fields, find a
+   failing event again: [compare with a CMSSW export](how-to/compare-with-a-cmssw-export.md).
+6. **Start a new design from scratch** — see the [quickstart](getting-started/quickstart.md).
 
 ## Current scope
 

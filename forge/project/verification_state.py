@@ -314,6 +314,16 @@ def render_markdown(records: List[ResultRecord]) -> str:
         lines.append(f"| {r.name} | {r.status} | {'yes' if r.required else 'no'} | {reference} | {fresh} | "
                      f"{detail} | {r.path.name} |")
     lines.append("")
+    origins: Dict[str, Dict[str, Any]] = {}
+    for r in records:
+        origin = (r.payload.get("expected") or {}).get("provenance")
+        if isinstance(origin, dict) and origin:
+            origins[r.name] = origin
+    if origins:
+        lines += ["Where each reference came from:", ""]
+        lines += [f"- {name}: " + ", ".join(f"{k} {v}" for k, v in origin.items() if not isinstance(v, (dict, list)))
+                  for name, origin in origins.items()]
+        lines.append("")
     for r in records:
         rows = [(i["interface"], row) for i in r.payload.get("interfaces") or [] for row in i.get("rows") or []]
         if not rows:

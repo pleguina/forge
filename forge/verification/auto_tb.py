@@ -10,7 +10,9 @@ so new inputs need no recompilation (the compile key of
 Protocols, as driven and observed:
 
 - ``scalar``: an input takes the next word every cycle (the last word is
-  held); an output is recorded every cycle.
+  held); an output is recorded every cycle, which is not activity: a design
+  whose outputs all change every cycle ends ``drain`` cycles after its last
+  input.
 - ``valid``: an input word is driven with valid for one cycle, then
   ``gap`` idle cycles; an output is recorded when valid is high.
 - ``ready_valid``: an input word is held with valid until ready, and a new
@@ -35,7 +37,7 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from forge.verification.protocols import EMP_FIELDS, Interface
 
-TB_GENERATOR_VERSION = "2"
+TB_GENERATOR_VERSION = "3"
 TB_MODULE = "forge_tb"
 # Drives forge_tb's clock where the simulator runs Verilog delays (XSim);
 # Verilator runs forge_tb from a generated C++ main instead.
@@ -248,9 +250,10 @@ def testbench(b: Bench) -> str:
         L += [f"    if ({fire}) begin",
               f'      if ($isunknown({data})) $fdisplay(fd, "%0d !{o.name} x", cycle);',
               f'      else $fdisplay(fd, "%0d <{o.name} %h", cycle, {data});',
-              f"      seen_{o.name} = seen_{o.name} + 1;",
-              "      last_activity = cycle;",
-              "    end"]
+              f"      seen_{o.name} = seen_{o.name} + 1;"]
+        if o.protocol != "scalar":
+            L.append("      last_activity = cycle;")
+        L.append("    end")
         if o.ready is not None:
             L.append(f"    {o.ready.name} <= ($urandom % 100) >= bp_{o.name};")
         L += ["  end", ""]
