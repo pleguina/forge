@@ -43,7 +43,7 @@ another position is reported as out of order.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import AbstractSet, Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 CHECKER_VERSION = "4"
 MODES = ("transaction", "exact_cycle", "fixed_latency", "latency_window")
@@ -477,7 +477,7 @@ def checks(cmp: Compare, results: Sequence[InterfaceResult], oracle: bool) -> Di
     property the settings did not ask for is not checked, never passed."""
     kinds = {row.get("kind") for r in results for row in r.rows}
 
-    def verdict(asked: bool, bad: set, unavailable: set = frozenset()) -> str:
+    def verdict(asked: bool, bad: AbstractSet[Any], unavailable: AbstractSet[Any] = frozenset()) -> str:
         if not asked:
             return "not_checked"
         if kinds & set(unavailable):

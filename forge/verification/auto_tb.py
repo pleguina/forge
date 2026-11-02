@@ -264,12 +264,12 @@ def testbench(b: Bench) -> str:
         for p in i.ports():
             if p.direction == "in":
                 L.append(f"    {p.name} = '0;")
-    for m in mem_ins:
-        L += [f'    if ($value$plusargs("STIM_{m.name}=%s", path)) $readmemh(path, mem_{m.name});',
-              f'    if ($value$plusargs("CNT_{m.name}=%s", path)) $readmemh(path, cnt_{m.name});',
-              f'    void\'($value$plusargs("N_{m.name}=%d", n_{m.name}));']
-    for m in mem_outs:
-        L.append(f'    void\'($value$plusargs("EXPECT_{m.name}=%d", expect_{m.name}));')
+    for mi in mem_ins:
+        L += [f'    if ($value$plusargs("STIM_{mi.name}=%s", path)) $readmemh(path, mem_{mi.name});',
+              f'    if ($value$plusargs("CNT_{mi.name}=%s", path)) $readmemh(path, cnt_{mi.name});',
+              f'    void\'($value$plusargs("N_{mi.name}=%d", n_{mi.name}));']
+    for mo in mem_outs:
+        L.append(f'    void\'($value$plusargs("EXPECT_{mo.name}=%d", expect_{mo.name}));')
     for o in outs:
         L += [f'    void\'($value$plusargs("EXPECT_{o.name}=%d", expect_{o.name}));',
               f'    void\'($value$plusargs("BACKPRESSURE_{o.name}=%d", bp_{o.name}));']

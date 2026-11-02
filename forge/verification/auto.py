@@ -30,6 +30,7 @@ interface and transaction.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -1328,7 +1329,7 @@ def compare_outputs(level: Level, compared: Sequence[Interface], expected: Optio
         if level.compare.framing:
             if o.protocol != "emp_lword":
                 raise ValueError(f"{level.name}: compare.framing checks link-word packets; {o.name} is {o.protocol}")
-            sb.framing(result, observed, lambda w, o=o: unpack(o, w), [f for f in ("start", "last") if f in o.fields])
+            sb.framing(result, observed, functools.partial(unpack, o), [f for f in ("start", "last") if f in o.fields])
             if result.rows:
                 result.status = sb.FAILED
         result.set_aside(context)
@@ -1513,13 +1514,13 @@ def load_function(spec: Any, root: Path, where: str) -> Any:
     if not callable(function):
         raise ValueError(f"{where} {spec!r}: {path.name} has no function {func}")
     local = [path]
-    imported = [sys.modules[m] for m in set(sys.modules) - before]
+    imported: List[Any] = [sys.modules[m] for m in set(sys.modules) - before]
     imported += [v for v in vars(module).values() if type(v) is type(sys)]
     imported += [sys.modules.get(getattr(v, "__module__", "") or "") for v in vars(module).values() if callable(v)]
-    for mod in imported:
-        file = getattr(mod, "__file__", None)
-        if file and root.resolve() in Path(file).resolve().parents and Path(file).resolve() not in local:
-            local.append(Path(file).resolve())
+    for mod in filter(None, imported):
+        source = getattr(mod, "__file__", None)
+        if source and root.resolve() in Path(source).resolve().parents and Path(source).resolve() not in local:
+            local.append(Path(source).resolve())
     try:
         function.forge_files = sorted(local)
     except AttributeError:
