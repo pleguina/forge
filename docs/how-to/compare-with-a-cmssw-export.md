@@ -83,7 +83,26 @@ python3 cmssw_sidecar.py --writer writer.json --log cmsRun.log \
 
 `writer.json` repeats the writer's arguments (`path`, `ext`,
 `frames_per_bx`, `board_tmux`, `max_frames_per_file`, and per channel
-`tmux`, `gap`, `offset`, `indices`). For each file it writes
+`tmux`, `gap`, `offset`, `indices`). The producer's constructor fixes
+`frames_per_bx`, `board_tmux` and each channel's TMUX and gap; the indices
+usually come from a `cff`, so read them from the loaded process rather than
+copying them:
+
+```python
+import json, runpy, sys
+sys.argv = ["gt_firmware_evaluation.py", "platform=VU13P"]
+p = runpy.run_path(sys.argv[0])["process"].l1tGTProducer
+tmux = {"GCT_1": 6, "GMT_1": 18, "GTT_1": 6, "GTT_2": 6, "GTT_3": 6, "GTT_4": 6,
+        "CL2_1": 6, "CL2_2": 6, "CL2_3": 6}   # L1GTEvaluationProducer.cc
+json.dump({"path": "inputPattern", "ext": "txt", "frames_per_bx": 9, "board_tmux": 1,
+           "max_frames_per_file": p.maxFrames.value(),
+           "channels": {n: {"tmux": t, "gap": 0, "offset": 0,
+                            "indices": list(getattr(p.InputChannels, n).value())}
+                        for n, t in tmux.items()}},
+          open("writer.json", "w"), indent=1)
+```
+
+For each file it writes
 `<file>.events.json` (each event's run, lumi and event number and its frames
 on every channel) and `<file>.provenance.json` (CMSSW release and commit
 from the environment, the configuration's checksum, and what

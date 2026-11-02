@@ -23,7 +23,7 @@ CLI nor how its report looks establishes that a result is correct.
 | Existing top simulated against reference data (`verification.target: existing`) | Task | Tested: XSim 2024.1, Verilator 5.022 |
 | Source descriptions: `.f`, Hog list files, ipbb dep trees (`verification.sources`) | Task | Tested for `.f` and Hog (XSim, mixed VHDL-2008/SystemVerilog); ipbb through ipbb's own parser, tested with a stub parser |
 | Comparison: strict, `order: event` by value, `order: event` with a latency window, fields and codecs, framing | Task | Tested |
-| Event association from pattern-file packets, or from the frames of a CMSSW `BoardDataWriter` sidecar | Task | Tested on generated files; no `BoardDataWriter` output from a CMSSW job is in the suite |
+| Event association from pattern-file packets, or from the frames of a CMSSW `BoardDataWriter` sidecar | Task | Tested; the layout against every packet of `L1GTEvaluationProducer`'s input files from CMSSW_20_0_0 (TMUX 6 and 18 on one board, a file split) |
 | `forge/integration/cmssw_sidecar.py` | Task (run in the CMSSW environment) | Tested |
 | Focused runs (`--event-id`, `--pre-roll`) | Task | Tested |
 | Evidence applicability (compile, run, comparison parts; memory, decoder, constraints files; simulator version) | Task | Tested |

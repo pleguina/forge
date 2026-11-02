@@ -24,6 +24,8 @@ from forge.verification.protocols import Interface, Port
 
 WRITER = {"path": "tx", "ext": "txt", "frames_per_bx": 1, "board_tmux": 6, "max_frames_per_file": 60,
           "channels": {"tracks": {"tmux": 18, "gap": 2, "offset": 0, "indices": [0, 1, 2]}}}
+GT_RUNS = json.loads((Path(__file__).resolve().parent / "fixtures" / "cmssw_board_writer"
+                      / "gt_input_packets.json").read_text())["runs"]
 LOG = "\n".join(f"Begin processing the {k + 1}th record. Run 1, Event {100 + k}, LumiSection 7 on stream 0"
                 for k in range(10))
 
@@ -88,3 +90,22 @@ def test_a_file_that_does_not_match_the_layout_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="no valid word on link 1"):
         load_tagged(ref, Bench("t", "clk", "rst", True, [iface]), inputs=False)
+
+
+@pytest.mark.parametrize("run", GT_RUNS, ids=[r["config"] for r in GT_RUNS])
+def test_the_layout_matches_every_packet_a_cmssw_job_wrote(run):
+    files = cmssw_sidecar.layout(run["writer"], cmssw_sidecar.events_from_log("\n".join(run["log"])))
+
+    assert [f["file"] for f in files] == list(run["packets"])
+    assert sum(len(f["events"]) for f in files) == len(run["log"])
+    for f in files:
+        slots = {}
+        for k, event in enumerate(f["events"]):
+            for link, frames in event["links"].items():
+                slots.setdefault(link, []).append((frames, k))
+        written = run["packets"][f["file"]]
+        assert sorted(slots) == sorted(written)
+        for link, packets in written.items():
+            assert len(packets) == len(slots[link]), f"{f['file']} link {link}"
+            for (first, last), ((slot_first, slot_last), k) in zip(packets, sorted(slots[link])):
+                assert first == slot_first and last <= slot_last, f"{f['file']} link {link} event {k}"
