@@ -152,6 +152,55 @@ _STATUS_ICON = {"VERIFIED": "✅", "FAILED": "❌", "PARTIAL": "⚠️ ", "NOT_V
                 "BLOCKED_MISSING_TOOL": "⏭️ ", "SKIPPED": "⏭️ "}
 
 
+def _targets(args) -> Optional[List[str]]:
+    names = [n.strip() for raw in getattr(args, "target", None) or [] for n in raw.split(",") if n.strip()]
+    return names or None
+
+
+def _events(args) -> Optional[List[str]]:
+    if getattr(args, "event_id", None):
+        return [str(args.event_id)]
+    if getattr(args, "event_list", None):
+        return [e.strip() for e in args.event_list.split(",") if e.strip()]
+    return None
+
+
+def _build_subsystems(project, spec, select, json_mode: bool) -> None:
+    """Generate the top level of each subsystem target from the design, and
+    refuse one whose connections are not exactly the design's."""
+    import yaml
+
+    from forge.core.cli._shared import run_forge_command
+    from forge.project.resolve import design_registry
+    from forge.project.subsystem import subsystem_design, subsystem_difference, subsystems
+    from forge.verification import auto
+
+    for name, instances in subsystems(project, spec, select).items():
+        gen = auto.subsystem_dir(project, name)
+        gen.mkdir(parents=True, exist_ok=True)
+        design = gen.parent / "design.yml"
+        design.write_text(yaml.safe_dump(subsystem_design(project, instances), sort_keys=False))
+        argv = ["build", str(design), "--mode", "verilog", "--top-name", f"{name.replace('.', '_').replace('-', '_')}_top",
+                "--output", str(gen / f"{name}_top.v"), "--consumer-root", str(project.root)]
+        registry = design_registry(design)
+        if registry is not None:
+            argv += ["--contracts-from", str(registry)]
+        for option, value in project.build_options().items():
+            if option not in ("mode", "top_name"):
+                argv += [f"--{option.replace('_', '-')}", value]
+        code, output = run_forge_command(argv, quiet=True)
+        if code != 0:
+            if output:
+                print(output, file=sys.stderr)
+            sys.exit(_guided_run_failure(f"subsystem {name} did not build", json_mode=json_mode))
+        difference = subsystem_difference(project, name, instances)
+        if difference:
+            sys.exit(_guided_run_failure(
+                f"subsystem {name} is not wired as the design is: " + "; ".join(difference),
+                json_mode=json_mode,
+                action=f"Declare the connections of {', '.join(instances)} under connections: in the design"))
+
+
 def cmd_auto_test(args, project) -> None:
     """`forge test` without a verification config: plan from the design and
     forge.yml's verification keys, simulate every level, record evidence."""
@@ -162,6 +211,10 @@ def cmd_auto_test(args, project) -> None:
 
     json_mode = getattr(args, "json", False)
     spec = dict(project.config.verification_spec)
+    select, events = _targets(args), _events(args)
+    if getattr(args, "level", None) and spec.get("targets"):
+        sys.exit(_guided_run_failure("--level selects the design or modules; this project names its targets",
+                                     json_mode=json_mode, action="Select targets with --target"))
     for key in ("backend", "level"):
         value = getattr(args, key, None)
         if value:
@@ -180,18 +233,21 @@ def cmd_auto_test(args, project) -> None:
             return None
         return {"path": str(Path(value).resolve()), **({"format": fmt} if fmt else {})}
 
-    if spec.get("target") != "existing":
-        code, output = run_forge_command(["build"], quiet=True)
-        if code != 0:
-            if output:
-                print(output, file=sys.stderr)
-            sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
     try:
+        if spec.get("target") != "existing":
+            code, output = run_forge_command(["build"], quiet=True)
+            if code != 0:
+                if output:
+                    print(output, file=sys.stderr)
+                sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
+            if not getattr(args, "plan", False):
+                _build_subsystems(project, spec, select, json_mode)
         plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
-                         expected_override=ref(args.expected, args.expected_format))
+                         expected_override=ref(args.expected, args.expected_format), select=select, events=events)
     except (OSError, ValueError, KeyError) as exc:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode,
-                                     action="Declare the interfaces under verification.protocols in forge.yml"))
+                                     action="Declare the interfaces under verification.protocols in forge.yml"
+                                     if isinstance(exc, KeyError) else None))
     if getattr(args, "plan", False):
         if json_mode:
             print(json.dumps(plan.to_dict(), indent=2))
@@ -213,51 +269,103 @@ def cmd_auto_test(args, project) -> None:
                                  stall=args.stall, backpressure=args.backpressure)
     except (OSError, ValueError, KeyError) as exc:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode))
-    for old in out_dir.glob("*.evidence.json"):
-        old.unlink()
+    # A run of some events is kept with its run; the latest results stay those of every event.
+    focused = bool(events)
+    if not focused:
+        ran = {e.level.replace(":", "_") for e in evidence}
+        for old in out_dir.glob("*.evidence.json"):
+            if select is None or old.name[: -len(".evidence.json")].rpartition(".")[0] in ran:
+                old.unlink()
     artifacts, diagnostics, results = [], [], []
     for e in evidence:
         path = out_dir / f"{e.level.replace(':', '_')}.{e.backend}.evidence.json"
-        e.write(path)
+        if not focused:
+            e.write(path)
+            artifacts.append(str(path))
         e.write(run_dir / path.name)
-        artifacts.append(str(path))
         reason = e.doc.get("reason", "")
         detail = reason or ", ".join(
             f"{r['interface']} {r['matched']}/{r['expected']}" if r["expected"] else f"{r['interface']} {r['observed']} words"
             for r in e.doc.get("interfaces", []))
+        required = e.doc.get("required", True)
         if not json_mode:
-            print(f"  {_STATUS_ICON[e.status]} {e.level} [{e.backend}]: {e.status}" + (f" ({detail})" if detail else ""))
+            print(f"  {_STATUS_ICON[e.status]} {e.level} [{e.backend}]: {e.status}" + (f" ({detail})" if detail else "")
+                  + ("" if required else ", not required"))
         if e.status == "FAILED":
-            diagnostics.append({"severity": "error", "message": f"{e.level} [{e.backend}]: {detail}"})
-        elif e.status != "VERIFIED":
+            diagnostics.append({"severity": "error" if required else "warning",
+                                "message": f"{e.level} [{e.backend}]: {detail}"})
+        elif e.status != "VERIFIED" and required:
             diagnostics.append({"severity": "warning", "message": f"{e.level} [{e.backend}]: {e.status}"
                                 + (f", {reason}" if reason else "")})
-        results.append({"name": f"{e.level}[{e.backend}]", "success": e.status != "FAILED",
+        results.append({"name": f"{e.level}[{e.backend}]", "success": e.status != "FAILED" or not required,
                         "skipped": e.status not in ("VERIFIED", "FAILED"), "message": detail})
-    junit = out_dir / "junit.xml"
+    junit = out_dir / "junit.xml" if not focused else run_dir / "junit.xml"
     write_junit_xml(junit, suite_name=project.config.project, results=results)
     artifacts.append(str(junit))
     overall = auto.summary(evidence)
+    targets = _target_summary(evidence)
     (run_dir / "run.json").write_text(json.dumps({
         "run": run_id, "verification": overall,
         "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence},
+        "targets": targets,
         "evidence": {f"{e.level}[{e.backend}]": e.doc["evidence_id"] for e in evidence},
+        **({"events": events} if events else {}),
     }, indent=2) + "\n")
     artifacts.append(str(run_dir))
+    if not json_mode:
+        print(_target_sentence(targets))
     status = {"VERIFIED": "pass", "FAILED": "fail"}.get(overall, "warn")
     if status == "warn" and getattr(args, "require_verified", False):
         status = "fail"
         diagnostics.append({"severity": "error",
                             "message": f"--require-verified: verification is {overall}, not VERIFIED"})
+    metrics: Dict[str, Any] = {"verification": overall, "targets": targets,
+               "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence}}
+    if focused:
+        metrics["events"] = events
     envelope = CommandEnvelope(
         status=status,
         diagnostics=diagnostics,
         artifacts=artifacts,
-        metrics={"verification": overall,
-                 "levels": {f"{e.level}[{e.backend}]": e.status for e in evidence}},
-        next_actions=_auto_next_actions(evidence),
+        metrics=metrics,
+        next_actions=_auto_next_actions([e for e in evidence if e.doc.get("required", True)]),
     )
     sys.exit(emit(envelope, json_mode=json_mode))
+
+
+_REFERENCE_WORDS = {"functional": "reference comparison", "derived": "replay of recorded traffic",
+                    "none": "no reference supplied"}
+
+
+def _target_summary(evidence) -> dict:
+    """target -> {scope, required, reference, status}, its status combined over
+    the simulators it ran on."""
+    from forge.verification import scoreboard as sb
+
+    out: dict = {}
+    for e in evidence:
+        entry = out.setdefault(e.level, {"scope": e.doc.get("scope", e.level),
+                                         "required": e.doc.get("required", True),
+                                         "reference": e.doc.get("reference", "none"), "statuses": []})
+        entry["statuses"].append(e.status)
+    for entry in out.values():
+        statuses = entry.pop("statuses")
+        ran = [s for s in statuses if s != "SKIPPED"]
+        entry["status"] = sb.combine(ran) if ran else "SKIPPED"
+    return out
+
+
+def _target_sentence(targets: dict) -> str:
+    """``Required: payload VERIFIED (reference comparison). Not required:
+    module:x (no reference supplied).``"""
+    def say(name, t):
+        return f"{name} {t['status']} ({_REFERENCE_WORDS.get(t['reference'], t['reference'])})"
+
+    required = [say(n, t) for n, t in targets.items() if t["required"]]
+    optional = [say(n, t) for n, t in targets.items() if not t["required"]]
+    return "\n" + "; ".join(filter(None, [
+        "Required: " + ", ".join(required) if required else "",
+        "not required: " + ", ".join(optional) if optional else ""])) + "."
 
 
 def _auto_next_actions(evidence) -> List[str]:
@@ -275,13 +383,18 @@ def _auto_next_actions(evidence) -> List[str]:
     failed = [e for e in evidence if e.status == "FAILED"]
     for e in failed:
         actions.append(f"Fix {e.level} [{e.backend}]: " + (e.doc.get("reason") or "see its evidence file"))
+    skipped = [e for e in evidence if e.status == "SKIPPED" and e.doc.get("reason")]
+    for e in skipped:
+        actions.append(f"{e.level} [{e.backend}] was not simulated: {e.doc['reason']}")
     no_oracle = sorted({e.level for e in evidence if e.status == "NOT_VERIFIED_NO_ORACLE"
                         or (e.status == "BLOCKED_MISSING_TOOL" and not e.doc.get("expected"))})
     if no_oracle:
-        design = "design" in no_oracle
+        design = [lv for lv in no_oracle if lv == "design" or lv.startswith("existing:")]
         modules = [lv.split(":", 1)[1] for lv in no_oracle if lv.startswith("module:")]
+        named = [lv for lv in no_oracle if lv not in design and not lv.startswith("module:")]
         where = (["verification.expected (or --expected)"] if design else []) + (
-            [f"verification.modules.{m}.expected" for m in modules])
+            [f"verification.modules.{m}.expected" for m in modules]) + (
+            [f"verification.targets.{t}.expected" for t in named])
         actions.append(f"Give an expected output: {', '.join(where)} in forge.yml")
     if any(e.status == "PARTIAL" for e in evidence):
         actions.append("Some interfaces have no expected output; add them to the expected file")
@@ -600,6 +713,9 @@ def register(sub) -> None:
     auto.add_argument("--latency", default=None, help="Cycles, or MIN:MAX, for the latency modes")
     auto.add_argument("--backend", default=None, choices=("xsim", "verilator"), help="Only this simulator")
     auto.add_argument("--level", default=None, choices=("design", "modules"), help="Only this level")
+    auto.add_argument("--target", action="append", default=None,
+                      help="Only this target (repeatable, or comma-separated): a name under verification.targets, "
+                           "or design / module:<name>. --event-id/--event-list replay some events of its data")
     auto.add_argument("--seed", type=int, default=1, help="Seed of the stall and backpressure patterns")
     auto.add_argument("--stall", type=int, default=0, help="Percent of cycles a ready_valid input withholds a word")
     auto.add_argument("--backpressure", type=int, default=0,

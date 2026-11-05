@@ -187,7 +187,8 @@ def test_forge_test_verifies_with_input_and_expected_alone(project, capsys):
     levels = doc["metrics"]["levels"]
     assert levels["design[verilator]"] == "VERIFIED"
     assert levels["module:packer[verilator]"] == "NOT_VERIFIED_NO_ORACLE"
-    assert doc["metrics"]["verification"] == "PARTIAL"
+    assert doc["metrics"]["verification"] == "VERIFIED"
+    assert doc["metrics"]["targets"]["module:packer"]["required"] is False
     evidence = json.loads((project / ".forge/reports/test/auto/design.verilator.evidence.json").read_text())
     assert evidence["schema"] == "forge.verification_evidence/1"
     assert evidence["expected"]["sha256"] and evidence["compile_key"] and evidence["evidence_id"]

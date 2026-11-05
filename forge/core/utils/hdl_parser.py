@@ -461,6 +461,25 @@ def _verilog_parameters(
     return params
 
 
+def eval_verilog_constant(
+    expr: str, params: Optional[Mapping[str, int]] = None, defines: Optional[Mapping[str, str]] = None,
+) -> int:
+    """The value of a Verilog constant expression over *params* and *defines*;
+    ValueError when it involves anything else."""
+    return _eval_verilog_expr(expr, dict(params or {}), dict(defines or {}))
+
+
+def verilog_module_parameters(
+    source: str, overrides: Optional[Mapping[str, Any]] = None, defines: Optional[Mapping[str, str]] = None,
+) -> Dict[str, int]:
+    """The evaluated parameters of the module in *source*, with *overrides*
+    replacing their defaults; one that cannot be evaluated is left out."""
+    txt = _strip_sv_comments(source)
+    all_defines = dict(defines or {})
+    all_defines.update({m.group(1): (m.group(2) or "") for m in _VLOG_DEFINE_RE.finditer(txt)})
+    return _verilog_parameters(txt, all_defines, overrides)
+
+
 _VLOG_DIRECTIONS = {"input": "in", "output": "out", "inout": "inout"}
 _VLOG_NET_WORDS = frozenset({
     "wire", "reg", "logic", "bit", "signed", "unsigned", "var", "tri", "tri0", "tri1",

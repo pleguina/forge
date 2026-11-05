@@ -73,13 +73,16 @@ def verification_setup(config: Any) -> VerificationSetup:
         if path is not None:
             files.append((f"verification.{key}", path))
             expected = expected or key == "expected"
-    for name, mod in sorted((spec.get("modules") or {}).items()):
-        for key in ("input", "expected"):
-            path = _data_path((mod or {}).get(key), root)
-            if path is not None:
-                files.append((f"verification.modules.{name}.{key}", path))
-                expected = expected or key == "expected"
-    if files:
+    for group in ("modules", "targets"):
+        entries = spec.get(group) or {}
+        for name, mod in sorted(entries.items() if isinstance(entries, dict) else []):
+            for key in ("input", "expected"):
+                path = _data_path((mod or {}).get(key), root)
+                if path is not None:
+                    files.append((f"verification.{group}.{name}.{key}", path))
+                    expected = expected or key == "expected"
+            expected = expected or bool((mod or {}).get("replay"))
+    if files or spec.get("targets"):
         return VerificationSetup(DATA, data_files=files, expected=expected, backends=backends)
     if config.dataset:
         return VerificationSetup(DATASET, data_files=[("verification.dataset", (root / config.dataset).resolve())],
@@ -109,9 +112,21 @@ class ResultRecord:
     def verified(self) -> bool:
         return self.status in ("VERIFIED", "PASS") and not self.stale
 
+    @property
+    def required(self) -> bool:
+        """Whether this result decides the project's status (a target a
+        project marks ``required: false`` does not)."""
+        return bool(self.payload.get("required", True))
+
+    @property
+    def reference(self) -> str:
+        """``functional``, ``derived`` (recorded traffic) or ``none``."""
+        return str(self.payload.get("reference") or ("functional" if self.payload.get("expected") else "none"))
+
     def to_dict(self) -> Dict[str, Any]:
         return {"name": self.name, "status": self.status, "path": str(self.path),
-                "reason": self.reason, "stale": self.stale}
+                "reason": self.reason, "stale": self.stale, "required": self.required,
+                "reference": self.reference}
 
 
 def _sha256(path: Path) -> Optional[str]:
@@ -136,6 +151,9 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = N
         names = (ref or {}).get("events")
         if names and _sha256(Path(names["path"])) != names.get("sha256"):
             changed.append(f"the {key} event names {Path(names['path']).name}")
+    replay = doc.get("replay") or {}
+    if any(_sha256(Path(f["path"])) != f.get("sha256") for f in replay.get("files") or []):
+        changed.append(f"the traffic {replay.get('source')} recorded")
     if plans is not None:
         level = str(doc.get("level", ""))
         if level not in plans:
@@ -145,21 +163,45 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = N
     return ", ".join(changed)
 
 
-def current_plans(config: Any) -> Optional[Dict[str, str]]:
-    """level -> plan identity of the data-driven plan for a loaded ``forge.yml``
-    and its last build, or None when no plan can be made (nothing built yet).
-    Reads only; nothing under ``.forge/`` is rewritten."""
+def _plan(config: Any) -> Any:
     from types import SimpleNamespace
 
     from forge.verification import auto
 
     paths = config.paths()
-    project = SimpleNamespace(root=config.root, config=config, top_level=lambda: paths.top_level("verilog", "algo_top"))
+    design = (config.root / config.design).resolve() if config.design else paths.design_yml
+    project = SimpleNamespace(root=config.root, config=config, paths=paths, design=design,
+                              top_level=lambda: paths.top_level("verilog", "algo_top"))
+    return auto.plan(project, spec=dict(config.verification_spec))
+
+
+def current_plans(config: Any) -> Optional[Dict[str, str]]:
+    """level -> plan identity of the data-driven plan for a loaded ``forge.yml``
+    and its last build, or None when no plan can be made (nothing built yet).
+    Reads only; nothing under ``.forge/`` is rewritten."""
+    from forge.verification import auto
+
     try:
-        plan = auto.plan(project, spec=dict(config.verification_spec))
+        plan = _plan(config)
     except Exception:  # noqa: BLE001 — applicability then rests on file hashes alone
         return None
     return {level.name: auto.plan_identity(level) for level in plan.levels}
+
+
+def target_problem(config: Any) -> Optional[str]:
+    """Why ``verification.targets`` cannot be planned, or None. A design not
+    built yet is not a problem with the targets."""
+    if not (config.verification_spec or {}).get("targets"):
+        return None
+    try:
+        _plan(config)
+    except FileNotFoundError:
+        return None
+    except ValueError as exc:
+        return str(exc)
+    except Exception:  # noqa: BLE001 — anything else is reported by forge test itself
+        return None
+    return None
 
 
 def evidence_dir(report_root: Path) -> Path:
@@ -220,10 +262,12 @@ def latest_results(report_root: Path, plans: Optional[Dict[str, str]] = None) ->
 
 
 def overall_status(records: Iterable[ResultRecord]) -> str:
-    """One status for *records*: FAILED beats OUT_OF_DATE beats anything
-    unverified beats VERIFIED. A failure is reported even when out of date;
-    a pass that no longer applies is not."""
+    """One status for the required *records* (all of them when none is):
+    FAILED beats OUT_OF_DATE beats anything unverified beats VERIFIED. A
+    failure is reported even when out of date; a pass that no longer applies
+    is not."""
     records = list(records)
+    records = [r for r in records if r.required] or records
     if any(r.stale for r in records) and not any(
             r.status in ("FAILED", "FAIL") for r in records):
         return "OUT_OF_DATE"
@@ -247,15 +291,19 @@ def render_markdown(records: List[ResultRecord]) -> str:
     if not records:
         lines.append("No verification results yet — run `forge test`.")
         return "\n".join(lines) + "\n"
-    lines += [f"Overall: **{overall_status(records)}**", "",
-              "| result | status | up to date | detail | file |", "|---|---|---|---|---|"]
+    lines += [f"Overall: **{overall_status(records)}** (from the required results)", "",
+              "| result | status | required | reference | up to date | detail | file |",
+              "|---|---|---|---|---|---|---|"]
     for r in records:
         detail = r.reason or ", ".join(
             f"{i['interface']} {i['matched']}/{i['expected']}" if i.get("expected")
             else f"{i['interface']} {i.get('observed', 0)} words"
             for i in r.payload.get("interfaces") or [])
         fresh = f"no — changed: {r.stale}" if r.stale else "yes"
-        lines.append(f"| {r.name} | {r.status} | {fresh} | {detail} | {r.path.name} |")
+        reference = {"functional": "reference output", "derived": "recorded traffic",
+                     "none": "none supplied"}.get(r.reference, r.reference)
+        lines.append(f"| {r.name} | {r.status} | {'yes' if r.required else 'no'} | {reference} | {fresh} | "
+                     f"{detail} | {r.path.name} |")
     lines.append("")
     for r in records:
         rows = [(i["interface"], row) for i in r.payload.get("interfaces") or [] for row in i.get("rows") or []]

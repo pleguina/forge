@@ -7,6 +7,11 @@ and decides what can be checked at each level:
   through the interfaces its ports form (:mod:`forge.verification.protocols`);
 - ``module:<name>``: each RTL module on its own, with its own ports.
 
+``verification.targets`` names the levels instead, each with a scope (the
+design, a module, one instance, or a subsystem of instances), its data, and
+whether its result is required. An instance or subsystem can replay the
+traffic a design target recorded at its boundary.
+
 Every level is compiled and elaborated, reset, and run on its input (or idle,
 without one), with every observed output checked for X and Z. Its function is
 checked only against an expected output given for it: a level with none is
@@ -25,9 +30,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -113,9 +119,21 @@ class Level:
     skip: str = ""          # why the level is not simulated
     defines: Dict[str, str] = field(default_factory=dict)
     decoder: Any = None     # project function naming the fields of a word, for mismatch rows
+    scope: str = ""         # design, module:<name>, instance:<path> or subsystem
+    required: bool = True   # whether its result decides the project's verification status
+    events: Optional[List[str]] = None      # only these events of its data (names or positions)
+    replay: Optional["Replay"] = None       # its data is traffic a design target recorded
+    members: List[str] = field(default_factory=list)    # a subsystem's instances
+    backends: Optional[List[str]] = None    # only these of the plan's simulators
 
     def to_dict(self) -> Dict[str, Any]:
-        out: Dict[str, Any] = {"level": self.name, "top": self.top}
+        out: Dict[str, Any] = {"level": self.name, "top": self.top, "required": self.required}
+        if self.scope and self.scope != self.name:
+            out["scope"] = self.scope
+        if self.members:
+            out["instances"] = list(self.members)
+        if self.backends:
+            out["backends"] = list(self.backends)
         if self.skip:
             out["skipped"] = self.skip
             return out
@@ -130,13 +148,32 @@ class Level:
         out["interfaces"] = [{
             "name": i.name, "direction": i.direction, "protocol": i.version, "width": i.width,
             "ports": [p.name for p in i.ports()]} for i in self.bench.interfaces]
-        out["input"] = str(self.input.path) if self.input else None
-        out["expected"] = str(self.expected.path) if self.expected else None
-        out["checks"] = ["compile", "reset", "no_x_on_outputs"] + (["function"] if self.expected else [])
-        if not self.expected:
+        if self.bench.parameters:
+            out["parameters"] = dict(self.bench.parameters)
+        if self.replay is not None:
+            out["input"] = out["expected"] = f"recorded by {self.replay.source}"
+            out["replays"] = dict(self.replay.instances)
+        else:
+            out["input"] = str(self.input.path) if self.input else None
+            out["expected"] = str(self.expected.path) if self.expected else None
+        if self.events:
+            out["events"] = list(self.events)
+        checked = self.expected is not None or self.replay is not None
+        out["checks"] = ["compile", "reset", "no_x_on_outputs"] + (["function"] if checked else [])
+        if not checked:
             out["function"] = "no expected output: NOT_VERIFIED_NO_ORACLE"
         out["compare"] = self.compare.to_dict()
         return out
+
+
+@dataclass
+class Replay:
+    """Data recorded during a design target's run: ``instances`` maps each
+    recorded instance to the prefix its interfaces carry in the replaying
+    level (empty for an instance level, ``<instance>_`` in a subsystem)."""
+
+    source: str
+    instances: Dict[str, str]
 
 
 @dataclass
@@ -204,102 +241,506 @@ def _module_bench(module: Optional[Mapping[str, Any]], config: Any) -> Union[str
     return ports, clock, reset, level == "high"
 
 
-def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
-         input_override: Optional[Any] = None, expected_override: Optional[Any] = None) -> VerificationPlan:
-    """The plan of a built ``forge.yml`` project (``forge.project.resolve.ResolvedProject``).
+@dataclass
+class Want:
+    """What a level is asked to check: its data, how outputs are compared, and
+    the interfaces declared where port names follow no convention."""
 
-    *spec* is ``forge.yml``'s ``verification:`` mapping; *input_override* and
-    *expected_override* (``--input``, ``--expected``; absolute paths or specs)
-    replace its ``input`` and ``expected``.
+    input: Optional[DataRef] = None
+    expected: Optional[DataRef] = None
+    compare: sb.Compare = field(default_factory=sb.Compare)
+    gap: int = 0
+    protocols: Optional[Mapping[str, Any]] = None
+    depth: int = 1 << 16
+
+
+def _level(name: str, scope: str, top: str, sources: List[Path], incs: List[Path], bench: Bench,
+           want: Want, **extra: Any) -> Level:
+    return Level(name, top, sources, incs, bench, want.input, want.expected, want.compare, want.gap,
+                 scope=scope, **extra)
+
+
+class _Generated:
+    """The levels of a design ``forge build`` generated: its top, its modules,
+    their instances, and subsystems of them built on their own."""
+
+    def __init__(self, project: Any, spec: Mapping[str, Any]) -> None:
+        self.project = project
+        gen = project.top_level().parent
+        self.manifest = json.loads((gen / "build_manifest.json").read_text())
+        self.ir = json.loads((gen / "design.ir.json").read_text())["design"]
+        self.period = project.config.clock.resolved_period_ns()
+        self.per_module: Mapping[str, Any] = spec.get("modules") or {}
+        self.ir_modules = {m["name"]: m for m in self.ir.get("modules", [])}
+        self.instances = {i["id"]: i["module"] for i in self.ir.get("instances", [])}
+        self.benches: Dict[str, Union[str, ModuleBench]] = {}
+        for name, mod in self.manifest.get("modules", {}).items():
+            if mod.get("kind") == "rtl" and mod.get("verilog_files"):
+                self.benches[name] = _module_bench(self.ir_modules.get(name), project.config)
+        self.notes: List[str] = []
+
+    def protocols(self, module: str) -> Optional[Mapping[str, Any]]:
+        return (self.per_module.get(module) or {}).get("protocols")
+
+    def _top(self, name: str, scope: str, manifest: Mapping[str, Any], ir: Mapping[str, Any],
+             want: Want) -> Level:
+        top = manifest["top_module"]
+        top_ports = [Port(p["name"], p["direction"], int(p["width"])) for p in ir["top_ports"]]
+        clock = next((p["name"] for p in ir["top_ports"] if p.get("origin") == "clock"), None)
+        reset = next((p["name"] for p in ir["top_ports"] if p.get("origin") == "reset"), None)
+        if clock is None or reset is None:
+            return Level(name, top, [], [], None, skip="the top level has no clock or reset port", scope=scope)
+        ifaces = infer(top_ports, exclude=[clock, reset], declared=want.protocols)
+        self.notes.append(f"{name}: clock {clock}, reset {reset} (active high, generated top), "
+                          + ", ".join(f"{i.name}: {i.protocol}" for i in ifaces))
+        return _level(name, scope, top, [Path(f) for f in manifest["verilog_files"]],
+                      [Path(d) for d in manifest.get("include_dirs", [])],
+                      Bench(top, clock, reset, True, ifaces, period_ns=self.period, depth=want.depth), want)
+
+    def design(self, name: str, want: Want) -> Level:
+        return self._top(name, "design", self.manifest, self.ir, want)
+
+    def module(self, name: str, module: str, want: Want) -> Level:
+        mod = self.manifest.get("modules", {}).get(module)
+        if mod is None:
+            raise ValueError(f"no module {module!r} in the design (have {', '.join(sorted(self.manifest['modules']))})")
+        top = str(mod.get("top") or module)
+        bench = self.benches.get(module, "not an RTL module; checked through the design level")
+        if isinstance(bench, str):
+            return Level(name, top, [], [], None, skip=bench, scope=f"module:{module}")
+        ports, clock, reset, active_high = bench
+        ifaces = infer(ports, exclude=[clock, reset], declared=want.protocols)
+        params = dict((self.ir_modules.get(module) or {}).get("parameters") or {})
+        self.notes.append(f"{name}: clock {clock}, reset {reset} (active {'high' if active_high else 'low'})")
+        return _level(name, f"module:{module}", top, [Path(f) for f in mod.get("verilog_files", [])],
+                      [Path(d) for d in mod.get("include_dirs", [])],
+                      Bench(top, clock, reset, active_high, ifaces, period_ns=self.period, depth=want.depth,
+                            parameters=params), want)
+
+    def module_of(self, instance: str) -> str:
+        if instance not in self.instances:
+            raise ValueError(f"no instance {instance!r} in the design (have {', '.join(sorted(self.instances))})")
+        return self.instances[instance]
+
+    def instance(self, name: str, path: str, want: Want) -> Level:
+        module = self.module_of(path)
+        if want.protocols is None:
+            want.protocols = self.protocols(module)
+        level = self.module(name, module, want)
+        level.scope = f"instance:{path}"
+        return level
+
+    def all_instances(self) -> List[str]:
+        return sorted(self.instances)
+
+    def probes(self, instances: Sequence[str]) -> List[Tuple[str, Interface]]:
+        out: List[Tuple[str, Interface]] = []
+        for inst in instances:
+            module = self.module_of(inst)
+            bench = self.benches.get(module, "not an RTL module")
+            if isinstance(bench, str):
+                raise ValueError(f"cannot record instance {inst}: {bench}")
+            ports, clock, reset, _ = bench
+            out += [(inst, i) for i in infer(ports, exclude=[clock, reset], declared=self.protocols(module))]
+        return out
+
+    def subsystem_instances(self, members: Sequence[Any]) -> List[str]:
+        """The instances *members* selects: instance ids, or a block's name for
+        every instance of it."""
+        by_block: Dict[str, List[str]] = {}
+        for inst, block in self.instances.items():
+            by_block.setdefault(block, []).append(inst)
+        out: List[str] = []
+        for member in (str(m) for m in members):
+            if member in self.instances:
+                out.append(member)
+            elif member in by_block:
+                out += sorted(by_block[member])
+            else:
+                raise ValueError(f"no instance or block {member!r} in the design "
+                                 f"(have {', '.join(sorted(self.instances))})")
+        return sorted(set(out))
+
+    def subsystem(self, name: str, instances: Sequence[str], want: Want) -> Level:
+        gen = subsystem_dir(self.project, name)
+        if not (gen / "build_manifest.json").is_file():
+            return Level(name, f"{name}_top", [], [], None, scope="subsystem",
+                         skip="not generated yet: `forge test` generates it before simulating")
+        manifest = json.loads((gen / "build_manifest.json").read_text())
+        ir = json.loads((gen / "design.ir.json").read_text())["design"]
+        return self._top(name, "subsystem", manifest, ir, want)
+
+
+class _Existing:
+    """The levels of a project's own top, as written: the top, any module in
+    its sources, and any instance in its hierarchy."""
+
+    def __init__(self, config: Any, spec: Mapping[str, Any]) -> None:
+        from forge.core.utils.hdl_parser import parse_verilog_defines
+        from forge.project.hdl_scan import scan_hdl_file, split_verilog_modules
+
+        self.config = config
+        root: Path = config.root
+        self.top = str(spec.get("top") or config.top or "")
+        if not self.top:
+            raise ValueError("verification.target: existing needs the top to simulate: set top: (or "
+                             "verification.top) in forge.yml to the name of your existing top-level module")
+        if spec.get("filelist"):
+            sources, incs, defines = read_filelist(root / str(spec["filelist"]))
+        else:
+            sources, incs, defines = list(config.resolve_sources("rtl")), [], {}
+        if not sources:
+            raise ValueError("verification.target: existing found no sources: set sources.rtl or verification.filelist")
+        raw_defines = spec.get("defines") or {}
+        defines.update(parse_verilog_defines(raw_defines) if isinstance(raw_defines, list)
+                       else {str(k): str(v) for k, v in raw_defines.items()})
+        incs += [(root / str(d)).resolve() for d in spec.get("include_dirs") or []]
+        for src in sources:
+            if src.parent not in incs:
+                incs.append(src.parent)
+        self.sources, self.incs, self.defines = sources, incs, defines
+        self.per_module: Mapping[str, Any] = spec.get("modules") or {}
+        self.period = config.clock.resolved_period_ns()
+        self.units = {u.name: u for src in sources for u in scan_hdl_file(src)}
+        self.verilog: Dict[str, str] = {}
+        for src in sources:
+            if src.suffix.lower() not in (".vhd", ".vhdl"):
+                self.verilog.update(split_verilog_modules(src.read_text(errors="replace")))
+        if self.top not in self.units:
+            raise ValueError(f"no module or entity named {self.top!r} in the {len(sources)} source(s) of "
+                             + ("verification.filelist" if spec.get("filelist") else "sources.rtl"))
+        self.notes: List[str] = []
+
+    def protocols(self, module: str) -> Optional[Mapping[str, Any]]:
+        return (self.per_module.get(module) or {}).get("protocols")
+
+    def _ports(self, module: str, overrides: Optional[Mapping[str, Any]] = None) -> List[Port]:
+        from forge.core.utils.hdl_parser import (
+            UnresolvedWidthError, apply_declared_widths, scan_verilog_port_decls, scan_vhdl_port_decls,
+        )
+
+        unit = self.units[module]
+        if unit.language == "vhdl":
+            decls = scan_vhdl_port_decls(unit.path.read_text())
+        else:
+            decls = scan_verilog_port_decls(self.verilog[module], overrides, self.defines)
+        policy = self.config.modules.get(module)
+        decls = apply_declared_widths(decls, policy.widths if policy else None, f"module {module!r}")
+        unresolved = {n: d.range_text for n, d in decls.items() if d.width is None}
+        if unresolved:
+            raise UnresolvedWidthError(unresolved, f"module {module!r}")
+        return [Port(n, d.direction, int(d.width or 0)) for n, d in decls.items()]
+
+    def _bench(self, module: str, clock: str, reset: str, active_high: bool, want: Want,
+               parameters: Optional[Mapping[str, Any]] = None) -> Bench:
+        ports = self._ports(module, parameters)
+        names = {p.name for p in ports}
+        missing = [n for n in (clock, reset) if n not in names]
+        if missing:
+            raise ValueError(f"{module} has no port {' or '.join(missing)}; set clock.port / reset.port in forge.yml")
+        return Bench(module, clock, reset, active_high,
+                     infer(ports, exclude=[clock, reset], declared=want.protocols),
+                     period_ns=self.period, depth=want.depth, parameters=dict(parameters or {}))
+
+    def design(self, name: str, want: Want) -> Level:
+        bench = self._bench(self.top, self.config.clock.port, self.config.reset.port,
+                            self.config.reset.active == "high", want)
+        return _level(name, "design", self.top, self.sources, list(self.incs), bench, want,
+                      defines=dict(self.defines))
+
+    def module(self, name: str, module: str, want: Want) -> Level:
+        if module not in self.units:
+            raise ValueError(f"no module {module!r} in the sources (have {', '.join(sorted(self.units))})")
+        reset = self.config.reset.port
+        bench = self._bench(module, self.config.clock.port, reset, self.config.reset.active == "high", want)
+        return _level(name, f"module:{module}", module, self.sources, list(self.incs), bench, want,
+                      defines=dict(self.defines))
+
+    def resolve(self, path: str) -> Tuple[str, Dict[str, Any], str, str, bool]:
+        """``(module, parameters, clock, reset, reset_active_high)`` of the
+        instance at *path* (labels from the top down, joined by ``.``).
+
+        Each parameter assignment is evaluated in its parent's parameters;
+        the clock and reset are the ports wired to the parent's, an inverting
+        connection (``~rst``) flipping the reset's active level."""
+        from forge.core.utils.hdl_parser import eval_verilog_constant, verilog_module_parameters
+        from forge.project.hdl_scan import verilog_instances
+
+        parent = self.top
+        params = verilog_module_parameters(self.verilog.get(parent, ""), None, self.defines)
+        clock, reset, active_high = self.config.clock.port, self.config.reset.port, self.config.reset.active == "high"
+        overrides: Dict[str, Any] = {}
+        for label in path.split("."):
+            if parent not in self.verilog:
+                raise ValueError(f"instance {path}: {parent} is not Verilog; its instances cannot be read")
+            found = {i.label: i for i in verilog_instances(self.verilog[parent], parent)}
+            inst = found.get(label)
+            if inst is None:
+                raise ValueError(f"instance {path}: {parent} has no instance {label!r} "
+                                 f"(has {', '.join(sorted(found)) or 'none'})")
+            if inst.positional:
+                raise ValueError(f"instance {path}: {label} connects by position; only named "
+                                 "connections (.name(...)) say which port is which")
+            if inst.module not in self.units:
+                raise ValueError(f"instance {path}: module {inst.module} is not in the sources")
+            overrides = {}
+            for key, expr in inst.parameters.items():
+                try:
+                    overrides[key] = eval_verilog_constant(expr, params, self.defines)
+                except ValueError:
+                    if any(re.search(rf"\b{re.escape(p)}\b", expr) for p in params):
+                        raise ValueError(f"instance {path}: parameter {key} = {expr} cannot be evaluated") from None
+                    overrides[key] = expr
+            nets = {expr.replace(" ", ""): port for port, expr in inst.ports.items()}
+            next_clock = nets.get(clock)
+            next_reset = nets.get(reset)
+            for inverted in (f"~{reset}", f"!{reset}"):
+                if next_reset is None and inverted in nets:
+                    next_reset, active_high = nets[inverted], not active_high
+            if next_clock is None or next_reset is None:
+                missing = " or ".join(n for n, v in (("clock", next_clock), ("reset", next_reset)) if v is None)
+                raise ValueError(f"instance {path}: no port of {label} is wired to the {missing} "
+                                 f"({clock if next_clock is None else reset}) of {parent}")
+            clock, reset = next_clock, next_reset
+            parent = inst.module
+            params = verilog_module_parameters(self.verilog.get(parent, ""), overrides, self.defines)
+        return parent, overrides, clock, reset, active_high
+
+    def instance(self, name: str, path: str, want: Want) -> Level:
+        module, overrides, clock, reset, active_high = self.resolve(path)
+        if want.protocols is None:
+            want.protocols = self.protocols(module)
+        bench = self._bench(module, clock, reset, active_high, want, overrides)
+        self.notes.append(f"{name}: {module} at {path}, clock {clock}, reset {reset} "
+                          f"(active {'high' if active_high else 'low'})")
+        return _level(name, f"instance:{path}", module, self.sources, list(self.incs), bench, want,
+                      defines=dict(self.defines))
+
+    def all_instances(self) -> List[str]:
+        from forge.project.hdl_scan import verilog_instances
+
+        return sorted(i.label for i in verilog_instances(self.verilog.get(self.top, ""), self.top)
+                      if i.module in self.units and not i.positional)
+
+    def probes(self, instances: Sequence[str]) -> List[Tuple[str, Interface]]:
+        out: List[Tuple[str, Interface]] = []
+        for path in instances:
+            module, overrides, clock, reset, _ = self.resolve(path)
+            ports = self._ports(module, overrides)
+            out += [(path, i) for i in infer(ports, exclude=[clock, reset], declared=self.protocols(module))]
+        return out
+
+    def subsystem(self, name: str, instances: Sequence[str], want: Want) -> Level:
+        raise ValueError(f"verification.targets.{name}: a subsystem is built from a generated design; in your "
+                         "own top, a module that holds the instances is one: use scope instance:<its path>")
+
+    def subsystem_instances(self, members: Sequence[Any]) -> List[str]:
+        return [str(m) for m in members]
+
+
+def plan_existing(config: Any, spec: Mapping[str, Any], input_override: Optional[Any] = None,
+                  expected_override: Optional[Any] = None) -> Level:
+    """The level that simulates the project's own top as it is written.
+
+    The top is ``verification.top`` or forge.yml's ``top``; its sources are
+    ``verification.filelist`` when given, else forge.yml's ``sources:``; its
+    ports, clock and reset come from that top's declaration and forge.yml's
+    ``clock``/``reset``. Nothing is generated and no adoption question has to
+    be answered first.
+    """
+    design = _Existing(config, spec)
+    links = spec.get("links") or {}
+
+    def data(value: Any) -> Optional[DataRef]:
+        return DataRef.from_spec(value, config.root, links, spec.get("association")) if value else None
+
+    return design.design(f"existing:{design.top}", Want(
+        data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
+        sb.Compare.from_dict(spec.get("compare")), int(spec.get("gap", 0)), spec.get("protocols"),
+        int(spec.get("depth", 1 << 16))))
+
+
+_TARGET_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
+_TARGET_KEYS = frozenset({"scope", "instances", "input", "expected", "compare", "gap", "protocols",
+                          "backends", "required", "replay", "record", "depth"})
+
+
+def subsystem_dir(project: Any, name: str) -> Path:
+    """Where ``forge test`` generates the top level of subsystem target *name*."""
+    return project.paths.state_root / "verify" / name / "generated"
+
+
+def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
+         input_override: Optional[Any] = None, expected_override: Optional[Any] = None,
+         select: Optional[Sequence[str]] = None, events: Optional[Sequence[str]] = None) -> VerificationPlan:
+    """The plan of a ``forge.yml`` project: a built one
+    (``forge.project.resolve.ResolvedProject``), or one whose own top is
+    simulated (``verification.target: existing``).
+
+    *spec* is ``forge.yml``'s ``verification:`` mapping. Without ``targets``
+    the levels are the design and each module; the design's result is the
+    one required, a module's only when it has an expected output of its own.
+    *select* keeps only the named levels; *events* (names or positions)
+    restricts every level with data of its own to those events.
+    *input_override* and *expected_override* (``--input``, ``--expected``)
+    replace the data of the design level, or of the one selected target.
     """
     spec = dict(spec or {})
     root: Path = project.root
-    notes: List[str] = []
     backends = [str(b) for b in spec.get("backends") or ["xsim", "verilator"]]
     for b in backends:
         if b not in BACKENDS:
             raise ValueError(f"verification.backends: {b!r}, want {' or '.join(BACKENDS)}")
-    target = str(spec.get("target") or "generated")
+    kind = str(spec.get("target") or "generated")
+    if kind not in ("generated", "existing"):
+        raise ValueError(f"verification.target: {kind!r}, want generated or existing")
     decoder = load_decoder(spec["decoder"], root) if spec.get("decoder") else None
-    if target == "existing":
-        level = plan_existing(project.config, spec, input_override, expected_override)
-        level.decoder = decoder
-        notes.append(f"{level.name}: the project's own top, as written; nothing generated")
-        return VerificationPlan([level], backends, notes)
-    if target != "generated":
-        raise ValueError(f"verification.target: {target!r}, want generated or existing")
-    gen = project.top_level().parent
-    manifest = json.loads((gen / "build_manifest.json").read_text())
-    ir = json.loads((gen / "design.ir.json").read_text())["design"]
-    levels_wanted = [str(x) for x in spec.get("levels") or ["design", "modules"]]
-    compare = sb.Compare.from_dict(spec.get("compare"))
     links = spec.get("links") or {}
 
     def data(value: Any) -> Optional[DataRef]:
         return DataRef.from_spec(value, root, links, spec.get("association")) if value else None
 
-    period = project.config.clock.resolved_period_ns()
-    per_module = spec.get("modules") or {}
-    ir_modules = {m["name"]: m for m in ir.get("modules", [])}
-    module_benches: Dict[str, Union[str, ModuleBench]] = {}
-    module_ifaces: Dict[str, List[Interface]] = {}
-    for name, mod in manifest.get("modules", {}).items():
-        files = [Path(f) for f in mod.get("verilog_files", [])]
-        if mod.get("kind") != "rtl" or not files:
-            continue
-        resolved = _module_bench(ir_modules.get(name), project.config)
-        module_benches[name] = resolved
-        if not isinstance(resolved, str):
-            ports, mclock, mreset, _ = resolved
-            module_ifaces[name] = infer(ports, exclude=[mclock, mreset],
-                                        declared=(per_module.get(name) or {}).get("protocols"))
-
-    top_ports = [Port(p["name"], p["direction"], int(p["width"])) for p in ir["top_ports"]]
-    clock = next((p["name"] for p in ir["top_ports"] if p.get("origin") == "clock"), None)
-    reset = next((p["name"] for p in ir["top_ports"] if p.get("origin") == "reset"), None)
-    levels: List[Level] = []
-    if "design" in levels_wanted:
-        top = manifest["top_module"]
-        if clock is None or reset is None:
-            levels.append(Level("design", top, [], [], None, skip="the top level has no clock or reset port"))
-        else:
-            ifaces = infer(top_ports, exclude=[clock, reset], declared=spec.get("protocols"))
-            probes = [(inst["id"], i) for inst in ir.get("instances", []) if spec.get("record_modules")
-                      for i in module_ifaces.get(inst["module"], [])]
-            notes.append(f"design: clock {clock}, reset {reset} (active high, generated top), "
-                         + ", ".join(f"{i.name}: {i.protocol}" for i in ifaces))
-            levels.append(Level(
-                "design", top, [Path(f) for f in manifest["verilog_files"]],
-                [Path(d) for d in manifest.get("include_dirs", [])],
-                Bench(top, clock, reset, True, ifaces, period_ns=period,
-                      depth=int(spec.get("depth", 1 << 16)), probes=probes),
-                data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
-                compare, int(spec.get("gap", 0))))
-    if "modules" in levels_wanted:
-        for name, mod in sorted(manifest.get("modules", {}).items()):
-            files = [Path(f) for f in mod.get("verilog_files", [])]
-            top = str(mod.get("top") or name)
-            mspec = per_module.get(name) or {}
-            if mod.get("kind") != "rtl" or not files:
-                levels.append(Level(f"module:{name}", top, [], [], None,
-                                    skip="not an RTL module; checked through the design level"))
-                continue
-            bench = module_benches[name]
-            if isinstance(bench, str):
-                levels.append(Level(f"module:{name}", top, [], [], None, skip=bench))
-                continue
-            _, mclock, mreset, active_high = bench
-            levels.append(Level(
-                f"module:{name}", top, files, [Path(d) for d in mod.get("include_dirs", [])],
-                Bench(top, mclock, mreset, active_high, module_ifaces[name], period_ns=period),
-                data(mspec.get("input")), data(mspec.get("expected")),
-                sb.Compare.from_dict(mspec.get("compare")), int(mspec.get("gap", 0))))
-            notes.append(f"module:{name}: clock {mclock}, reset {mreset} "
-                         f"(active {'high' if active_high else 'low'})")
-    notes.append(f"clock period {period:g} ns (forge.yml clock)")
+    design: Union[_Generated, _Existing] = (
+        _Existing(project.config, spec) if kind == "existing" else _Generated(project, spec))
+    if spec.get("targets"):
+        levels = _declared_levels(design, spec, data, select, input_override, expected_override)
+    else:
+        levels = _implicit_levels(design, spec, data, input_override, expected_override)
+        if select:
+            known = {lv.name for lv in levels}
+            unknown = [s for s in select if s not in known]
+            if unknown:
+                raise ValueError(f"no target {', '.join(unknown)} (have {', '.join(sorted(known))}); "
+                                 "name targets under verification.targets in forge.yml")
+            levels = [lv for lv in levels if lv.name in select]
+    if events:
+        own = [lv for lv in levels if lv.replay is None and lv.input is not None]
+        if not own:
+            raise ValueError("--event-id/--event-list: no selected level has input data of its own to select from")
+        for lv in own:
+            lv.events = [str(e) for e in events]
+    notes = list(design.notes)
+    if isinstance(design, _Existing):
+        notes.append(f"existing:{design.top}: the project's own top, as written; nothing generated")
+    notes.append(f"clock period {design.period:g} ns (forge.yml clock)")
     for level in levels:
         level.decoder = decoder
     return VerificationPlan(levels, backends, notes)
+
+
+def _implicit_levels(design: Union[_Generated, _Existing], spec: Mapping[str, Any], data: Any,
+                     input_override: Optional[Any], expected_override: Optional[Any]) -> List[Level]:
+    compare = sb.Compare.from_dict(spec.get("compare"))
+    want = Want(data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
+                compare, int(spec.get("gap", 0)), spec.get("protocols"), int(spec.get("depth", 1 << 16)))
+    if isinstance(design, _Existing):
+        level = design.design(f"existing:{design.top}", want)
+        if spec.get("record_modules") and level.bench is not None:
+            level.bench.probes = design.probes(design.all_instances())
+        return [level]
+    wanted = [str(x) for x in spec.get("levels") or ["design", "modules"]]
+    levels: List[Level] = []
+    if "design" in wanted:
+        level = design.design("design", want)
+        if spec.get("record_modules") and level.bench is not None:
+            recordable = [i for i in design.all_instances()
+                          if not isinstance(design.benches.get(design.module_of(i), ""), str)]
+            level.bench.probes = design.probes(recordable)
+        levels.append(level)
+    if "modules" in wanted:
+        for name in sorted(design.manifest.get("modules", {})):
+            mspec = design.per_module.get(name) or {}
+            level = design.module(f"module:{name}", name, Want(
+                data(mspec.get("input")), data(mspec.get("expected")), sb.Compare.from_dict(mspec.get("compare")),
+                int(mspec.get("gap", 0)), mspec.get("protocols")))
+            level.required = level.expected is not None
+            levels.append(level)
+    return levels
+
+
+def _declared_levels(design: Union[_Generated, _Existing], spec: Mapping[str, Any], data: Any,
+                     select: Optional[Sequence[str]], input_override: Optional[Any],
+                     expected_override: Optional[Any]) -> List[Level]:
+    targets = spec["targets"]
+    if not isinstance(targets, Mapping):
+        raise ValueError("verification.targets: want a mapping of target name to its scope and data")
+    unknown = [s for s in select or [] if s not in targets]
+    if unknown:
+        raise ValueError(f"no target {', '.join(unknown)} under verification.targets "
+                         f"(have {', '.join(map(str, targets))})")
+    if (input_override or expected_override) and len(select or targets) != 1:
+        raise ValueError("--input/--expected replace one target's data: name it with --target")
+    levels: List[Level] = []
+    replays: List[Level] = []
+    for name, t in targets.items():
+        name, t = str(name), dict(t or {})
+        where = f"verification.targets.{name}"
+        if not _TARGET_NAME.fullmatch(name):
+            raise ValueError(f"{where}: a target name is letters, digits, '_', '.' and '-'")
+        extra = sorted(set(t) - _TARGET_KEYS)
+        if extra:
+            raise ValueError(f"{where}: unknown key {', '.join(extra)} (want {', '.join(sorted(_TARGET_KEYS))})")
+        replay = t.get("replay")
+        if replay and (t.get("input") or t.get("expected")):
+            raise ValueError(f"{where}: replay and input/expected are alternatives; give one")
+        chosen = select is None or name in select
+        want = Want(data(input_override if chosen and input_override else t.get("input")),
+                    data(expected_override if chosen and expected_override else t.get("expected")),
+                    sb.Compare.from_dict(t.get("compare", spec.get("compare"))), int(t.get("gap", spec.get("gap", 0))),
+                    t.get("protocols"), int(t.get("depth", spec.get("depth", 1 << 16))))
+        scope = str(t.get("scope") or "design")
+        if scope == "design":
+            if replay:
+                raise ValueError(f"{where}: a design target is what records traffic; replay is for "
+                                 "instance and subsystem targets")
+            if want.protocols is None:
+                want.protocols = spec.get("protocols")
+            level = design.design(name, want)
+            if t.get("record") and level.bench is not None:
+                level.bench.probes = design.probes(design.all_instances())
+        elif scope.startswith("module:"):
+            if replay:
+                raise ValueError(f"{where}: a module on its own has no recorded traffic; "
+                                 "replay one of its instances with scope instance:<id>")
+            module = scope.split(":", 1)[1]
+            if want.protocols is None:
+                want.protocols = design.protocols(module)
+            level = design.module(name, module, want)
+        elif scope.startswith("instance:"):
+            path = scope.split(":", 1)[1]
+            level = design.instance(name, path, want)
+            if replay:
+                level.replay = Replay(str(replay), {path: ""})
+        elif scope == "subsystem":
+            members = t.get("instances")
+            if not members or not isinstance(members, list):
+                raise ValueError(f"{where}: a subsystem lists its instances: instances: [a, b, ...]")
+            insts = design.subsystem_instances(members)
+            level = design.subsystem(name, insts, want)
+            level.members = insts
+            if replay:
+                level.replay = Replay(str(replay), {i: f"{i}_" for i in insts})
+        else:
+            raise ValueError(f"{where}.scope: {scope!r}, want design, module:<name>, instance:<path> or subsystem")
+        level.required = bool(t.get("required", True))
+        if t.get("backends"):
+            level.backends = [str(b) for b in t["backends"]]
+        levels.append(level)
+        if level.replay is not None:
+            replays.append(level)
+    by_name = {lv.name: lv for lv in levels}
+    for level in replays:
+        assert level.replay is not None
+        source = by_name.get(level.replay.source)
+        if source is None or source.scope != "design":
+            raise ValueError(f"verification.targets.{level.name}.replay: {level.replay.source!r} is not a "
+                             "design target of this project")
+        if source.bench is not None:
+            have = {(i, p.name) for i, p in source.bench.probes}
+            source.bench.probes += [pr for pr in design.probes(list(level.replay.instances))
+                                    if (pr[0], pr[1].name) not in have]
+    levels.sort(key=lambda lv: lv.scope != "design")
+    return [lv for lv in levels if select is None or lv.name in select]
 
 
 # ── Data ────────────────────────────────────────────────────────────────────
@@ -610,75 +1051,6 @@ def read_filelist(path: Path, _seen: Optional[set] = None) -> Tuple[List[Path], 
     return sources, incs, defines
 
 
-def plan_existing(config: Any, spec: Mapping[str, Any], input_override: Optional[Any] = None,
-                  expected_override: Optional[Any] = None) -> Level:
-    """The level that simulates the project's own top as it is written.
-
-    The top is ``verification.top`` or forge.yml's ``top``; its sources are
-    ``verification.filelist`` when given, else forge.yml's ``sources:``; its
-    ports, clock and reset come from that top's declaration and forge.yml's
-    ``clock``/``reset``. Nothing is generated and no adoption question has to
-    be answered first.
-    """
-    from forge.core.utils.hdl_parser import (
-        UnresolvedWidthError, apply_declared_widths, parse_verilog_defines,
-        scan_verilog_port_decls, scan_vhdl_port_decls,
-    )
-    from forge.project.hdl_scan import scan_hdl_file, split_verilog_modules
-
-    root: Path = config.root
-    top = str(spec.get("top") or config.top or "")
-    if not top:
-        raise ValueError("verification.target: existing needs the top to simulate: set top: (or verification.top) "
-                         "in forge.yml to the name of your existing top-level module")
-    if spec.get("filelist"):
-        sources, incs, defines = read_filelist(root / str(spec["filelist"]))
-    else:
-        sources, incs, defines = list(config.resolve_sources("rtl")), [], {}
-    if not sources:
-        raise ValueError("verification.target: existing found no sources: set sources.rtl or verification.filelist")
-    raw_defines = spec.get("defines") or {}
-    defines.update(parse_verilog_defines(raw_defines) if isinstance(raw_defines, list)
-                   else {str(k): str(v) for k, v in raw_defines.items()})
-    incs += [(root / str(d)).resolve() for d in spec.get("include_dirs") or []]
-    for src in sources:
-        if src.parent not in incs:
-            incs.append(src.parent)
-
-    unit = next((u for src in sources for u in scan_hdl_file(src) if u.name == top), None)
-    if unit is None:
-        raise ValueError(f"no module or entity named {top!r} in the {len(sources)} source(s) of "
-                         + ("verification.filelist" if spec.get("filelist") else "sources.rtl"))
-    if unit.language == "vhdl":
-        decls = scan_vhdl_port_decls(unit.path.read_text())
-    else:
-        text = unit.path.read_text(errors="replace")
-        decls = scan_verilog_port_decls(
-            next(src for name, src in split_verilog_modules(text) if name == top), None, defines)
-    policy = config.modules.get(top)
-    decls = apply_declared_widths(decls, policy.widths if policy else None, f"module {top!r}")
-    unresolved = {n: d.range_text for n, d in decls.items() if d.width is None}
-    if unresolved:
-        raise UnresolvedWidthError(unresolved, f"module {top!r}")
-    ports = [Port(n, d.direction, int(d.width or 0)) for n, d in decls.items()]
-    clock, reset = config.clock.port, config.reset.port
-    names = {p.name for p in ports}
-    missing = [n for n in (clock, reset) if n not in names]
-    if missing:
-        raise ValueError(f"{top} has no port {' or '.join(missing)}; set clock.port / reset.port in forge.yml")
-    links = spec.get("links") or {}
-
-    def data(value: Any) -> Optional[DataRef]:
-        return DataRef.from_spec(value, root, links, spec.get("association")) if value else None
-
-    bench = Bench(top, clock, reset, config.reset.active == "high",
-                  infer(ports, exclude=[clock, reset], declared=spec.get("protocols")),
-                  period_ns=config.clock.resolved_period_ns(), depth=int(spec.get("depth", 1 << 16)))
-    return Level(f"existing:{top}", top, sources, incs, bench,
-                 data(input_override or spec.get("input")), data(expected_override or spec.get("expected")),
-                 sb.Compare.from_dict(spec.get("compare")), int(spec.get("gap", 0)), defines=defines)
-
-
 def _event_cycles(tagged: Tagged, driven: Mapping[str, Sequence[Tuple[int, int]]]) -> Optional[Dict[str, int]]:
     """The cycle of each event's first input word on any input interface, or
     None when the input names no events. The trace records the words driven
@@ -728,6 +1100,7 @@ def plan_identity(level: Level) -> str:
     its result: interfaces and protocols, clock, reset, data references, compare
     settings, checker and testbench generator versions."""
     body = {**level.to_dict(), "checker": sb.CHECKER_VERSION, "testbench_generator": TB_GENERATOR_VERSION}
+    body.pop("required")
     return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -758,22 +1131,108 @@ def _evidence(level: Level, backend: str, status: str, **extra: Any) -> Evidence
         "protocols": {i.name: i.version for i in level.bench.interfaces} if level.bench else {},
         "clock_period_ns": level.bench.period_ns if level.bench else None,
         "testbench_generator": TB_GENERATOR_VERSION,
+        "scope": level.scope or level.name,
+        "required": level.required,
         **extra,
     }
+    expected = doc["expected"] or {}
+    doc["reference"] = ("derived" if level.replay is not None or expected.get("derived_from")
+                        else "functional" if expected else "none")
     body = json.dumps(doc, sort_keys=True).encode()
     doc["evidence_id"] = hashlib.sha256(body).hexdigest()
     return Evidence(level.name, backend, status, doc)
 
 
+def _replayed(level: Level, backend: str, work: Path, recorded: Path) -> Union[str, Tuple[DataRef, DataRef, Dict[str, Any]]]:
+    """The input and expected output of a replaying *level*, merged from the
+    traffic its source recorded under *recorded* (preferably by the same
+    simulator), or why there is none."""
+    assert level.replay is not None and level.bench is not None
+    wanted = level.replay.instances
+    candidates = [recorded / backend] + sorted(d for d in recorded.glob("*") if d.is_dir() and d.name != backend)
+    source = next((d for d in candidates if all((d / "module_traces" / i / "expected.json").is_file()
+                                                for i in wanted)), None)
+    if source is None:
+        return (f"nothing recorded for {', '.join(sorted(wanted))}: run "
+                f"`forge test --target {level.replay.source}` first")
+    names = {i.name: i.direction for i in level.bench.interfaces}
+    docs: Dict[str, Dict[str, Any]] = {"in": {}, "out": {}}
+    files, origins = [], []
+    for inst, prefix in sorted(wanted.items()):
+        d = source / "module_traces" / inst
+        for doc_name in ("input.json", "expected.json"):
+            path = d / doc_name
+            files.append({"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+            for iface, values in json.loads(path.read_text()).items():
+                direction = names.get(prefix + iface)
+                if direction is not None:
+                    docs[direction][prefix + iface] = values
+        origins.append(json.loads((d / DERIVED).read_text()))
+    out = work / "replay"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "input.json").write_text(json.dumps(docs["in"], indent=1) + "\n")
+    (out / "expected.json").write_text(json.dumps(docs["out"], indent=1) + "\n")
+    (out / DERIVED).write_text(json.dumps({"replayed_from": level.replay.source, "backend": source.name,
+                                           "recordings": origins}, indent=1) + "\n")
+    return (DataRef(out / "input.json"), DataRef(out / "expected.json"),
+            {"source": level.replay.source, "backend": source.name, "files": files})
+
+
+def _select_events(level: Level, tagged: Tagged,
+                   expected: Optional[Dict[str, List[sb.Expected]]]) -> Tuple[Tagged, Optional[Dict[str, List[sb.Expected]]], List[str]]:
+    """*tagged* and *expected* restricted to the events *level* selects, by
+    name or by position (``7``, ``10-12``)."""
+    assert level.events and level.input is not None
+    if level.compare.mode == "exact_cycle":
+        raise ValueError("--event-id/--event-list with compare mode exact_cycle: the expected cycles are "
+                         "those of the whole run; use transaction or a latency mode")
+    order: List[str] = []
+    for rows in tagged.values():
+        for event, _ in rows:
+            if event is not None and event not in order:
+                order.append(event)
+    if not order:
+        raise ValueError(f"{level.input.path} names no events to select from: give it an events: file "
+                         "(verification.input: {path, events}) or use a pattern file")
+    chosen: List[str] = []
+    for token in level.events:
+        if token in order:
+            chosen.append(token)
+            continue
+        lo, sep, hi = token.partition("-")
+        if not (lo.isdigit() and (not sep or hi.isdigit())):
+            raise ValueError(f"no event {token!r} in {level.input.path} (events are named "
+                             f"{', '.join(order[:5])}{', ...' if len(order) > 5 else ''})")
+        for k in range(int(lo), int(hi or lo) + 1):
+            if k >= len(order):
+                raise ValueError(f"event position {k}: {level.input.path} holds {len(order)} events")
+            chosen.append(order[k])
+    keep = set(chosen)
+    tagged = {k: [(e, v) for e, v in rows if e in keep] for k, rows in tagged.items()}
+    if expected is not None:
+        expected = {k: [x for x in rows if x.event in keep] for k, rows in expected.items()}
+    return tagged, expected, [e for e in order if e in keep]
+
+
 def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0, backpressure: int = 0,
-        max_cycles: int = 1_000_000) -> Evidence:
-    """Simulate *level* on *backend* in *work* and compare; never raises for a failing design."""
+        max_cycles: int = 1_000_000, recorded: Optional[Path] = None) -> Evidence:
+    """Simulate *level* on *backend* in *work* and compare; never raises for a failing design.
+
+    *recorded* is the work directory of the target a replaying level replays."""
     if level.skip or level.bench is None:
         return _evidence(level, backend, sb.SKIPPED, reason=level.skip)
     missing = missing_tools(backend)
     if missing:
         return _evidence(level, backend, sb.BLOCKED_MISSING_TOOL, reason=f"{', '.join(missing)} not on PATH")
+    replayed: Dict[str, Any] = {}
+    if level.replay is not None:
+        found = _replayed(level, backend, work.resolve(), recorded or work)
+        if isinstance(found, str):
+            return _evidence(level, backend, sb.SKIPPED, reason=found)
+        level = replace(level, input=found[0], expected=found[1])
+        replayed = {"replay": found[2]}
     bench = level.bench
+    assert bench is not None
     level.sources = [f.resolve() for f in level.sources]
     level.include_dirs = [d.resolve() for d in level.include_dirs]
     work = work.resolve()
@@ -806,8 +1265,11 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
         sentinel.write_text(key)
 
     tagged = load_tagged(level.input, bench, inputs=True) if level.input else {}
-    values = {k: [v for _, v in rows] for k, rows in tagged.items()}
     expected = load_expected(level.expected, bench) if level.expected else None
+    if level.events:
+        tagged, expected, chosen = _select_events(level, tagged, expected)
+        replayed["events"] = chosen
+    values = {k: [v for _, v in rows] for k, rows in tagged.items()}
     plusargs = write_inputs(bench, values, work / "data", gap=level.gap)
     trace = work / "trace.txt"
     plusargs.update({"TRACE": str(trace), "SEED": str(seed), "MAX_CYCLES": str(max_cycles)})
@@ -823,7 +1285,7 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     proc = subprocess.run(_sim_command(backend, work, plusargs), cwd=work, capture_output=True, text=True)
     (work / "sim.log").write_text(proc.stdout + proc.stderr)
     ident = {"compile_key": key, "compile_reused": reused, "tool": tool_version(BACKENDS[backend][0]),
-             "seed": seed, "stall_percent": stall, "backpressure_percent": backpressure}
+             "seed": seed, "stall_percent": stall, "backpressure_percent": backpressure, **replayed}
     if proc.returncode != 0 or not trace.is_file():
         return _evidence(level, backend, sb.FAILED, **ident, reason=f"simulation failed, see {work / 'sim.log'}")
     t = _parse_trace(trace.read_text())
@@ -849,21 +1311,33 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
         ident["recorded_modules"] = _record(bench, t, work / "module_traces", {
             "level": level.name, "backend": backend, "status": status, "compile_key": key,
             "input_sha256": level.input.sha256() if level.input else None,
+            "events": replayed.get("events"),
             "note": "recorded from the design level: a regression reference, not an independent oracle"})
     return _evidence(level, backend, status, **ident,
                      inputs_driven={k: len(v) for k, v in t["inputs"].items()},
                      interfaces=[r.to_dict() for r in results])
 
 
+def level_dir(work_root: Path, name: str) -> Path:
+    return work_root / name.replace(":", "_")
+
+
 def run_plan(p: VerificationPlan, work_root: Path, **kwargs: Any) -> List[Evidence]:
     out = []
     for level in p.levels:
+        recorded = level_dir(work_root, level.replay.source) if level.replay is not None else None
         for backend in p.backends:
-            work = work_root / level.name.replace(":", "_") / backend
-            out.append(run(level, backend, work, **kwargs))
+            if level.backends and backend not in level.backends:
+                continue
+            out.append(run(level, backend, level_dir(work_root, level.name) / backend, recorded=recorded, **kwargs))
     return out
 
 
 def summary(evidence: Sequence[Evidence]) -> str:
-    return sb.combine([e.status for e in evidence if e.status != sb.SKIPPED]) if any(
-        e.status != sb.SKIPPED for e in evidence) else sb.SKIPPED
+    """One status for a run: that of the required levels (every level when
+    none is). A required level that could not be simulated counts against it;
+    one that is not required and was skipped does not."""
+    required = [e for e in evidence if e.doc.get("required", True)]
+    statuses = [e.status for e in required] if required else [
+        e.status for e in evidence if e.status != sb.SKIPPED]
+    return sb.combine(statuses) if statuses else sb.SKIPPED

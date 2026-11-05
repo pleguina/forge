@@ -36,7 +36,7 @@ from forge.project.discovery import (
 )
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
 from forge.project.verification_state import (
-    DATA, VerificationSetup, current_plans, latest_results, overall_status, verification_setup,
+    DATA, VerificationSetup, current_plans, latest_results, overall_status, target_problem, verification_setup,
 )
 
 # ── Section states ────────────────────────────────────────────────────────
@@ -860,6 +860,11 @@ def _check_data_verification(status: ProjectStatus, setup: VerificationSetup) ->
                     description="Point " + ", ".join(k for k, _ in setup.missing)
                     + f" in {ROOT_CONFIG_NAME} at existing files", safe=False)],
         )
+
+    problem = target_problem(status.config)
+    if problem:
+        status.report.error("ATG044", problem, action=f"Correct verification.targets in {ROOT_CONFIG_NAME}")
+        return _CheckOutput(StatusSection("Verification", FAIL, problem, ("ATG044",)), [])
 
     actions: List[Action] = []
     codes: Tuple[str, ...] = ()

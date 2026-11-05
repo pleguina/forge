@@ -59,7 +59,15 @@ compiled, reset, run and checked for X and Z on its outputs, and reports
 | `module:<name>` | Each RTL module on its own, with `forge.yml`'s clock and reset ports, and `verification.modules.<name>.input`/`expected` when given |
 
 `--level design` or `verification.levels: [design]` runs one level only. An
-HLS module is checked through the levels that contain it.
+HLS module is checked through the levels that contain it. The design's
+result decides the project's status; a module's only when it has an expected
+output of its own, so a design comparison that passed is VERIFIED even while
+the modules have no reference:
+
+```
+Required: design VERIFIED (reference comparison); not required: module:decimator
+NOT_VERIFIED_NO_ORACLE (no reference supplied), ...
+```
 
 When the only reference is at the design level, `--record-modules` records,
 during the design-level run, what every module instance received and
@@ -123,6 +131,69 @@ and `ready_valid` outputs drop ready, in N percent of cycles (`--seed` fixes
 the pattern), so a design that loses, repeats or reorders words under flow
 control fails.
 
+## Targets
+
+When the question is narrower or wider than "the design and every module",
+name what to check under `verification.targets`. Each target has a scope,
+its data and comparison, and whether its result is required:
+
+```yaml
+verification:
+  targets:
+    payload:                          # scope: design (the default)
+      input: data/input.json
+      expected: data/expected.json
+    sorter:
+      scope: instance:sorter_3        # one instance, with its own parameters
+      replay: payload                 # the traffic payload's run recorded at it
+    front_end:
+      scope: subsystem
+      instances: [unpacker, sorter]   # instances, or a block for all of its instances
+      replay: payload
+    packer_alone:
+      scope: module:packer            # a module on its own, with its block's parameters
+      input: data/packer_in.json
+      expected: data/packer_out.json
+      required: false                 # reported, but does not decide the status
+```
+
+| Scope | Simulates |
+|-------|-----------|
+| `design` | the generated top (or, with `target: existing`, your own) |
+| `module:<name>` | one module on its own, with its block's parameters |
+| `instance:<path>` | the module of one instance with that instance's parameters, clock and reset; in your own top, `<path>` is the labels from the top down (`u_proc.u_sorter`) |
+| `subsystem` | a top generated from the design with only `instances` and the connections among them; every port a connection to the rest reached becomes a port. A subsystem whose connections come out different from the design's is refused, naming them |
+
+Every target takes `input`, `expected`, `compare`, `gap`, `protocols`,
+`backends` and `required` (default `true`). Only the required targets decide
+the status `forge test` exits with, `--require-verified` included; the others
+are reported as not required.
+
+### Replay a failure without the payload
+
+`replay: <design target>` drives an instance or subsystem target with the
+traffic that design target's run recorded at its boundary, and expects what
+it recorded coming out. The design target records it on every run once a
+target replays it (`record: true` records every instance). After you change
+the module, `forge test --target sorter` re-checks it against that traffic in
+a fraction of the payload's time; its result is a regression reference
+(`reference: derived`), not an independent one, and goes out of date when
+the payload's run records new traffic.
+
+`--event-id` or `--event-list` (names or positions: `7`, `2,10-12`,
+`run1:5:42@bx3`) runs only those events of the data, which must name its
+events (pattern files, an `events:` file, or a dataset JSON with `events`).
+Run the design target on the failing event, then replay the instance on
+what it recorded:
+
+```bash
+forge test --target payload --event-id 7
+forge test --target sorter
+```
+
+A run of some events is kept under `.forge/reports/test/runs/` and does not
+replace the latest results, which stay those of every event.
+
 ## Statuses and evidence
 
 | Status | Meaning |
@@ -132,15 +203,17 @@ control fails.
 | `NOT_VERIFIED_NO_ORACLE` | Simulated cleanly, with nothing to compare its function against |
 | `BLOCKED_MISSING_TOOL` | The simulator is not installed |
 | `SKIPPED` | The level cannot be simulated (an HLS module, a module without the clock or reset port) |
-| `PARTIAL` | Some levels verified, others not |
+| `PARTIAL` | Some required levels verified, others not |
 
 Each level and simulator writes
 `.forge/reports/test/auto/<level>.<backend>.evidence.json`: the sources and
 their hashes, the compile key, whether the build was reused, the simulator's
 version, the input and expected files with their hashes, the protocol and
 checker versions, the seed, and every interface's result rows; and an
-`evidence_id` over all of it. `junit.xml` next to them has one case per level
-and simulator.
+`evidence_id` over all of it, with the target's `scope`, whether it is
+`required`, and its `reference`: `functional` (an expected output you gave),
+`derived` (recorded traffic) or `none`. `junit.xml` next to them has one case
+per level and simulator.
 
 ## Compile once, run many
 
