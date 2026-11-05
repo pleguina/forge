@@ -21,6 +21,12 @@ Protocols, as driven and observed:
   valid and ready are both high.
 - ``emp_lword``: an input word per frame, all fields as given; an output is
   recorded when valid is high, with its fields.
+- ``memory``: the testbench holds the memory, zero at the start (as a BRAM
+  after configuration), read with its declared latency.
+  An input memory's transaction is one call's contents, written into page
+  ``call % pages`` before the call starts; an output memory's every write is
+  recorded. A block with memories runs one call at a time: the next starts
+  after ``ap_done``.
 
 A probe records an interface of a module instance inside the DUT the same
 way, as ``<instance>/<interface>``. An X or Z on a recorded output, or on an
@@ -37,7 +43,7 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from forge.verification.protocols import EMP_FIELDS, Interface
 
-TB_GENERATOR_VERSION = "3"
+TB_GENERATOR_VERSION = "4"
 TB_MODULE = "forge_tb"
 # Drives forge_tb's clock where the simulator runs Verilog delays (XSim);
 # Verilator runs forge_tb from a generated C++ main instead.
@@ -119,6 +125,60 @@ def _int(v: Any) -> int:
     return int(str(v), 0)
 
 
+def _memory_text(b: Bench, ins: Sequence[Interface], call: Any) -> List[str]:
+    """The memories the testbench holds for the DUT's ``memory`` interfaces."""
+    L: List[str] = []
+    for m in [i for i in b.interfaces if i.protocol == "memory"]:
+        w, depth, lat = m.width, m.options["depth"], m.options["latency"]
+        f = m.fields
+        # zero, as a BRAM after configuration and an HLS model's static array start
+        L += [f"  reg [{w - 1}:0] ram_{m.name} [0:{depth - 1}];",
+              f"  initial for (int i = 0; i < {depth}; i++) ram_{m.name}[i] = '0;"]
+        if m.direction == "in":
+            L += [f"  reg [{w - 1}:0] mem_{m.name} [0:{b.depth - 1}];",
+                  f"  reg [31:0] cnt_{m.name} [0:{b.depth - 1}];",
+                  f"  integer n_{m.name} = 0, p_{m.name} = 0, off_{m.name} = 0;"]
+        else:
+            L.append(f"  integer expect_{m.name} = -1, seen_{m.name} = 0;")
+        for k in "01":
+            if f"q{k}" in f:
+                rd = f"rd_{m.name}_{k}"
+                L += [f"  reg [{w - 1}:0] {rd} [0:{lat - 1}];",
+                      f"  always @(posedge {b.clock}) begin",
+                      f"    if ({f['ce' + k].name}) {rd}[0] <= ram_{m.name}[{f['address' + k].name}];",
+                      *([f"    for (int i = 1; i < {lat}; i++) {rd}[i] <= {rd}[i - 1];"] if lat > 1 else []),
+                      "  end",
+                      f"  always @* {f['q' + k].name} = {rd}[{lat - 1}];"]
+            if f"we{k}" in f:
+                d, a = f[f"d{k}"].name, f[f"address{k}"].name
+                L += [f"  always @(posedge {b.clock}) if ({f['ce' + k].name} && {f['we' + k].name}) begin",
+                      f"    ram_{m.name}[{a}] <= {d};"]
+                if m.direction == "out":
+                    L += ["    if (running) begin",
+                          f'      if ($isunknown({d})) $fdisplay(fd, "%0d !{m.name} x", cycle);',
+                          f'      else $fdisplay(fd, "%0d <{m.name} %h", cycle, {d});',
+                          f"      seen_{m.name} = seen_{m.name} + 1; last_activity = cycle;",
+                          "    end"]
+                L.append("  end")
+        L.append("")
+    if call is not None:
+        L += ["  integer done_call = 0;",
+              f"  always @(posedge {b.clock}) if (running && {call.fields['done'].name}) done_call <= done_call + 1;", ""]
+    return L
+
+
+def _load_pages(b: Bench) -> List[str]:
+    """Statements that write the next call's contents into each input memory."""
+    L: List[str] = []
+    for m in [i for i in b.interfaces if i.protocol == "memory" and i.direction == "in"]:
+        page = m.options["depth"] // m.options["pages"]
+        L += [f"        for (int i = 0; i < cnt_{m.name}[p_call]; i++)",
+              f"          ram_{m.name}[(p_call % {m.options['pages']}) * {page} + i] = mem_{m.name}[off_{m.name} + i];",
+              f'        $fdisplay(fd, "%0d >{m.name} %h", cycle, cnt_{m.name}[p_call]);',
+              f"        off_{m.name} = off_{m.name} + cnt_{m.name}[p_call]; p_{m.name} = p_{m.name} + 1;"]
+    return L
+
+
 def memory(iface: Interface, values: Sequence[Any], gap: int = 0) -> List[str]:
     """The ``$readmemh`` lines of an input interface's transactions."""
     digits = max(1, -(-word_width(iface) // 4))
@@ -147,8 +207,14 @@ def testbench(b: Bench) -> str:
     half = round(b.period_ns / 2, 3)   # `timescale 1ns/1ps
     active = "1'b1" if b.reset_active_high else "1'b0"
     idle = "1'b0" if b.reset_active_high else "1'b1"
-    ins = [i for i in b.interfaces if i.direction == "in"]
-    outs = [i for i in b.interfaces if i.direction == "out"]
+    ins = [i for i in b.interfaces if i.direction == "in" and i.protocol != "memory"]
+    outs = [i for i in b.interfaces if i.direction == "out" and i.protocol != "memory"]
+    mem_ins = [i for i in b.interfaces if i.direction == "in" and i.protocol == "memory"]
+    mem_outs = [i for i in b.interfaces if i.direction == "out" and i.protocol == "memory"]
+    call = next((i for i in ins if "done" in i.fields), None) if mem_ins or mem_outs else None
+    if mem_ins and call is None:
+        raise ValueError(f"{b.top}: input memories ({', '.join(i.name for i in mem_ins)}) are written per call; "
+                         "the design needs HLS's ap_start/ap_ready/ap_done (ap_ctrl_hs) to say when a call starts")
     L = [
         "// Written by forge (forge.verification.auto_tb); do not edit.",
         "`timescale 1ns/1ps",
@@ -164,12 +230,14 @@ def testbench(b: Bench) -> str:
         "  reg running = 1'b0;",
         "  string trace;",
     ]
-    for i in b.interfaces:
-        L += [_decl(p.direction, p.width, p.name) for p in i.ports()]
+    ports = list({p.name: p for i in b.interfaces for p in i.ports()}.values())
+    L += [_decl(p.direction, p.width, p.name) for p in ports]
+    if call is not None and not call.data:
+        L.append("  reg [0:0] call_word;")
     overrides = ", ".join(f".{k}({v})" for k, v in b.parameters.items())
     L.append(f"  {b.top} #({overrides}) dut (" if overrides else f"  {b.top} dut (")
     conns = [f"    .{b.clock}({b.clock})", f"    .{b.reset}({b.reset})"]
-    conns += [f"    .{p.name}({p.name})" for i in b.interfaces for p in i.ports()]
+    conns += [f"    .{p.name}({p.name})" for p in ports]
     L += [",\n".join(conns), "  );", ""]
 
     for i in ins:
@@ -180,6 +248,7 @@ def testbench(b: Bench) -> str:
         ]
     for o in outs:
         L.append(f"  integer expect_{o.name} = -1, seen_{o.name} = 0, bp_{o.name} = 0;")
+    L += _memory_text(b, ins, call)
 
     L += ["", "  initial begin", "    string path;", "    integer seed;",
           '    if (!$value$plusargs("TRACE=%s", trace)) trace = "trace.txt";',
@@ -195,6 +264,12 @@ def testbench(b: Bench) -> str:
         for p in i.ports():
             if p.direction == "in":
                 L.append(f"    {p.name} = '0;")
+    for mi in mem_ins:
+        L += [f'    if ($value$plusargs("STIM_{mi.name}=%s", path)) $readmemh(path, mem_{mi.name});',
+              f'    if ($value$plusargs("CNT_{mi.name}=%s", path)) $readmemh(path, cnt_{mi.name});',
+              f'    void\'($value$plusargs("N_{mi.name}=%d", n_{mi.name}));']
+    for mo in mem_outs:
+        L.append(f'    void\'($value$plusargs("EXPECT_{mo.name}=%d", expect_{mo.name}));')
     for o in outs:
         L += [f'    void\'($value$plusargs("EXPECT_{o.name}=%d", expect_{o.name}));',
               f'    void\'($value$plusargs("BACKPRESSURE_{o.name}=%d", bp_{o.name}));']
@@ -221,9 +296,12 @@ def testbench(b: Bench) -> str:
                   f"    end else {v} <= 1'b0;"]
         elif i.protocol == "ready_valid":
             v, r = i.valid.name, i.ready.name  # type: ignore[union-attr]
+            serial = f" && {ptr} == done_call" if i is call else ""
+            data = data if i.data else "call_word"
             L += [f"    if (!{v} || {r}) begin",
-                  f"      if ({ptr} < {n} && ($urandom % 100) >= stall_{i.name}) begin",
+                  f"      if ({ptr} < {n}{serial} && ($urandom % 100) >= stall_{i.name}) begin",
                   f"        {data} <= {m}[{ptr}]; {v} <= 1'b1; {ptr} <= {ptr} + 1;",
+                  *(_load_pages(b) if i is call else []),
                   f"      end else {v} <= 1'b0;",
                   "    end",
                   f'    if ({v} && {r}) $fdisplay(fd, "%0d >{i.name} %h", cycle, {data});']
@@ -273,10 +351,13 @@ def testbench(b: Bench) -> str:
               f'    $fdisplay(fd, "%0d {tag} %h", cycle, {_concat(ref)});', ""]
 
     consumed = " && ".join([f"p_{i.name} >= n_{i.name}" for i in ins] or ["1'b1"])
+    if call is not None:
+        consumed += " && done_call >= p_call"
     if any(i.protocol == "ready_valid" for i in ins):
         consumed += " && " + " && ".join(f"!{i.valid.name}" for i in ins  # type: ignore[union-attr]
                                          if i.protocol == "ready_valid")
-    reached = " && ".join([f"(expect_{o.name} < 0 || seen_{o.name} >= expect_{o.name})" for o in outs] or ["1'b1"])
+    reached = " && ".join([f"(expect_{o.name} < 0 || seen_{o.name} >= expect_{o.name})" for o in [*outs, *mem_outs]]
+                          or ["1'b1"])
     L += [f"  always @(posedge {b.clock}) if (running) begin",
           "    cycle <= cycle + 1;",
           f"    if (!({consumed})) last_activity = cycle;",
@@ -299,6 +380,21 @@ def write_inputs(b: Bench, values: Mapping[str, Sequence[Any]], directory: Path,
     args: Dict[str, str] = {}
     for i in b.interfaces:
         if i.direction != "in":
+            continue
+        if i.protocol == "memory":
+            pages = [list(v) if isinstance(v, (list, tuple)) else [v] for v in values.get(i.name, [])]
+            words = [w for page in pages for w in page]
+            if len(words) > b.depth:
+                raise ValueError(f"{i.name}: {len(words)} words, the testbench holds {b.depth} (raise depth)")
+            too_big = [len(page) for page in pages if len(page) > i.options["depth"] // i.options["pages"]]
+            if too_big:
+                raise ValueError(f"{i.name}: a call of {too_big[0]} words does not fit a page of "
+                                 f"{i.options['depth'] // i.options['pages']}")
+            digits = max(1, -(-i.width // 4))
+            (directory / f"{i.name}.mem").write_text("".join(f"{pack(i, w):0{digits}x}\n" for w in words))
+            (directory / f"{i.name}.cnt").write_text("".join(f"{len(page):x}\n" for page in pages))
+            args.update({f"STIM_{i.name}": str(directory / f"{i.name}.mem"),
+                         f"CNT_{i.name}": str(directory / f"{i.name}.cnt"), f"N_{i.name}": str(len(pages))})
             continue
         lines = memory(i, values.get(i.name, []), gap if i.protocol == "valid" else 0)
         if len(lines) > b.depth:

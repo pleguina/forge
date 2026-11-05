@@ -167,3 +167,90 @@ def test_an_input_left_without_its_driver_is_named():
 
     assert impact.instances_removed == ["slow"]
     assert impact.instances_changed == {"join": ["input b: no longer driven (tied off)"]}
+
+
+# ── A stage replaced before a reconvergent merge ────────────────────────────
+
+ROLES = {"src": {"dout": "output", "dout_vld": "output"},
+         "slow": {"din": "input", "din_vld": "input", "dout": "output", "dout_vld": "output"},
+         "fast": {"din": "input", "din_vld": "input", "dout": "output", "dout_vld": "output"},
+         "merge": {"in_slow": "input", "in_slow_vld": "input", "in_fast": "input", "in_fast_vld": "input"}}
+
+
+def _stage_design(root: Path, slow_cycles: int, fast_delay: str) -> Path:
+    (root / "interfaces").mkdir(parents=True, exist_ok=True)
+    for name, ports in ROLES.items():
+        lines = ["ip_interface:", f"  module_name: {name}", f"  ip_info_key: {name}", "  source_type: rtl",
+                 "  roles:", "    clock_primary: {raw_port: ap_clk, direction: input, width: 1}",
+                 "    reset_primary: {raw_port: ap_rst, direction: input, width: 1}"] + [
+                 f"    {p}: {{raw_port: {p}, direction: {d}, width: {1 if p.endswith('vld') else 8}}}"
+                 for p, d in ports.items()]
+        (root / "interfaces" / f"{name}.interface.yaml").write_text("\n".join(lines) + "\n")
+    (root / "modules.yml").write_text("registry_version: '1'\nmodules:\n" + "".join(
+        f"  - name: {n}\n    kind: rtl\n    top: {n}_top\n    src: [{n}.v]\n"
+        f"    interface_contract: interfaces/{n}.interface.yaml\n    latency_cycles: {c}\n"
+        for n, c in (("src", 1), ("slow", slow_cycles), ("fast", 1), ("merge", 1))))
+    (root / "design.yml").write_text(
+        "part: xcvu13p\nclock_period: 4.0\nregistry: modules.yml\nmodules:\n"
+        + "".join(f"  - {{name: {n}, ref: {n}}}\n" for n in ROLES)
+        + "connections:\n"
+        "  - {from: src, to: slow, port_map: [[dout, din], [dout_vld, din_vld]]}\n"
+        "  - {from: src, to: fast, port_map: [[dout, din], [dout_vld, din_vld]]}\n"
+        "  - {from: slow, to: merge, port_map: [[dout, in_slow], [dout_vld, in_slow_vld]]}\n"
+        f"  - {{from: fast, to: merge, port_map: [[dout, in_fast], [dout_vld, in_fast_vld]], delay_cycles: {fast_delay}}}\n")
+    return root / "design.yml"
+
+
+def _gen_top(design: Path, out: Path, capsys):
+    args = build_parser().parse_args(["dev", "topgen", "gen-top", str(design), "--mode", "verilog",
+                                      "--output", str(out / "algo_top.v"),
+                                      "--contracts-from", str(design.parent / "modules.yml")])
+    code = 0
+    try:
+        args.func(args)
+    except SystemExit as exc:
+        code = int(exc.code or 0)
+    return code, capsys.readouterr().out
+
+
+def test_a_slower_stage_before_a_merge_realigns_payload_and_valid_where_permitted(tmp_path, capsys):
+    design = _stage_design(tmp_path, 5, "auto")
+    assert _gen_top(design, tmp_path / "five", capsys)[0] == 0
+    design = _stage_design(tmp_path, 7, "auto")
+    assert _gen_top(design, tmp_path / "seven", capsys)[0] == 0
+
+    top = (tmp_path / "seven" / "algo_top.v").read_text().replace(" ", "")
+    assert top.count(".DEPTH(6)") == 2          # data and valid delayed alike
+    before = json.loads((tmp_path / "five" / "design.ir.json").read_text())["design"]
+    after = json.loads((tmp_path / "seven" / "design.ir.json").read_text())["design"]
+    impact = compare(before, after)
+
+    assert impact.modules == {"slow": ["latency: 5 cycles -> 7 cycles"]}
+    assert impact.merges == []
+    (realigned,) = impact.realigned
+    assert realigned["instance"] == "merge" and len(realigned["delays"]) == 2
+    assert all("4 cycle(s) -> latency_delay 6 cycle(s)" in d for d in realigned["delays"])
+    targets = affected_targets(impact, {"payload": {"scope": "design"}, "merge": {"scope": "instance:merge"},
+                                        "src": {"scope": "instance:src"}})
+    assert set(targets) == {"payload", "merge"}
+
+
+def test_a_fixed_delay_that_no_longer_aligns_stops_generation(tmp_path, capsys):
+    design = _stage_design(tmp_path, 7, "4")
+
+    code, out = _gen_top(design, tmp_path / "out", capsys)
+
+    assert code != 0 and not (tmp_path / "out" / "algo_top.v").exists()
+    assert "merge: inputs differ by 2 cycle(s)" in out and "delay_cycles: auto" in out
+
+
+def test_timing_the_analysis_cannot_see_is_listed_not_assumed():
+    before = _fork_and_merge()
+    after = copy.deepcopy(before)
+    after["modules"][2]["latency"] = {"kind": "fixed", "cycles": 3}
+    after["modules"][3]["latency"] = None                  # join: undeclared
+    after["modules"][4]["latency"] = {"kind": "elastic"}   # sink
+
+    impact = compare(before, after)
+
+    assert impact.unanalysed == {"join": "latency undeclared", "sink": "latency elastic"}

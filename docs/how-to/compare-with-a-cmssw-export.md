@@ -40,7 +40,15 @@ fields:
   charge: {low: 1, bits: 1}
   pt:     {low: 2, bits: 13}
   phi:    {low: 15, bits: 13, signed: true}
+  d0:     {low: 41, bits: 7, default: 0}    # the export gives none
 ```
+
+An object missing a field without a `default` is an error, so `pT` in the
+export is not packed as `pt = 0`. A layout shared by packing and reading
+cannot catch its own mistake: check it once against a word written down
+independently (the subsystem's own packer, or a word from its firmware
+documentation), as `forge/tests/test_integration_objects.py` does for the
+SAMuon word.
 
 ```yaml
 verification:
@@ -55,6 +63,66 @@ verification:
 A payload bug is reported per event with the decoded fields on both sides;
 `--event-id` runs one event; a packet missing on one link is an error naming
 the event and link.
+
+## Pattern files CMSSW already writes
+
+A subsystem whose emulator writes its board patterns with
+`L1Trigger/DemonstratorTools`' `BoardDataWriter` needs no export and no
+codec for packing: FORGE reads those EMPv2 files as they are. What the files
+do not say is which event each packet is. `BoardDataWriter` places events by
+fixed rules (TMUX rotation over a channel's indices, offset, gap, a new file
+when the buffer would overrun), so `forge/integration/cmssw_sidecar.py`
+recomputes the placement from the writer's settings and the order the job
+processed the events. It needs only Python 3, so it runs in the CMSSW
+environment, after the job:
+
+```bash
+python3 cmssw_sidecar.py --writer writer.json --log cmsRun.log \
+    --config my_cfg.py --provenance sample.json
+```
+
+`writer.json` repeats the writer's arguments (`path`, `ext`,
+`frames_per_bx`, `board_tmux`, `max_frames_per_file`, and per channel
+`tmux`, `gap`, `offset`, `indices`). The producer's constructor fixes
+`frames_per_bx`, `board_tmux` and each channel's TMUX and gap; the indices
+usually come from a `cff`, so read them from the loaded process rather than
+copying them:
+
+```python
+import json, runpy, sys
+sys.argv = ["gt_firmware_evaluation.py", "platform=VU13P"]
+p = runpy.run_path(sys.argv[0])["process"].l1tGTProducer
+tmux = {"GCT_1": 6, "GMT_1": 18, "GTT_1": 6, "GTT_2": 6, "GTT_3": 6, "GTT_4": 6,
+        "CL2_1": 6, "CL2_2": 6, "CL2_3": 6}   # L1GTEvaluationProducer.cc
+json.dump({"path": "inputPattern", "ext": "txt", "frames_per_bx": 9, "board_tmux": 1,
+           "max_frames_per_file": p.maxFrames.value(),
+           "channels": {n: {"tmux": t, "gap": 0, "offset": 0,
+                            "indices": list(getattr(p.InputChannels, n).value())}
+                        for n, t in tmux.items()}},
+          open("writer.json", "w"), indent=1)
+```
+
+For each file it writes
+`<file>.events.json` (each event's run, lumi and event number and its frames
+on every channel) and `<file>.provenance.json` (CMSSW release and commit
+from the environment, the configuration's checksum, and what
+`sample.json` adds: GlobalTag, firmware configuration, LUT hashes). Point the
+data spec at them:
+
+```yaml
+verification:
+  expected: {path: patterns/tx_0.txt, format: empv2, events: patterns/tx_0.txt.events.json,
+             provenance: patterns/tx_0.txt.provenance.json}
+```
+
+With frames in the events file, FORGE takes each event's packets from the
+frames the writer gave it rather than grouping packets that overlap in time,
+so time-multiplexed events on different links keep their identity, and a
+file that does not match the layout (an event missing, another writer
+setting) is refused. The event order comes from the job's log, which is the
+writer's order for a job on one stream; with several streams, give the order
+with `--events` instead. Each file the writer splits off is its own
+reference: name the one a target plays.
 
 ## A full-chip payload: OMTF
 

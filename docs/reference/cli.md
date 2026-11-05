@@ -55,7 +55,8 @@ emits the same {schema_version, status, diagnostics, artifacts, metrics,
 next_actions} envelope (docs/development/cli_exit_codes.md).
 
 Examples:
-  forge init my_plugin
+  forge init
+  forge init --example my_plugin
   forge adopt .
   forge check
   forge build
@@ -1221,15 +1222,21 @@ options:
 ### `forge init`
 
 ```text
-usage: forge init [-h] [--plugins-root PLUGINS_ROOT] [--algo-root ALGO_ROOT]
-                  [--consumer-root CONSUMER_ROOT] [--dry-run] [--verbose] [--json]
-                  plugin_id
+usage: forge init [-h] [--example PLUGIN_ID] [--top TOP] [--clock CLOCK] [--reset RESET]
+                  [--input INPUT] [--expected EXPECTED] [--hog-project HOG_PROJECT]
+                  [--filelist FILELIST] [--force] [--plugins-root PLUGINS_ROOT]
+                  [--algo-root ALGO_ROOT] [--consumer-root CONSUMER_ROOT] [--dry-run] [--verbose]
+                  [--json]
 
-positional arguments:
-  plugin_id             Plugin identifier (e.g. 'my_algo')
+Write one forge.yml that compares the firmware already in this repository with reference data: its
+top, clock, reset and source description; nothing else is written. --example scaffolds the full
+example plugin for extension authors and chains validate -> build -> test -> report.
 
 options:
   -h, --help            show this help message and exit
+  --example PLUGIN_ID   Scaffold the example plugin PLUGIN_ID (topology, contracts, RTL stub,
+                        verification flow) and chain validate -> build -> test -> report, for
+                        extension authors
   --plugins-root PLUGINS_ROOT
                         Root directory under which to create <plugin_id>/forge/ (default:
                         plugins/)
@@ -1242,6 +1249,17 @@ options:
                         entirely
   --verbose, -v         Print each underlying command's full output instead of one line per stage
   --json                Machine-readable JSON output
+
+existing firmware:
+  --top TOP             The top-level module (default: the one discovery finds)
+  --clock CLOCK         Its clock port
+  --reset RESET         Its reset port
+  --input INPUT         Input data (JSON, EMP or APx pattern file)
+  --expected EXPECTED   The output the firmware should produce
+  --hog-project HOG_PROJECT
+                        Read the sources from this Hog project (Top/<name>/list)
+  --filelist FILELIST   Read the sources from this .f compile list
+  --force               Replace an existing forge.yml
 ```
 
 ### `forge inspect`
@@ -1339,9 +1357,11 @@ options:
 ### `forge report`
 
 ```text
-usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--package TARGET] [--ip-info IP_INFO]
-                    [--build-dir BUILD_DIR] [--output OUTPUT] [--hls-build-root HLS_BUILD_ROOT]
-                    [--solution SOLUTION] [--probe-csv PROBE_CSV] [--probe-format {long,wide}]
+usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--package TARGET]
+                    [--package-events EVENTS] [--pre-roll PRE_ROLL] [--external-data]
+                    [--bitfile BITFILE] [--ip-info IP_INFO] [--build-dir BUILD_DIR]
+                    [--output OUTPUT] [--hls-build-root HLS_BUILD_ROOT] [--solution SOLUTION]
+                    [--probe-csv PROBE_CSV] [--probe-format {long,wide}]
                     [--probe-pairs PROBE_PAIRS] [--provenance PROVENANCE] [--junit-xml JUNIT_XML]
                     [--verify-design VERIFY_DESIGN] [--results-json RESULTS_JSON]
                     [--module-width MODULE_WIDTH] [--fifo-probe FIFO_PROBE]
@@ -1359,6 +1379,14 @@ options:
                         Path to modules.yml (interface_contract: entries)
   --package TARGET      Write TARGET's replay package (reference data, link mapping, comparison,
                         build identity) under .forge/reports/packages/, or --output
+  --package-events EVENTS
+                        With --package: the event(s) the package reproduces (names or positions,
+                        comma-separated)
+  --pre-roll PRE_ROLL   With --package-events: events of history replayed before each one
+  --external-data       With --package: name the reference files by path and checksum instead of
+                        copying them
+  --bitfile BITFILE     With --package: the bitstream built from this source, recorded by checksum
+                        as the firmware a capture should come from
   --ip-info IP_INFO     Path to a pre-built ip_info.yaml (optional)
   --build-dir BUILD_DIR
                         HLS/RTL build root to scan for component.xml (optional)
@@ -1407,14 +1435,16 @@ options:
 
 ```text
 usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_LIST]
-                  [--all-events] [--plugin PLUGIN] [--input INPUT] [--input-format INPUT_FORMAT]
-                  [--expected EXPECTED] [--expected-format EXPECTED_FORMAT]
+                  [--all-events] [--pre-roll PRE_ROLL] [--plugin PLUGIN] [--input INPUT]
+                  [--input-format INPUT_FORMAT] [--expected EXPECTED]
+                  [--expected-format EXPECTED_FORMAT]
                   [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
                   [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
                   [--target TARGET] [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE]
                   [--record-modules] [--capture CAPTURE] [--capture-format CAPTURE_FORMAT]
-                  [--capture-offset CAPTURE_OFFSET] [--package PACKAGE] [--plan]
-                  [--require-verified] [--json]
+                  [--capture-offset CAPTURE_OFFSET] [--package PACKAGE]
+                  [--implementation TIMING_SUMMARY] [--constraints XDC [XDC ...]]
+                  [--firmware-id FIRMWARE_ID] [--plan] [--require-verified] [--json]
                   MODE ...
 
 positional arguments:
@@ -1433,6 +1463,9 @@ options:
                         Comma-separated event IDs or ranges (e.g. 1,7,10-12); a plugin may qualify
                         one (e.g. event:processor, 4:2)
   --all-events          Run every event in the dataset
+  --pre-roll PRE_ROLL   With --event-id/--event-list: also replay and compare this many events
+                        before each one, for a design that keeps state across events (default: the
+                        target's pre_roll, else 0)
   --plugin PLUGIN       Plugin ID to bootstrap (when flow.plugin is absent from YAML)
   --require-verified    Exit 1 unless everything was verified: a missing simulator, a missing
                         expected output or a skipped flow fails instead of warning (for CI)
@@ -1472,6 +1505,15 @@ without a verification config:
                         modes)
   --package PACKAGE     With --capture: the replay package the board ran (forge report --package);
                         its reference must still be forge.yml's
+  --implementation TIMING_SUMMARY
+                        Record this Vivado report_timing_summary of the target's build as its
+                        implementation result, instead of simulating
+  --constraints XDC [XDC ...]
+                        With --implementation: the constraints the build used, recorded by content
+  --firmware-id FIRMWARE_ID
+                        With --capture: JSON of the firmware identity read back from the board
+                        (git_sha, bitfile_sha256, ID registers); without it the capture's firmware
+                        is unconfirmed
   --plan                Print what would be verified, and what was inferred, without simulating
 ```
 

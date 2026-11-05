@@ -13,9 +13,17 @@ word. A codec names where each field sits in the word:
 
 The same codec packs a reference export into pattern files
 (:func:`write_patterns`) and reads the payload's output words back
-(``verification.codecs``), so the two cannot disagree on the layout. A word
-whose data bits are all zero is no object. ``shift`` places the data above
-low bits a link word keeps for its own flags.
+(``verification.codecs``), so the two cannot disagree on the layout.
+``shift`` places the data above low bits a link word keeps for its own flags.
+
+Every field an object must give is named: packing an object that lacks a
+field is an error unless the field has a ``default`` (``d0: {low: 41, bits:
+7, default: 0}``), so a misspelt key is not packed as zero. ``unknown:
+error`` also refuses keys the codec does not name (``ignore``, the default,
+lets an export carry its own bookkeeping such as the link). ``empty`` says
+which words carry no object: ``zero`` (the default) a word whose data bits
+are all zero, the name of a constant field (``empty: valid``) a word in
+which that field does not hold its constant, ``never`` none.
 """
 
 from __future__ import annotations
@@ -34,6 +42,7 @@ class Field:
     bits: int
     signed: bool = False
     value: Optional[int] = None    # a constant every object carries
+    default: Optional[int] = None  # packed when an object does not give the field
 
 
 @dataclass
@@ -42,6 +51,8 @@ class Codec:
     width: int = 64
     shift: int = 0
     fields: Dict[str, Field] = field(default_factory=dict)
+    unknown: str = "ignore"
+    empty: str = "zero"
 
     @classmethod
     def from_spec(cls, spec: Mapping[str, Any], name: str) -> "Codec":
@@ -49,9 +60,13 @@ class Codec:
         fields: Dict[str, Field] = {}
         for fname, f in (spec.get("fields") or {}).items():
             if not isinstance(f, Mapping) or "low" not in f or "bits" not in f:
-                raise ValueError(f"codec {name}: field {fname}: want {{low: N, bits: N}} (signed, value optional)")
+                raise ValueError(f"codec {name}: field {fname}: want {{low: N, bits: N}} "
+                                 "(signed, value, default optional)")
+            if f.get("value") is not None and f.get("default") is not None:
+                raise ValueError(f"codec {name}: field {fname}: a constant (value) takes no default")
             made = Field(int(f["low"]), int(f["bits"]), bool(f.get("signed", False)),
-                         None if f.get("value") is None else int(f["value"]))
+                         None if f.get("value") is None else int(f["value"]),
+                         None if f.get("default") is None else int(f["default"]))
             if made.low < 0 or made.bits < 1 or made.low + made.bits > width:
                 raise ValueError(f"codec {name}: field {fname} (bits {made.low}..{made.low + made.bits - 1}) "
                                  f"does not fit {width} bits")
@@ -61,7 +76,24 @@ class Codec:
             fields[str(fname)] = made
         if not fields:
             raise ValueError(f"codec {name}: no fields")
-        return cls(name, width, int(spec.get("shift", 0)), fields)
+        unknown = str(spec.get("unknown", "ignore"))
+        if unknown not in ("ignore", "error"):
+            raise ValueError(f"codec {name}: unknown: {unknown!r}, want ignore or error")
+        empty = str(spec.get("empty", "zero"))
+        if empty not in ("zero", "never") and (empty not in fields or fields[empty].value is None):
+            raise ValueError(f"codec {name}: empty: {empty!r}, want zero, never or the name of a constant "
+                             f"field ({', '.join(n for n, f in fields.items() if f.value is not None) or 'none'})")
+        return cls(name, width, int(spec.get("shift", 0)), fields, unknown, empty)
+
+    def to_spec(self) -> Dict[str, Any]:
+        """The layout as ``from_spec`` reads it: what decides every word."""
+        out: Dict[str, Any] = {"width": self.width, "shift": self.shift, "unknown": self.unknown,
+                               "empty": self.empty, "fields": {}}
+        for fname, f in self.fields.items():
+            out["fields"][fname] = {"low": f.low, "bits": f.bits, "signed": f.signed,
+                                    **({"value": f.value} if f.value is not None else {}),
+                                    **({"default": f.default} if f.default is not None else {})}
+        return out
 
     @classmethod
     def load(cls, path: Path) -> "Codec":
@@ -69,11 +101,21 @@ class Codec:
         return cls.from_spec(yaml.safe_load(Path(path).read_text()) or {}, Path(path).stem)
 
     def pack(self, obj: Mapping[str, Any]) -> int:
-        """The word of *obj*, a mapping of field to value; fields the codec
-        does not name are ignored, fields it names and *obj* lacks are 0."""
+        """The word of *obj*, a mapping of field to value. A field *obj* lacks
+        takes its ``default``, and is an error without one; keys the codec
+        does not name are ignored, or refused with ``unknown: error``."""
+        missing = [n for n, f in self.fields.items() if f.value is None and f.default is None and n not in obj]
+        if missing:
+            raise ValueError(f"codec {self.name}: the object has no {', '.join(missing)} (it has "
+                             f"{', '.join(map(str, obj)) or 'nothing'}); give the field or a default for it")
+        if self.unknown == "error":
+            extra = [str(k) for k in obj if k not in self.fields]
+            if extra:
+                raise ValueError(f"codec {self.name}: the object has {', '.join(extra)}, which the codec does "
+                                 f"not name (unknown: error)")
         word = 0
         for fname, f in self.fields.items():
-            v = f.value if f.value is not None else int(obj.get(fname, 0))
+            v = f.value if f.value is not None else int(obj[fname] if fname in obj else f.default or 0)
             lo, hi = (-(1 << (f.bits - 1)), (1 << (f.bits - 1)) - 1) if f.signed else (0, (1 << f.bits) - 1)
             if not lo <= v <= hi:
                 raise ValueError(f"codec {self.name}: {fname} = {v} does not fit {f.bits} "
@@ -82,15 +124,17 @@ class Codec:
         return word << self.shift
 
     def unpack(self, word: int) -> Optional[Dict[str, int]]:
-        """The fields of *word* (its data bits; flags above them are left
-        out), or None when they are all zero: no object."""
+        """The fields of *word* (its data bits; flags below them are left
+        out), or None for a word that carries no object (``empty``)."""
         data = (word >> self.shift) & ((1 << self.width) - 1)
-        if data == 0:
+        if data == 0 and self.empty == "zero":
             return None
         out = {}
         for fname, f in self.fields.items():
             v = (data >> f.low) & ((1 << f.bits) - 1)
             out[fname] = v - (1 << f.bits) if f.signed and v >> (f.bits - 1) else v
+        if self.empty in self.fields and out[self.empty] != self.fields[self.empty].value:
+            return None
         return out
 
 
@@ -113,6 +157,7 @@ def codec_decoder(codecs: Mapping[str, Codec]) -> Callable[[str, int], Optional[
         if codec is None:
             raise ValueError(f"verification.codecs names no codec for {interface} (have {', '.join(codecs)})")
         return codec.unpack(word)
+    decode.forge_identity = {k: c.to_spec() for k, c in codecs.items()}  # type: ignore[attr-defined]
     return decode
 
 

@@ -62,7 +62,7 @@ def test_init_runs_full_chain_with_zero_manual_edits(
     plugins_root = tmp_path / "plugins"
 
     result = _run(
-        capsys, "throwaway_plugin",
+        capsys, "--example", "throwaway_plugin",
         "--plugins-root", str(plugins_root), "--consumer-root", str(tmp_path),
         "--json",
     )
@@ -110,7 +110,7 @@ def test_init_dry_run_writes_nothing(capsys: pytest.CaptureFixture[str], tmp_pat
     before = _tree_snapshot(tmp_path)
 
     result = _run(
-        capsys, "throwaway_plugin",
+        capsys, "--example", "throwaway_plugin",
         "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path),
         "--dry-run", "--json",
     )
@@ -126,7 +126,7 @@ def test_init_dry_run_writes_nothing(capsys: pytest.CaptureFixture[str], tmp_pat
 
 def test_init_registered_as_top_level_command() -> None:
     parser = build_parser()
-    parsed = parser.parse_args(["init", "some_plugin"])
+    parsed = parser.parse_args(["init", "--example", "some_plugin"])
     assert parsed.func.__name__ == "cmd_init"
 
 
@@ -138,7 +138,7 @@ def test_init_writes_a_forge_yml_the_bare_commands_use(
 
     monkeypatch.setattr(toolchain, "tool_present", lambda name: False)
     result = _run(
-        capsys, "throwaway_plugin",
+        capsys, "--example", "throwaway_plugin",
         "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path), "--json",
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -161,7 +161,7 @@ def test_init_leaves_an_existing_forge_yml_alone(
     (tmp_path / "forge.yml").write_text("project: other\n")
 
     result = _run(
-        capsys, "throwaway_plugin",
+        capsys, "--example", "throwaway_plugin",
         "--plugins-root", str(tmp_path / "plugins"), "--consumer-root", str(tmp_path), "--json",
     )
 

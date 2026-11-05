@@ -1,0 +1,21 @@
+project: l1tk_vmr_l1phia
+top: VMRouterCMTop_L1PHIA
+sources:
+  rtl:
+  - firmware-hls/IntegrationTests/ReducedCombinedConfig_FPGA1/script/VMRouterCMTop_L1PHIA/solution/impl/verilog/*.v
+clock: {port: ap_clk, frequency: 240MHz}
+reset: {port: ap_rst, active: high}
+verification:
+  target: existing
+  backends: [xsim]
+  formats:
+    l1tk-vmr-in: vmr_data.py:inputs
+    l1tk-vmr-out: vmr_data.py:expected
+  protocols:
+    "inputStubs_dataarray_*": {protocol: memory, latency: 1, pages: 4}
+  streams:
+    memoryME: ["memoryME_dataarray_*"]
+  outputs: [memoriesAS_dataarray_s, memoryME]
+  compare: {order: event, mode: latency_window, latency: {min: 0, max: next}}
+  input: {path: firmware-hls/emData/MemPrintsReducedCM, format: l1tk-vmr-in}
+  expected: {path: firmware-hls/emData/MemPrintsReducedCM, format: l1tk-vmr-out}

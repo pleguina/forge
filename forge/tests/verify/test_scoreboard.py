@@ -77,3 +77,71 @@ def test_bad_compare_specs_are_refused(spec, message):
 ])
 def test_statuses_combine_without_turning_absence_into_a_pass(statuses, combined):
     assert sb.combine(statuses) == combined
+
+
+# ── Empty references, events and time ───────────────────────────────────────
+
+@pytest.mark.parametrize("order", ["strict", "event", "any"])
+def test_an_object_against_an_empty_reference_is_extra(order):
+    res = compare("o", [], [(0, 1)], Compare(order=order))
+    assert res.status == sb.FAILED and _kinds(res) == ["extra"]
+
+
+@pytest.mark.parametrize("order", ["strict", "event", "any"])
+def test_an_empty_run_against_an_empty_reference_verifies(order):
+    assert compare("o", [], [], Compare(order=order)).status == sb.VERIFIED
+
+
+def _window(lo, hi=None):
+    return Compare.from_dict({"order": "event", "mode": "latency_window" if hi is not None else "fixed_latency",
+                              "latency": {"min": lo, "max": hi} if hi is not None else lo})
+
+
+# Three BXs 10 cycles apart; each BX's output occupies cycles start+4 .. start+6.
+STARTS = {"bx0": 0, "bx1": 10, "bx2": 20}
+
+
+def _bx(*pairs):
+    return [Expected(v, event=e) for e, v in pairs]
+
+
+def test_order_event_with_a_latency_window_allows_reordering_within_a_bx():
+    exp = _bx(("bx0", 1), ("bx0", 2), ("bx2", 3))
+    res = compare("o", exp, [(4, 2), (5, 1), (25, 3)], _window(4, 6), event_cycles=STARTS)
+    assert res.status == sb.VERIFIED and res.matched == 3
+
+
+def test_a_whole_bx_shift_fails_although_every_value_is_right():
+    exp = _bx(("bx0", 1), ("bx1", 2))
+    shifted = compare("o", exp, [(14, 1), (24, 2)], _window(4, 6), event_cycles=STARTS)
+    assert shifted.status == sb.FAILED
+    assert [(r["kind"], r.get("event")) for r in shifted.rows] == [
+        ("missing", "bx0"), ("mismatch", "bx1"), ("extra", "bx2")]
+    value_only = compare("o", exp, [(14, 1), (24, 2)], Compare(order="event"), event_cycles=STARTS)
+    assert value_only.status == sb.VERIFIED
+
+
+def test_an_object_in_an_empty_bx_between_occupied_ones_is_extra():
+    exp = _bx(("bx0", 1), ("bx2", 3))
+    res = compare("o", exp, [(4, 1), (15, 9), (24, 3)], _window(4, 6), event_cycles=STARTS)
+    assert [(r["kind"], r.get("event")) for r in res.rows] == [("extra", "bx1")]
+
+
+def test_identical_objects_in_neighbouring_bxs_are_both_needed():
+    exp = _bx(("bx0", 7), ("bx1", 7))
+    assert compare("o", exp, [(4, 7), (14, 7)], _window(4, 6), event_cycles=STARTS).status == sb.VERIFIED
+    both_in_one = compare("o", exp, [(4, 7), (5, 7)], _window(4, 6), event_cycles=STARTS)
+    assert [(r["kind"], r.get("event")) for r in both_in_one.rows] == [("duplicate", "bx0"), ("missing", "bx1")]
+
+
+def test_a_word_outside_every_window_or_in_two_is_never_matched_by_value():
+    exp = _bx(("bx0", 1))
+    late = compare("o", exp, [(8, 1)], _window(4, 6), event_cycles=STARTS)
+    assert _kinds(late) == ["extra", "missing"] and late.rows[0]["latency"] == 8
+    overlapping = compare("o", exp, [(14, 1)], _window(4, 14), event_cycles=STARTS)
+    assert "ambiguous_event" in _kinds(overlapping)
+
+
+def test_order_event_with_latency_needs_named_events():
+    res = compare("o", [Expected(1)], [(4, 1)], _window(4), event_cycles=None)
+    assert res.status == sb.FAILED and _kinds(res) == ["no_event_timing"]

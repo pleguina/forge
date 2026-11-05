@@ -47,6 +47,8 @@ forge inspect --impact old.json # against any snapshot `forge inspect --emit-ir`
 | Connections | added or removed, a width at either end, pipeline registers, delays and synchronizers on them |
 | What it affects | the instances that behave or connect differently, and everything they feed |
 | Merges | every instance fed by several producers where the timing of some branches changed and of others did not: the places a latency change has to be balanced |
+| Merges realigned | merges whose every branch changed because a `delay_cycles: auto` delay into them was resized: the delay and its old and new depth. Every signal on the connection (data, valid, event tags) moves by the same delay |
+| Timing not analysed | changed or downstream instances whose latency is undeclared, bounded, elastic or opaque: alignment through them is unknown, not assumed |
 | Verification to run again | the [targets](verify-from-the-design.md#targets) whose scope covers a change, and replays of traffic that will be recorded again |
 | To regenerate | what the last build wrote, and the subsystem tops that contain a change |
 
@@ -56,6 +58,23 @@ Numbered copies that change the same way are one line (`csc_*.csp_out->subdet.in
 and lists of instances are ranges (`dt_0..14`). With `--variant`, the
 comparison is with that variant's last build.
 
+A slower stage before a merge is balanced only where you allowed it: with
+`delay_cycles: auto` on the other branch, `forge build` resizes the delay
+(5 to 7 cycles on one branch turns a 4-cycle delay on the other into 6, on
+the data and its valid alike). A delay you fixed yourself, or a merge left
+without one, stops the build when the declared latencies no longer line up:
+
+```
+❌ Merge inputs out of alignment at the declared latencies:
+   • merge: inputs differ by 2 cycle(s) (exact_cycle); Insert signal_delay DEPTH=2 on the path from 'fast' into 'merge'
+```
+
+A merge that does not need its inputs on the same cycle says so with its
+`input_alignment` (`window` or `framed`). An unknown latency on a branch is
+reported by `forge dev analyze latency-check`, not guessed. All of this is
+alignment at the declared latencies (contracts, HLS reports): it says
+nothing about post-route timing.
+
 The report is written to `.forge/reports/impact.md`; `--json` gives it in
 `metrics.impact`, with `metrics.rerun` and `metrics.regenerate`. A
 misaligned merge makes the result a warning. Then:
@@ -64,3 +83,6 @@ misaligned merge makes the result a warning. Then:
 forge build
 forge test --target payload,shaper_replay
 ```
+
+The targets listed cover the change as far as the static graph sees it.
+They are the ones to run first; a release still runs every required target.

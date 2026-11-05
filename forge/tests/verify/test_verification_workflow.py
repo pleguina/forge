@@ -200,5 +200,5 @@ def test_a_changed_checker_setting_makes_a_pass_out_of_date(project, monkeypatch
     _, doc, _ = _run(capsys, "report", "--json")
 
     assert doc["metrics"]["verification"] == "OUT_OF_DATE"
-    assert any("verification settings" in d["message"] for d in doc["diagnostics"])
+    assert any("its comparison" in d["message"] for d in doc["diagnostics"])
     assert "out of date" in _verification_section(project).detail
