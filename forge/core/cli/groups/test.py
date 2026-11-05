@@ -165,34 +165,49 @@ def _events(args) -> Optional[List[str]]:
     return None
 
 
-def _build_subsystems(project, spec, select, json_mode: bool) -> None:
-    """Generate the top level of each subsystem target from the design, and
-    refuse one whose connections are not exactly the design's."""
-    import yaml
-
+def _build_design(project, design: Path, output: Path, what: str, json_mode: bool) -> None:
+    """`forge build` of *design* into *output*, with the project's build
+    options and the design's own registry."""
     from forge.core.cli._shared import run_forge_command
     from forge.project.resolve import design_registry
+
+    argv = ["build", str(design), "--mode", "verilog", "--top-name", output.stem,
+            "--output", str(output), "--consumer-root", str(project.root)]
+    registry = design_registry(design)
+    if registry is not None:
+        argv += ["--contracts-from", str(registry)]
+    for option, value in project.build_options().items():
+        if option not in ("mode", "top_name"):
+            argv += [f"--{option.replace('_', '-')}", value]
+    code, output_text = run_forge_command(argv, quiet=True)
+    if code != 0:
+        if output_text:
+            print(output_text, file=sys.stderr)
+        sys.exit(_guided_run_failure(f"{what} did not build", json_mode=json_mode))
+
+
+def _build_variants_and_subsystems(project, spec, select, json_mode: bool) -> None:
+    """Generate each selected target's variant, and the top level of each
+    subsystem target from the design, refusing a subsystem whose connections
+    are not exactly the design's."""
+    import yaml
+
     from forge.project.subsystem import subsystem_design, subsystem_difference, subsystems
+    from forge.project.variants import variant_design
     from forge.verification import auto
 
+    targets = spec.get("targets") if isinstance(spec.get("targets"), dict) else {}
+    for name in sorted({str((t or {}).get("variant")) for n, t in targets.items()
+                        if (t or {}).get("variant") and (not select or n in select)}):
+        design = variant_design(project.config, project.design, name)
+        _build_design(project, design, auto.variant_generated_dir(project, name) / "algo_top.v", f"variant {name}", json_mode)
     for name, instances in subsystems(project, spec, select).items():
         gen = auto.subsystem_dir(project, name)
         gen.mkdir(parents=True, exist_ok=True)
         design = gen.parent / "design.yml"
         design.write_text(yaml.safe_dump(subsystem_design(project, instances), sort_keys=False))
-        argv = ["build", str(design), "--mode", "verilog", "--top-name", f"{name.replace('.', '_').replace('-', '_')}_top",
-                "--output", str(gen / f"{name}_top.v"), "--consumer-root", str(project.root)]
-        registry = design_registry(design)
-        if registry is not None:
-            argv += ["--contracts-from", str(registry)]
-        for option, value in project.build_options().items():
-            if option not in ("mode", "top_name"):
-                argv += [f"--{option.replace('_', '-')}", value]
-        code, output = run_forge_command(argv, quiet=True)
-        if code != 0:
-            if output:
-                print(output, file=sys.stderr)
-            sys.exit(_guided_run_failure(f"subsystem {name} did not build", json_mode=json_mode))
+        top = f"{name.replace('.', '_').replace('-', '_')}_top"
+        _build_design(project, design, gen / f"{top}.v", f"subsystem {name}", json_mode)
         difference = subsystem_difference(project, name, instances)
         if difference:
             sys.exit(_guided_run_failure(
@@ -241,7 +256,7 @@ def cmd_auto_test(args, project) -> None:
                     print(output, file=sys.stderr)
                 sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
             if not getattr(args, "plan", False):
-                _build_subsystems(project, spec, select, json_mode)
+                _build_variants_and_subsystems(project, spec, select, json_mode)
         plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
                          expected_override=ref(args.expected, args.expected_format), select=select, events=events)
     except (OSError, ValueError, KeyError) as exc:

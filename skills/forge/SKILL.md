@@ -176,6 +176,12 @@ Only required targets (default) decide the status and `--require-verified`.
 Without `targets`, the design is required and a module only when it has its
 own expected output.
 
+`variants: {board: design.board.yml, sim: {modules: {lane: {instances: 2}}}}`
+names variants of the design (`forge build --variant sim`, a target's
+`variant: sim`). In a hand-written design, `subsystems:` defines a chain of
+blocks once; `{name: lane, subsystem: lane, instances: 6, overrides: {3: {post:
+{ref: other}}}}` makes copies named `lane_<k>__<block>`.
+
 A project with a hand-written design keeps it: `design: path/design.yml`,
 `registry: path/modules.yml`, `verification.config: path/design.verification.yml`
 (plugin flows; `forge test` then runs those flows).
@@ -256,11 +262,12 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | `forge adopt --json [path]` | create `forge.yml` from an existing repository (`--dry-run` to preview) |
 | `forge check --json [--strict]` | project status, every blocker with its action |
 | `forge next --json` | the single most urgent step |
-| `forge build --json [--dry-run]` | generate the top level into `.forge/generated/` |
+| `forge build --json [--dry-run] [--variant V]` | generate the top level into `.forge/generated/` (a variant into `.forge/variants/V/`) |
 | `forge test --json [--plan] [--target T] [--event-list E] [--backend B] [--require-verified]` | simulate and compare |
 | `forge test --input F --expected F --json` | one-off data without editing `forge.yml` |
 | `forge report --json` | collect results into `.forge/reports/` |
 | `forge inspect --json [--emit-ir F]` | the resolved design (canonical IR) |
+| `forge inspect --impact [OLD_IR] --json` | what changed since the last build (or a snapshot), what it affects, misaligned merges, targets to rerun, files to regenerate |
 | `forge explain <target> --json` | why FORGE decided (or refused to decide) something |
 | `forge fix --json [--apply]` | source-proven repairs, previewed as a diff |
 | `forge connect a.port b.port --json` | record one connection in `forge.yml` |

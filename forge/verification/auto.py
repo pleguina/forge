@@ -264,9 +264,9 @@ class _Generated:
     """The levels of a design ``forge build`` generated: its top, its modules,
     their instances, and subsystems of them built on their own."""
 
-    def __init__(self, project: Any, spec: Mapping[str, Any]) -> None:
+    def __init__(self, project: Any, spec: Mapping[str, Any], gen: Optional[Path] = None) -> None:
         self.project = project
-        gen = project.top_level().parent
+        gen = gen or project.top_level().parent
         self.manifest = json.loads((gen / "build_manifest.json").read_text())
         self.ir = json.loads((gen / "design.ir.json").read_text())["design"]
         self.period = project.config.clock.resolved_period_ns()
@@ -562,12 +562,17 @@ def plan_existing(config: Any, spec: Mapping[str, Any], input_override: Optional
 
 _TARGET_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 _TARGET_KEYS = frozenset({"scope", "instances", "input", "expected", "compare", "gap", "protocols",
-                          "backends", "required", "replay", "record", "depth"})
+                          "backends", "required", "replay", "record", "depth", "variant"})
 
 
 def subsystem_dir(project: Any, name: str) -> Path:
     """Where ``forge test`` generates the top level of subsystem target *name*."""
     return project.paths.state_root / "verify" / name / "generated"
+
+
+def variant_generated_dir(project: Any, name: str) -> Path:
+    """Where the top level of ``forge.yml`` variant *name* is generated."""
+    return project.paths.state_root / "variants" / name / "generated"
 
 
 def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
@@ -672,6 +677,7 @@ def _declared_levels(design: Union[_Generated, _Existing], spec: Mapping[str, An
         raise ValueError("--input/--expected replace one target's data: name it with --target")
     levels: List[Level] = []
     replays: List[Level] = []
+    sources: Dict[str, Union[_Generated, _Existing]] = {}
     for name, t in targets.items():
         name, t = str(name), dict(t or {})
         where = f"verification.targets.{name}"
@@ -689,15 +695,30 @@ def _declared_levels(design: Union[_Generated, _Existing], spec: Mapping[str, An
                     sb.Compare.from_dict(t.get("compare", spec.get("compare"))), int(t.get("gap", spec.get("gap", 0))),
                     t.get("protocols"), int(t.get("depth", spec.get("depth", 1 << 16))))
         scope = str(t.get("scope") or "design")
+        if t.get("variant") and (scope != "design" or not isinstance(design, _Generated)):
+            raise ValueError(f"{where}: variant: names the generated design a design-scope target simulates")
         if scope == "design":
             if replay:
                 raise ValueError(f"{where}: a design target is what records traffic; replay is for "
                                  "instance and subsystem targets")
             if want.protocols is None:
                 want.protocols = spec.get("protocols")
-            level = design.design(name, want)
+            origin: Union[_Generated, _Existing] = design
+            if t.get("variant"):
+                assert isinstance(design, _Generated)
+                gen = variant_generated_dir(design.project, str(t["variant"]))
+                if not (gen / "build_manifest.json").is_file():
+                    level = Level(name, "algo_top", [], [], None, scope="design",
+                                  skip=f"variant {t['variant']} not generated yet: `forge test` generates it")
+                    levels.append(level)
+                    sources[name] = design
+                    level.required = bool(t.get("required", True))
+                    continue
+                origin = _Generated(design.project, spec, gen)
+            level = origin.design(name, want)
+            sources[name] = origin
             if t.get("record") and level.bench is not None:
-                level.bench.probes = design.probes(design.all_instances())
+                level.bench.probes = origin.probes(origin.all_instances())
         elif scope.startswith("module:"):
             if replay:
                 raise ValueError(f"{where}: a module on its own has no recorded traffic; "
@@ -737,7 +758,7 @@ def _declared_levels(design: Union[_Generated, _Existing], spec: Mapping[str, An
                              "design target of this project")
         if source.bench is not None:
             have = {(i, p.name) for i, p in source.bench.probes}
-            source.bench.probes += [pr for pr in design.probes(list(level.replay.instances))
+            source.bench.probes += [pr for pr in sources[source.name].probes(list(level.replay.instances))
                                     if (pr[0], pr[1].name) not in have]
     levels.sort(key=lambda lv: lv.scope != "design")
     return [lv for lv in levels if select is None or lv.name in select]

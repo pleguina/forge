@@ -273,6 +273,7 @@ def _build_config(
         design=existing.design if existing else None,
         registry=existing.registry if existing else None,
         build=dict(existing.build) if existing else {},
+        variants=dict(existing.variants) if existing else {},
         schema_version=FORGE_YML_SCHEMA_VERSION,
     )
 
