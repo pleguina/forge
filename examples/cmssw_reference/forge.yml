@@ -1,0 +1,17 @@
+# A payload compared with a CMSSW export: `python3 make_patterns.py`, then `forge test`.
+project: cmssw_reference
+top: candidate_to_gmt
+sources:
+  rtl: [rtl/*.v]
+clock: {port: clk}
+reset: {port: rst, active: high}
+verification:
+  target: existing
+  backends: [verilator, xsim]
+  input: {path: data/input.txt, format: empv2, events: data/input.events.json}
+  expected: {path: data/expected.txt, format: empv2, events: data/expected.events.json,
+             provenance: data/provenance.json}
+  links: {l0: 0, l1: 1, l2: 2, l3: 3, l4: 4, l5: 5, q0: 0, q1: 1, q2: 2, q3: 3, q4: 4, q5: 5}
+  codecs:
+    "q*": codecs/samuon.yml
+  compare: {fields: [pt, eta, phi, charge, qual], order: event}

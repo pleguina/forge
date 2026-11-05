@@ -559,3 +559,18 @@ def test_block_design_chains_a_boundary_crossing_and_a_delay(tmp_path, capsys):
     assert f"connect_bd_net [get_bd_pins fast/dout] [get_bd_pins {crossing}/din]" in tcl
     assert f"connect_bd_net [get_bd_pins {crossing}/dout] [get_bd_pins delay_0/din]" in tcl
     assert "connect_bd_net [get_bd_pins delay_0/dout] [get_bd_pins merge/in_fast]" in tcl
+
+
+def test_the_resolved_ir_carries_the_sized_delay_as_generation_does(tmp_path):
+    from forge.ir import build_project_ir, to_json_dict
+
+    design = _write_design(tmp_path)
+    ports = [{"name": n, "direction": d, "width": 8, "type": "wire"} for n, d in
+             (("dout", "OUT"), ("in_slow", "IN"), ("in_fast", "IN"))]
+    ip_info = tmp_path / "ip_info.yaml"
+    ip_info.write_text(json.dumps({m: {"ports": ports} for m in ("slow", "fast", "merge")}))
+
+    doc = to_json_dict(build_project_ir(design, ip_info=ip_info))["design"]
+
+    fast = next(c for c in doc["connections"] if c["producer"]["instance_id"] == "fast")
+    assert [(t["kind"], t["cycles"]) for t in fast["transformations"]] == [("latency_delay", 5)]

@@ -15,6 +15,7 @@ has only been resolved.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -186,6 +187,12 @@ def compare(before: Mapping[str, Any], after: Mapping[str, Any],
         diffs = _connection_changes(conn0[cid], conn1[cid])
         if diffs:
             impact.connections_changed[cid] = diffs
+    # an input that loses its driver is tied off by generation, not reported as a connection
+    driven0 = {(c["consumer"]["instance_id"], c["consumer"]["port"]) for c in conn0.values()}
+    driven1 = {(c["consumer"]["instance_id"], c["consumer"]["port"]) for c in conn1.values()}
+    for iid, port in sorted(driven0 - driven1):
+        if iid in inst1:
+            impact.instances_changed.setdefault(iid, []).append(f"input {port}: no longer driven (tied off)")
 
     def module_of(iid: str) -> Optional[str]:
         return (inst1.get(iid) or inst0.get(iid) or {}).get("module")
@@ -285,6 +292,50 @@ def affected_targets(impact: Impact, targets: Mapping[str, Mapping[str, Any]],
     return out
 
 
+def _brief(names: Sequence[str]) -> str:
+    """*names* with each numbered family written as a range: ``csc_0..51``."""
+    families: Dict[str, List[int]] = {}
+    out: List[str] = []
+    for name in names:
+        m = re.fullmatch(r"(.*?)(\d+)", name)
+        if m is None:
+            out.append(name)
+            continue
+        if m.group(1) not in families:
+            families[m.group(1)] = []
+            out.append(m.group(1))
+        families[m.group(1)].append(int(m.group(2)))
+    shown = []
+    for item in out:
+        if item not in families:
+            shown.append(item)
+            continue
+        indices = sorted(set(families[item]))
+        spans = [[indices[0], indices[0]]]
+        for k in indices[1:]:
+            if k == spans[-1][1] + 1:
+                spans[-1][1] = k
+            else:
+                spans.append([k, k])
+        shown += [f"{item}{a}" if a == b else f"{item}{a}..{b}" for a, b in spans]
+    return ", ".join(shown)
+
+
+def _grouped(rows: Mapping[str, Sequence[str]]) -> List[Tuple[str, Sequence[str], int]]:
+    """``(name, changes, count)``: rows whose names differ only in their
+    numbers and whose changes are the same, as one row named with ``*``."""
+    groups: Dict[Tuple[str, Tuple[str, ...]], List[str]] = {}
+    for name, changes in rows.items():
+        groups.setdefault((re.sub(r"\d+", "*", name), tuple(changes)), []).append(name)
+    out: List[Tuple[str, Sequence[str], int]] = []
+    for (pattern, changes), names in groups.items():
+        if len(names) >= 3:
+            out.append((pattern, changes, len(names)))
+        else:
+            out += [(n, changes, 1) for n in names]
+    return out
+
+
 def render_markdown(impact: Impact, targets: Mapping[str, str], artifacts: Sequence[str],
                     base: str) -> str:
     """The impact report ``forge inspect --impact`` writes."""
@@ -296,9 +347,10 @@ def render_markdown(impact: Impact, targets: Mapping[str, str], artifacts: Seque
         if not rows:
             return
         lines.extend([f"## {title}", ""])
-        for name, changes in rows.items():
+        for name, changes, count in _grouped(rows):
             files = f" ({', '.join(where[name])})" if where and where.get(name) else ""
-            lines.append(f"- **{name}**{files}: " + "; ".join(changes))
+            many = f" ({count})" if count > 1 else ""
+            lines.append(f"- **{name}**{many}{files}: " + "; ".join(changes))
         lines.append("")
 
     section("Modules", impact.modules, impact.sources)
@@ -308,13 +360,13 @@ def render_markdown(impact: Impact, targets: Mapping[str, str], artifacts: Seque
     section("Connections", {**{c: ["added"] for c in impact.connections_added},
                             **{c: ["removed"] for c in impact.connections_removed}, **impact.connections_changed})
     lines += ["## What it affects", "",
-              f"- Changed: {', '.join(impact.affected) or 'none'}",
-              f"- Downstream of them: {', '.join(impact.downstream) or 'none'}", ""]
+              f"- Changed: {_brief(impact.affected) or 'none'}",
+              f"- Downstream of them: {_brief(impact.downstream) or 'none'}", ""]
     if impact.merges:
         lines += ["## Merges whose inputs are no longer aligned", ""]
         for m in impact.merges:
-            lines.append(f"- **{m['instance']}**: the branch from {', '.join(m['changed'])} changed timing, "
-                         f"the one from {', '.join(m['unchanged'])} did not")
+            lines.append(f"- **{m['instance']}**: the branch from {_brief(m['changed'])} changed timing, "
+                         f"the one from {_brief(m['unchanged'])} did not")
         lines.append("")
     if targets:
         lines += ["## Verification to run again", ""] + [f"- `{n}`: {why}" for n, why in targets.items()] + [""]

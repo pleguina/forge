@@ -1,0 +1,11 @@
+# The GMT standalone-muon word, in the field order of CMSSW's SAMuon word
+# (L1TMuonOverlapPhase2 OmtfProcessorPhase2::getSAMuons, Phase2L1GMT bit widths).
+width: 64
+fields:
+  valid:  {low: 0, bits: 1, value: 1}
+  charge: {low: 1, bits: 1}
+  pt:     {low: 2, bits: 13}
+  phi:    {low: 15, bits: 13, signed: true}
+  eta:    {low: 28, bits: 13, signed: true}
+  d0:     {low: 41, bits: 7}
+  qual:   {low: 48, bits: 8}

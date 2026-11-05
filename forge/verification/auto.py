@@ -13,7 +13,9 @@ whether its result is required. An instance or subsystem can replay the
 traffic a design target recorded at its boundary.
 
 Every level is compiled and elaborated, reset, and run on its input (or idle,
-without one), with every observed output checked for X and Z. Its function is
+without one), with every observed output checked for X and Z (from ``settle``
+cycles after reset, for a pipeline whose data registers fill with X until
+its first input reaches the output). Its function is
 checked only against an expected output given for it: a level with none is
 ``NOT_VERIFIED_NO_ORACLE``, however cleanly it simulated. A level whose
 simulator is not installed is ``BLOCKED_MISSING_TOOL``.
@@ -30,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -62,6 +65,7 @@ class DataRef:
     links: Dict[str, int] = field(default_factory=dict)   # interface -> link, for pattern files
     events: Optional[Path] = None      # names of the events the file holds, in order
     association: Dict[str, Any] = field(default_factory=dict)   # max_skew, missing
+    provenance: Optional[Path] = None  # where the data came from (software, configuration), as JSON
 
     @classmethod
     def from_spec(cls, spec: Any, root: Path, links: Optional[Mapping[str, int]] = None,
@@ -73,8 +77,9 @@ class DataRef:
         if fmt not in data_formats():
             raise ValueError(f"{path}: format {fmt!r}, want one of {', '.join(data_formats())}")
         events = (root / str(spec["events"])).resolve() if spec.get("events") else None
+        provenance = (root / str(spec["provenance"])).resolve() if spec.get("provenance") else None
         return cls(path, fmt, {str(k): int(v) for k, v in (links or {}).items()}, events,
-                   dict(association or {}))
+                   dict(association or {}), provenance)
 
     def sha256(self) -> str:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
@@ -88,6 +93,12 @@ class DataRef:
                              "sha256": hashlib.sha256(self.events.read_bytes()).hexdigest()}
         if self.association:
             out["association"] = dict(self.association)
+        if self.provenance is not None:
+            out["provenance"] = json.loads(self.provenance.read_text())
+        elif self.format == "json":
+            doc = json.loads(self.path.read_text())
+            if isinstance(doc, dict) and isinstance(doc.get("provenance"), dict):
+                out["provenance"] = doc["provenance"]
         return out
 
 
@@ -125,6 +136,11 @@ class Level:
     replay: Optional["Replay"] = None       # its data is traffic a design target recorded
     members: List[str] = field(default_factory=list)    # a subsystem's instances
     backends: Optional[List[str]] = None    # only these of the plan's simulators
+    outputs: Optional[List[str]] = None     # the outputs its reference covers; the others are traced only
+    streams: Dict[str, List[str]] = field(default_factory=dict)    # one output read from several, in cycle order
+    drain: Optional[int] = None             # cycles simulated after the last input
+    settle: int = 0                         # cycles after reset in which X on an output is not an error
+    simulation: Dict[str, Any] = field(default_factory=dict)       # verification.xsim
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"level": self.name, "top": self.top, "required": self.required}
@@ -163,6 +179,16 @@ class Level:
         if not checked:
             out["function"] = "no expected output: NOT_VERIFIED_NO_ORACLE"
         out["compare"] = self.compare.to_dict()
+        if self.outputs is not None:
+            out["outputs"] = list(self.outputs)
+        if self.streams:
+            out["streams"] = {k: list(v) for k, v in self.streams.items()}
+        if self.drain is not None:
+            out["drain"] = self.drain
+        if self.settle:
+            out["settle"] = self.settle
+        if self.simulation:
+            out["xsim"] = dict(self.simulation)
         return out
 
 
@@ -562,7 +588,9 @@ def plan_existing(config: Any, spec: Mapping[str, Any], input_override: Optional
 
 _TARGET_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 _TARGET_KEYS = frozenset({"scope", "instances", "input", "expected", "compare", "gap", "protocols",
-                          "backends", "required", "replay", "record", "depth", "variant"})
+                          "backends", "required", "replay", "record", "depth", "variant", "outputs", "drain",
+                          "settle"})
+_XSIM_KEYS = frozenset({"elab_libs", "extra_top_modules", "extra_sources"})
 
 
 def subsystem_dir(project: Any, name: str) -> Path:
@@ -599,7 +627,12 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     kind = str(spec.get("target") or "generated")
     if kind not in ("generated", "existing"):
         raise ValueError(f"verification.target: {kind!r}, want generated or existing")
+    if spec.get("decoder") and spec.get("codecs"):
+        raise ValueError("verification.decoder and verification.codecs both read output words; give one")
     decoder = load_decoder(spec["decoder"], root) if spec.get("decoder") else None
+    if spec.get("codecs"):
+        from forge.integration.objects import codec_decoder, load_codecs
+        decoder = codec_decoder(load_codecs(spec["codecs"], root))
     links = spec.get("links") or {}
 
     def data(value: Any) -> Optional[DataRef]:
@@ -628,9 +661,58 @@ def plan(project: Any, *, spec: Optional[Mapping[str, Any]] = None,
     if isinstance(design, _Existing):
         notes.append(f"existing:{design.top}: the project's own top, as written; nothing generated")
     notes.append(f"clock period {design.period:g} ns (forge.yml clock)")
+    streams = spec.get("streams") or {}
+    if not isinstance(streams, Mapping):
+        raise ValueError("verification.streams: want a mapping of stream name to its output ports (names or globs)")
+    xsim = dict(spec.get("xsim") or {})
+    extra = sorted(set(xsim) - _XSIM_KEYS)
+    if extra:
+        raise ValueError(f"verification.xsim: unknown key {', '.join(extra)} (want {', '.join(sorted(_XSIM_KEYS))})")
+    if xsim.get("extra_sources"):
+        xsim["extra_sources"] = [str((root / os.path.expandvars(str(f))).resolve()) for f in xsim["extra_sources"]]
+    targets = spec.get("targets") or {}
     for level in levels:
         level.decoder = decoder
+        level.simulation = xsim
+        t = (targets.get(level.name) or {}) if isinstance(targets, Mapping) else {}
+        drain = t.get("drain", spec.get("drain"))
+        level.drain = None if drain is None else int(drain)
+        level.settle = int(t.get("settle", spec.get("settle", 0)))
+        if level.compare.fields and decoder is None:
+            raise ValueError(f"{level.name}: compare.fields names fields of the decoder's reading: "
+                             "give verification.decoder")
+        if level.bench is not None:
+            _resolve_outputs(level, streams, t.get("outputs", spec.get("outputs") if level.scope == "design" else None))
     return VerificationPlan(levels, backends, notes)
+
+
+def _resolve_outputs(level: Level, streams: Mapping[str, Any], outputs: Any) -> None:
+    """The streams and compared outputs of *level*, by name or glob over its
+    output interfaces; a pattern that matches nothing is an error."""
+    from fnmatch import fnmatchcase
+
+    assert level.bench is not None
+    names = [i.name for i in level.bench.interfaces if i.direction == "out"]
+    for stream, patterns in streams.items():
+        members = [n for pat in ([patterns] if isinstance(patterns, str) else list(patterns))
+                   for n in names if fnmatchcase(n, str(pat))]
+        if members:
+            level.streams[str(stream)] = list(dict.fromkeys(members))
+        elif level.scope == "design":
+            raise ValueError(f"verification.streams.{stream}: no output of {level.name} matches {patterns}")
+    if outputs is None:
+        return
+    if isinstance(outputs, str):
+        outputs = [outputs]
+    known = [*level.streams, *[n for n in names if not any(n in m for m in level.streams.values())]]
+    chosen: List[str] = []
+    for pat in outputs:
+        found = [n for n in known if fnmatchcase(n, str(pat))]
+        if not found:
+            raise ValueError(f"verification.targets.{level.name}.outputs: {pat!r} matches no output "
+                             f"(have {', '.join(known)})")
+        chosen += [n for n in found if n not in chosen]
+    level.outputs = chosen
 
 
 def _implicit_levels(design: Union[_Generated, _Existing], spec: Mapping[str, Any], data: Any,
@@ -775,10 +857,14 @@ def load_inputs(ref: DataRef, bench: Bench) -> Dict[str, List[Any]]:
     return {k: [v for _, v in rows] for k, rows in load_tagged(ref, bench, inputs=True).items()}
 
 
-def load_expected(ref: DataRef, bench: Bench) -> Dict[str, List[sb.Expected]]:
-    by = {i.name: i for i in bench.interfaces if i.direction == "out"}
+def load_expected(ref: DataRef, bench: Bench, outputs: Optional[Sequence[Interface]] = None
+                  ) -> Dict[str, List[sb.Expected]]:
+    """*ref*'s expected words for the output interfaces of *bench*, or for
+    *outputs* (a level's compared outputs, its streams among them)."""
+    ifaces = list(outputs) if outputs is not None else [i for i in bench.interfaces if i.direction == "out"]
+    by = {i.name: i for i in ifaces}
     out: Dict[str, List[sb.Expected]] = {}
-    for k, rows in load_tagged(ref, bench, inputs=False).items():
+    for k, rows in _load_tagged(ref, by, inputs=False).items():
         out[k] = []
         for event, v in rows:
             if isinstance(v, Mapping) and "value" in v:
@@ -792,7 +878,11 @@ def load_expected(ref: DataRef, bench: Bench) -> Dict[str, List[sb.Expected]]:
 def load_tagged(ref: DataRef, bench: Bench, *, inputs: bool) -> Tagged:
     """*ref*'s transactions for the input (or output) interfaces of *bench*,
     each tagged with its event."""
-    by = {i.name: i for i in bench.interfaces if i.direction == ("in" if inputs else "out")}
+    return _load_tagged(ref, {i.name: i for i in bench.interfaces if i.direction == ("in" if inputs else "out")},
+                        inputs=inputs)
+
+
+def _load_tagged(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) -> Tagged:
     if _is_concise_json(ref):
         doc = json.loads(ref.path.read_text())
         doc = doc.get("inputs" if inputs else "outputs", doc)
@@ -857,7 +947,9 @@ def _from_dataset(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) ->
     events by :func:`forge.integration.emp.associate_events` — a link missing
     a packet is an error, not a shift — and each word is tagged with its
     event. Any other loader is read through its events: values an event keys
-    by an interface name, or words under its ``links``, in event order.
+    by an interface name, or words under its ``links``, in event order; an
+    entry whose ``id`` is null holds words of no event (a configuration
+    written before the first event, idle words after the last).
     """
     from forge.verification.dataset_format import get_format_loader
     loader = get_format_loader(ref.path, ref.format)
@@ -891,25 +983,51 @@ def _from_dataset(ref: DataRef, by: Mapping[str, Interface], *, inputs: bool) ->
             out[name] = rows
         return out
     dataset = loader.load(ref.path)
-    names = [str(e.get("id", k)) for k, e in enumerate(dataset.events)]
+    ids: List[Optional[str]] = [None if "id" in e and e["id"] is None else str(e.get("id", k))
+                                for k, e in enumerate(dataset.events)]
     if ref.events is not None:
-        names = _event_names(ref, len(names))
-    for event_name, event in zip(names, dataset.events):
-        for name in by:
-            if name in event:
-                v = event[name]
-                out.setdefault(name, []).extend((event_name, x) for x in (v if isinstance(v, list) else [v]))
+        ids = list(_event_names(ref, len(ids)))
+    per_cycle = [n for n, i in by.items() if inputs and i.protocol == "scalar"
+                 and any(n in e for e in dataset.events)]
+    held: Dict[str, Any] = {n: 0 for n in per_cycle}
+    for tag, event in zip(ids, dataset.events):
+        given = {n: (event[n] if isinstance(event[n], list) else [event[n]]) for n in by if n in event}
+        _align_cycles(ref, tag, given, per_cycle, held)
+        for name, values in given.items():
+            out.setdefault(name, []).extend((tag, x) for x in values)
         for name, link in wanted.items():
             for w in (event.get("links") or {}).get(str(link), []):
                 word = _word(w)
                 if by[name].protocol == "emp_lword":
-                    out.setdefault(name, []).append((event_name, _emp_dict(word)))
+                    out.setdefault(name, []).append((tag, _emp_dict(word)))
                 elif word.valid:
-                    out.setdefault(name, []).append((event_name, word.data))
+                    out.setdefault(name, []).append((tag, word.data))
     if not out:
         raise ValueError(f"{ref.path}: no event names an interface of this level"
                          + ("" if wanted else ", and verification.links maps none to a link"))
     return out
+
+
+def _align_cycles(ref: DataRef, tag: Optional[str], given: Dict[str, List[Any]], per_cycle: Sequence[str],
+                  last: Dict[str, Any]) -> None:
+    """Make every per-cycle (``scalar``) input span the same cycles in one
+    dataset entry, so each entry starts on the same cycle on every input: an
+    input the entry gives fewer words, or none, holds its last word. Within
+    a named event the inputs it names must give the same number of words: one
+    missing a word would shift every later event on that input alone."""
+    lengths = {n: len(given[n]) for n in per_cycle if n in given}
+    if not lengths:
+        return
+    span = max(lengths.values())
+    short = sorted(n for n, k in lengths.items() if k < span)
+    if tag is not None and short:
+        raise ValueError(f"{ref.path}: event {tag} gives {short[0]} {lengths[short[0]]} word(s) and other per-cycle "
+                         f"inputs {span}: a per-cycle input missing a word would shift every later event")
+    for n in per_cycle:
+        values = given.get(n, [])
+        if values:
+            last[n] = values[-1]
+        given[n] = values + [last[n]] * (span - len(values))
 
 
 # ── Backends ────────────────────────────────────────────────────────────────
@@ -929,12 +1047,15 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
     incs = [str(d) for d in level.include_dirs]
     defs = [f"{k}={v}" if v != "" else k for k, v in level.defines.items()]
     if backend == "xsim":
+        sim = level.simulation
         cmds = []
         if vhdl:
             cmds.append(["xvhdl", *vhdl])
         cmds.append(["xvlog", "-sv", *[a for d in incs for a in ("-i", d)], *[a for d in defs for a in ("-d", d)],
-                     *vlog, str(tb)])
-        cmds.append(["xelab", TB_CLOCKED, "-s", "forge_tb_snap", "-timescale", "1ns/1ps"])
+                     *vlog, *[str(f) for f in sim.get("extra_sources") or []], str(tb)])
+        cmds.append(["xelab", TB_CLOCKED, *[str(t) for t in sim.get("extra_top_modules") or []],
+                     *[a for lib in sim.get("elab_libs") or [] for a in ("-L", str(lib))],
+                     "-s", "forge_tb_snap", "-timescale", "1ns/1ps"])
         return cmds
     if vhdl:
         raise RuntimeError("Verilator does not read VHDL")
@@ -943,6 +1064,61 @@ def _compile_commands(backend: str, level: Level, tb: Path, work: Path) -> List[
     return [["verilator", "--cc", "--exe", "--build", "--no-timing", "-j", "0", "-Wno-fatal", "-Wno-lint", "-Wno-style",
              "-Wno-STMTDLY", "--top-module", TB_MODULE, "-Mdir", str(work / "obj"), "-o", "forge_tb",
              *[f"-I{d}" for d in incs], *[f"-D{d}" for d in defs], *vlog, str(tb), str(work / "forge_tb_main.cpp")]]
+
+
+def _stage_memory_files(level: Level, work: Path) -> int:
+    """Link the ``.dat`` files next to *level*'s sources into *work*: HLS
+    writes ROM contents there and reads them from the simulator's directory."""
+    linked = 0
+    for d in dict.fromkeys([*(f.parent for f in level.sources), *level.include_dirs]):
+        for dat in sorted(d.glob("*.dat")) if d.is_dir() else []:
+            dst = work / dat.name
+            if not dst.exists():
+                dst.symlink_to(dat.resolve())
+                linked += 1
+    return linked
+
+
+def _compared(level: Level) -> List[Interface]:
+    """The outputs *level* compares: each stream, as one interface named after
+    it, and every other output, kept to ``outputs`` when the level names them."""
+    assert level.bench is not None
+    outs = {i.name: i for i in level.bench.interfaces if i.direction == "out"}
+    in_streams = {m for members in level.streams.values() for m in members}
+    compared = [replace(outs[members[0]], name=name) for name, members in level.streams.items()]
+    compared += [i for n, i in outs.items() if n not in in_streams]
+    if level.outputs is not None:
+        compared = [i for i in compared if i.name in level.outputs]
+    return compared
+
+
+def _observed(level: Level, name: str, trace: Mapping[str, Any]) -> Tuple[List[Tuple[int, int]], List[int]]:
+    """``(cycle, word)`` of output *name*, a stream's members merged in cycle
+    order (by member at equal cycles), and the cycles it carried X or Z."""
+    members = level.streams.get(name)
+    if members is None:
+        return trace["outputs"].get(name, []), trace["unknown"].get(name, [])
+    merged = sorted((c, k, v) for k, m in enumerate(members) for c, v in trace["outputs"].get(m, []))
+    unknown = sorted({c for m in members for c in trace["unknown"].get(m, [])})
+    return [(c, v) for c, _, v in merged], unknown
+
+
+def _field_key(level: Level, name: str) -> Optional[sb.Key]:
+    fields = level.compare.fields
+    if not fields:
+        return None
+    decoder = level.decoder
+
+    def key(word: int) -> Optional[Tuple[Any, ...]]:
+        got = decoder(name, word)
+        if got is None:
+            return None
+        missing = [f for f in fields if f not in got]
+        if missing:
+            raise ValueError(f"verification.decoder gives no field {', '.join(missing)} for {name} "
+                             f"(compare.fields of {level.name}); it gives {', '.join(got)}")
+        return tuple(got[f] for f in fields)
+    return key
 
 
 def _sim_command(backend: str, work: Path, plusargs: Mapping[str, str]) -> List[str]:
@@ -1202,7 +1378,8 @@ def _replayed(level: Level, backend: str, work: Path, recorded: Path) -> Union[s
 def _select_events(level: Level, tagged: Tagged,
                    expected: Optional[Dict[str, List[sb.Expected]]]) -> Tuple[Tagged, Optional[Dict[str, List[sb.Expected]]], List[str]]:
     """*tagged* and *expected* restricted to the events *level* selects, by
-    name or by position (``7``, ``10-12``)."""
+    name or by position (``7``, ``10-12``). Words of no event (a setup, the
+    idle frames of a pattern file) are kept."""
     assert level.events and level.input is not None
     if level.compare.mode == "exact_cycle":
         raise ValueError("--event-id/--event-list with compare mode exact_cycle: the expected cycles are "
@@ -1229,7 +1406,7 @@ def _select_events(level: Level, tagged: Tagged,
                 raise ValueError(f"event position {k}: {level.input.path} holds {len(order)} events")
             chosen.append(order[k])
     keep = set(chosen)
-    tagged = {k: [(e, v) for e, v in rows if e in keep] for k, rows in tagged.items()}
+    tagged = {k: [(e, v) for e, v in rows if e is None or e in keep] for k, rows in tagged.items()}
     if expected is not None:
         expected = {k: [x for x in rows if x.event in keep] for k, rows in expected.items()}
     return tagged, expected, [e for e in order if e in keep]
@@ -1266,6 +1443,7 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     if backend == "verilator":
         generated.append(work / "forge_tb_main.cpp")
         generated[-1].write_text(verilator_main(bench))
+    _stage_memory_files(level, work)
     lst = work / "sources.f"
     _list_file(level, generated, lst)
     try:
@@ -1286,7 +1464,8 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
         sentinel.write_text(key)
 
     tagged = load_tagged(level.input, bench, inputs=True) if level.input else {}
-    expected = load_expected(level.expected, bench) if level.expected else None
+    compared = _compared(level)
+    expected = load_expected(level.expected, bench, compared) if level.expected else None
     if level.events:
         tagged, expected, chosen = _select_events(level, tagged, expected)
         replayed["events"] = chosen
@@ -1294,6 +1473,8 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     plusargs = write_inputs(bench, values, work / "data", gap=level.gap)
     trace = work / "trace.txt"
     plusargs.update({"TRACE": str(trace), "SEED": str(seed), "MAX_CYCLES": str(max_cycles)})
+    if level.drain is not None:
+        plusargs["DRAIN"] = str(level.drain)
     for i in bench.interfaces:
         if i.direction == "in" and i.protocol == "ready_valid":
             plusargs[f"STALL_{i.name}"] = str(stall)
@@ -1317,11 +1498,12 @@ def run(level: Level, backend: str, work: Path, *, seed: int = 1, stall: int = 0
     input_cycles = [c for c, _ in t["inputs"].get(first_in, [])] if first_in else []
     event_cycles = _event_cycles(tagged, t["inputs"])
     results = []
-    for o in (i for i in bench.interfaces if i.direction == "out"):
+    for o in compared:
         exp = None if expected is None else expected.get(o.name)
-        result = sb.compare(o.name, exp, t["outputs"].get(o.name, []), level.compare,
-                            input_cycles=input_cycles, unknown=t["unknown"].get(o.name, []),
-                            event_cycles=event_cycles)
+        observed, unknown = _observed(level, o.name, t)
+        unknown = [c for c in unknown if c >= level.settle]
+        result = sb.compare(o.name, exp, observed, level.compare, input_cycles=input_cycles, unknown=unknown,
+                            event_cycles=event_cycles, key=_field_key(level, o.name))
         if level.decoder is not None:
             _decode_rows(level.decoder, o, result.rows)
         results.append(result)

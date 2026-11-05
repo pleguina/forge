@@ -15,10 +15,11 @@ package's.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 PACKAGE_SCHEMA = "forge.replay_package/1"
 MANIFEST = "manifest.json"
@@ -89,6 +90,8 @@ def write_package(config: Any, target: str, out: Optional[Path] = None) -> Path:
         "clock_period_ns": level.bench.period_ns,
         "interfaces": [{"name": i.name, "direction": i.direction, "protocol": i.version, "width": i.width,
                         "link": links.get(i.name)} for i in level.bench.interfaces],
+        "streams": {k: list(v) for k, v in level.streams.items()},
+        "outputs": list(level.outputs) if level.outputs is not None else None,
         "simulated": simulated,
     }
     (out / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
@@ -96,9 +99,27 @@ def write_package(config: Any, target: str, out: Optional[Path] = None) -> Path:
     return out
 
 
+_INDEX = re.compile(r"(?<=_)\d+(?=_|$)")
+
+
 def _readme(manifest: Dict[str, Any]) -> str:
-    rows: List[str] = [f"| {i['name']} | {i['direction']} | {i['protocol']} | {i['width']} | "
-                       f"{'' if i['link'] is None else i['link']} |" for i in manifest["interfaces"]]
+    rows: List[str] = []
+    families: Dict[Tuple[str, ...], List[str]] = {}
+    for i in manifest["interfaces"]:
+        shape = (_INDEX.sub("*", i["name"]), i["direction"], i["protocol"], str(i["width"]),
+                 "" if i["link"] is None else "*" if _INDEX.search(i["name"]) else str(i["link"]))
+        families.setdefault(shape, []).append(i["name"])
+    for (pattern, direction, protocol, width, _), names in families.items():
+        links = [manifest["links"].get(n) for n in names]
+        link = ", ".join(str(x) for x in links if x is not None)
+        name = names[0] if len(names) == 1 else f"{pattern} ({len(names)})"
+        rows.append(f"| {name} | {direction} | {protocol} | {width} | {link} |")
+    if manifest.get("streams"):
+        rows += ["", "Streams, read in cycle order: " + "; ".join(
+            f"{k}: {_INDEX.sub('*', v[0])} ({len(v)})" if len({_INDEX.sub('*', n) for n in v}) == 1
+            else f"{k}: {', '.join(v)}" for k, v in manifest["streams"].items())]
+    if manifest.get("outputs") is not None:
+        rows += ["", "Compared: " + ", ".join(manifest["outputs"]) + "; the other outputs are traced only."]
     sims = ", ".join(f"{k}: {v['status']}" + (" (out of date)" if v["stale"] else "")
                      for k, v in manifest["simulated"].items()) or "none recorded"
     return "\n".join([

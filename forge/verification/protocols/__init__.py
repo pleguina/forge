@@ -6,7 +6,7 @@ A port list says how a design moves data, within a few naming conventions:
 is ``ready_valid`` as well; EMP's link word fields ``x_data``, ``x_valid``,
 ``x_start``, ``x_last``, ``x_start_of_orbit``, ``x_strobe`` are an
 ``emp_lword``; ``x`` with Vitis HLS's ``x_ap_vld`` is ``valid``. A data port
-with none of these is ``scalar``: a value per clock cycle, except in a block
+with none of these, or a valid or ready that pairs with no data port, is ``scalar``: a value per clock cycle, except in a block
 with HLS's ``ap_start``/``ap_ready``/``ap_done`` (``ap_ctrl_hs``): there the
 scalar inputs are one call, held with ``ap_start`` until ``ap_ready``
 (``ready_valid``), and the scalar outputs its result, taken at ``ap_done``
@@ -144,9 +144,8 @@ def infer(ports: Sequence[Port], *, exclude: Sequence[str] = (),
             out.append(Interface(n, "scalar", p.direction, [take(n)]))
     if all(c in by_name and c not in used for c in HLS_CONTROL):
         out = _hls_call(out, take, by_name)
-    left = [n for n in by_name if n not in used]
-    if left:
-        raise InterfaceError(f"ports in no interface: {', '.join(left)} (declare them under protocols)")
+    for n in [n for n in by_name if n not in used]:
+        out.append(Interface(n, "scalar", by_name[n].direction, [take(n)]))
     order = {p.name: i for i, p in enumerate(ports)}
     return sorted(out, key=lambda i: order[i.ports()[0].name])
 

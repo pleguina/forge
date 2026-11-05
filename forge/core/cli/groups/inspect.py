@@ -72,6 +72,7 @@ def cmd_inspect(args):
             build_dir=getattr(args, "build_dir", None),
             ip_root=getattr(args, "ip_root", None),
             src_root=getattr(args, "src_root", None),
+            hls_build_root=getattr(args, "hls_build_root", None),
         )
     except Exception as e:  # noqa: BLE001 - surfaced as a clean CLI error
         if getattr(args, "debug", False):
@@ -270,26 +271,30 @@ def _plan_targets(config, modules) -> dict:
 
 def _impact(args, project, design_path: Path, *, json_mode: bool) -> int:
     """`forge inspect --impact [BASE]`: what changing the design from BASE
-    (default: the last build) affects."""
+    (default: the last build, of the variant when one is named) affects."""
     from forge.analysis.impact import affected_targets, compare, render_markdown
     from forge.core.cli.envelope import CommandEnvelope, emit
     from forge.ir import to_json_dict
     from forge.ir.deserialize import IrSchemaError, from_json_dict
     from forge.project.config import ForgeConfig
     from forge.project.paths import find_project_root
+    from forge.project.variants import variant_dir
 
     root = find_project_root(Path.cwd())
     config = ForgeConfig.load(root) if root is not None else None
     paths = config.paths() if config is not None else None
     if args.impact:
         base = Path(args.impact).expanduser().resolve()
+    elif paths is not None and getattr(args, "variant", None):
+        base = variant_dir(paths, args.variant) / "generated" / "design.ir.json"
     elif paths is not None:
         base = paths.generated_root / "design.ir.json"
     else:
         return _guided_failure("--impact needs the IR to compare with outside a forge.yml project",
                                json_mode=json_mode)
     if not base.is_file():
-        return _guided_failure(f"no IR to compare with at {base}: run `forge build` first, or name a "
+        build = f"forge build --variant {args.variant}" if getattr(args, "variant", None) else "forge build"
+        return _guided_failure(f"no IR to compare with at {base}: run `{build}` first, or name a "
                                "snapshot written by --emit-ir", json_mode=json_mode)
     try:
         previous, _ = from_json_dict(json.loads(base.read_text()))
@@ -311,11 +316,15 @@ def _impact(args, project, design_path: Path, *, json_mode: bool) -> int:
                                getattr(args, "variant", None))
     regenerate: list = []
     if not impact.empty:
+        built = base.parent
+        if paths is not None:
+            built = (variant_dir(paths, args.variant) / "generated" if getattr(args, "variant", None)
+                     else paths.generated_root)
         try:
-            outputs = json.loads(provenance.read_text()).get("output_hashes") or {}
+            outputs = json.loads((built / "provenance.json").read_text()).get("output_hashes") or {}
             regenerate = sorted(shown(design_path.parent / rel) for rel in outputs)
         except (OSError, ValueError):
-            regenerate = [shown(base.parent)]
+            regenerate = [shown(built)]
         spec_targets = (config.verification_spec or {}).get("targets") or {} if config is not None else {}
         regenerate += [f".forge/verify/{n}/generated/" for n in targets
                        if (spec_targets.get(n) or {}).get("scope") == "subsystem"]
@@ -488,6 +497,8 @@ def register(sub) -> None:
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
     p.add_argument("--ip-root", help="Additional IP repo root to scan (optional)")
     p.add_argument("--src-root", help="Root for resolving relative RTL src paths (optional)")
+    p.add_argument("--hls-build-root", help="HLS build root whose reports size delay_cycles: auto, as forge build "
+                                            "does (default: forge.yml's build: hls_build_root)")
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
     p.add_argument("--variant", default=None,
                    help="Resolve a variant named under variants: in forge.yml instead of the project's "
