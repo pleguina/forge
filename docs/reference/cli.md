@@ -1335,7 +1335,7 @@ options:
 ### `forge report`
 
 ```text
-usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--ip-info IP_INFO]
+usage: forge report [-h] [--contracts-from CONTRACTS_FROM] [--package TARGET] [--ip-info IP_INFO]
                     [--build-dir BUILD_DIR] [--output OUTPUT] [--hls-build-root HLS_BUILD_ROOT]
                     [--solution SOLUTION] [--probe-csv PROBE_CSV] [--probe-format {long,wide}]
                     [--probe-pairs PROBE_PAIRS] [--provenance PROVENANCE] [--junit-xml JUNIT_XML]
@@ -1353,6 +1353,8 @@ options:
   -h, --help            show this help message and exit
   --contracts-from CONTRACTS_FROM
                         Path to modules.yml (interface_contract: entries)
+  --package TARGET      Write TARGET's replay package (reference data, link mapping, comparison,
+                        build identity) under .forge/reports/packages/, or --output
   --ip-info IP_INFO     Path to a pre-built ip_info.yaml (optional)
   --build-dir BUILD_DIR
                         HLS/RTL build root to scan for component.xml (optional)
@@ -1406,7 +1408,9 @@ usage: forge test [-h] [--flow FLOW] [--event-id EVENT_ID] [--event-list EVENT_L
                   [--compare-mode {transaction,exact_cycle,fixed_latency,latency_window}]
                   [--latency LATENCY] [--backend {xsim,verilator}] [--level {design,modules}]
                   [--target TARGET] [--seed SEED] [--stall STALL] [--backpressure BACKPRESSURE]
-                  [--record-modules] [--plan] [--require-verified] [--json]
+                  [--record-modules] [--capture CAPTURE] [--capture-format CAPTURE_FORMAT]
+                  [--capture-offset CAPTURE_OFFSET] [--package PACKAGE] [--plan]
+                  [--require-verified] [--json]
                   MODE ...
 
 positional arguments:
@@ -1455,6 +1459,15 @@ without a verification config:
   --record-modules      Record each module instance's inputs and outputs during the design-level
                         run, as data a module level can be checked against (derived, not
                         independent)
+  --capture CAPTURE     Compare this board capture (a pattern file) with the target's expected
+                        output, using verification.links, instead of simulating
+  --capture-format CAPTURE_FORMAT
+                        The capture's dataset format (default: from the file)
+  --capture-offset CAPTURE_OFFSET
+                        Capture frame at which the input's frame 0 was played (for the latency
+                        modes)
+  --package PACKAGE     With --capture: the replay package the board ran (forge report --package);
+                        its reference must still be forge.yml's
   --plan                Print what would be verified, and what was inferred, without simulating
 ```
 

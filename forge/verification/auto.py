@@ -1354,6 +1354,101 @@ def run_plan(p: VerificationPlan, work_root: Path, **kwargs: Any) -> List[Eviden
     return out
 
 
+# ── Board captures ──────────────────────────────────────────────────────────
+
+BOARD = "board"
+
+
+def _link_frames(ref: DataRef, iface: Interface, link: int, board: Any, offset: int = 0) -> List[Tuple[int, int]]:
+    """``(frame, word)`` of every word *iface* carries on *link* of *board*:
+    the valid ones, packed as the testbench traces them."""
+    words = board.links.get(link)
+    if words is None:
+        raise ValueError(f"{ref.path}: no link {link} (for {iface.name})")
+    return [(frame + offset, pack(iface, _emp_dict(w)) if iface.protocol == "emp_lword" else w.data)
+            for frame, w in enumerate(words) if w.valid]
+
+
+def build_identity(level: Level, generated: Optional[Path] = None) -> Dict[str, Any]:
+    """What a board build of *level* was made from: its top, every source and
+    header by content hash, its defines and, for a generated top, the IR and
+    output hashes of the build that wrote it; ``id`` is a hash over all of it."""
+    identity: Dict[str, Any] = {
+        "top": level.top,
+        "sources": [{"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+                    for f in level.sources if f.is_file()],
+        "headers": _headers(level),
+        "defines": dict(level.defines),
+    }
+    provenance = generated / "provenance.json" if generated is not None else None
+    if provenance is not None and provenance.is_file():
+        doc = json.loads(provenance.read_text())
+        identity["generated"] = {k: doc.get(k) for k in ("ir_content_hash", "plan_hash", "output_hashes")}
+    identity["id"] = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    return identity
+
+
+def compare_capture(level: Level, capture: DataRef, *, input_offset: Optional[int] = None,
+                    build: Optional[Mapping[str, Any]] = None) -> Evidence:
+    """A board capture of *level*'s outputs compared with its expected output
+    by the scoreboard simulation uses, as evidence on backend ``board``.
+
+    *capture* is a pattern file (a format whose loader reads link words);
+    each output interface is read from the link ``verification.links`` maps
+    it to, and a capture's cycles are its frames. A latency mode measures
+    from the input: *input_offset* is the capture frame at which the input's
+    frame 0 was played, which only the board setup knows. *build* is the
+    identity of the firmware the capture came from."""
+    from forge.verification.dataset_format import get_format_loader
+
+    if level.skip or level.bench is None:
+        return _evidence(level, BOARD, sb.SKIPPED, reason=level.skip)
+    if level.expected is None:
+        raise ValueError(f"{level.name}: no expected output to compare a capture with")
+    bench = level.bench
+    loader = get_format_loader(capture.path, capture.format)
+    if not hasattr(loader, "read"):
+        raise ValueError(f"{capture.path}: a capture is a pattern file ({capture.format} carries no link words)")
+    links = level.expected.links
+    outputs = [i for i in bench.interfaces if i.direction == "out"]
+    unmapped = [o.name for o in outputs if o.name not in links]
+    if unmapped:
+        raise ValueError(f"verification.links maps no link to {', '.join(unmapped)}, so the capture cannot be read for it")
+    if level.compare.mode in ("fixed_latency", "latency_window") and input_offset is None:
+        raise ValueError(f"compare mode {level.compare.mode} measures latency from the input: give the capture "
+                         "frame at which the input's frame 0 was played (--capture-offset)")
+    board = loader.read(capture.path)
+    expected: Optional[Dict[str, List[sb.Expected]]] = load_expected(level.expected, bench)
+    tagged: Tagged = load_tagged(level.input, bench, inputs=True) if level.input is not None else {}
+    extra: Dict[str, Any] = {}
+    if level.events:
+        tagged, expected, extra["events"] = _select_events(level, tagged, expected)
+    driven: Dict[str, List[Tuple[int, int]]] = {}
+    if input_offset is not None and level.input is not None:
+        source = get_format_loader(level.input.path, level.input.format)
+        if not hasattr(source, "read"):
+            raise ValueError(f"{level.input.path}: --capture-offset times the input as played, which needs it "
+                             "as a pattern file")
+        played = source.read(level.input.path)
+        for i in (i for i in bench.interfaces if i.direction == "in" and i.name in level.input.links):
+            driven[i.name] = _link_frames(level.input, i, level.input.links[i.name], played, input_offset)
+    first_in = next((i.name for i in bench.interfaces if i.direction == "in" and i.name in driven), None)
+    input_cycles = [c for c, _ in driven.get(first_in, [])] if first_in else []
+    event_cycles = _event_cycles(tagged, driven) if driven else None
+    results = []
+    for o in outputs:
+        observed = _link_frames(capture, o, links[o.name], board)
+        result = sb.compare(o.name, None if expected is None else expected.get(o.name), observed, level.compare,
+                            input_cycles=input_cycles, unknown=[], event_cycles=event_cycles)
+        if level.decoder is not None:
+            _decode_rows(level.decoder, o, result.rows)
+        results.append(result)
+    status = sb.combine([r.status for r in results])
+    return _evidence(level, BOARD, status, capture=capture.to_dict(), build=dict(build or {}),
+                     input_offset=input_offset, links={o.name: links[o.name] for o in outputs},
+                     interfaces=[r.to_dict() for r in results], **extra)
+
+
 def summary(evidence: Sequence[Evidence]) -> str:
     """One status for a run: that of the required levels (every level when
     none is). A required level that could not be simulated counts against it;

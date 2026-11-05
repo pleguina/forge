@@ -114,6 +114,7 @@ nav:
       - Verify from the Design: how-to/verify-from-the-design.md
       - Change a Processing Stage: how-to/change-a-processing-stage.md
       - Repeat a Chain and Name Variants: how-to/repeat-a-chain-and-name-variants.md
+      - Compare a Board Capture: how-to/compare-a-board-capture.md
       - Integrate Verification: how-to/integrate-verification.md
       - Set Up the Verification Framework: how-to/setup-verification-framework.md
       - Analyze Performance: how-to/analyze-performance.md

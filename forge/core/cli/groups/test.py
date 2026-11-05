@@ -263,6 +263,8 @@ def cmd_auto_test(args, project) -> None:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode,
                                      action="Declare the interfaces under verification.protocols in forge.yml"
                                      if isinstance(exc, KeyError) else None))
+    if getattr(args, "capture", None) and not getattr(args, "plan", False):
+        sys.exit(_compare_capture(args, project, plan, json_mode))
     if getattr(args, "plan", False):
         if json_mode:
             print(json.dumps(plan.to_dict(), indent=2))
@@ -346,6 +348,62 @@ def cmd_auto_test(args, project) -> None:
         next_actions=_auto_next_actions([e for e in evidence if e.doc.get("required", True)]),
     )
     sys.exit(emit(envelope, json_mode=json_mode))
+
+
+def _compare_capture(args, project, plan, json_mode: bool) -> int:
+    """`forge test --capture`: a board capture compared with a design target's
+    expected output, recorded as that target's ``board`` result."""
+    from datetime import datetime, timezone
+
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.project.replay_package import check_package
+    from forge.project.verification_state import evidence_dir, runs_dir
+    from forge.verification import auto
+
+    levels = [lv for lv in plan.levels if lv.scope == "design" and lv.expected is not None]
+    if len(levels) != 1:
+        return _guided_run_failure(
+            "--capture compares one design target with an expected output: name it with --target "
+            f"(have {', '.join(lv.name for lv in levels) or 'none'})", json_mode=json_mode)
+    level = levels[0]
+    try:
+        if getattr(args, "package", None):
+            build = {**check_package(Path(args.package).resolve(), level)["build"], "package": str(Path(args.package).resolve())}
+        else:
+            generated = next((f.parent for f in level.sources if (f.parent / "provenance.json").is_file()), None)
+            build = {**auto.build_identity(level, generated), "package": None}
+        capture = auto.DataRef.from_spec(
+            {"path": str(Path(args.capture).resolve()), **({"format": args.capture_format} if args.capture_format else {})},
+            project.root)
+        evidence = auto.compare_capture(level, capture, input_offset=getattr(args, "capture_offset", None), build=build)
+    except (OSError, ValueError, KeyError) as exc:
+        return _guided_run_failure(str(exc), json_mode=json_mode)
+    name = f"{level.name.replace(':', '_')}.{auto.BOARD}.evidence.json"
+    run_dir = runs_dir(project.paths.report_root) / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = evidence_dir(project.paths.report_root)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    evidence.write(out_dir / name)
+    evidence.write(run_dir / name)
+    (run_dir / "run.json").write_text(json.dumps({
+        "run": run_dir.name, "verification": evidence.status, "levels": {f"{level.name}[board]": evidence.status},
+        "evidence": {f"{level.name}[board]": evidence.doc["evidence_id"]}, "capture": str(capture.path)}, indent=2) + "\n")
+    detail = ", ".join(f"{r['interface']} {r['matched']}/{r['expected']}" for r in evidence.doc.get("interfaces", []))
+    rows = [(r["interface"], row) for r in evidence.doc.get("interfaces", []) for row in r.get("rows") or []]
+    if not json_mode:
+        print(f"  {_STATUS_ICON[evidence.status]} {level.name} [board]: {evidence.status} ({detail}), "
+              f"build {build['id'][:12]}")
+        for iface, row in rows[:10]:
+            print(f"      {iface} {row.get('kind')}" + "".join(
+                f" {k}={row[k]}" for k in ("event", "index", "cycle", "expected", "observed") if k in row))
+    status = {"VERIFIED": "pass", "FAILED": "fail"}.get(evidence.status, "warn")
+    return emit(CommandEnvelope(
+        status=status,
+        diagnostics=[{"severity": "error", "message": f"{level.name} [board]: {detail}"}] if status == "fail" else [],
+        artifacts=[str(out_dir / name), str(run_dir)],
+        metrics={"verification": evidence.status, "levels": {f"{level.name}[board]": evidence.status},
+                 "build": build["id"], "capture": str(capture.path)},
+    ), json_mode=json_mode)
 
 
 _REFERENCE_WORDS = {"functional": "reference comparison", "derived": "replay of recorded traffic",
@@ -738,6 +796,16 @@ def register(sub) -> None:
     auto.add_argument("--record-modules", dest="record_modules", action="store_true", default=False,
                       help="Record each module instance's inputs and outputs during the design-level run, "
                            "as data a module level can be checked against (derived, not independent)")
+    auto.add_argument("--capture", default=None,
+                      help="Compare this board capture (a pattern file) with the target's expected output, "
+                           "using verification.links, instead of simulating")
+    auto.add_argument("--capture-format", dest="capture_format", default=None,
+                      help="The capture's dataset format (default: from the file)")
+    auto.add_argument("--capture-offset", dest="capture_offset", type=int, default=None,
+                      help="Capture frame at which the input's frame 0 was played (for the latency modes)")
+    auto.add_argument("--package", default=None,
+                      help="With --capture: the replay package the board ran (forge report --package); "
+                           "its reference must still be forge.yml's")
     auto.add_argument("--plan", action="store_true", default=False,
                       help="Print what would be verified, and what was inferred, without simulating")
     p_test.add_argument(

@@ -32,6 +32,7 @@ renderer that already exists elsewhere in the codebase —
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -80,11 +81,39 @@ def _verification_only_report(config, output: Optional[str]):
     )
 
 
+def _package(target: str, output: Optional[str]):
+    """`forge report --package <target>`: the target's replay package."""
+    from forge.core.cli.envelope import CommandEnvelope
+    from forge.project.config import ForgeConfig
+    from forge.project.paths import find_project_root
+    from forge.project.replay_package import write_package
+
+    root = find_project_root(Path.cwd())
+    if root is None:
+        return CommandEnvelope(status="fail", diagnostics=[
+            {"severity": "error", "message": "--package needs a forge.yml project"}])
+    try:
+        out = write_package(ForgeConfig.load(root), target, Path(output).resolve() if output else None)
+    except (OSError, ValueError, KeyError) as exc:
+        return CommandEnvelope(status="fail", diagnostics=[{"severity": "error", "message": str(exc)}],
+                               next_actions=["Run `forge build` (or `forge test`) first"]
+                               if isinstance(exc, FileNotFoundError) else [])
+    manifest = json.loads((out / "manifest.json").read_text())
+    return CommandEnvelope(
+        status="pass", artifacts=[str(p) for p in sorted(out.rglob("*")) if p.is_file()],
+        metrics={"package": str(out), "build": manifest["build"]["id"], "simulated": manifest["simulated"]},
+        next_actions=[f"Play {out / manifest['reference']['input']['file']} on the board, then "
+                      f"`forge test --target {target} --capture <capture> --package {out}`"],
+    )
+
+
 def cmd_report(args) -> None:
     from forge.core.cli.envelope import CommandEnvelope, emit
 
     json_mode = getattr(args, "json", False)
     output = args.output
+    if getattr(args, "package", None):
+        sys.exit(emit(_package(args.package, output), json_mode=json_mode))
     if args.design is None:
         from forge.core.cli._shared import resolve_project_args
 
@@ -625,6 +654,9 @@ def register(sub) -> None:
         help="Path to design.yml (default: the forge.yml project around the current directory)",
     )
     p.add_argument("--contracts-from", help="Path to modules.yml (interface_contract: entries)")
+    p.add_argument("--package", metavar="TARGET", default=None,
+                   help="Write TARGET's replay package (reference data, link mapping, comparison, build "
+                        "identity) under .forge/reports/packages/, or --output")
     p.add_argument("--ip-info", help="Path to a pre-built ip_info.yaml (optional)")
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
     p.add_argument(
