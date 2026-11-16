@@ -10,22 +10,21 @@
 #     - hidden contract-validate / verify-doctor smoke templates
 #   It must NOT:
 #     - define mandatory concrete jobs
-#     - reference plugins/trigger_demo/ or any arc-framework-internal path
+#     - reference plugins/trigger_demo/ or any other path inside the forge repository
 #     - assume any framework directory layout beyond the installed CLI surface
 #     - contain OMTF-specific logic or variables
 #
 # A plugin consumes this file via:
 #   include:
-#     - project: pleguina/arc-framework
-#       ref: main          # pin to a version tag after stabilisation
-#       file: ci/plugin-consumer.yml
+#     # pin a version tag instead of main after stabilisation
+#     - remote: https://raw.githubusercontent.com/pleguina/forge/main/ci/plugin-consumer.yml
 #
 # The plugin then extends the hidden templates:
 #   my-job:
 #     extends: .forge_plugin_setup
 #     stage: validate
 #     script:
-#       - forge topgen validate-registry modules.yml --strict
+#       - forge dev topgen validate-registry modules.yml --strict
 # ============================================================================
 
 # ---------------------------------------------------------------------------
@@ -86,9 +85,9 @@ default:
 # `ci/release_artifacts.sh`), so pinning a tag is also what makes a CI run
 # reproducible six months later.
 #
-# Override FORGE_FORGE_PIP_REF only if your org stands up its own internal
+# Override FORGE_PIP_REF only if your org stands up its own internal
 # package index and wants to mirror releases there, e.g.:
-#   FORGE_FORGE_PIP_REF: "--index-url https://pypi.mycompany.internal/simple/ forge"
+#   FORGE_PIP_REF: "--index-url https://pypi.mycompany.internal/simple/ forge"
 # ---------------------------------------------------------------------------
 .forge_plugin_setup:
   image: python:3.11-slim
@@ -96,7 +95,7 @@ default:
     - default-x86_64
   before_script:
     - pip install --quiet --cache-dir .pip-cache
-        ${FORGE_FORGE_PIP_REF:-"git+https://github.com/pleguina/forge.git@${FORGE_FRAMEWORK_REF:-main}#subdirectory=forge"}
+        ${FORGE_PIP_REF:-"git+https://github.com/pleguina/forge.git@${FORGE_FRAMEWORK_REF:-main}#subdirectory=forge"}
         pytest pyyaml yamllint
 
 # ---------------------------------------------------------------------------
@@ -110,8 +109,8 @@ default:
   extends: .forge_plugin_setup
   stage: validate
   script:
-    - forge topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
-    - forge core verify-contract
+    - forge dev topgen validate-registry "${PLUGIN_MODULES_YML}" --strict
+    - forge dev core verify-contract
         --ip-info "${PLUGIN_IP_INFO_YML:-ip_info.yaml}"
         --all-contracts "${PLUGIN_INTERFACES_DIR}"
   artifacts:
@@ -124,14 +123,14 @@ default:
 # ---------------------------------------------------------------------------
 # .forge_verify_doctor
 #
-# Hidden template: run forge verify doctor against the plugin verification
+# Hidden template: run forge dev verify doctor against the plugin verification
 # contract. Extend this in a concrete job; set PLUGIN_VERIFY_CONTRACT_PATH.
 # ---------------------------------------------------------------------------
 .forge_verify_doctor:
   extends: .forge_plugin_setup
   stage: smoke
   script:
-    - forge verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
+    - forge dev verify doctor "${PLUGIN_VERIFY_CONTRACT_PATH}" --strict
   artifacts:
     name: "forge-verify-doctor-${CI_COMMIT_SHORT_SHA}"
     when: always

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standardised subprocess wrapper for forge verify backends — Workstream D7.
+"""Standardised subprocess wrapper for forge dev verify backends — Workstream D7.
 
 All simulator and binary invocations executed by framework backends must go
 through this module.  This provides:

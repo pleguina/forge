@@ -1,6 +1,6 @@
 """``forge migrate`` — bring a whole project up to the current schemas.
 
-``forge topgen migrate`` performs the individual migrations, and asks the
+``forge dev topgen migrate`` performs the individual migrations, and asks the
 user to already know which files need which one. That is the wrong question
 to put to someone who has just upgraded FORGE and wants to know whether
 their project still works.
@@ -119,7 +119,7 @@ def register(sub) -> None:
             "Find every schema-bearing file in a project — both the forge.yml + "
             ".forge/ layout and the plugins/<id>/forge/ one — work out what each "
             "needs, and preview the whole chain as one diff. Performs no migration "
-            "itself: each is delegated to the same function `forge topgen migrate` "
+            "itself: each is delegated to the same function `forge dev topgen migrate` "
             "uses, so the two routes cannot diverge. Migrations that move files are "
             "reported with the command that performs them, never performed here."
         ),

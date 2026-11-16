@@ -94,8 +94,9 @@ class TestNoContractHeuristic:
         clock_of, reset_of, unresolved = resolve_domain_nets(
             cfg, {}, report, global_nets, _mod_of_instance(cfg),
         )
-        assert clock_of["m1"] == "clk"
-        assert reset_of["m1"] == "rst_n"
+        # Both ports are driven by the global ap_clk/ap_rst nets.
+        assert clock_of["m1"] == "ap_clk"
+        assert reset_of["m1"] == "ap_rst"
         assert unresolved == []
 
     def test_unresolvable_module_is_reported(self):

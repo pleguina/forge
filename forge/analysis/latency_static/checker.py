@@ -26,10 +26,10 @@ produces a real multi-predecessor merge point here.
 from __future__ import annotations
 
 import dataclasses
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from forge.analysis.latency_model import LatencyProvenance
-from forge.analysis.latency_static.graph import LatencyGraph
+from forge.analysis.latency_static.graph import LatencyEdge, LatencyGraph
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +55,9 @@ class PathLatency:
     # overlap check; None/None when total_cycles is None (unknown).
     range_lo: Optional[int] = None
     range_hi: Optional[int] = None
+    # Cycles the merge node's InputAlignment.offsets asks this source to arrive
+    # after the others; already subtracted from total_cycles and the range.
+    offset: int = 0
 
 
 @dataclasses.dataclass
@@ -79,12 +82,21 @@ class MismatchReport:
     #                        supplies `consumer_protocols`); never a scalar
     #                        latency mismatch — ready/valid handshaking
     #                        doesn't require cycle-exact producer alignment.
+    #   framed            — declared by the merge node (InputAlignment
+    #                        kind: framed): its inputs carry their own framing;
+    #                        never a mismatch.
+    #   window            — declared by the merge node (kind: window): a
+    #                        mismatch iff the paths spread over more than
+    #                        window_cycles.
     alignment: str = "exact_cycle"
+    window_cycles: Optional[int] = None
 
     @property
     def is_mismatch(self) -> bool:
-        if self.alignment in ("elastic_buffer", "transaction_order"):
+        if self.alignment in ("elastic_buffer", "transaction_order", "framed"):
             return False
+        if self.alignment == "window":
+            return self.delta is not None and self.delta > (self.window_cycles or 0)
         if self.alignment == "bounded_skew":
             ranges = [
                 (p.range_lo, p.range_hi) for p in self.paths
@@ -157,7 +169,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
         if not (edges_by_pred.get(p) and (edges_by_pred[p].unknown_cdc or edges_by_pred[p].control_strobe))
     ]
 
-    if own_unknown or own_kind in ("bounded", "elastic"):
+    if own_unknown or own_cycles is None or own_kind in ("bounded", "elastic"):
         return (None if own_unknown else own_cycles, own_unknown)
 
     if len(real_preds) == 0:
@@ -169,7 +181,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
             p_edge = edges_by_pred.get(p)
             p_edge_cycles = p_edge.latency.cycles if (p_edge and p_edge.latency and p_edge.latency.cycles) else 0
             p_upstream, p_unknown = _branch_upstream(graph, p, p_edge)
-            if p_unknown:
+            if p_unknown or p_upstream is None:
                 return (own_cycles, False)  # can't confirm balance — stay conservative
             totals.append(p_upstream + p_edge_cycles)
         if len(set(totals)) == 1:
@@ -203,7 +215,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
 
     upstream_cycles, upstream_unknown = _branch_upstream(graph, pred, edge)
-    if upstream_unknown:
+    if upstream_unknown or upstream_cycles is None:
         return (None, True)
     return (upstream_cycles + edge_cycles + own_cycles, False)
 
@@ -251,106 +263,136 @@ def check_merge_points(
     edge_by_pair = {(e.src, e.dst): e for e in graph.edges}
 
     for node_name in graph.nodes:
-        # A control_strobe predecessor (Connection.control_strobe — a
-        # reset/swap/output-stamp pulse, not a data path) is excluded
-        # entirely from merge-point detection, not merely marked
-        # "unknown" the way an unknown_cdc predecessor is: its timing is
-        # deliberately scheduled by the receiving design, not a second
-        # data source requiring exact-cycle reconciliation against a
-        # sibling data path. A node fed by exactly one real data
-        # predecessor plus a control strobe is therefore not a merge
-        # point at all. See Connection.control_strobe's own docstring
-        # for the real external-consumer example (bx_timing's new_event_*
-        # strobes) this was found needed for.
-        preds = [
-            p for p in graph.predecessors(node_name)
-            if not (edge_by_pair.get((p, node_name)) and edge_by_pair[(p, node_name)].control_strobe)
-        ]
-        if len(preds) < 2:
-            continue
+        report = analyse_merge_point(graph, node_name, edge_by_pair, consumer_protocols)
+        if report is not None:
+            reports.append(report)
+    return reports
 
-        path_lats: List[PathLatency] = []
-        kinds: Set[str] = set()
-        for src in sorted(preds):
-            src_node = graph.nodes[src]
-            edge = edge_by_pair.get((src, node_name))
-            node_cycles, unknown = _branch_upstream(graph, src, edge)
 
-            if edge and edge.unknown_cdc:
-                # This path's own final hop is a mailbox_transfer/async_fifo
-                # crossing into the merge node itself — genuinely unbounded
-                # (LatencyEdge.unknown_cdc's own docstring), regardless of
-                # how src's own upstream chain resolved.
-                unknown = True
-            edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
+def analyse_merge_point(
+    graph: LatencyGraph,
+    node_name: str,
+    edge_by_pair: Optional[Dict[Tuple[str, str], LatencyEdge]] = None,
+    consumer_protocols: Optional[Dict[str, str]] = None,
+) -> Optional[MismatchReport]:
+    """The :class:`MismatchReport` of one node, or None when it is not a merge
+    point (fewer than 2 data predecessors, control strobes excluded). Uses the edges' current
+    latencies, so a caller that changes an edge (the auto-delay resolver) sees
+    the effect on every node downstream."""
+    if edge_by_pair is None:
+        edge_by_pair = {(e.src, e.dst): e for e in graph.edges}
+    consumer_protocols = consumer_protocols or {}
+    # A control_strobe predecessor (Connection.control_strobe — a
+    # reset/swap/output-stamp pulse, not a data path) is excluded
+    # entirely from merge-point detection, not merely marked
+    # "unknown" the way an unknown_cdc predecessor is: its timing is
+    # deliberately scheduled by the receiving design, not a second
+    # data source requiring exact-cycle reconciliation against a
+    # sibling data path. A node fed by exactly one real data
+    # predecessor plus a control strobe is therefore not a merge
+    # point at all. See Connection.control_strobe's own docstring
+    # for the real external-consumer example (bx_timing's new_event_*
+    # strobes) this was found needed for.
+    preds = [
+        p for p in graph.predecessors(node_name)
+        if not (edge_by_pair.get((p, node_name)) and edge_by_pair[(p, node_name)].control_strobe)
+    ]
+    if len(preds) < 2:
+        return None
 
-            kind = src_node.latency.kind if src_node.latency else None
-            if kind:
-                kinds.add(kind)
+    declared = getattr(graph.nodes[node_name], "alignment", None)
+    offsets = declared.offsets if declared is not None else {}
 
-            total = (node_cycles + edge_cycles) if not unknown else None
+    path_lats: List[PathLatency] = []
+    kinds: Set[str] = set()
+    for src in sorted(preds):
+        src_node = graph.nodes[src]
+        edge = edge_by_pair.get((src, node_name))
+        node_cycles, unknown = _branch_upstream(graph, src, edge)
 
-            range_lo: Optional[int] = None
-            range_hi: Optional[int] = None
-            if kind == "bounded" and src_node.latency and src_node.latency.min_cycles is not None \
-                    and src_node.latency.max_cycles is not None:
-                range_lo = src_node.latency.min_cycles + edge_cycles
-                range_hi = src_node.latency.max_cycles + edge_cycles
-            elif total is not None:
-                range_lo = range_hi = total
+        if edge and edge.unknown_cdc:
+            # This path's own final hop is a mailbox_transfer/async_fifo
+            # crossing into the merge node itself — genuinely unbounded
+            # (LatencyEdge.unknown_cdc's own docstring), regardless of
+            # how src's own upstream chain resolved.
+            unknown = True
+        edge_cycles = edge.latency.cycles if (edge and edge.latency and edge.latency.cycles) else 0
 
-            provenance = (
-                LatencyProvenance(
-                    "inferred",
-                    detail=f"{src_node.latency_source}:{node_cycles} + edge:{edge_cycles}",
-                )
-                if total is not None else None
+        kind = src_node.latency.kind if src_node.latency else None
+        if kind:
+            kinds.add(kind)
+
+        offset = int(offsets.get(src_node.module, offsets.get(src_node.ref, 0)))
+        total = None if unknown or node_cycles is None else node_cycles + edge_cycles - offset
+
+        range_lo: Optional[int] = None
+        range_hi: Optional[int] = None
+        if kind == "bounded" and src_node.latency and src_node.latency.min_cycles is not None \
+                and src_node.latency.max_cycles is not None:
+            range_lo = src_node.latency.min_cycles + edge_cycles - offset
+            range_hi = src_node.latency.max_cycles + edge_cycles - offset
+        elif total is not None:
+            range_lo = range_hi = total
+
+        provenance = (
+            LatencyProvenance(
+                "inferred",
+                detail=f"{src_node.latency_source}:{node_cycles} + edge:{edge_cycles}",
             )
-            path_lats.append(PathLatency(
-                path=[src, node_name],
-                total_cycles=total,
-                has_unknown=unknown,
-                provenance=provenance,
-                range_lo=range_lo,
-                range_hi=range_hi,
-            ))
-
-        if "elastic" in kinds:
-            alignment = "elastic_buffer"
-        elif "bounded" in kinds:
-            alignment = "bounded_skew"
-        elif consumer_protocols.get(node_name) == "ready-valid":
-            alignment = "transaction_order"
-        else:
-            alignment = "exact_cycle"
-
-        known = [p.total_cycles for p in path_lats if p.total_cycles is not None]
-        if not known:
-            max_lat = min_lat = delta = None
-        else:
-            max_lat = max(known)
-            min_lat = min(known)
-            delta = max_lat - min_lat
-
-        suggestion: Optional[str] = None
-        if alignment == "exact_cycle" and delta and delta > 0:
-            for p in path_lats:
-                if p.total_cycles == min_lat and p.total_cycles is not None:
-                    short_src = p.path[0]
-                    suggestion = (
-                        f"Insert signal_delay DEPTH={delta} on the path from "
-                        f"'{short_src}' into '{node_name}'"
-                    )
-                    break
-
-        reports.append(MismatchReport(
-            merge_node=node_name,
-            paths=path_lats,
-            max_latency=max_lat,
-            min_latency=min_lat,
-            delta=delta,
-            suggestion=suggestion,
-            alignment=alignment,
+            if total is not None else None
+        )
+        path_lats.append(PathLatency(
+            path=[src, node_name],
+            total_cycles=total,
+            has_unknown=unknown,
+            provenance=provenance,
+            range_lo=range_lo,
+            range_hi=range_hi,
+            offset=offset,
         ))
 
-    return reports
+    window_cycles: Optional[int] = None
+    if declared is not None and declared.kind == "framed":
+        alignment = "framed"
+    elif declared is not None and declared.kind == "window":
+        alignment = "window"
+        window_cycles = declared.window_cycles
+    elif "elastic" in kinds:
+        alignment = "elastic_buffer"
+    elif "bounded" in kinds:
+        alignment = "bounded_skew"
+    elif consumer_protocols.get(node_name) == "ready-valid":
+        alignment = "transaction_order"
+    else:
+        alignment = "exact_cycle"
+
+    known = [p.total_cycles for p in path_lats if p.total_cycles is not None]
+    if not known:
+        max_lat = min_lat = delta = None
+    else:
+        max_lat = max(known)
+        min_lat = min(known)
+        delta = max_lat - min_lat
+
+    suggestion: Optional[str] = None
+    if alignment == "exact_cycle" and delta and delta > 0:
+        for p in path_lats:
+            if p.total_cycles == min_lat and p.total_cycles is not None:
+                short_src = p.path[0]
+                suggestion = (
+                    f"Insert signal_delay DEPTH={delta} on the path from "
+                    f"'{short_src}' into '{node_name}'"
+                )
+                break
+
+    return MismatchReport(
+        merge_node=node_name,
+        paths=path_lats,
+        max_latency=max_lat,
+        min_latency=min_lat,
+        delta=delta,
+        suggestion=suggestion,
+        alignment=alignment,
+        window_cycles=window_cycles,
+    )
+

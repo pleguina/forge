@@ -2,7 +2,7 @@
 
 Aggregates all framework health checks into a single callable. This is the
 canonical way to determine whether a design contract is on the supported path
-(i.e., it works with standard ``forge verify generate / prepare / run`` commands
+(i.e., it works with standard ``forge dev verify generate / prepare / run`` commands
 without unsupported workarounds).
 """
 from __future__ import annotations
@@ -98,7 +98,7 @@ def validate_supported_path(
     else:
         add_issue(
             f"[FWV019] tools/bootstrap.py not found: {bootstrap_py}  "
-            f"→ create with: forge verify init-plugin <plugin_id>"
+            f"→ create with: forge dev verify init-plugin <plugin_id>"
         )
 
     from forge.verification.supported_matrix import validate_flow_matrix
@@ -136,7 +136,7 @@ def validate_supported_path(
         else:
             add_warning(
                 f"[FWV004] {prefix} verify.flow.yml missing  "
-                f"→ forge verify generate {design_path} --flow {flow.name}"
+                f"→ forge dev verify generate {design_path} --flow {flow.name}"
             )
 
         if flow.kind in csim_kinds:
@@ -169,7 +169,7 @@ def validate_supported_path(
         else:
             add_issue(
                 f"[FWV004] {prefix} TB not found: {generated.tb_sv}  "
-                f"→ forge verify generate {design_path} --flow {flow.name}"
+                f"→ forge dev verify generate {design_path} --flow {flow.name}"
             )
 
         if generated.port_map.exists():
@@ -177,7 +177,7 @@ def validate_supported_path(
         else:
             add_warning(
                 f"[FWV004] {prefix} port_map.yaml missing  "
-                f"→ forge verify generate {design_path} --flow {flow.name}"
+                f"→ forge dev verify generate {design_path} --flow {flow.name}"
             )
 
         if not check_stimulus:

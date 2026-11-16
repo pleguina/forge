@@ -6,7 +6,7 @@ Core HLS catalog loading and TCL generation logic.
 This module is the single implementation source for all HLS orchestration
 operations. It is consumed by:
   - topgen hls gen-tcl  (via cli/main.py)
-    - framework/hls/generate_hls_tcl.py  (compatibility entry point)
+    - forge/hls/generate_hls_tcl.py  (compatibility entry point)
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from forge.contracts.design_variant import load_design_document
 from jinja2 import Environment, FileSystemLoader
 
 
@@ -118,7 +120,7 @@ def load_hls_catalog(config_path: Path | str | None = None) -> dict[str, Any]:
     modules: dict[str, dict[str, Any]] = {}
     aliases: dict[str, str] = {}
     design_aliases: dict[str, str] = {}
-    stage_modules = {stage: [] for stage in SUPPORTED_STAGES}
+    stage_modules: dict[str, list[str]] = {stage: [] for stage in SUPPORTED_STAGES}
     ordered_modules: list[str] = []
 
     for raw_module in raw_modules:
@@ -195,7 +197,7 @@ def modules_for_stage(catalog: dict[str, Any], stage: str) -> list[str]:
 
 def modules_from_design(catalog: dict[str, Any], design_path: Path | str) -> list[str]:
     resolved_design = Path(design_path).expanduser().resolve()
-    design_data = yaml.safe_load(resolved_design.read_text()) or {}
+    design_data = load_design_document(resolved_design)
     modules = []
     for module in design_data.get("modules", []):
         # ref: is the primary lookup key in the new registry-based format

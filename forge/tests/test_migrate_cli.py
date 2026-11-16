@@ -1,7 +1,7 @@
 """Coverage for `forge migrate` — bringing a whole project up to the schemas
 this build understands (plan §11, F4).
 
-`forge topgen migrate` already performed the individual migrations well, and
+`forge dev topgen migrate` already performed the individual migrations well, and
 asked the user to know which files needed which one. That is the wrong
 question to put to someone who has just upgraded FORGE. This command answers
 theirs, and the properties worth defending are the ones that make a
@@ -259,7 +259,7 @@ def test_a_migrated_project_still_validates(
 
 
 def test_migration_delegates_rather_than_reimplementing(legacy: Path) -> None:
-    """Byte-identical to what `forge topgen migrate` writes for the same
+    """Byte-identical to what `forge dev topgen migrate` writes for the same
     file — a second implementation that drifted would be undetectable
     until it corrupted someone's project."""
     from forge.generation.migrate import migrate_schema_version
@@ -303,7 +303,7 @@ def test_the_manual_action_names_the_command_that_performs_it(
 
     action = plan_migration(plugin).manual[0]
 
-    assert action.command.startswith("forge topgen migrate --kind legacy-plugin-layout")
+    assert action.command.startswith("forge dev topgen migrate --kind legacy-plugin-layout")
     assert action.safe is False
 
 

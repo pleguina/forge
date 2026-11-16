@@ -31,7 +31,7 @@
       "kind": "class",
       "module": "forge",
       "name": "Connection",
-      "summary": "Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None, control_strobe: 'bool' = False, external_source: 'bool' = False)"
+      "summary": "Connection(from_: 'str', to: 'str', port_map: 'List[Tuple[str, str]]' = <factory>, port_map_ranges: 'List[dict]' = <factory>, register_stages: 'int' = 0, delay_cycles: 'int' = 0, delay_auto: 'bool' = False, contract_wiring: 'bool' = False, boundary: 'Optional[str]' = None, cdc: 'Optional[Dict[str, Any]]' = None, control_strobe: 'bool' = False, external_source: 'bool' = False)"
     },
     {
       "kind": "class",
@@ -43,7 +43,7 @@
       "kind": "class",
       "module": "forge",
       "name": "Module",
-      "summary": "Module(name: 'str', top: 'str', src: 'List[str]', kind: 'ModuleKind' = 'hls', rtl_lang: 'Optional[RtlLang]' = None, vhdl_library: 'Optional[str]' = None, vhdl_version: 'Optional[str]' = None, rtl_include_dirs: 'List[str]' = <factory>, verilog_defines: 'List[str]' = <factory>, rtl_packages: 'List[str]' = <factory>, parameters: 'Dict[str, Any]' = <factory>, tb: 'List[str]' = <factory>, includes: 'List[str]' = <factory>, cflags: 'List[str]' = <factory>, stages: 'List[Stage]' = <factory>, version: 'str' = '1.0', tb_args: 'Optional[TestBenchArgs]' = None, csim_opts: 'Optional[str]' = None, csynth_opts: 'Optional[str]' = None, cosim_opts: 'Optional[str]' = None, ip_opts: 'Optional[str]' = None, instances: 'int' = 1, instance_name: 'Optional[str]' = None, instance_offset: 'int' = 0, external_in_ports: 'List[str]' = <factory>, external_out_ports: 'List[str]' = <factory>, debug: 'bool' = False, output_delays: 'Dict[str, int]' = <factory>, ip_info_key: 'Optional[str]' = None, timing: 'Optional[ModuleTiming]' = None)"
+      "summary": "Module(name: 'str', top: 'str', src: 'List[str]', kind: 'ModuleKind' = 'hls', rtl_lang: 'Optional[RtlLang]' = None, vhdl_library: 'Optional[str]' = None, vhdl_version: 'Optional[str]' = None, rtl_include_dirs: 'List[str]' = <factory>, verilog_defines: 'List[str]' = <factory>, rtl_packages: 'List[str]' = <factory>, parameters: 'Dict[str, Any]' = <factory>, port_widths: 'Dict[str, int]' = <factory>, tb: 'List[str]' = <factory>, includes: 'List[str]' = <factory>, cflags: 'List[str]' = <factory>, stages: 'List[Stage]' = <factory>, version: 'str' = '1.0', tb_args: 'Optional[TestBenchArgs]' = None, csim_opts: 'Optional[str]' = None, csynth_opts: 'Optional[str]' = None, cosim_opts: 'Optional[str]' = None, ip_opts: 'Optional[str]' = None, instances: 'int' = 1, instance_name: 'Optional[str]' = None, instance_offset: 'int' = 0, external_in_ports: 'List[str]' = <factory>, external_out_ports: 'List[str]' = <factory>, debug: 'bool' = False, output_delays: 'Dict[str, int]' = <factory>, ip_info_key: 'Optional[str]' = None, timing: 'Optional[ModuleTiming]' = None)"
     },
     {
       "kind": "value",
@@ -90,14 +90,20 @@
     {
       "kind": "function",
       "module": "forge",
-      "name": "write_structural_vhdl",
-      "summary": "Generate a structural RTL top that wires algorithm modules together."
+      "name": "write_structural_verilog",
+      "summary": "Generate a structural Verilog top that wires algorithm modules together."
     },
     {
       "kind": "function",
       "module": "forge",
       "name": "write_summary",
       "summary": "Write the summary dict out in either JSON or YAML form."
+    },
+    {
+      "kind": "function",
+      "module": "forge",
+      "name": "write_vhdl_wrapper",
+      "summary": "Write entity *entity_name* instantiating Verilog module *core_name*."
     },
     {
       "kind": "value",
@@ -127,13 +133,13 @@
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "GraphNodeKind",
-      "summary": "An enumeration."
+      "summary": "What a node of the design-explorer graph stands for."
     },
     {
       "kind": "class",
       "module": "forge.analysis.design_explorer",
       "name": "MaturityStatus",
-      "summary": "An enumeration."
+      "summary": "How a module's connections are wired: by contract, by name matching, or both."
     },
     {
       "kind": "class",
@@ -222,8 +228,8 @@
     {
       "kind": "function",
       "module": "forge.generation.generators",
-      "name": "write_structural_vhdl",
-      "summary": "Generate a structural RTL top that wires algorithm modules together."
+      "name": "write_vhdl_wrapper",
+      "summary": "Write entity *entity_name* instantiating Verilog module *core_name*."
     },
     {
       "kind": "class",

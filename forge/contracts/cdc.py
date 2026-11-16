@@ -15,6 +15,11 @@ for a *data* crossing:
           depth: 2           # required for async_fifo; must be a power of two
           min_spacing_cycles: 8   # required for pulse_sync
 
+``kind: waived`` (with a required ``reason:``) approves a crossing the
+author knows is safe without a synchronizer — related clocks, or a
+quasi-static configuration value. It is wired directly and listed with its
+reason in the crossing report.
+
 A *reset* crossing is declared differently, since it's a property of a
 destination reset *domain*, not a data connection between two modules —
 see the top-level ``reset_domains:`` block instead:
@@ -41,7 +46,7 @@ Following the exact existing convention of
 ``forge.contracts.contract_verifier.verify_topology_groups``: this
 function only ever produces ``"error"``-severity issues (no warning
 tier). It is called both from ``gen-top --strict`` (as an error) and
-from ``forge topgen validate`` (surfaced as
+from ``forge dev topgen validate`` (surfaced as
 a warning, whenever contracts/ip_info are available) — see
 ``forge/core/cli/groups/topgen.py``.
 
@@ -59,7 +64,9 @@ from .config import DesignConfig
 from .contract_loader import LoadedContract
 from .domains import resolve_domain_nets
 
-KNOWN_CDC_KINDS = frozenset({"level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo"})
+KNOWN_CDC_KINDS = frozenset({
+    "level_sync", "2ff_sync", "pulse_sync", "mailbox_transfer", "async_fifo", "waived",
+})
 
 CODE_UNDECLARED_CLOCK_CROSSING = "ATG023"
 CODE_UNDECLARED_RESET_CROSSING = "ATG024"
@@ -88,6 +95,7 @@ class _PairDomains:
     reset_a: "str | None"
     reset_b: "str | None"
     approved: bool
+    reason: "str | None" = None
 
 
 def _resolve_pairs(
@@ -133,6 +141,7 @@ def _resolve_pairs(
             clock_a=clock_of_module.get(src_mod), clock_b=clock_of_module.get(dst_mod),
             reset_a=reset_of_module.get(src_mod), reset_b=reset_of_module.get(dst_mod),
             approved=cdc is not None,
+            reason=cdc.get("reason") if cdc else None,
         ))
     return pairs
 
@@ -156,8 +165,7 @@ def verify_cdc(
             issues.append(CdcIssue(
                 "error", f"{pair.src_mod}->{pair.dst_mod}",
                 f"undeclared clock-domain crossing: '{pair.clock_a}' -> '{pair.clock_b}' "
-                f"— add a 'cdc:' block ({sorted(KNOWN_CDC_KINDS)}) to this connection "
-                "or remove --strict.",
+                f"— add a 'cdc:' block ({sorted(KNOWN_CDC_KINDS)}) to this connection.",
                 code=CODE_UNDECLARED_CLOCK_CROSSING,
             ))
 
@@ -168,8 +176,7 @@ def verify_cdc(
             issues.append(CdcIssue(
                 "error", f"{pair.src_mod}->{pair.dst_mod}",
                 f"undeclared reset-domain crossing: '{pair.reset_a}' -> '{pair.reset_b}' "
-                f"— add a 'cdc:' block ({sorted(KNOWN_CDC_KINDS)}) to this connection "
-                "or remove --strict.",
+                f"— add a 'cdc:' block ({sorted(KNOWN_CDC_KINDS)}) to this connection.",
                 code=CODE_UNDECLARED_RESET_CROSSING,
             ))
 
@@ -213,7 +220,10 @@ def report_all_crossings(
             continue
 
         connection = f"{pair.src_mod}->{pair.dst_mod}"
-        if pair.approved:
+        if pair.approved and pair.kind == "waived":
+            passed = True
+            message = f"waived: {pair.reason}"
+        elif pair.approved:
             passed = True
             message = f"approved via cdc: {{kind: {pair.kind}}}"
         else:

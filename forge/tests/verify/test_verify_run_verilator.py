@@ -1,4 +1,4 @@
-"""Real end-to-end Verilator coverage for `forge verify run`.
+"""Real end-to-end Verilator coverage for `forge dev verify run`.
 
 Mirrors test_verify_run_xsim.py's convention exactly: tool-gated skip (real
 `shutil.which`, never mocked), a `shutil.copytree` of plugins/passthrough_demo
@@ -23,6 +23,7 @@ import pytest
 
 from forge.core.cli.main import build_parser
 import forge.verification.__main__ as verify_cli
+from forge.verification.run import bootstrap_for_flow
 
 pytestmark = pytest.mark.integration
 
@@ -36,7 +37,7 @@ skip_without_verilator = pytest.mark.skipif(
 
 
 @pytest.fixture
-def consumer_root(tmp_path: Path) -> Path:
+def consumer_root(tmp_path: Path, prepare_plugin_flows) -> Path:
     """An isolated copy of plugins/passthrough_demo, gen-top'd into place.
 
     Same layout test_verify_run_xsim.py's fixture builds; both flows
@@ -57,6 +58,7 @@ def consumer_root(tmp_path: Path) -> Path:
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     ])
     parsed.func(parsed)  # raises SystemExit only on failure; let it propagate
+    prepare_plugin_flows(tmp_path / "plugins/passthrough_demo/forge/verify/design.verification.yml", tmp_path)
 
     return tmp_path
 
@@ -190,7 +192,7 @@ def test_run_backend_populates_enriched_execution_result_fields(
     from forge.verification.flow_loader import load_generic_flow
     from forge.verification.runtime_context import RuntimeContext
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
     adapter = get_adapter(cfg.backend)
     assert adapter.backend_id == "verilator"
@@ -231,7 +233,7 @@ def test_run_backend_compile_failure_reports_compile_stage(
     from forge.verification.flow_loader import load_generic_flow
     from forge.verification.runtime_context import RuntimeContext
 
-    assert verify_cli._bootstrap("passthrough_demo", str(flow_yml))
+    assert bootstrap_for_flow("passthrough_demo", str(flow_yml))
     cfg = load_generic_flow(flow_yml, consumer_root=consumer_root)
     adapter = get_adapter(cfg.backend)
     ctx = RuntimeContext(work_dir=flow_yml.parent / "xsim_work")

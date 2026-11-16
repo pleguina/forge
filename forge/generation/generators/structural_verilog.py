@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 import yaml  # To read system.yml
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
-from ...contracts.domains import resolve_domain_nets
+from ...contracts.domains import reset_is_active_low, resolve_domain_nets
 from ...contracts.matcher import load_ip_info, auto_match_ports
 from forge.core.utils.hdl_parser import _vhdl_entity_name, _verilog_module_name
 from ._port_resolution import (
@@ -597,7 +597,8 @@ def write_structural_verilog(
                     pm.append(f"    .{pname}(ap_clk)")
                     continue
                 if _global == "reset":
-                    pm.append(f"    .{pname}(ap_rst)")
+                    _low = reset_is_active_low(pname, (contracts or {}).get(mod.name) or (contracts or {}).get(mod.ip_info_key or ""))
+                    pm.append(f"    .{pname}({'~ap_rst' if _low else 'ap_rst'})")
                     continue
 
                 # A non-standard-named
@@ -616,6 +617,8 @@ def write_structural_verilog(
                     domain_name = reset_of_module[mod.name]
                     if domain_name in reset_sync_domains:
                         rst_sync_net = _verilog_ident(f"rst_sync_{domain_name}")
+                        if reset_is_active_low(pname, (contracts or {}).get(mod.name) or (contracts or {}).get(mod.ip_info_key or "")):
+                            rst_sync_net = f"~{rst_sync_net}"
                         pm.append(f"    .{pname}({rst_sync_net})")
                         continue
 
@@ -659,8 +662,9 @@ def write_structural_verilog(
                         pm.append(f"    .{pname}()")  # leave unconnected
                         open_outputs.append((ilabel, pname, w))
                 else:  # input
-                    src_i = incoming.get(pname)
-                    if src_i:
+                    driver = incoming.get(pname)
+                    if driver:
+                        src_i = driver
                         src_mod = inst_to_mod[src_i]
                         src_pin = None
                         for (s_i, d_i), pairs in conn_map.items():
@@ -738,18 +742,60 @@ def write_structural_verilog(
         emit("")
 
     # ====== Register Stage Instances ======================================
+    # On a connection with both, the register stages come first and the delay
+    # reads their output. With a boundary tag the protected crossing is the
+    # register stages when declared, else the delay.
+    boundary_infos: List[Dict[str, Any]] = []  # collected for crossing manifest
+    boundary_names_used: Set[str] = set()
+
+    def _emit_crossing(tag, src_i, dst_i, s_pin, d_pin, w, depth, src_net, dst_net):
+        inst_name = _boundary_inst_name(tag, s_pin, d_pin)
+        if inst_name in boundary_names_used:
+            # One source pin feeding the same-named pin of several
+            # consumers (or instances): name by consumer instance.
+            inst_name = f"{inst_name}_{_ident_frag(dst_i)}"
+        boundary_names_used.add(inst_name)
+        emit(f"  // Boundary crossing {src_i}.{s_pin} → {dst_i}.{d_pin} [boundary={tag}]")
+        emit(f'  (* KEEP_HIERARCHY = "TRUE" *)')
+        emit(f"  slr_crossing_delay #(")
+        emit(f"    .WIDTH({w}),")
+        emit(f"    .DEPTH({depth})")
+        emit(f"  ) {inst_name} (")
+        emit(f"    .clk(ap_clk),")
+        emit(f"    .rst(ap_rst),")
+        emit(f"    .din({src_net}),")
+        emit(f"    .dout({dst_net})")
+        emit(f"  );")
+        emit("")
+
+        boundary_infos.append({
+            "tag": tag,
+            "src_inst": src_i,
+            "dst_inst": dst_i,
+            "src_pin": s_pin,
+            "dst_pin": d_pin,
+            "depth": depth,
+            "width": w,
+            "instance_name": inst_name,
+        })
+
     emit("  // Register stages for pipelined connections")
     reg_stage_counter = 0
     for (src_i, dst_i), pairs in conn_map.items():
         num_stages = reg_stages_map.get((src_i, dst_i), 0)
         if num_stages > 0:
             src_mod = inst_to_mod[src_i]
-            for s_pin_raw, _d_pin_raw in pairs:
+            tag = boundary_map.get((src_i, dst_i))
+            for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
                 w = _pin_width_for_inst(src_i, s_pin)
 
                 src_net = _verilog_ident(f"net_{src_i}_{s_pin}")
                 dst_net = _verilog_ident(f"reg_net_{src_i}_{dst_i}_{s_pin}")
+                if tag:
+                    d_pin = _canon_pin(ip_info, inst_to_mod[dst_i], d_pin_raw)
+                    _emit_crossing(tag, src_i, dst_i, s_pin, d_pin, w, num_stages, src_net, dst_net)
+                    continue
                 inst_name = f"reg_stage_{reg_stage_counter}"
 
                 emit(f"  // Pipeline {src_i}.{s_pin} → {dst_i} ({num_stages} stages)")
@@ -768,14 +814,13 @@ def write_structural_verilog(
     # ====== Signal Delay Instances (connection delays) ====================
     emit("  // Signal delays for connection timing alignment")
     delay_counter = 0
-    boundary_infos: List[Dict[str, Any]] = []  # collected for crossing manifest
-    boundary_names_used: Set[str] = set()
 
     for (src_i, dst_i), pairs in conn_map.items():
         num_delays = delay_cycles_map.get((src_i, dst_i), 0)
         if num_delays > 0:
             src_mod = inst_to_mod[src_i]
-            tag = boundary_map.get((src_i, dst_i))
+            num_stages = reg_stages_map.get((src_i, dst_i), 0)
+            tag = None if num_stages > 0 else boundary_map.get((src_i, dst_i))
 
             for s_pin_raw, d_pin_raw in pairs:
                 s_pin = _canon_pin(ip_info, src_mod, s_pin_raw)
@@ -783,41 +828,15 @@ def write_structural_verilog(
                 d_pin = _canon_pin(ip_info, dst_mod_name, d_pin_raw)
                 w = _pin_width_for_inst(src_i, s_pin)
 
-                src_net = _verilog_ident(f"net_{src_i}_{s_pin}")
+                src_net = _verilog_ident(
+                    f"reg_net_{src_i}_{dst_i}_{s_pin}" if num_stages > 0 else f"net_{src_i}_{s_pin}"
+                )
                 dst_net = _verilog_ident(f"delay_net_{src_i}_{dst_i}_{s_pin}")
 
                 if tag:
-                    # Boundary crossing: emit a protected slr_crossing_delay with
-                    # a stable, deterministic instance name.
-                    inst_name = _boundary_inst_name(tag, s_pin, d_pin)
-                    if inst_name in boundary_names_used:
-                        # One source pin feeding the same-named pin of several
-                        # consumers (or instances): name by consumer instance.
-                        inst_name = f"{inst_name}_{_ident_frag(dst_i)}"
-                    boundary_names_used.add(inst_name)
-                    emit(f"  // Boundary crossing {src_i}.{s_pin} → {dst_i}.{d_pin} [boundary={tag}]")
-                    emit(f'  (* KEEP_HIERARCHY = "TRUE" *)')
-                    emit(f"  slr_crossing_delay #(")
-                    emit(f"    .WIDTH({w}),")
-                    emit(f"    .DEPTH({num_delays})")
-                    emit(f"  ) {inst_name} (")
-                    emit(f"    .clk(ap_clk),")
-                    emit(f"    .rst(ap_rst),")
-                    emit(f"    .din({src_net}),")
-                    emit(f"    .dout({dst_net})")
-                    emit(f"  );")
-                    emit("")
-
-                    boundary_infos.append({
-                        "tag": tag,
-                        "src_inst": src_i,
-                        "dst_inst": dst_i,
-                        "src_pin": s_pin,
-                        "dst_pin": d_pin,
-                        "depth": num_delays,
-                        "width": w,
-                        "instance_name": inst_name,
-                    })
+                    # Boundary crossing: a protected slr_crossing_delay with a
+                    # stable, deterministic instance name.
+                    _emit_crossing(tag, src_i, dst_i, s_pin, d_pin, w, num_delays, src_net, dst_net)
                 else:
                     # Normal delay: use signal_delay with a positional name.
                     inst_name = f"delay_{delay_counter}"
@@ -854,13 +873,6 @@ def write_structural_verilog(
             src_mod = inst_to_mod[src_i]
             dst_mod = inst_to_mod[dst_i]
 
-            # resolve_domain_nets's domain identity is the raw port name
-            # verbatim (e.g. "rst") — but this generator's own clock/reset
-            # auto-map (above) aliases every standard-name variant onto the
-            # single literal ap_clk/ap_rst top-level port regardless of
-            # which variant a given module's contract used. Translate
-            # through the same rule here, or the synchronizer would
-            # reference a top-level net that doesn't exist.
             src_clk_domain = clock_of_module.get(src_mod)
             src_rst_domain = reset_of_module.get(src_mod)
             dst_clk_domain = clock_of_module.get(dst_mod)
@@ -988,7 +1000,9 @@ def write_structural_verilog(
     if reset_sync_domains:
         emit("  // Reset synchronizers for reset_domains.*.sync: reset_sync declarations")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
-            derived_from = rel.get("derived_from")
+            # A synchronized reset domain must name the domain it derives from
+            # (DesignConfig validation).
+            derived_from = rel["derived_from"]
             async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
 
             # The synchronizer's own destination clock: whichever clock

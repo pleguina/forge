@@ -525,8 +525,8 @@ def auto_match_ports(
                     dims = [dims]
                     
                 pairs_nd = _expand_nd(
-                    rng.get("src_tpl") or rng.get("src_prefix"),
-                    rng.get("dst_tpl") or rng.get("dst_prefix"),
+                    rng.get("src_tpl") or rng["src_prefix"],
+                    rng.get("dst_tpl") or rng["dst_prefix"],
                     dims   = dims,
                     order  = rng.get("order"),
                     s_offs = [rng.get(f"src_start{k}", 0) for k in range(len(dims))],
@@ -550,7 +550,7 @@ def auto_match_ports(
                 s_pin = sp if scalar_src else _pick_existing(sp, si + k, src_ports)
                 d_pin = dp if dst_scalar else _pick_existing(dp, di + k, dst_ports)
 
-                meta = {
+                meta: Optional[Dict[str, Any]] = {
                     "kind":       "1d",
                     "si":         si,
                     "di":         di,
@@ -673,8 +673,8 @@ def auto_match_ports(
             return int(s1 or s2) if (s1 or s2) is not None else None
 
         # Fallback base indices (used only if needed)
-        src_idxs = [i for (sp, _, _, _) in base_pairs if (i := _idx_of(sp)) is not None]
-        dst_idxs = [i for (_, dp, _, _) in base_pairs if (i := _idx_of(dp)) is not None]
+        src_idxs = [idx for (sp, _, _, _) in base_pairs if (idx := _idx_of(sp)) is not None]
+        dst_idxs = [idx for (_, dp, _, _) in base_pairs if (idx := _idx_of(dp)) is not None]
         src_base_idx = min(src_idxs) if src_idxs else 0
         dst_base_idx = min(dst_idxs) if dst_idxs else 0
         dst_side_has_indices = bool(dst_idxs)

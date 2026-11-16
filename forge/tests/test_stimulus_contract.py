@@ -178,3 +178,53 @@ def test_stimulus_task_signature_constant_matches_docstring():
     # The framework-owned constant must exactly match what validate_stimulus
     # actually requires — this pins that invariant.
     assert STIMULUS_TASK_SIGNATURE == "task automatic run_stimulus();"
+
+
+class TestStimulusHandoffAfterPrepare:
+    """A flow fed from a dataset XML builds stimulus_current.svh in the
+    backend's prepare step: preflight lets it be missing, and the file is
+    checked once the inputs are prepared."""
+
+    def _cfg(self, tmp_path: Path):
+        (tmp_path / "tb_top.sv").write_text("module tb_top; endmodule\n")
+
+        class _Cfg:
+            flow_kind = "full_chip_rtl"
+            flow_file = str(tmp_path / "verify.flow.yml")
+            tb_module = "tb_top"
+            flow_name = "f"
+
+        return _Cfg()
+
+    def _stimulus_errors(self, result):
+        return [e for e in result.errors if "Stimulus handoff" in e]
+
+    def test_preflight_requires_it_without_a_dataset(self, tmp_path: Path):
+        from forge.verification.preflight import run_preflight
+
+        cfg = self._cfg(tmp_path)
+        cfg.dut_rtl = tmp_path / "dut.v"
+        cfg.dut_manifest = cfg.dut_tb_bindings = cfg.dut_probe_map = None
+        cfg.dut_port_map = cfg.dut_port_signature = cfg.checker = None
+        cfg.dataset_xml = tmp_path / "events.xml"
+        assert self._stimulus_errors(run_preflight(cfg))
+
+    def test_preflight_lets_it_be_built_from_a_dataset(self, tmp_path: Path):
+        from forge.verification.preflight import run_preflight
+
+        cfg = self._cfg(tmp_path)
+        cfg.dut_rtl = tmp_path / "dut.v"
+        cfg.dut_manifest = cfg.dut_tb_bindings = cfg.dut_probe_map = None
+        cfg.dut_port_map = cfg.dut_port_signature = cfg.checker = None
+        cfg.dataset_xml = tmp_path / "events.xml"
+        assert not self._stimulus_errors(run_preflight(cfg, xml_input=tmp_path / "events.xml"))
+
+    def test_checked_after_prepare(self, tmp_path: Path):
+        from forge.verification.preflight import validate_stimulus_handoff
+
+        cfg = self._cfg(tmp_path)
+        assert validate_stimulus_handoff(cfg)
+        _write(tmp_path, _VALID_SVH)
+        assert validate_stimulus_handoff(cfg) == []
+        _write(tmp_path, _VALID_SVH + "\n$finish;\n")
+        assert validate_stimulus_handoff(cfg)

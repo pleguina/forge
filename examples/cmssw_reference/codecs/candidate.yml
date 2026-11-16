@@ -1,0 +1,9 @@
+# The candidate word the example's input links carry: one track-finder candidate per 64-bit word.
+width: 64
+fields:
+  valid:  {low: 0, bits: 1, value: 1}
+  pt:     {low: 1, bits: 13}
+  eta:    {low: 14, bits: 13, signed: true}
+  phi:    {low: 27, bits: 13, signed: true}
+  charge: {low: 40, bits: 1}
+  qual:   {low: 41, bits: 8}

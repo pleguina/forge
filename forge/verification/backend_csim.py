@@ -53,7 +53,7 @@ that takes precedence over the framework default.
 
 Auto-registration
 -----------------
-Auto-registered at ``forge verify`` package import time.  No plugin
+Auto-registered at ``forge dev verify`` package import time.  No plugin
 ``bootstrap.py`` needs to call ``register_backend("csim", ...)``.
 
 ADAPTER singleton

@@ -130,8 +130,8 @@ class TestCsimAdapter:
 class TestFlowLoading:
 
     @pytest.fixture()
-    def flow_yml(self) -> Path:
-        return _PLUGIN_VERIFY / "hit_decoder_csim" / "verify.flow.yml"
+    def flow_yml(self, generated_verify_root: Path) -> Path:
+        return generated_verify_root / "hit_decoder_csim" / "verify.flow.yml"
 
     def test_flow_file_exists(self, flow_yml: Path) -> None:
         assert flow_yml.exists()
@@ -180,8 +180,8 @@ class TestFlowLoading:
 class TestXsimFlowLoading:
 
     @pytest.fixture()
-    def flow_yml(self) -> Path:
-        return _PLUGIN_VERIFY / "hit_decoder_xsim" / "verify.flow.yml"
+    def flow_yml(self, generated_verify_root: Path) -> Path:
+        return generated_verify_root / "hit_decoder_xsim" / "verify.flow.yml"
 
     def test_flow_file_exists(self, flow_yml: Path) -> None:
         assert flow_yml.exists()
@@ -221,8 +221,8 @@ class TestXsimFlowLoading:
         "trigger_logic_xsim",
         "trigger_output_xsim",
     ])
-    def test_all_xsim_flows_load(self, module: str) -> None:
-        yml = _PLUGIN_VERIFY / module / "verify.flow.yml"
+    def test_all_xsim_flows_load(self, module: str, generated_verify_root: Path) -> None:
+        yml = generated_verify_root / module / "verify.flow.yml"
         assert yml.exists(), f"verify.flow.yml missing: {yml}"
         cfg = load_generic_flow(yml, consumer_root=_REPO_ROOT)
         assert cfg.flow_kind == "single_module_rtl"
@@ -234,9 +234,9 @@ class TestXsimFlowLoading:
         "trigger_logic_xsim",
         "trigger_output_xsim",
     ])
-    def test_all_xsim_svs_exist(self, module: str) -> None:
-        """Each xsim flow directory must contain an SV testbench."""
-        flow_dir = _PLUGIN_VERIFY / module
+    def test_all_xsim_svs_exist(self, module: str, generated_verify_root: Path) -> None:
+        """Generation writes an SV testbench for each single-module flow."""
+        flow_dir = generated_verify_root / module
         tb_name = f"tb_{module}.sv"
         assert (flow_dir / tb_name).exists(), f"SV testbench missing: {tb_name}"
 

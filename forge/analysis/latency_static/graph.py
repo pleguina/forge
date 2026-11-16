@@ -49,11 +49,12 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
 from forge.analysis.latency_model import LatencyProvenance, LatencyValue
+from forge.contracts.design_variant import load_design_document
 from forge.ir.identifiers import resolved_instance_id
 
 
@@ -81,8 +82,14 @@ class LatencyNode:
     # correct value for the common single-instance case.
     instance_id: str = ""
     display_name: str = ""
+    # The design.yml module this instance belongs to (``name`` is per instance),
+    # and its declared InputAlignment (None = exact, the default).
+    module: str = ""
+    alignment: Optional[Any] = None
 
     def __post_init__(self) -> None:
+        if not self.module:
+            self.module = self.name
         if not self.instance_id:
             self.instance_id = self.name
         if not self.display_name:
@@ -129,6 +136,14 @@ class LatencyEdge:
     # stream is billed for an upstream path it never travelled. See
     # Connection.external_source for the topology that motivated it.
     external_source: bool = False
+    # The design connections this edge stands for, as ("connection" |
+    # "topology_group", index in DesignConfig, delay_auto): several connections
+    # between the same instance pair share one edge.
+    refs: List[Tuple[str, int, bool]] = dataclasses.field(default_factory=list, compare=False)
+
+    @property
+    def auto(self) -> bool:
+        return any(is_auto for _, _, is_auto in self.refs)
 
 
 @dataclasses.dataclass
@@ -341,7 +356,7 @@ def _resolved_registry_path(design_path: Path) -> Optional[Path]:
     """The registry path design.yml's own `registry:` field resolves to,
     or None if it doesn't declare one — used to decide whether a caller's
     `modules_yml_path` override actually differs (see build_graph)."""
-    design = _load_yaml(design_path)
+    design = load_design_document(design_path)
     reg_field = design.get("registry")
     if not reg_field:
         return None
@@ -445,6 +460,33 @@ def build_graph(
     return _build_graph_from_ir(design_path, hls_reports, conn_map=conn_map)
 
 
+def build_resolved_graph(
+    design_path: Path,
+    modules_yml_path: Optional[Path] = None,
+    hls_build_root: Optional[Path] = None,
+    conn_map: "Optional[Dict[tuple, list]]" = None,
+) -> LatencyGraph:
+    """The latency graph of *design_path* as generation sees it.
+
+    HLS modules take their latency from the reports under *hls_build_root*
+    when it exists, and instance pairing comes from *conn_map*, or from
+    :func:`resolve_conn_map` when none is given. ``forge dev analyze
+    latency-check``, ``forge report``, ``forge check`` and
+    ``delay_cycles: auto`` all build the graph here, so they agree on the
+    same design.
+    """
+    hls_reports = None
+    if hls_build_root is not None and Path(hls_build_root).is_dir():
+        from forge.analysis.hls_reports.extractor import collect_reports, latency_map_from_reports
+
+        hls_reports = latency_map_from_reports(collect_reports(Path(hls_build_root)))
+    if conn_map is None:
+        conn_map = resolve_conn_map(design_path, modules_yml_path=modules_yml_path)
+    return build_graph(
+        design_path, modules_yml_path=modules_yml_path, hls_reports=hls_reports, conn_map=conn_map,
+    )
+
+
 def _build_graph_from_ir(
     design_path: Path,
     hls_reports: Optional[Dict[str, int]] = None,
@@ -481,6 +523,7 @@ def _build_graph_from_ir(
         lat_hint = timing.latency_hint if timing else None
         is_var = timing.variable_latency if timing else False
         declaration = timing.latency if timing else None
+        lat: Optional[LatencyValue]
         if declaration is not None:
             # A structured latency: {kind: ...} block is
             # explicit and authoritative — takes precedence over the flat
@@ -508,23 +551,32 @@ def _build_graph_from_ir(
                 # exactly, including its bracket-vs-underscore join.
                 instance_id=mod.instance_id(idx),
                 display_name=inst_name,
+                module=mod.name,
+                alignment=timing.input_alignment if timing else None,
             )
 
     edges: List[LatencyEdge] = []
-    seen_pairs: set = set()
+    edge_by_pair: Dict[tuple, LatencyEdge] = {}
 
     def _add_edge(
         src: str, dst: str, latency: Optional[LatencyValue] = None,
         unknown_cdc: bool = False, control_strobe: bool = False,
-        external_source: bool = False,
+        external_source: bool = False, ref: Optional[Tuple[str, int, bool]] = None,
     ) -> None:
-        if src in nodes and dst in nodes and (src, dst) not in seen_pairs:
-            seen_pairs.add((src, dst))
-            edges.append(LatencyEdge(
-                src=src, dst=dst, latency=latency,
-                unknown_cdc=unknown_cdc, control_strobe=control_strobe,
-                external_source=external_source,
-            ))
+        if src not in nodes or dst not in nodes:
+            return
+        existing = edge_by_pair.get((src, dst))
+        if existing is not None:
+            if ref is not None and ref not in existing.refs:
+                existing.refs.append(ref)
+            return
+        edge = LatencyEdge(
+            src=src, dst=dst, latency=latency,
+            unknown_cdc=unknown_cdc, control_strobe=control_strobe,
+            external_source=external_source, refs=[ref] if ref is not None else [],
+        )
+        edge_by_pair[(src, dst)] = edge
+        edges.append(edge)
 
     def _conn_map_pairs(src_mod_name: str, dst_mod_name: str, src_names: list, dst_names: list) -> Optional[List[tuple]]:
         """When a real conn_map was resolved, translate its
@@ -558,7 +610,7 @@ def _build_graph_from_ir(
         src_mod_name: str, dst_mod_name: str,
         latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
         positional_pairs: Optional[List[tuple]] = None, control_strobe: bool = False,
-        external_source: bool = False,
+        external_source: bool = False, ref: Optional[Tuple[str, int, bool]] = None,
     ) -> None:
         src_mod = mod_by_name.get(src_mod_name)
         dst_mod = mod_by_name.get(dst_mod_name)
@@ -576,13 +628,13 @@ def _build_graph_from_ir(
             for i_s, i_d in pairs:
                 if 0 <= i_s < len(src_names) and 0 <= i_d < len(dst_names):
                     _add_edge(src_names[i_s], dst_names[i_d], latency, unknown_cdc,
-                              control_strobe, external_source)
+                              control_strobe, external_source, ref)
             return
         for s in src_names:
             for d in dst_names:
-                _add_edge(s, d, latency, unknown_cdc, control_strobe, external_source)
+                _add_edge(s, d, latency, unknown_cdc, control_strobe, external_source, ref)
 
-    for conn in cfg.connections:
+    for conn_idx, conn in enumerate(cfg.connections):
         conn_cdc_kind = conn.cdc.get("kind") if conn.cdc else None
         src_mod = mod_by_name.get(conn.from_)
         dst_mod = mod_by_name.get(conn.to)
@@ -593,8 +645,9 @@ def _build_graph_from_ir(
             positional_pairs=pairs,
             control_strobe=conn.control_strobe,
             external_source=getattr(conn, "external_source", False),
+            ref=("connection", conn_idx, conn.delay_auto),
         )
-    for tg in cfg.topology_groups:
+    for tg_idx, tg in enumerate(cfg.topology_groups):
         # TopologyGroup carries delay_cycles/boundary only (no register_stages
         # or cdc); without a delay its latency is honestly None, not a
         # fabricated 0. Its real per-instance pairing (partition/
@@ -604,6 +657,7 @@ def _build_graph_from_ir(
             tg.from_, tg.to,
             _edge_latency_from_connection(tg),
             external_source=getattr(tg, "external_source", False),
+            ref=("topology_group", tg_idx, tg.delay_auto),
         )
 
     return LatencyGraph(nodes=nodes, edges=edges)
@@ -619,7 +673,7 @@ def _build_graph_legacy(
     `modules_yml_path` override that genuinely differs from design.yml's
     own `registry:` field — never observed in real/documented usage, but
     the public `build_graph` signature has always allowed it."""
-    design = _load_yaml(design_path)
+    design = load_design_document(design_path)
 
     if modules_yml_path is not None:
         registry = _load_yaml(modules_yml_path)
@@ -655,6 +709,7 @@ def _build_graph_legacy(
                                                  mod.get("instance_name"),
                                                  int(mod.get("instance_offset", 0))),
                 display_name=inst_name,
+                module=name,
             )
 
     # ── Edges ──────────────────────────────────────────────────────────────

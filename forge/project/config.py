@@ -156,10 +156,8 @@ def _endpoint(value: Any, *, field_name: str, source: Any) -> str:
 class ModulePolicy:
     """How the user wants one specific module handled.
 
-    The only per-module intent ``forge.yml`` carries. Everything else about a
-    module is derived from its source; this is the one thing no source can
-    state, because it is a decision about how much of the module FORGE
-    should claim to understand.
+    Everything else about a module is derived from its source; these are the
+    facts and decisions no port list can state.
     """
 
     management: str = MANAGEMENT_MANAGED
@@ -167,6 +165,15 @@ class ModulePolicy:
     #: named after the file: which one is the kernel top. Absent for every
     #: module whose top its source already proves.
     top: Optional[str] = None
+    #: The module registry's ``latency:`` block, e.g. ``{kind: fixed,
+    #: cycles: 3}``. ``latency: 3`` in ``forge.yml`` is read as fixed.
+    latency: Optional[Dict[str, Any]] = None
+    #: A user-maintained interface contract, relative to the project root,
+    #: used instead of the one inferred from the module's ports.
+    contract: Optional[str] = None
+    #: ``{port: bits}`` for ports whose range the source scan cannot
+    #: evaluate (a package constant, an unsupported function).
+    widths: Dict[str, int] = field(default_factory=dict)
 
     @property
     def opaque(self) -> bool:
@@ -176,7 +183,65 @@ class ModulePolicy:
         out: Dict[str, Any] = {"management": self.management}
         if self.top:
             out["top"] = self.top
+        if self.latency is not None:
+            if self.latency.get("kind") == "fixed" and set(self.latency) == {"kind", "cycles"}:
+                out["latency"] = self.latency["cycles"]
+            else:
+                out["latency"] = dict(self.latency)
+        if self.contract:
+            out["contract"] = self.contract
+        if self.widths:
+            out["widths"] = dict(self.widths)
         return out
+
+
+#: ``build:`` keys in ``forge.yml``, each the ``forge build`` option of the
+#: same name. The path-valued ones resolve against the project root.
+BUILD_PATH_OPTIONS = (
+    "hls_build_root", "ip_root", "ip_info", "build_dir", "system", "rtl_resource_root",
+)
+BUILD_OPTIONS = ("mode", "top_name") + BUILD_PATH_OPTIONS
+
+
+def _latency(value: Any, *, module: str, source: Any) -> Dict[str, Any]:
+    """Normalise a ``modules.<name>.latency`` entry to the registry's form."""
+    from forge.contracts.config import LatencyDeclaration
+
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        block: Dict[str, Any] = {"kind": "fixed", "cycles": value}
+    elif isinstance(value, dict):
+        block = dict(value)
+    else:
+        raise ValueError(
+            f"{source}: module {module!r} latency must be a cycle count "
+            f"(e.g. `latency: 3`) or a mapping such as "
+            f"`latency: {{kind: bounded, min_cycles: 2, max_cycles: 4}}`"
+        )
+    try:
+        LatencyDeclaration(**block)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{source}: module {module!r} latency: {exc}") from exc
+    return block
+
+
+def _port_widths(value: Any, *, module: str, source: Any) -> Dict[str, int]:
+    """Validate a ``modules.<name>.widths`` mapping of port to bit count."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{source}: module {module!r} widths must map port names to bit "
+            f"counts, e.g. `widths: {{lookup_addr: 4}}`"
+        )
+    out: Dict[str, int] = {}
+    for port, bits in value.items():
+        if isinstance(bits, bool) or not isinstance(bits, int) or bits < 1:
+            raise ValueError(
+                f"{source}: module {module!r} width of {port!r} must be a "
+                f"positive integer, got {bits!r}"
+            )
+        out[str(port)] = bits
+    return out
 
 
 @dataclass(frozen=True)
@@ -200,6 +265,8 @@ class ProjectDecisions:
     connections: "tuple" = ()
     #: Module name -> the HLS kernel top function the user named.
     hls_tops: Dict[str, str] = field(default_factory=dict)
+    #: Module name -> ``{port: bits}`` the user declared.
+    port_widths: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
     def declares_connection(self, producer: str, consumer: str) -> bool:
         return (producer, consumer) in self.connections
@@ -226,6 +293,14 @@ class ForgeConfig:
         clock / reset: See :class:`ClockSpec` / :class:`ResetSpec`.
         part: Target device.
         dataset: Verification dataset path, when one is configured.
+        verification_config: The user's ``design.verification.yml``,
+            relative to ``root``, which ``forge test`` runs.
+        design: A hand-written ``design.yml``, relative to ``root``. When
+            set, it is the design every command uses as it stands, and
+            nothing is derived from the sources.
+        registry: The ``modules.yml`` that goes with ``design``; by default
+            the one its ``registry:`` key names.
+        build: ``forge build`` options, by name (:data:`BUILD_OPTIONS`).
         modules: Per-module handling, by module name. Only modules the user
             has said something about appear; everything else is managed.
         connections: Producer/consumer pairs the user has decided on, for
@@ -247,11 +322,28 @@ class ForgeConfig:
     reset: ResetSpec = field(default_factory=ResetSpec)
     part: str = DEFAULT_PART
     dataset: Optional[str] = None
+    verification_config: Optional[str] = None
+    #: The rest of ``verification:`` (input, expected, links, compare,
+    #: protocols, backends, levels, modules), read by
+    #: ``forge.verification.auto``.
+    verification_spec: Dict[str, Any] = field(default_factory=dict)
+    design: Optional[str] = None
+    registry: Optional[str] = None
+    build: Dict[str, str] = field(default_factory=dict)
     modules: Dict[str, ModulePolicy] = field(default_factory=dict)
     #: Connections the user has decided on, where discovery found more than
     #: one equally valid reading. See :class:`DeclaredConnection`.
     connections: List[DeclaredConnection] = field(default_factory=list)
+    #: Named variants of the design: a design file written with
+    #: ``variant_of:``, or the changes themselves (``remove``, ``modules``,
+    #: ``add`` and top-level keys), applied to the project's design.
+    variants: Dict[str, Any] = field(default_factory=dict)
     schema_version: str = FORGE_YML_SCHEMA_VERSION
+
+    @property
+    def authored(self) -> bool:
+        """Whether the project names its own design rather than being derived."""
+        return self.design is not None
 
     @property
     def opaque_modules(self) -> "frozenset":
@@ -307,9 +399,26 @@ class ForgeConfig:
                     f"{management!r}; must be one of {MANAGEMENT_KINDS}"
                 )
             top = fields.get("top")
+            contract = fields.get("contract")
             modules[str(name)] = ModulePolicy(
                 management=management,
                 top=str(top) if top else None,
+                latency=(
+                    _latency(fields["latency"], module=str(name), source=config_path)
+                    if fields.get("latency") is not None else None
+                ),
+                contract=str(contract) if contract else None,
+                widths=_port_widths(fields.get("widths"), module=str(name), source=config_path),
+            )
+
+        build_raw = raw.get("build") or {}
+        if not isinstance(build_raw, dict):
+            raise ValueError(f"{config_path}: 'build' must be a mapping of forge build options")
+        unknown = sorted(set(build_raw) - set(BUILD_OPTIONS))
+        if unknown:
+            raise ValueError(
+                f"{config_path}: unknown build option(s) {', '.join(unknown)}; "
+                f"known: {', '.join(BUILD_OPTIONS)}"
             )
 
         connections_raw = raw.get("connections") or []
@@ -330,6 +439,15 @@ class ForgeConfig:
                 consumer=_endpoint(entry["to"], field_name="to", source=config_path),
             ))
 
+        variants_raw = raw.get("variants") or {}
+        if not isinstance(variants_raw, dict) or not all(
+                isinstance(v, (str, dict)) and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", str(k))
+                for k, v in variants_raw.items()):
+            raise ValueError(
+                f"{config_path}: 'variants' maps a name (letters, digits, '_', '.', '-') to a design "
+                f"file written with variant_of:, or to the changes, e.g. `sim: {{remove: {{modules: [mon]}}}}`"
+            )
+
         return cls(
             project=str(raw.get("project") or config_path.parent.name),
             root=config_path.parent,
@@ -347,8 +465,16 @@ class ForgeConfig:
             ),
             part=str(raw.get("part") or DEFAULT_PART),
             dataset=str(verification_raw["dataset"]) if verification_raw.get("dataset") else None,
+            verification_config=(
+                str(verification_raw["config"]) if verification_raw.get("config") else None
+            ),
+            verification_spec={str(k): v for k, v in verification_raw.items() if k not in ("dataset", "config")},
+            design=str(raw["design"]) if raw.get("design") else None,
+            registry=str(raw["registry"]) if raw.get("registry") else None,
+            build={str(k): str(v) for k, v in build_raw.items() if v is not None},
             modules=modules,
             connections=connections,
+            variants={str(k): v for k, v in variants_raw.items()},
             schema_version=str(raw.get("schema_version") or FORGE_YML_SCHEMA_VERSION),
         )
 
@@ -363,25 +489,43 @@ class ForgeConfig:
         out: Dict[str, Any] = {
             "schema_version": self.schema_version,
             "project": self.project,
-            "sources": {},
         }
-        if self.rtl_globs:
-            out["sources"]["rtl"] = list(self.rtl_globs)
-        if self.hls_globs:
-            out["sources"]["hls"] = list(self.hls_globs)
-        if self.top:
-            out["top"] = self.top
-        out["part"] = self.part
-        out["clock"] = self.clock.to_dict()
-        out["reset"] = self.reset.to_dict()
+        if self.design:
+            # The part, clock and reset are the design's own.
+            out["design"] = self.design
+            if self.registry:
+                out["registry"] = self.registry
+            if self.build:
+                out["build"] = dict(self.build)
+        else:
+            out["sources"] = {}
+            if self.rtl_globs:
+                out["sources"]["rtl"] = list(self.rtl_globs)
+            if self.hls_globs:
+                out["sources"]["hls"] = list(self.hls_globs)
+            if self.build:
+                out["build"] = dict(self.build)
+            if self.top:
+                out["top"] = self.top
+            out["part"] = self.part
+            out["clock"] = self.clock.to_dict()
+            out["reset"] = self.reset.to_dict()
+        verification: Dict[str, Any] = {}
         if self.dataset:
-            out["verification"] = {"dataset": self.dataset}
+            verification["dataset"] = self.dataset
+        if self.verification_config:
+            verification["config"] = self.verification_config
+        verification.update(self.verification_spec)
+        if verification:
+            out["verification"] = verification
         if self.modules:
             out["modules"] = {
                 name: policy.to_dict() for name, policy in sorted(self.modules.items())
             }
         if self.connections:
             out["connections"] = [c.to_dict() for c in self.connections]
+        if self.variants:
+            out["variants"] = dict(self.variants)
         return out
 
     def to_yaml(self) -> str:
@@ -394,17 +538,49 @@ class ForgeConfig:
         import yaml
 
         body = yaml.safe_dump(self.to_dict(), sort_keys=False, default_flow_style=False)
+        if (self.verification_spec or {}).get("target") == "existing":
+            return (
+                f"# {self.project} — FORGE project\n"
+                f"#\n"
+                f"# Your own top, compiled from the sources named here, is simulated\n"
+                f"# as it is written and compared with verification.expected;\n"
+                f"# nothing is generated or moved. Results go under .forge/.\n"
+                f"#\n"
+                f"#   forge check    what is missing or inconsistent\n"
+                f"#   forge test     simulate the top and compare its outputs\n"
+                f"#   forge report   collect the results\n"
+                f"#\n"
+            ) + body
+        if self.authored:
+            return (
+                f"# {self.project} — FORGE project\n"
+                f"#\n"
+                f"# The design is the hand-written file `design:` names, used as it\n"
+                f"# stands; FORGE writes everything it generates under .forge/.\n"
+                f"#\n"
+                f"#   forge check    what is missing or inconsistent\n"
+                f"#   forge build    generate the structural top level\n"
+                f"#   forge test     simulate it against verification.config\n"
+                f"#   forge report   collect the results\n"
+                f"#\n"
+            ) + body
         header = (
             f"# {self.project} — FORGE project\n"
             f"#\n"
-            f"# This is the only file you maintain by hand. Everything FORGE\n"
-            f"# resolves from it — the module registry, the design topology and\n"
-            f"# the interface contracts — is generated under .forge/ and can be\n"
-            f"# deleted and regenerated at any time.\n"
+            f"# Your decisions about the design live here, or in files this one\n"
+            f"# names. Everything FORGE derives from it and from the sources —\n"
+            f"# the module registry, the design topology and the inferred\n"
+            f"# interface contracts — is written under .forge/ and can be\n"
+            f"# deleted at any time; every command regenerates it.\n"
             f"#\n"
             f"#   forge check    what is missing or inconsistent\n"
-            f"#   forge next     the one thing to do next\n"
             f"#   forge build    generate the structural top level\n"
+            f"#   forge test     simulate it against verification.config\n"
+            f"#   forge report   collect the results\n"
+            f"#\n"
+            f"# Per module: `modules: {{<name>: {{latency: 3}}}}` declares a fixed\n"
+            f"# latency in cycles; `contract: <path>` uses your own interface\n"
+            f"# contract instead of the inferred one.\n"
             f"#\n"
         )
         return header + body
@@ -436,6 +612,11 @@ class ForgeConfig:
                 name: policy.top
                 for name, policy in self.modules.items()
                 if policy.top
+            },
+            port_widths={
+                name: dict(policy.widths)
+                for name, policy in self.modules.items()
+                if policy.widths
             },
         )
 

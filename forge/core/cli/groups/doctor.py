@@ -1,6 +1,6 @@
 """forge doctor — top-level environment/toolchain health check.
 
-Unlike ``forge verify doctor`` (which checks one plugin's flow artifacts
+Unlike ``forge dev verify doctor`` (which checks one plugin's flow artifacts
 against a specific design.verification.yml), this is a plugin-agnostic
 check of whether the *installation itself* is sane: is the right Python
 version in use, are the optional simulator/toolchain binaries on PATH,
@@ -37,7 +37,7 @@ def _run_checks() -> dict:
         "detail": ".".join(str(v) for v in sys.version_info[:3]),
     }
 
-    # tool_present is the same shared presence check `forge verify doctor`
+    # tool_present is the same shared presence check `forge dev verify doctor`
     # (verify/__main__.py) uses for xvlog/xelab/xsim — so both doctor
     # commands agree on tool availability for the same environment.
     for tool in ("xvlog", "xelab", "xsim", "ghdl", "verilator"):
@@ -139,10 +139,10 @@ def register(sub) -> None:
 
     Containment note: this checks the
     *installation* (toolchains on PATH, optional Python extras, framework
-    resource files) — plugin-agnostic. ``forge verify doctor`` checks one
+    resource files) — plugin-agnostic. ``forge dev verify doctor`` checks one
     plugin's flow artifacts against a specific ``design.verification.yml``
-    and is authoritative for that. ``forge verify preflight`` is a real
-    subset of ``forge verify doctor``'s checks kept as a separate command
+    and is authoritative for that. ``forge dev verify preflight`` is a real
+    subset of ``forge dev verify doctor``'s checks kept as a separate command
     (not merged) — it stays intentionally narrower and faster for use in
     tight verify-iteration loops.
     """

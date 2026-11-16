@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import forge
+from forge.docsgen.artifact_walker import own_doc
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ class PublicSymbol:
 
 
 def _first_doc_line(obj: Any) -> str:
-    doc = inspect.getdoc(obj) or ""
+    doc = own_doc(obj) if inspect.isclass(obj) else (inspect.getdoc(obj) or "")
     return doc.strip().splitlines()[0].strip() if doc.strip() else ""
 
 

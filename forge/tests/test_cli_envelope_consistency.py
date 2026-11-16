@@ -52,7 +52,7 @@ _COMMANDS = [
     ["fix", "--json"],
     ["migrate", "--json"],
     ["inspect", str(DESIGN_YML), "--contracts-from", str(MODULES_YML), "--json"],
-    ["build", str(DESIGN_YML), "--contracts-from", str(MODULES_YML), "--json"],
+    ["build", str(DESIGN_YML), "--contracts-from", str(MODULES_YML), "--dry-run", "--json"],
     ["topgen", "validate", str(DESIGN_YML), "--json"],
     ["topgen", "validate-registry", str(MODULES_YML), "--json"],
     ["core", "resources", "--json"],

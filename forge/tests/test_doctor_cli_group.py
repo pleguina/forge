@@ -100,7 +100,7 @@ def test_doctor_and_verify_doctor_agree_on_tool_availability(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The de-duplication proof: `forge
-    doctor` and `forge verify doctor` both check xvlog/xelab/xsim
+    doctor` and `forge dev verify doctor` both check xvlog/xelab/xsim
     presence via the same shared `forge.core.toolchain_versions.tool_present`
     helper now — they must report identically for the same environment,
     where before each independently called `shutil.which` (a duplication
@@ -141,5 +141,5 @@ def test_doctor_and_verify_doctor_agree_on_tool_availability(
         )
         assert doctor_present == verify_present, (
             f"{tool}: forge doctor says present={doctor_present}, "
-            f"forge verify doctor says present={verify_present}"
+            f"forge dev verify doctor says present={verify_present}"
         )

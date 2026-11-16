@@ -1,6 +1,6 @@
 """``forge adopt`` — enter an existing repository instead of replacing it.
 
-``forge init`` creates a project shaped like FORGE. That covers the first
+``forge init --example`` creates a project shaped like FORGE. That covers the first
 five minutes and nothing after: the moment a user has a repository of their
 own, ``init`` has nothing to offer them, and the documented alternative was
 to hand-author a module registry, a design topology and one interface
@@ -27,7 +27,7 @@ def _render_scan(result, root: Path) -> None:
     print()
 
     counts = result.counts()
-    rtl_by_language = {}
+    rtl_by_language: dict[str, int] = {}
     for unit in result.units:
         rtl_by_language[unit.language] = rtl_by_language.get(unit.language, 0) + 1
     if rtl_by_language:
@@ -175,7 +175,7 @@ def cmd_adopt(args) -> None:
                 ),
                 "action": (
                     "Point `forge adopt` at the directory holding the design's "
-                    "sources, or run `forge init <name>` to start a new project"
+                    "sources, or run `forge init --example <name>` to start from the example plugin"
                 ),
             }],
             metrics={"root": str(root), "scanned_files": len(plan.discovery.files)},
@@ -185,7 +185,7 @@ def cmd_adopt(args) -> None:
         print(f"❌ No RTL modules or HLS kernels found under {root}.", file=sys.stderr)
         print(f"   Scanned {len(plan.discovery.files)} files.", file=sys.stderr)
         print("   → Point `forge adopt` at the design's source directory, or run "
-              "`forge init <name>` to start a new project.", file=sys.stderr)
+              "`forge init --example <name>` to start from the example plugin.", file=sys.stderr)
         sys.exit(1)
 
     interactive = getattr(args, "interactive", False)
@@ -288,8 +288,9 @@ def register(sub) -> None:
                    help="Project name (default: the directory name)")
     from forge.project.config import DEFAULT_PART
 
-    p.add_argument("--part", default=DEFAULT_PART,
-                   help=f"Target device (default: {DEFAULT_PART}, a placeholder you can change later)")
+    p.add_argument("--part", default=None,
+                   help=(f"Target device (default: the part already in forge.yml, else "
+                         f"{DEFAULT_PART}, a placeholder you can change later)"))
     p.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                    help="Show what would be written without writing it")
     p.add_argument("--force", action="store_true", default=False,

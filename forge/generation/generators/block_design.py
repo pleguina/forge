@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 from ...contracts.config import DesignConfig, Module, resolve_declared_path
-from ...contracts.domains import resolve_domain_nets
+from ...contracts.domains import reset_is_active_low, resolve_domain_nets
 from ._port_resolution import (
     _boundary_inst_name,
     build_connection_maps,
@@ -202,7 +202,7 @@ def write_bd_tcl(
     Returns a report dict with exactly the same shape
     ``write_structural_verilog`` returns (``open_outputs``, ``tied_to_zero``,
     ``total_modules``, ``total_instances``, ``total_connections``,
-    ``top_ports``), so ``forge topgen gen-top``'s reporting/manifest
+    ``top_ports``), so ``forge dev topgen gen-top``'s reporting/manifest
     pipeline works unmodified against either mode.
 
     Plain ``register_stages``/``delay_cycles`` (no ``boundary:`` tag) are
@@ -319,7 +319,7 @@ def write_bd_tcl(
     # RegisterStage/signal_delay — only a *non*-boundary reg_stages_map/
     # delay_cycles_map entry needs the plain module.
     _plain_reg_stages = any(k not in boundary_map for k in reg_stages_map)
-    _plain_delays = any(k not in boundary_map for k in delay_cycles_map)
+    _plain_delays = any(k not in boundary_map or k in reg_stages_map for k in delay_cycles_map)
     _needed = (
         (["RegisterStage.v"] if _plain_reg_stages else [])
         + (["signal_delay.v"] if _plain_delays else [])
@@ -477,6 +477,9 @@ def write_bd_tcl(
                 return "ap_rst"
             return net_name
 
+        # The global ap_rst is active-high; active-low reset pins read it
+        # through one inverter.
+        rst_inv_created = False
         for net, binds in global_nets.items():
             if net in reset_sync_domains:
                 # This domain's member instances are reset from a real
@@ -494,17 +497,28 @@ def write_bd_tcl(
                 groups.setdefault(key, []).append(inst)
 
             for base, insts in groups.items():
+                driver = f"[get_bd_ports {top_port}]"
+                if top_port == "ap_rst" and reset_is_active_low(net, (contracts or {}).get(base)):
+                    if not rst_inv_created:
+                        tcl += [
+                            "create_bd_cell -type ip -vlnv xilinx.com:ip:util_vector_logic:2.0 ap_rst_inv",
+                            "set_property -dict [list CONFIG.C_OPERATION {not} CONFIG.C_SIZE {1}] "
+                            "[get_bd_cells ap_rst_inv]",
+                            "connect_bd_net [get_bd_ports ap_rst] [get_bd_pins ap_rst_inv/Op1]",
+                        ]
+                        rst_inv_created = True
+                    driver = "[get_bd_pins ap_rst_inv/Res]"
                 numeric, _ = _pins_are_numeric(insts)
                 if numeric:
                     cmd_tpl = (
-                        f"connect_bd_net [get_bd_ports {top_port}] "
+                        f"connect_bd_net {driver} "
                         f"[get_bd_pins {base}_${{idx}}/{net}]"
                     )
                     tcl.append(_for_loop("idx", len(insts), [cmd_tpl]))
                 else:
                     for inst in insts:
                         tcl.append(
-                            f"connect_bd_net [get_bd_ports {top_port}] [get_bd_pins {inst}/{net}]"
+                            f"connect_bd_net {driver} [get_bd_pins {inst}/{net}]"
                         )
         tcl.append("")
 
@@ -519,7 +533,9 @@ def write_bd_tcl(
     if reset_sync_domains:
         tcl.append("# -- reset synchronizers for reset_domains.*.sync: reset_sync --")
         for rst_sync_counter, (name, rel) in enumerate(sorted(reset_sync_domains.items())):
-            derived_from = rel.get("derived_from")
+            # A synchronized reset domain must name the domain it derives from
+            # (DesignConfig validation).
+            derived_from = rel["derived_from"]
             async_rst_net = _domain_to_top_level_net(derived_from, is_clock=False, own_nets=global_nets)
 
             # The synchronizer's own destination clock: whichever clock
@@ -700,73 +716,74 @@ def write_bd_tcl(
         # cell-name template across iterations, which a real per-pin cell
         # instance can't).
         if num_stages > 0 or num_delays > 0:
+            # Register stages first, then the delay, as in verilog mode. With a
+            # boundary tag the protected crossing is the register stages when
+            # declared, else the delay. slr_crossing_delay's interface matches
+            # signal_delay's (clk/rst/din/dout), not RegisterStage's.
             tag = boundary_map.get((src_mod, dst_mod))
             for s_pin, d_pin in pairs:
                 s_pin_c = _canon_pin(ip_info, src_mod, s_pin)
                 d_pin_c = _canon_pin(ip_info, dst_mod, d_pin)
                 w = _pin_width(src_mod, s_pin_c)
 
-                if tag:
-                    # Boundary crossing: a protected slr_crossing_delay
-                    # with a stable, deterministic instance name, whatever
-                    # count was declared (register_stages or delay_cycles
-                    # — config.py's own load-time validation already
-                    # guarantees exactly one is positive for a boundary
-                    # tag). Its interface matches signal_delay's
-                    # (clk/rst/din/dout), not RegisterStage's.
-                    depth = num_stages or num_delays
-                    inst_name = _boundary_inst_name(tag, s_pin_c, d_pin_c)
-                    if inst_name in boundary_names_used:
-                        # One source pin feeding the same-named pin of several consumers
-                        # (or instances): name by consumer instance, as verilog mode does.
-                        inst_name = f"{inst_name}_{_ident_frag(dst_mod)}"
-                    boundary_names_used.add(inst_name)
-                    tcl += [
-                        f"# Boundary crossing {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} "
-                        f"[boundary={tag}]",
-                        f"create_bd_cell -type module -reference slr_crossing_delay {inst_name}",
-                        f"set_property CONFIG.WIDTH {{{w}}} [get_bd_cells {inst_name}]",
-                        f"set_property CONFIG.DEPTH {{{depth}}} [get_bd_cells {inst_name}]",
-                        f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
-                        f"connect_bd_net [get_bd_ports ap_rst] [get_bd_pins {inst_name}/rst]",
-                        f"connect_bd_net [get_bd_pins {src_mod}/{s_pin_c}] [get_bd_pins {inst_name}/din]",
-                        f"connect_bd_net [get_bd_pins {inst_name}/dout] [get_bd_pins {dst_mod}/{d_pin_c}]",
-                    ]
-                    boundary_infos.append({
-                        "tag": tag,
-                        "src_inst": src_mod,
-                        "dst_inst": dst_mod,
-                        "src_pin": s_pin_c,
-                        "dst_pin": d_pin_c,
-                        "depth": depth,
-                        "width": w,
-                        "instance_name": inst_name,
-                    })
-                elif num_stages > 0:
-                    inst_name = f"reg_stage_{reg_stage_counter}"
-                    reg_stage_counter += 1
-                    tcl += [
-                        f"# Pipeline {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} ({num_stages} stages)",
-                        f"create_bd_cell -type module -reference RegisterStage {inst_name}",
-                        f"set_property CONFIG.DATAWIDTH {{{w}}} [get_bd_cells {inst_name}]",
-                        f"set_property CONFIG.STAGES {{{num_stages}}} [get_bd_cells {inst_name}]",
-                        f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
-                        f"connect_bd_net [get_bd_pins {src_mod}/{s_pin_c}] [get_bd_pins {inst_name}/data_in]",
-                        f"connect_bd_net [get_bd_pins {inst_name}/data_out] [get_bd_pins {dst_mod}/{d_pin_c}]",
-                    ]
-                else:
-                    inst_name = f"delay_{delay_counter}"
-                    delay_counter += 1
-                    tcl += [
-                        f"# Delay {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} (+{num_delays} cycles)",
-                        f"create_bd_cell -type module -reference signal_delay {inst_name}",
-                        f"set_property CONFIG.WIDTH {{{w}}} [get_bd_cells {inst_name}]",
-                        f"set_property CONFIG.DEPTH {{{num_delays}}} [get_bd_cells {inst_name}]",
-                        f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
-                        f"connect_bd_net [get_bd_ports ap_rst] [get_bd_pins {inst_name}/rst]",
-                        f"connect_bd_net [get_bd_pins {src_mod}/{s_pin_c}] [get_bd_pins {inst_name}/din]",
-                        f"connect_bd_net [get_bd_pins {inst_name}/dout] [get_bd_pins {dst_mod}/{d_pin_c}]",
-                    ]
+                cells: List[Tuple[str, List[str], str, str]] = []  # (name, tcl, in pin, out pin)
+                for kind, depth in (("stages", num_stages), ("delay", num_delays)):
+                    if depth <= 0:
+                        continue
+                    if tag and (kind == "stages" or num_stages == 0):
+                        inst_name = _boundary_inst_name(tag, s_pin_c, d_pin_c)
+                        if inst_name in boundary_names_used:
+                            # One source pin feeding the same-named pin of several consumers
+                            # (or instances): name by consumer instance, as verilog mode does.
+                            inst_name = f"{inst_name}_{_ident_frag(dst_mod)}"
+                        boundary_names_used.add(inst_name)
+                        cells.append((inst_name, [
+                            f"# Boundary crossing {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} "
+                            f"[boundary={tag}]",
+                            f"create_bd_cell -type module -reference slr_crossing_delay {inst_name}",
+                            f"set_property CONFIG.WIDTH {{{w}}} [get_bd_cells {inst_name}]",
+                            f"set_property CONFIG.DEPTH {{{depth}}} [get_bd_cells {inst_name}]",
+                            f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
+                            f"connect_bd_net [get_bd_ports ap_rst] [get_bd_pins {inst_name}/rst]",
+                        ], "din", "dout"))
+                        boundary_infos.append({
+                            "tag": tag,
+                            "src_inst": src_mod,
+                            "dst_inst": dst_mod,
+                            "src_pin": s_pin_c,
+                            "dst_pin": d_pin_c,
+                            "depth": depth,
+                            "width": w,
+                            "instance_name": inst_name,
+                        })
+                    elif kind == "stages":
+                        inst_name = f"reg_stage_{reg_stage_counter}"
+                        reg_stage_counter += 1
+                        cells.append((inst_name, [
+                            f"# Pipeline {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} ({depth} stages)",
+                            f"create_bd_cell -type module -reference RegisterStage {inst_name}",
+                            f"set_property CONFIG.DATAWIDTH {{{w}}} [get_bd_cells {inst_name}]",
+                            f"set_property CONFIG.STAGES {{{depth}}} [get_bd_cells {inst_name}]",
+                            f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
+                        ], "data_in", "data_out"))
+                    else:
+                        inst_name = f"delay_{delay_counter}"
+                        delay_counter += 1
+                        cells.append((inst_name, [
+                            f"# Delay {src_mod}.{s_pin_c} -> {dst_mod}.{d_pin_c} (+{depth} cycles)",
+                            f"create_bd_cell -type module -reference signal_delay {inst_name}",
+                            f"set_property CONFIG.WIDTH {{{w}}} [get_bd_cells {inst_name}]",
+                            f"set_property CONFIG.DEPTH {{{depth}}} [get_bd_cells {inst_name}]",
+                            f"connect_bd_net [get_bd_ports ap_clk] [get_bd_pins {inst_name}/clk]",
+                            f"connect_bd_net [get_bd_ports ap_rst] [get_bd_pins {inst_name}/rst]",
+                        ], "din", "dout"))
+
+                driver = f"{src_mod}/{s_pin_c}"
+                for inst_name, cell_tcl, in_pin, out_pin in cells:
+                    tcl += cell_tcl
+                    tcl.append(f"connect_bd_net [get_bd_pins {driver}] [get_bd_pins {inst_name}/{in_pin}]")
+                    driver = f"{inst_name}/{out_pin}"
+                tcl.append(f"connect_bd_net [get_bd_pins {driver}] [get_bd_pins {dst_mod}/{d_pin_c}]")
             continue
 
         buckets: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
@@ -916,7 +933,7 @@ if __name__ == "__main__":
     )
     cfg = DesignConfig.load(yd)
     info = load_ip_info(ns.ip_info)
-    conn, gnet = auto_match_ports(cfg, info)
+    conn, gnet, _report = auto_match_ports(cfg, info)
     write_bd_tcl(
         cfg,
         info,

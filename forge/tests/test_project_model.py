@@ -14,12 +14,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from forge.project.actions import Action, dedupe, render_all
 from forge.project.config import (
     DEFAULT_PART,
     ClockSpec,
     ForgeConfig,
+    ModulePolicy,
     ResetSpec,
     parse_frequency_to_period_ns,
 )
@@ -177,7 +179,7 @@ def test_forge_yml_round_trips(tmp_path: Path) -> None:
 def test_an_absent_verification_block_means_not_configured_not_broken(tmp_path: Path) -> None:
     ForgeConfig(project="demo", root=tmp_path).save()
 
-    assert "verification" not in (tmp_path / "forge.yml").read_text()
+    assert "verification" not in yaml.safe_load((tmp_path / "forge.yml").read_text())
     assert ForgeConfig.load(tmp_path).dataset is None
 
 
@@ -274,8 +276,8 @@ def test_the_recommended_step_is_a_runnable_command_before_a_judgement_call(
     tmp_path: Path,
 ) -> None:
     """Check order is dependency order, which is the wrong order to
-    *recommend* work in: a draft contract does not block generation, so
-    "generate the top level" must come before "review the contracts"."""
+    *recommend* work in: an undeclared latency does not block generation, so
+    "generate the top level" must come before "declare the latencies"."""
     from forge.project.adopt import plan_adoption
     import shutil
 
@@ -285,7 +287,7 @@ def test_the_recommended_step_is_a_runnable_command_before_a_judgement_call(
     status = evaluate(tmp_path / "p")
 
     assert status.recommended_action.id == "build-design"
-    assert status.recommended_action.command.startswith("forge build ")
+    assert status.recommended_action.command == "forge build"
 
 
 def test_a_generated_top_level_older_than_its_sources_is_reported_stale(
@@ -318,8 +320,12 @@ def test_a_contract_naming_a_port_the_module_does_not_have_is_a_blocker(
     shutil.copytree(FIXTURE, tmp_path / "p")
     plan = plan_adoption(tmp_path / "p")
     plan.write()
-    contract = plan.paths.contract_root / "shaper.interface.yaml"
-    contract.write_text(contract.read_text() + "\n    ghost:\n      raw_port: not_a_port\n")
+    inferred = plan.paths.contract_root / "shaper.interface.yaml"
+    contract = tmp_path / "p" / "shaper.interface.yaml"
+    contract.write_text(inferred.read_text() + "\n    ghost:\n      raw_port: not_a_port\n")
+    config = ForgeConfig.load(tmp_path / "p")
+    config.modules["shaper"] = ModulePolicy(contract="shaper.interface.yaml")
+    config.save()
 
     status = evaluate(tmp_path / "p")
 

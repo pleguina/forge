@@ -6,7 +6,7 @@ exercising the diagnostic path a real design would hit if its FIFO were
 undersized for its own burst pattern.
 
 FIFO depth *sufficiency* for a given burst pattern is not (and cannot
-be) a static topology-validity concern -- `forge topgen validate` only
+be) a static topology-validity concern -- `forge dev topgen validate` only
 checks depth is a positive power of two (ATG022/ATG026), which
 ``invalid_fifo_depth_packetizer.yml``'s own depth=4 satisfies. This is
 therefore a release-gate-style check over real *measured* data, not a

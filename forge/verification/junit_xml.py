@@ -1,9 +1,6 @@
-"""forge.verification.junit_xml — minimal JUnit XML writer. Consumes the
-per-event result list `forge test run` builds by
-looping the existing single-run verification path (`_build_runtime_context`/
-`_run_one_loaded_flow`) once per event — this module only renders that
-already-computed data as `<testsuite><testcase>` XML, stdlib
-`xml.etree.ElementTree` only, no new dependency and no new checking logic.
+"""forge.verification.junit_xml — minimal JUnit XML writer for the per-event
+results of :func:`forge.verification.run.run_flow_events`, rendered as
+``<testsuite><testcase>`` with the standard library only.
 """
 
 from __future__ import annotations
@@ -28,19 +25,27 @@ def write_junit_xml(
         message, or a simulator-log tail) — used as the `<failure>`
         element's text when ``success`` is False.
       - ``time``    (float, optional): elapsed seconds, if known.
+      - ``skipped`` (bool, optional): not run this time; written as
+        ``<skipped/>`` and not counted as a failure.
     """
     n_failures = sum(1 for r in results if not r.get("success"))
-    testsuite = ET.Element("testsuite", {
+    n_skipped = sum(1 for r in results if r.get("success") and r.get("skipped"))
+    suite_attrs = {
         "name": suite_name,
         "tests": str(len(results)),
         "failures": str(n_failures),
-    })
+    }
+    if n_skipped:
+        suite_attrs["skipped"] = str(n_skipped)
+    testsuite = ET.Element("testsuite", suite_attrs)
     for r in results:
         attrs: Dict[str, str] = {"name": str(r["name"]), "classname": suite_name}
         if r.get("time") is not None:
             attrs["time"] = f"{r['time']:.3f}"
         testcase = ET.SubElement(testsuite, "testcase", attrs)
-        if not r.get("success"):
+        if r.get("success") and r.get("skipped"):
+            ET.SubElement(testcase, "skipped")
+        elif not r.get("success"):
             message = r.get("message") or "event failed"
             failure = ET.SubElement(testcase, "failure", {"message": message})
             failure.text = message

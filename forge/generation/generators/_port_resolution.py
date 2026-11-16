@@ -28,14 +28,21 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Container, Dict, List, Optional, Set, Tuple
 
 import yaml
 
 from ...contracts.config import DesignConfig, Module
+from ...contracts.domains import (
+    collapses_to_global as _collapses_to_global,
+    top_level_net as _domain_to_top_level_net,
+)
 from forge.core.utils.signal_names import is_clock_name, is_reset_name
-from forge.core.utils.hdl_parser import _scan_ports as scan_vhdl_ports
-from forge.core.utils.hdl_parser import _scan_verilog_ports as scan_vlog_ports
+from forge.core.utils.hdl_parser import (
+    UnresolvedWidthError,
+    parse_verilog_defines,
+    scan_module_ports,
+)
 
 _re_trailing_num = re.compile(r"^(.*?)(?:_(\d+)|(\d+))$")
 
@@ -97,7 +104,7 @@ def build_connection_maps(cfg: DesignConfig) -> Tuple[
                     delay_cycles_map[key] = conn.delay_cycles
                 if conn.boundary:
                     boundary_map[key] = conn.boundary
-                if conn.cdc:
+                if conn.cdc and conn.cdc.get("kind") != "waived":
                     # '2ff_sync' is a backwards-compatible alias of 'level_sync', normalized
                     # here once so every dispatch site only recognizes one spelling (callers
                     # may build Connection objects directly, bypassing DesignConfig.load).
@@ -117,77 +124,21 @@ def build_connection_maps(cfg: DesignConfig) -> Tuple[
                     delay_cycles_map[key] = tg.delay_cycles
                 if tg.boundary:
                     boundary_map[key] = tg.boundary
+    staged = sorted(k for k in cdc_map if k in reg_stages_map or k in delay_cycles_map)
+    if staged:
+        pairs = ", ".join(f"{a} -> {b}" for a, b in staged)
+        raise ValueError(
+            f"[ATG050] {pairs}: a cdc: crossing cannot also carry register_stages or "
+            "delay_cycles (from its connection or a topology group). Put the stages on a "
+            "connection inside one clock domain."
+        )
     return reg_stages_map, delay_cycles_map, boundary_map, cdc_map
-
-
-#: The clock/reset names collapsed onto the single top-level ``ap_clk``/
-#: ``ap_rst`` net. A name *outside* this that the design declared as its own
-#: domain (``clk_b``) must keep its own net — that distinction is
-#: load-bearing for CDC, handled entirely by the caller (not here).
-def _is_standard_clock(name: str) -> bool:
-    return (
-        name in ("clk", "clock", "ap_clk")
-        or name.endswith("_clk") or name.endswith("_ap_clk")
-    )
-
-
-def _is_standard_reset(name: str) -> bool:
-    return (
-        name in ("rst", "reset", "ap_rst", "rst_n")
-        or name.endswith("_rst") or name.endswith("_ap_rst")
-        or name.endswith("_rst_n")
-    )
-
-
-def _collapses_to_global(name: str, *, is_clock: bool, own_nets) -> bool:
-    """Whether this clock/reset pin is driven by the single global net.
-
-    Three cases:
-    1. A **standard** name (``clk``, ``ap_clk``, ``*_clk``) always collapses
-       onto ``ap_clk``/``ap_rst``, even when the design also lists it as a
-       domain — that is what ``connect_clock``/``connect_reset`` mean.
-    2. A **non-standard** name the design declared as its own domain
-       (``clk_b``) keeps its own top-level net.
-    3. A name that reads as a clock or reset by the shared convention but is
-       **neither** standard nor a declared domain (``pclk``, ``presetn``,
-       ``s_axi_aclk``) collapses onto the global net.
-    """
-    standard = _is_standard_clock(name) if is_clock else _is_standard_reset(name)
-    if standard:
-        return True
-    reads_as = is_clock_name(name) if is_clock else is_reset_name(name)
-    return reads_as and name not in (own_nets or ())
-
-
-def _domain_to_top_level_net(
-    domain_name: str, *, is_clock: bool, own_nets: "Set[str] | Tuple[str, ...]" = (),
-) -> str:
-    """Translate a resolved clock/reset domain identity (the raw port name
-    — see ``forge.contracts.domains.resolve_domain_nets``) into the actual
-    top-level net a generator wires it to.
-
-    Both generators' own clock/reset auto-map (``_auto_mapped_global``
-    above) collapses every *standard*-name variant onto the single literal
-    ``ap_clk``/``ap_rst`` top-level port, regardless of which specific
-    variant string a module's contract declared. A domain with its own
-    declared global net (``clk_b``, a named second clock domain) keeps that
-    net instead — pass those names as *own_nets*, and they win over the
-    collapse.
-
-    Used by CDC synchronizer / reset-synchronizer emission to reference the
-    net that actually exists in the generated output, not the raw domain
-    identity string, so it must resolve exactly as the per-instance port
-    mapping does.
-    """
-    if not _collapses_to_global(domain_name, is_clock=is_clock, own_nets=own_nets):
-        return domain_name
-    return "ap_clk" if is_clock else "ap_rst"
 
 
 def _reset_net_for_domain(
     domain_name: "str | None",
     reset_sync_domains: Dict[str, Dict[str, Any]],
-    own_nets: "Set[str] | Tuple[str, ...]" = (),
+    own_nets: Container[str] = (),
     *,
     ident_fn=lambda s: s,
 ) -> str:
@@ -244,12 +195,16 @@ def _fetch_module_ports(mod: Module, meta: Dict, ip_root: Path) -> List[Dict]:
 
     mod_root = ip_root / mod.name
     scanned: Dict[str, Tuple[str, int]] = {}
+    defines = parse_verilog_defines(mod.verilog_defines)
     for ext in (".vhd", ".v", ".sv"):
         for p in sorted(mod_root.rglob(f"*{ext}")):
             try:
-                scanned = scan_vhdl_ports(p) if ext == ".vhd" else scan_vlog_ports(p)
+                scanned = scan_module_ports(
+                    p, mod.parameters, defines, mod.port_widths, f"module {mod.name!r} ({p})")
                 if scanned:
                     break
+            except UnresolvedWidthError:
+                raise
             except Exception:
                 continue
         if scanned:
@@ -456,7 +411,7 @@ def resolve_top_ports(
                     if ext_dir:
                         top_port_name = f"{ilabel}_{pname}"
 
-                if not ext_dir:
+                if not ext_dir or top_port_name is None:
                     continue
 
                 if ext_dir == "output":

@@ -31,9 +31,11 @@ Policy: framework/IP_INTERFACE_POLICY.md
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, overload
 
 import yaml
+
+from forge.core.utils.signal_names import is_active_low_reset
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Generation-authoritative role set
@@ -305,13 +307,9 @@ class LoadedContract:
 #: for ~55% of all contract content lines, and 308 of 324 roles carry
 #: *nothing else* — they are pure transcription of the port list. Declaring
 #: them stays supported (and is then verified against the real ports, which
-#: is what `forge core verify-contract` has always done); omitting them lets
+#: is what `forge dev core verify-contract` has always done); omitting them lets
 #: the scanned source answer instead.
 DERIVABLE_ROLE_FIELDS = ("raw_port", "direction", "width", "active_level")
-
-#: Suffixes that mark an active-low reset by near-universal HDL convention.
-_ACTIVE_LOW_SUFFIXES = ("_n", "_b", "_l")
-
 
 def _derive_role_fields(
     role_name: str, spec: dict, ports: Dict[str, dict],
@@ -337,7 +335,7 @@ def _derive_role_fields(
     if port is None:
         # Not an error here: a contract may legitimately describe a module
         # whose source this caller couldn't scan. Leave it alone and let
-        # `forge core verify-contract` be the place that reports it.
+        # `forge dev core verify-contract` be the place that reports it.
         return spec, []
 
     direction = "input" if str(port.get("direction", "")).upper().startswith("IN") else "output"
@@ -346,9 +344,6 @@ def _derive_role_fields(
         "direction": direction,
         "width": port.get("width", 1),
     }
-    if role_name.startswith("reset_"):
-        derived["active_level"] = "low" if raw.endswith(_ACTIVE_LOW_SUFFIXES) else "high"
-
     conflicts: List[str] = []
     for field, value in derived.items():
         if field in spec and spec[field] != value:
@@ -356,13 +351,17 @@ def _derive_role_fields(
                 f"role {role_name!r}: contract declares {field}={spec[field]!r} "
                 f"but port {raw!r} is {field}={value!r}"
             )
+    if role_name.startswith("reset_"):
+        # A name only suggests the level, so a declared one is not a
+        # contradiction to report.
+        derived["active_level"] = "low" if is_active_low_reset(raw) else "high"
     return {**derived, **spec}, conflicts
 
 
 #: Conflicts found while resolving contracts against their real port lists.
 #: Collected rather than raised so a single load reports every disagreement,
 #: and so this module stays free of CLI/diagnostic dependencies. Callers that
-#: care (``forge core verify-contract``, ``topgen validate``) drain it.
+#: care (``forge dev core verify-contract``, ``topgen validate``) drain it.
 _CONTRACT_CONFLICTS: List[str] = []
 
 
@@ -380,7 +379,11 @@ def _scan_module_ports(mod_entry: dict, plugin_root: Path) -> Dict[str, dict]:
     empty dict when nothing could be scanned — a contract that can't be
     resolved simply keeps whatever it declared.
     """
-    from forge.core.utils.hdl_parser import _scan_ports, _scan_verilog_ports
+    from forge.core.utils.hdl_parser import (
+        apply_declared_widths,
+        parse_verilog_defines,
+        scan_hdl_port_decls,
+    )
 
     srcs: List[Path] = []
     for entry in (mod_entry.get("src") or []):
@@ -403,14 +406,23 @@ def _scan_module_ports(mod_entry: dict, plugin_root: Path) -> Dict[str, dict]:
     for f in sorted((p for p in srcs if p.suffix.lower() in (".v", ".sv", ".vhd")),
                     key=_score, reverse=True):
         try:
-            raw = _scan_ports(f) if f.suffix.lower() == ".vhd" else _scan_verilog_ports(f)
+            raw = apply_declared_widths(
+                scan_hdl_port_decls(
+                    f, mod_entry.get("parameters"),
+                    parse_verilog_defines(mod_entry.get("verilog_defines") or []),
+                ),
+                mod_entry.get("port_widths"),
+            )
         except Exception:
             continue
         if raw:
+            # A width the scan could not evaluate is left out, so the role
+            # keeps whatever its contract declares instead of a guess.
             return {
-                name: {"direction": "IN" if str(d).lower().startswith("in") else "OUT",
-                       "width": w}
-                for name, (d, w) in raw.items()
+                name: {"direction": "IN" if decl.direction.lower().startswith("in") else "OUT",
+                       "width": decl.width}
+                for name, decl in raw.items()
+                if decl.width is not None
             }
     return {}
 
@@ -646,10 +658,20 @@ def synthesize_ip_info_from_contract(contract: LoadedContract) -> dict:
     }
 
 
+@overload
+def synthesize_ip_info(
+    contracts: Dict[str, LoadedContract], module_names: None = None,
+) -> Dict[str, dict]: ...
+@overload
+def synthesize_ip_info(
+    contracts: Dict[str, LoadedContract], module_names: List[str],
+) -> Dict[str, Optional[dict]]: ...
+
+
 def synthesize_ip_info(
     contracts: Dict[str, LoadedContract],
     module_names: Optional[List[str]] = None,
-) -> Dict[str, dict]:
+) -> Dict[str, Any]:
     """
     Build a **projected** ip_info dict from loaded contracts.
 
@@ -673,7 +695,7 @@ def synthesize_ip_info(
     A dict compatible with ``load_ip_info()``'s return value.
     """
     keys = module_names if module_names is not None else list(contracts.keys())
-    result: Dict[str, dict] = {}
+    result: Dict[str, Any] = {}
     for key in keys:
         c = contracts.get(key)
         result[key] = synthesize_ip_info_from_contract(c) if c else None

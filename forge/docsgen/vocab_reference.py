@@ -128,17 +128,18 @@ TRANSFORMATION_KINDS: "dict[str, TransformationKindDefinition]" = {
     "pipeline_register": TransformationKindDefinition(
         "pipeline_register", "real",
         "A pipeline register stage inserted on a connection, from "
-        "`Connection.register_stages`.",
+        "`Connection.register_stages` with no `boundary` tag.",
     ),
     "latency_delay": TransformationKindDefinition(
         "latency_delay", "real",
         "A fixed-cycle latency delay element, from `Connection.delay_cycles` "
-        "with no `boundary` tag.",
+        "with no `boundary` tag, or after a register-stage crossing.",
     ),
     "slr_crossing": TransformationKindDefinition(
         "slr_crossing", "real",
-        "An SLR-crossing delay register — `Connection.delay_cycles` *with* a "
-        "`boundary` tag; `tag` carries the boundary string.",
+        "An SLR-crossing delay register — the `register_stages` (else the "
+        "`delay_cycles`) of a connection *with* a `boundary` tag; `tag` carries "
+        "the boundary string.",
     ),
     "fanout": TransformationKindDefinition(
         "fanout", "real",

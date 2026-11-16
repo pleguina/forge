@@ -52,6 +52,7 @@ from .model import (
     ResolvedInterfaceMember,
     ResolvedLogicalInterface,
     ResolvedModuleDefinition,
+    ResolvedModulePort,
     ResolvedPhysicalBinding,
     ResolvedProject,
     ResolvedResetDomain,
@@ -77,7 +78,7 @@ def build_tie_off_connections(
 ) -> List[ResolvedConnection]:
     """Build synthetic ``tie_off`` connections from a generator's
     ``report["tied_to_zero"]`` list (``[(instance, port, width), ...]`` —
-    ``write_structural_verilog``/``write_structural_vhdl``).
+    ``write_structural_verilog``).
 
     Mirrors the existing ``"$external"`` sentinel convention: a tied port
     has no real producer in ``conn_map`` at all (there's nothing driving
@@ -105,6 +106,19 @@ def _as_path(value: Optional[Path | str]) -> Optional[Path]:
     return Path(value).expanduser().resolve() if value is not None else None
 
 
+def _module_language(mod: Module) -> Optional[str]:
+    """The HDL an RTL module is written in: its declared ``rtl_lang``, else
+    its sources' suffixes."""
+    if mod.kind != "rtl":
+        return None
+    if mod.rtl_lang:
+        return str(mod.rtl_lang)
+    suffixes = {Path(p).suffix.lower() for p in mod.src}
+    if suffixes & {".vhd", ".vhdl"}:
+        return "vhdl"
+    return "systemverilog" if ".sv" in suffixes else "verilog"
+
+
 def _resolve_ip_info(
     cfg: DesignConfig,
     *,
@@ -119,17 +133,30 @@ def _resolve_ip_info(
     ``forge inspect`` is read-only by default.
     """
     if ip_info_path is not None and ip_info_path.exists():
-        return load_ip_info(ip_info_path)
-    if contracts:
+        info = load_ip_info(ip_info_path)
+    elif contracts:
         mapped: Dict[str, LoadedContract] = {}
         for m in cfg.modules:
             c = contracts.get(m.name) or (m.ip_info_key and contracts.get(m.ip_info_key))
             if c:
                 mapped[m.name] = c
         return synthesize_ip_info(mapped)
-    if build_dir is not None:
+    elif build_dir is not None:
         return collect_all(build_root=build_dir, modules=cfg.modules, ip_root=ip_root, src_root=src_root)
-    return {}
+    else:
+        info = {}
+    # A module the last build never saw (a variant's, a new subsystem copy's)
+    # is read from its sources, in memory, as a build would.
+    missing = [m for m in cfg.modules if m.name not in info and (m.ip_info_key or m.name) not in info]
+    if missing:
+        import contextlib
+        import io
+
+        design_dir = Path(getattr(cfg, "_source_file", "") or ".").parent
+        with contextlib.redirect_stdout(io.StringIO()):
+            info.update({k: v for k, v in collect_all(build_root=design_dir / "build", modules=missing,
+                                                      ip_root=ip_root, src_root=src_root).items() if v})
+    return info
 
 
 def _cardinality_dict(primary_role: Dict[str, Any], direction: str) -> Optional[Dict[str, Any]]:
@@ -204,10 +231,14 @@ def _build_matching_evidence(
     gets a ``MatchingEvidence`` with only ``producer_width``/``consumer_width``
     populated, which is itself real evidence (no ``width_adapter`` exists,
     so a width mismatch here would otherwise be silent)."""
-    src_entry = port_index_by_module.get(src_mod, {}).get(src_port)
-    dst_entry = port_index_by_module.get(dst_mod, {}).get(dst_port)
-    src_width = ip_ports_by_module.get(src_mod, {}).get(src_port, {}).get("width")
-    dst_width = ip_ports_by_module.get(dst_mod, {}).get(dst_port, {}).get("width")
+    src_index = port_index_by_module.get(src_mod, {}) if src_mod else {}
+    dst_index = port_index_by_module.get(dst_mod, {}) if dst_mod else {}
+    src_ports = ip_ports_by_module.get(src_mod, {}) if src_mod else {}
+    dst_ports = ip_ports_by_module.get(dst_mod, {}) if dst_mod else {}
+    src_entry = src_index.get(src_port)
+    dst_entry = dst_index.get(dst_port)
+    src_width = src_ports.get(src_port, {}).get("width")
+    dst_width = dst_ports.get(dst_port, {}).get("width")
 
     if (src_entry is None and dst_entry is None and src_width is None
             and dst_width is None and gather_scatter_pattern is None
@@ -329,6 +360,7 @@ def _build_project_ir_full(
     build_dir: Optional[Path | str] = None,
     ip_root: Optional[Path | str] = None,
     src_root: Optional[Path | str] = None,
+    hls_build_root: Optional[Path | str] = None,
 ) -> Tuple[ResolvedProject, DesignConfig, Any]:
     """Shared body of :func:`build_project_ir` and
     :func:`build_project_ir_with_match_report` — loads everything from
@@ -362,6 +394,13 @@ def _build_project_ir_full(
     conn_map, global_nets, match_report = auto_match_ports(
         cfg, ip_info_data, contracts=contracts or None,
     )
+    # delay_cycles: auto is sized as generation sizes it (HLS report latencies
+    # under hls_build_root), so the IR's timing is the generated top's
+    if any(c.delay_auto for c in cfg.connections) or any(t.delay_auto for t in cfg.topology_groups):
+        from forge.analysis.latency_static.balance import apply_auto_delays, resolve_design_auto_delays
+        auto_delays = resolve_design_auto_delays(design_path, _as_path(hls_build_root), conn_map)
+        if not auto_delays.problems:
+            apply_auto_delays(cfg, auto_delays)
 
     project = assemble_project_ir(
         cfg,
@@ -420,6 +459,7 @@ def build_project_ir_with_match_report(
     build_dir: Optional[Path | str] = None,
     ip_root: Optional[Path | str] = None,
     src_root: Optional[Path | str] = None,
+    hls_build_root: Optional[Path | str] = None,
 ) -> Tuple[ResolvedProject, DesignConfig, Any]:
     """Same as :func:`build_project_ir`, but also returns the ``cfg``/
     ``match_report`` the matcher produced along the way — for callers that
@@ -434,6 +474,7 @@ def build_project_ir_with_match_report(
         build_dir=build_dir,
         ip_root=ip_root,
         src_root=src_root,
+        hls_build_root=hls_build_root,
     )
 
 
@@ -577,6 +618,17 @@ def assemble_project_ir(
             latency=timing.latency if timing else None,
             ip_info_key=mod.ip_info_key,
             declaration_order=declaration_order,
+            language=_module_language(mod),
+            ports=[
+                ResolvedModulePort(
+                    name=str(p["name"]),
+                    direction={"IN": "in", "INPUT": "in", "OUT": "out", "OUTPUT": "out"}.get(
+                        str(p.get("direction", "")).upper(), "inout"),
+                    width=int(p.get("width", 1)),
+                )
+                for p in (ip_entry or {}).get("ports") or []
+                if isinstance(p, dict) and p.get("name")
+            ],
         ))
     modules.sort(key=lambda m: m.name)
 
@@ -622,16 +674,22 @@ def assemble_project_ir(
         xforms: List[ResolvedTransformation] = []
         if c.cdc:
             cdc_declared_by_pair[(c.from_, c.to)] = c.cdc.get("kind")
+        # With a boundary tag the protected crossing (slr_crossing_delay) is
+        # register_stages when declared, else delay_cycles; a delay_cycles
+        # after a register-stage crossing is a plain signal_delay.
         if c.register_stages:
-            xforms.append(ResolvedTransformation(
-                id=f"xform:{c.from_}->{c.to}:pipeline_register",
-                kind="pipeline_register", cycles=c.register_stages,
-            ))
-        if c.delay_cycles:
             if c.boundary:
-                # One generated RTL instance (slr_crossing_delay, not
-                # signal_delay) for this case — one transformation, not
-                # both latency_delay and slr_crossing.
+                xforms.append(ResolvedTransformation(
+                    id=f"xform:{c.from_}->{c.to}:slr_crossing",
+                    kind="slr_crossing", cycles=c.register_stages, tag=c.boundary,
+                ))
+            else:
+                xforms.append(ResolvedTransformation(
+                    id=f"xform:{c.from_}->{c.to}:pipeline_register",
+                    kind="pipeline_register", cycles=c.register_stages,
+                ))
+        if c.delay_cycles:
+            if c.boundary and not c.register_stages:
                 xforms.append(ResolvedTransformation(
                     id=f"xform:{c.from_}->{c.to}:slr_crossing",
                     kind="slr_crossing", cycles=c.delay_cycles, tag=c.boundary,
@@ -641,7 +699,7 @@ def assemble_project_ir(
                     id=f"xform:{c.from_}->{c.to}:latency_delay",
                     kind="latency_delay", cycles=c.delay_cycles,
                 ))
-        if c.cdc:
+        if c.cdc and c.cdc.get("kind") != "waived":
             # The 5-kind CDC primitive family.
             # 'level_sync'/'2ff_sync' (alias) both map to the existing
             # 'cdc_synchronizer' transformation kind; the other 3 declared
@@ -716,9 +774,11 @@ def assemble_project_ir(
         # instances resolve to different, both-known domains? Enforcement
         # (rejecting an undeclared crossing under --strict) is
         # forge.contracts.cdc.verify_cdc's job, not this builder's.
-        src_clock, dst_clock = clock_of_module.get(src_mod), clock_of_module.get(dst_mod)
+        src_clock = clock_of_module.get(src_mod) if src_mod else None
+        dst_clock = clock_of_module.get(dst_mod) if dst_mod else None
         crosses_clock = src_clock is not None and dst_clock is not None and src_clock != dst_clock
-        src_reset, dst_reset = reset_of_module.get(src_mod), reset_of_module.get(dst_mod)
+        src_reset = reset_of_module.get(src_mod) if src_mod else None
+        dst_reset = reset_of_module.get(dst_mod) if dst_mod else None
         crosses_reset = src_reset is not None and dst_reset is not None and src_reset != dst_reset
         cdc_declared = cdc_declared_by_pair.get((src_mod, dst_mod))
         for src_port, dst_port in pairs:
@@ -790,16 +850,16 @@ def assemble_project_ir(
     # built above, no new schema. Excludes "$external" producers (clock/
     # reset global-net fan-out is universal — flagging it would make
     # every design "all fanout," not a meaningful signal).
-    producer_counts: Dict[Tuple[str, str], int] = {}
+    producer_counts: Dict[Tuple[str, Optional[str]], int] = {}
     for conn in connections:
         if conn.producer.instance_id != _EXTERNAL:
-            key = (conn.producer.instance_id, conn.producer.port)
-            producer_counts[key] = producer_counts.get(key, 0) + 1
+            pin = (conn.producer.instance_id, conn.producer.port)
+            producer_counts[pin] = producer_counts.get(pin, 0) + 1
     for conn in connections:
         if conn.producer.instance_id == _EXTERNAL:
             continue
-        key = (conn.producer.instance_id, conn.producer.port)
-        if producer_counts.get(key, 0) > 1:
+        pin = (conn.producer.instance_id, conn.producer.port)
+        if producer_counts.get(pin, 0) > 1:
             conn.transformations.append(ResolvedTransformation(
                 id=f"xform:{conn.id}:fanout", kind="fanout",
             ))

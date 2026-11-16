@@ -74,7 +74,7 @@ class GenerationPlan:
     explicit_connections: List[PlannedConnection] = field(default_factory=list)
     generated_transformations: List[PlannedTransformation] = field(default_factory=list)
     # Descriptive filtered view of generated_transformations (kinds that
-    # carry cycle counts) — NOT a new latency computation. `forge analyze
+    # carry cycle counts) — NOT a new latency computation. `forge dev analyze
     # latency-check` remains the actual latency-analysis tool.
     latency_changes: List[PlannedTransformation] = field(default_factory=list)
     # Per-connection MatchingEvidence (as plain dicts,

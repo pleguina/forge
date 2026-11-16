@@ -438,8 +438,8 @@ def test_no_contract_heuristic_clock_name_resolves_a_domain():
         conn_map=conn_map, global_nets=global_nets, match_report=report,
     )
     inst = project.design.instances[0]
-    assert inst.clock_domain == "clk"
-    assert inst.reset_domain == "rst"
+    assert inst.clock_domain == "ap_clk"
+    assert inst.reset_domain == "ap_rst"
     assert not any("domain" in d.message.lower() for d in project.design.diagnostics)
 
 

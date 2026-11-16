@@ -57,6 +57,20 @@ def test_tool_version_parses_real_version_output(monkeypatch, tmp_path):
     assert version == "GHDL 4.1.0 (Ubuntu 4.1.0+dfsg-1) [Dunoon edition]"
 
 
+def test_tool_version_leaves_nothing_in_the_working_directory(monkeypatch, tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # Like the Vivado tools: a log next to wherever it runs, even for -version.
+    _write_fake_tool(bin_dir, "xvlog", "#!/bin/sh\necho 'v' > xvlog.log\necho 'xvlog v2024.1'\n")
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.setenv("PATH", str(bin_dir))
+    monkeypatch.chdir(work)
+
+    assert tool_version("xvlog") == "xvlog v2024.1"
+    assert list(work.iterdir()) == []
+
+
 def test_tool_version_uses_dash_version_flag_for_xilinx_tools(monkeypatch, tmp_path):
     """xvlog/xelab/xsim expect `-version` (single dash), not `--version` —
     a fake script that only understands `-version` proves the right flag

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 
 def _endpoint_error(value: str) -> str:
@@ -33,7 +34,7 @@ def cmd_connect(args) -> None:
 
     json_mode = getattr(args, "json", False)
 
-    def fail(message: str, action: str = "") -> None:
+    def fail(message: str, action: str = "") -> NoReturn:
         envelope = CommandEnvelope(
             status="fail",
             diagnostics=[{"severity": "error", "message": message, "action": action}],

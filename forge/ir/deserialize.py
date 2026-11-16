@@ -97,7 +97,7 @@ def check_ir_schema_version(value: str) -> Optional[str]:
         raise IrSchemaError(
             f"IR schema version {value} is incompatible with this FORGE build "
             f"(supports {cur_major}.x, currently {IR_SCHEMA_VERSION}). "
-            "Regenerate the IR with `forge topgen gen-top`, or use the FORGE "
+            "Regenerate the IR with `forge dev topgen gen-top`, or use the FORGE "
             "version that wrote it."
         )
     if minor > cur_minor:
@@ -141,7 +141,8 @@ def _migrate_0_1_0_to_0_2_0(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 # 0.2.0 → 0.3.0 is additive only (a module's resolved compile set and
 # declaration order, a top-level port's origin and the instance pin behind
-# it, and the verification plan's own fields) — no step needed.
+# it, and the verification plan's own fields) — no step needed. So is
+# 0.3.0 → 0.4.0 (a module's HDL language and physical ports).
 _MIGRATIONS = [
     ("0.1.0", "0.2.0", _migrate_0_1_0_to_0_2_0),
 ]
@@ -202,7 +203,7 @@ def _build(annotation: Any, value: Any) -> Any:
         return [_build(item_type, v) for v in value]
     if origin in (dict, Dict):
         return dict(value)
-    if dataclasses.is_dataclass(annotation) and isinstance(value, dict):
+    if isinstance(annotation, type) and dataclasses.is_dataclass(annotation) and isinstance(value, dict):
         return _from_dataclass_dict(annotation, value)
     return value
 

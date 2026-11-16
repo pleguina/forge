@@ -18,11 +18,15 @@ if TYPE_CHECKING:
     from .contract_loader import LoadedContract
 
 
+# (src_pin, dst_pin, slot, meta): see derive_topology_group.
+WirePair = Tuple[str, str, Optional[int], Optional[dict]]
+
+
 def derive_topology_group(
     tg: "TopologyGroup",
     src_contract: "LoadedContract",
     dst_contract: "LoadedContract",
-) -> List[Tuple[str, str, Optional[int], Optional[dict]]]:
+) -> List[WirePair]:
     """
     Resolve a topology_group into wire pairs ``(src_pin, dst_pin, slot, meta)``.
 
@@ -36,7 +40,7 @@ def derive_topology_group(
     Returns the same 4-tuple format as ``auto_match_ports`` base_pairs:
     ``(src_port, dst_port, slot_or_none, meta_or_none)``
     """
-    pairs: List[Tuple[str, str, Optional[int], Optional[dict]]] = []
+    pairs: List[WirePair] = []
 
     # Add supplementary scalar port_map pairs first
     for s, d in tg.port_map:
@@ -91,12 +95,12 @@ def _resolve_explicit_role_pairs(
     src_roles: List[Dict],
     dst_roles: List[Dict],
     group_name: str,
-) -> List[Tuple[str, str, None, None]]:
+) -> List[WirePair]:
     """Resolve explicit role_pairs into wire pairs."""
     src_by_name = {r["role_name"]: r for r in src_roles}
     dst_by_name = {r["role_name"]: r for r in dst_roles}
 
-    pairs: List[Tuple[str, str, None, None]] = []
+    pairs: List[WirePair] = []
     for src_role_name, dst_role_name in role_pairs:
         src_role = src_by_name.get(src_role_name)
         dst_role = dst_by_name.get(dst_role_name)
@@ -118,7 +122,7 @@ def _resolve_instance_partition(
     tg: "TopologyGroup",
     src_roles: List[Dict],
     dst_roles: List[Dict],
-) -> List[Tuple[str, str, Optional[int], Optional[dict]]]:
+) -> List[WirePair]:
     """
     Resolve instance-partition assignment.
 
@@ -156,7 +160,7 @@ def _resolve_instance_partition(
             )
         dst_by_coord[coord] = r
 
-    pairs: List[Tuple[str, str, Optional[int], Optional[dict]]] = []
+    pairs: List[WirePair] = []
     for ia in tg.instance_assign:
         ia_coord = ia.coordinate_key()
         dst_role = dst_by_coord.get(ia_coord)
@@ -200,7 +204,7 @@ def _resolve_auto_match(
     src_roles: List[Dict],
     dst_roles: List[Dict],
     group_name: str,
-) -> List[Tuple[str, str, None, None]]:
+) -> List[WirePair]:
     """
     Auto-match producer and consumer roles by wiring_kind + coordinates.
 
@@ -220,7 +224,7 @@ def _resolve_auto_match(
         key = (r["wiring_kind"], coordinate_key(r))
         dst_grouped[key].append(r)
 
-    pairs: List[Tuple[str, str, None, None]] = []
+    pairs: List[WirePair] = []
 
     # Match by (wiring_kind, coordinate_key) keys
     for key in src_grouped:
@@ -243,9 +247,9 @@ def _resolve_auto_match(
 
 def _expand_role_pair(
     src_role: Dict, dst_role: Dict,
-) -> List[Tuple[str, str, None, None]]:
+) -> List[WirePair]:
     """Expand a matched src/dst role pair into concrete wire pairs."""
-    pairs: List[Tuple[str, str, None, None]] = []
+    pairs: List[WirePair] = []
 
     sk, dk = src_role["kind"], dst_role["kind"]
 

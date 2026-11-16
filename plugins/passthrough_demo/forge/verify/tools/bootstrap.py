@@ -2,7 +2,7 @@
 """passthrough_demo plugin registration — connects passthrough_demo to forge verify.
 
 After importing this module, passthrough_demo is known to the framework and
-forge verify generate / run will work for declared flows.
+forge dev verify generate / run will work for declared flows.
 """
 from __future__ import annotations
 

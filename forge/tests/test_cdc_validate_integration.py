@@ -1,7 +1,7 @@
 """
-Integration test for `forge topgen validate`'s CDC
+Integration test for `forge dev topgen validate`'s CDC
 wiring: `verify_cdc` used to be reachable only from `gen-top --strict`;
-this test drives the real `forge topgen validate` CLI entry point
+this test drives the real `forge dev topgen validate` CLI entry point
 against a small two-module, two-clock-domain synthetic design (built
 from scratch in tmp_path, mirroring test_cdc_generation.py's real-file
 manifest-test convention) and confirms an undeclared clock-domain
@@ -91,13 +91,13 @@ def _write_two_clock_design(tmp_path: Path) -> Path:
     return design_path
 
 
-def test_validate_warns_on_undeclared_cdc_crossing(tmp_path, capsys):
+def test_validate_fails_on_undeclared_cdc_crossing(tmp_path, capsys):
     design_path = _write_two_clock_design(tmp_path)
     code, out, _err = _run_topgen(capsys, "validate", str(design_path), "--json")
 
-    assert code == 0  # non-strict: a warning, not a failure
+    assert code == 1
     payload = json.loads(out)
-    assert payload["status"] == "warn"
+    assert payload["status"] == "fail"
     assert any(d.get("code") == "ATG023" for d in payload["diagnostics"])
 
 

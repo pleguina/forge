@@ -12,9 +12,9 @@ A **flow** is one entry under `flows:` in a plugin's
 `design.verification.yml` (the schema owned by
 `forge.verification.design_contract`) — it names a `kind`, a `backend`, a DUT
 (RTL source, top module, testbench module), a dataset, and simulation
-timing defaults. `forge verify generate` turns a flow declaration into a
+timing defaults. `forge dev verify generate` turns a flow declaration into a
 concrete, runnable artifact set (`verify.flow.yml`, a generated
-testbench, `wave.tcl`); `forge verify run` executes it.
+testbench, `wave.tcl`); `forge dev verify run` executes it.
 
 Three flow kinds exist today, corresponding to increasing levels of
 integration: `hls_csim` (an HLS module's C++ model, no RTL involved),
@@ -55,7 +55,7 @@ backends (`xsim`, `csim`, `verilator`) auto-register on import
 ## `FlowResult`: what a run actually produced
 
 `forge.verification.results.FlowResult` is the structured, schema-tagged result
-of one `forge test run`/`forge verify run` invocation: the flow name, the
+of one `forge test run`/`forge dev verify run` invocation: the flow name, the
 backend that ran it, and a list of per-event `EventResult`s (each with its
 own success flag, diagnostics, checks, artifacts, and duration).
 `FlowResult.success` is `True` only when every event succeeded;

@@ -51,6 +51,7 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from forge.verification.compile_key import build_key, reusable
 from forge.verification import backend_checker
 from forge.verification.backend_base import (
     ArtifactRequirement,
@@ -158,7 +159,7 @@ class VerilatorBackend(BackendAdapter):
         if not tb_sv.exists():
             errors.append(
                 f"SV testbench not found: {tb_sv}\n"
-                f"  → Regenerate with: forge verify generate design.verification.yml"
+                f"  → Regenerate with: forge dev verify generate design.verification.yml"
                 f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
             )
 
@@ -170,26 +171,12 @@ class VerilatorBackend(BackendAdapter):
                 errors.append(
                     f"DUT RTL file not found: {dut_rtl_path}\n"
                     f"  → Run HLS synthesis first:\n"
-                    f"      forge verify generate uses dut_rtl_source from design.verification.yml\n"
+                    f"      forge dev verify generate uses dut_rtl_source from design.verification.yml\n"
                     f"  RTL expected at: {dut_rtl_path}"
                 )
 
-        # ── 5. stimulus_current.svh exists ────────────────────────────────
-        from forge.verification.stimulus_contract import STIMULUS_FILE  # noqa: PLC0415
-        stim_svh = flow_dir / STIMULUS_FILE
-        if not stim_svh.exists():
-            errors.append(
-                f"stimulus_current.svh not found: {stim_svh}\n"
-                f"  → Generate it first: python3 tools/gen_stimulus.py"
-                f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
-            )
-        else:
-            # ── 6. Stimulus contract validation ───────────────────────────
-            from forge.verification.stimulus_contract import validate_stimulus  # noqa: PLC0415
-            sc = validate_stimulus(stim_svh)
-            if not sc.ok:
-                for e in sc.errors:
-                    errors.append(e)
+        # stimulus_current.svh is written by prepare_backend_inputs and
+        # checked after it (preflight.validate_stimulus_handoff).
 
         return errors
 
@@ -279,21 +266,23 @@ class VerilatorBackend(BackendAdapter):
         build_sentinel = work_dir / ".build_complete"
         binary = obj_dir / snapshot
 
-        if readmemh_mode and build_sentinel.exists() and binary.exists():
-            print("[verilator 1/2] Reusing existing build (stimulus_mode=readmemh)")
+        verilate_cmd = [
+            "verilator", "--binary", "--timing", "--Wno-fatal",
+            "-f", str(sources_f),
+            "--top-module", cfg.tb_module,
+            "-o", snapshot,
+            "--Mdir", str(obj_dir),
+        ]
+        if getattr(ctx, "probe_log", False):
+            verilate_cmd += ["-DPROBE_LOG=1"]
+        key = build_key(sources_f, [verilate_cmd], ["verilator"]) if readmemh_mode else None
+
+        if key is not None and reusable(build_sentinel, key) and binary.exists():
+            print("[verilator 1/2] Reusing the build of identical inputs (stimulus_mode=readmemh)")
         else:
+            build_sentinel.unlink(missing_ok=True)
             # ── verilator --binary ────────────────────────────────────────
             print(f"[verilator 1/2] Compiling+Elaborating ({cfg.tb_module})")
-            verilate_cmd = [
-                "verilator", "--binary", "--timing", "--Wno-fatal",
-                "-f", str(sources_f),
-                "--top-module", cfg.tb_module,
-                "-o", snapshot,
-                "--Mdir", str(obj_dir),
-            ]
-            if getattr(ctx, "probe_log", False):
-                verilate_cmd += ["-DPROBE_LOG=1"]
-
             run = _run_logged(verilate_cmd, verilate_log, cwd=work_dir)
             if run.exit_code != 0:
                 return ExecutionResult(
@@ -302,8 +291,8 @@ class VerilatorBackend(BackendAdapter):
                     backend_id=BACKEND_ID,
                     backend_metadata={"step": "verilate"},
                 )
-            if readmemh_mode:
-                build_sentinel.write_text("1")
+            if key is not None:
+                build_sentinel.write_text(key + "\n")
 
         # ── run the built binary ──────────────────────────────────────────
         print("[verilator 2/2] Simulating")

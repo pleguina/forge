@@ -1,7 +1,7 @@
 # forge CLI: exit codes and the output envelope
 
 This document is the single source of truth for what a `forge` (and
-`forge verify`) command's exit code means. It is cross-referenced from each
+`forge dev verify`) command's exit code means. It is cross-referenced from each
 migrated command's `--help` epilog rather than duplicated there.
 
 ## Historical inconsistency (resolved)
@@ -73,12 +73,12 @@ Two real conflations of exit code `2` (found while migrating each command
 onto the shared envelope, not merely renamed) were fixed as part of this
 sweep — both are deliberate, documented behavior changes:
 
-- `forge core verify-contract`: a real contract-verification failure
+- `forge dev core verify-contract`: a real contract-verification failure
   (`VerifyResult.errors`) used to exit `2` (via `VerifyResult.exit_code()`'s
   own errors→2 convention) — now exits `1` (`status: "fail"`). `2` is used
   there only for genuine usage errors (missing `--ip-info`/`--contract`
   file, neither `--contract` nor `--all-contracts` given).
-- `forge core resources --key <unknown>`: used to exit `1` — now exits `2`
+- `forge dev core resources --key <unknown>`: used to exit `1` — now exits `2`
   (a bad `--key` value is a usage error, not a "the resource doesn't
   exist" finding).
 
@@ -90,23 +90,23 @@ All commands below emit `CommandEnvelope` under `--json` (schema version
 | Command | Notes |
 |---|---|
 | `forge doctor` | `--strict` genuinely fails on any missing check (previously dead code — no check was ever `required=True`). |
-| `forge verify doctor` | |
-| `forge verify release-check` | |
+| `forge dev verify doctor` | |
+| `forge dev verify release-check` | |
 | `forge inspect` | Plain `--json` is a summary (counts + maturity + diagnostics), not a full IR dump — use `--emit-ir` for the full canonical IR. `--diff`/`--explain-staleness` results live in `metrics`. |
 | `forge build` | `{"plan","plan_hash"}` full-dump replaced with `metrics.counts` + `artifacts` + `diagnostics`. Supports `--strict`/`--dry-run`/`--provenance`/`--explain-staleness`. |
 | `forge test check-only` / `prepare` / `run` | `run`'s `metrics` carries `events_run`/`events_passed`/`events_failed`; supports `--junit-xml`. |
 | `forge report` | `artifacts` lists every file written; sections degrade to an honest "not available" note (`diagnostics` severity `note`) when optional inputs (`--hls-build-root`, `--probe-csv`, `--provenance`, `--junit-xml`) aren't given. |
 | `forge init` | `metrics.steps_completed` only ever lists steps that actually succeeded — a failed step halts immediately. |
-| `forge topgen validate` | Bespoke `{"passed","registry","design","stale"}` replaced; `metrics.stale` keeps the same `{"count","artifacts"}` shape as before for `--check-stale`. |
-| `forge topgen validate-registry` | Bespoke `{"passed","errors","warnings","infos"}` replaced with `diagnostics`. |
-| `forge core resources` | `--format json` (pre-existing) is a deprecated alias for the new `--json`; both produce the envelope, with the original `{key: {path, exists}}` dict now at `metrics.resources`. |
-| `forge core verify-contract` | Exit-code conflation fixed (see above). |
-| `forge analyze hls-report` / `latency-check` / `runtime-latency` / `plot-results` / `dashboard` | Lighter-touch pass (report-generation commands, not pass/fail gates — `metrics`/`artifacts` matter more than `diagnostics` here). Non-JSON text output and exit codes are unchanged. |
+| `forge dev topgen validate` | Bespoke `{"passed","registry","design","stale"}` replaced; `metrics.stale` keeps the same `{"count","artifacts"}` shape as before for `--check-stale`. |
+| `forge dev topgen validate-registry` | Bespoke `{"passed","errors","warnings","infos"}` replaced with `diagnostics`. |
+| `forge dev core resources` | `--format json` (pre-existing) is a deprecated alias for the new `--json`; both produce the envelope, with the original `{key: {path, exists}}` dict now at `metrics.resources`. |
+| `forge dev core verify-contract` | Exit-code conflation fixed (see above). |
+| `forge dev analyze hls-report` / `latency-check` / `runtime-latency` / `plot-results` / `dashboard` | Lighter-touch pass (report-generation commands, not pass/fail gates — `metrics`/`artifacts` matter more than `diagnostics` here). Non-JSON text output and exit codes are unchanged. |
 
-**Not on the envelope (deliberate)**: `forge verify
-preflight` (a real subset of `forge verify doctor`, kept separate and
-narrower/faster for tight verify-iteration loops), `forge topgen
+**Not on the envelope (deliberate)**: `forge dev verify
+preflight` (a real subset of `forge dev verify doctor`, kept separate and
+narrower/faster for tight verify-iteration loops), `forge dev topgen
 gen-top`/`hls *`/`framework *` (detailed subsystem commands the golden
-path wraps rather than replaces), and `forge topgen
+path wraps rather than replaces), and `forge dev topgen
 migrate` (a one-off developer tool, not a pass/fail gate or report
 generator).

@@ -7,7 +7,7 @@ Validates that:
   * Assertion checks reference correct expected values from algorithm
   * dry_run flag skips file writing
   * Unknown module raises ValueError
-  * Generated stimulus_current.svh files already exist in repo (committed)
+  * The stimulus and testbench generated for each flow fit together
 """
 from __future__ import annotations
 
@@ -32,7 +32,6 @@ from gen_stimulus import (  # noqa: E402
 
 _TOOLS         = Path(__file__).parent.parent.resolve()
 _REPO_ROOT     = _TOOLS.parents[4]
-_PLUGIN_VERIFY = _TOOLS.parent
 _XML           = _REPO_ROOT / "plugins/trigger_demo/forge/verify/schemas/data/trigger_demo_golden.xml"
 
 
@@ -294,8 +293,9 @@ class TestGenerateAll:
 # Pre-generated artifacts in repo
 # ═══════════════════════════════════════════════════════════════════════════
 
-class TestPreGeneratedStimulus:
-    """Verify committed stimulus_current.svh files are present and correct."""
+class TestGeneratedStimulus:
+    """gen_stimulus.py and `forge dev verify generate` write each flow's
+    stimulus and testbench."""
 
     _TB_FILES = {
         "hit_decoder_xsim": "tb_hit_decoder_xsim.sv",
@@ -312,12 +312,8 @@ class TestPreGeneratedStimulus:
         "trigger_output_xsim",
         "trigger_pipeline_xsim",
     ])
-    def test_stimulus_file_exists(self, flow: str) -> None:
-        svh = _PLUGIN_VERIFY / flow / "stimulus_current.svh"
-        assert svh.exists(), (
-            f"stimulus_current.svh missing for {flow}\n"
-            f"Run: python3 plugins/trigger_demo/verify/tools/gen_stimulus.py"
-        )
+    def test_stimulus_file_exists(self, flow: str, generated_verify_root: Path) -> None:
+        assert (generated_verify_root / flow / "stimulus_current.svh").exists()
 
     @pytest.mark.parametrize("flow", [
         "hit_decoder_xsim",
@@ -326,10 +322,8 @@ class TestPreGeneratedStimulus:
         "trigger_output_xsim",
         "trigger_pipeline_xsim",
     ])
-    def test_stimulus_has_run_stimulus_task(self, flow: str) -> None:
-        svh = _PLUGIN_VERIFY / flow / "stimulus_current.svh"
-        if not svh.exists():
-            pytest.skip("stimulus_current.svh not generated yet")
+    def test_stimulus_has_run_stimulus_task(self, flow: str, generated_verify_root: Path) -> None:
+        svh = generated_verify_root / flow / "stimulus_current.svh"
         assert "task automatic run_stimulus" in svh.read_text()
 
     @pytest.mark.parametrize("flow", [
@@ -339,9 +333,9 @@ class TestPreGeneratedStimulus:
         "trigger_output_xsim",
         "trigger_pipeline_xsim",
     ])
-    def test_sv_calls_run_stimulus(self, flow: str) -> None:
+    def test_sv_calls_run_stimulus(self, flow: str, generated_verify_root: Path) -> None:
         """The generated TB SV must contain the run_stimulus() call."""
-        tb_sv = _PLUGIN_VERIFY / flow / self._TB_FILES[flow]
+        tb_sv = generated_verify_root / flow / self._TB_FILES[flow]
         if not tb_sv.exists():
-            pytest.skip("TB SV not generated yet")
+            pytest.skip("generated from RTL, which needs an HLS build")
         assert "run_stimulus()" in tb_sv.read_text()

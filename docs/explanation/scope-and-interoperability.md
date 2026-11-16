@@ -25,7 +25,7 @@ here, not re-derived, so the two never drift apart:
 | HDL vs HLS support | Both — hand-written RTL (Verilog/VHDL) and Vitis HLS-generated modules, wired together in one topology |
 | Verification dataset format | XML-backed (`design.verification.yml` + XML golden data); a JSON layer-A loader exists but the documented v1.0 contract is XML-first |
 | Topology-generation approach | Contract-first (interface-contract-driven wiring), with heuristic name-matching as a compatibility fallback — see [architecture rationale](architecture-rationale.md) |
-| Clock/reset domains | One functional clock/reset per module; real structural cross-module CDC-crossing detection exists under `--strict`, but no full multi-clock-domain-per-module model — see [clock and reset domains](../concepts/clock-and-reset-domains.md) |
+| Clock/reset domains | One functional clock/reset per module; real structural cross-module CDC-crossing detection stops generation on an undeclared crossing, but no full multi-clock-domain-per-module model — see [clock and reset domains](../concepts/clock-and-reset-domains.md) |
 | Vendors/toolchains not supported | Intel/Altera, Lattice, generic ASIC flows |
 
 ## Comparison points

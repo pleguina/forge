@@ -7,8 +7,9 @@ or diff it against a previously exported snapshot.
 
 Read-only by default: building the IR never writes ``ip_info.yaml`` or any
 other file — the same invariant established for ``topgen gen-top --dry-run``.
-The only file this command ever writes is the one explicitly named by
-``--emit-ir``.
+It writes only the files explicitly named by ``--emit-ir`` and the other
+output options, and with ``--impact`` the impact report under the project's
+reports.
 """
 
 from __future__ import annotations
@@ -43,13 +44,20 @@ def _guided_failure(msg: str, *, json_mode: bool) -> "int":
 
 def cmd_inspect(args):
     from forge.core.cli.envelope import CommandEnvelope, emit
-    from forge.core.cli.groups.topgen import _compute_maturity_summary
+    from forge.generation.artifacts import compute_maturity_summary
     from forge.ir import (
         build_project_ir_with_match_report, content_hash, diff_projects, to_json_dict,
     )
 
-    design_path = Path(args.design).expanduser().resolve()
     json_mode = getattr(args, "json", False)
+    if args.design is None:
+        from forge.core.cli._shared import resolve_project_args
+
+        try:
+            resolve_project_args(args)
+        except (FileNotFoundError, ValueError) as e:
+            sys.exit(_guided_failure(str(e), json_mode=json_mode))
+    design_path = Path(args.design).expanduser().resolve()
 
     if not design_path.exists():
         sys.exit(_guided_failure(f"Design file not found: {design_path}", json_mode=json_mode))
@@ -64,6 +72,7 @@ def cmd_inspect(args):
             build_dir=getattr(args, "build_dir", None),
             ip_root=getattr(args, "ip_root", None),
             src_root=getattr(args, "src_root", None),
+            hls_build_root=getattr(args, "hls_build_root", None),
         )
     except Exception as e:  # noqa: BLE001 - surfaced as a clean CLI error
         if getattr(args, "debug", False):
@@ -75,7 +84,7 @@ def cmd_inspect(args):
     # honestly absent (None) rather than fabricated. Module/connection/
     # wiring-method counts are knowable pre-generation and always populate.
     ir_hash = content_hash(project)
-    maturity = _compute_maturity_summary(
+    maturity = compute_maturity_summary(
         cfg, match_report, ir_content_hash=ir_hash,
     )
 
@@ -83,6 +92,9 @@ def cmd_inspect(args):
     errors = [d for d in diagnostics if d["severity"] == "error"]
     warnings = [d for d in diagnostics if d["severity"] == "warning"]
     next_actions = _compute_next_actions(diagnostics, maturity)
+
+    if getattr(args, "impact", None) is not None:
+        sys.exit(_impact(args, project, design_path, json_mode=json_mode))
 
     if getattr(args, "diff", None):
         diff_path = Path(args.diff).expanduser().resolve()
@@ -228,14 +240,123 @@ def cmd_inspect(args):
     sys.exit(envelope.exit_code())
 
 
+def _changed_since(provenance: Path, design_dir: Path, state_root: Optional[Path]) -> list:
+    """Source files (absolute) whose content differs from what *provenance*
+    recorded; its paths are relative to the design's directory."""
+    import hashlib
+
+    try:
+        recorded = json.loads(provenance.read_text()).get("source_hashes") or {}
+    except (OSError, ValueError):
+        return []
+    changed = []
+    for rel, digest in recorded.items():
+        path = (design_dir / rel).resolve()
+        if state_root is not None and path.is_relative_to(state_root):
+            continue
+        current = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+        if current != digest:
+            changed.append(str(path))
+    return sorted(changed)
+
+
+def _plan_targets(config, modules) -> dict:
+    """``{name: {scope, instances?, replay?}}``: forge.yml's verification
+    targets, or the design and each module when it names none."""
+    targets = (config.verification_spec or {}).get("targets") if config is not None else None
+    if targets:
+        return {str(n): dict(t or {}) for n, t in targets.items()}
+    return {"design": {"scope": "design"}, **{f"module:{m}": {"scope": f"module:{m}"} for m in modules}}
+
+
+def _impact(args, project, design_path: Path, *, json_mode: bool) -> int:
+    """`forge inspect --impact [BASE]`: what changing the design from BASE
+    (default: the last build, of the variant when one is named) affects."""
+    from forge.analysis.impact import affected_targets, compare, render_markdown
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.ir import to_json_dict
+    from forge.ir.deserialize import IrSchemaError, from_json_dict
+    from forge.project.config import ForgeConfig
+    from forge.project.paths import find_project_root
+    from forge.project.variants import variant_dir
+
+    root = find_project_root(Path.cwd())
+    config = ForgeConfig.load(root) if root is not None else None
+    paths = config.paths() if config is not None else None
+    if args.impact:
+        base = Path(args.impact).expanduser().resolve()
+    elif paths is not None and getattr(args, "variant", None):
+        base = variant_dir(paths, args.variant) / "generated" / "design.ir.json"
+    elif paths is not None:
+        base = paths.generated_root / "design.ir.json"
+    else:
+        return _guided_failure("--impact needs the IR to compare with outside a forge.yml project",
+                               json_mode=json_mode)
+    if not base.is_file():
+        build = f"forge build --variant {args.variant}" if getattr(args, "variant", None) else "forge build"
+        return _guided_failure(f"no IR to compare with at {base}: run `{build}` first, or name a "
+                               "snapshot written by --emit-ir", json_mode=json_mode)
+    try:
+        previous, _ = from_json_dict(json.loads(base.read_text()))
+    except IrSchemaError as e:
+        return _guided_failure(str(e), json_mode=json_mode)
+    provenance = base.parent / "provenance.json"
+    changed_files = (_changed_since(provenance, design_path.parent, paths.state_root if paths else None)
+                     if provenance.is_file() else [])
+    after = to_json_dict(project)["design"]
+    impact = compare(to_json_dict(previous)["design"], after, changed_files)
+
+    def shown(path) -> str:
+        path = Path(path).resolve()
+        return str(path.relative_to(root)) if root is not None and path.is_relative_to(root) else str(path)
+
+    impact.sources = {m: [shown(f) for f in files] for m, files in impact.sources.items()}
+    impact.sources_changed = {m: [shown(f) for f in files] for m, files in impact.sources_changed.items()}
+    targets = affected_targets(impact, _plan_targets(config, [m["name"] for m in after.get("modules") or []]),
+                               getattr(args, "variant", None))
+    regenerate: list = []
+    if not impact.empty:
+        built = base.parent
+        if paths is not None:
+            built = (variant_dir(paths, args.variant) / "generated" if getattr(args, "variant", None)
+                     else paths.generated_root)
+        try:
+            outputs = json.loads((built / "provenance.json").read_text()).get("output_hashes") or {}
+            regenerate = sorted(shown(design_path.parent / rel) for rel in outputs)
+        except (OSError, ValueError):
+            regenerate = [shown(built)]
+        spec_targets = (config.verification_spec or {}).get("targets") or {} if config is not None else {}
+        regenerate += [f".forge/verify/{n}/generated/" for n in targets
+                       if (spec_targets.get(n) or {}).get("scope") == "subsystem"]
+    text = render_markdown(impact, targets, regenerate, shown(base))
+    artifacts = []
+    if paths is not None:
+        paths.report_root.mkdir(parents=True, exist_ok=True)
+        (paths.report_root / "impact.md").write_text(text)
+        artifacts.append(str(paths.report_root / "impact.md"))
+    envelope = CommandEnvelope(
+        status="warn" if impact.merges else "pass",
+        artifacts=artifacts,
+        metrics={"impact": impact.to_dict(), "rerun": targets, "regenerate": regenerate, "base": str(base)},
+        diagnostics=[{"severity": "warning", "message": f"{m['instance']}: inputs from {', '.join(m['changed'])} "
+                      f"changed timing, from {', '.join(m['unchanged'])} did not"} for m in impact.merges],
+        next_actions=(["forge build"] if not impact.empty else [])
+        + ([f"forge test --target {','.join(targets)}"] if targets else []),
+    )
+    if json_mode:
+        return emit(envelope, json_mode=True)
+    print(text)
+    return envelope.exit_code()
+
+
 def _design_registry(design_path: Path) -> Optional[str]:
     """The modules.yml named by design.yml's own ``registry:`` field, so a
     plain ``forge inspect design.yml`` sees the same contracts that
-    ``forge analyze latency-check`` and generation do."""
-    import yaml
+    ``forge dev analyze latency-check`` and generation do."""
+    from forge.contracts.design_variant import load_design_document
 
     try:
-        design = yaml.safe_load(design_path.read_text()) or {}
+        design = load_design_document(design_path)
     except Exception:  # noqa: BLE001 — resolution reports a broken design itself
         return None
     registry = design.get("registry") if isinstance(design, dict) else None
@@ -364,7 +485,10 @@ def register(sub) -> None:
         "inspect",
         help="Resolve a design into the canonical IR and inspect it (read-only)",
     )
-    p.add_argument("design", help="Path to design.yml")
+    p.add_argument(
+        "design", nargs="?", default=None,
+        help="Path to design.yml (default: the forge.yml project around the current directory)",
+    )
     p.add_argument(
         "--contracts-from",
         help="Path to modules.yml (interface_contract: entries); default: registry: field in design.yml",
@@ -373,9 +497,19 @@ def register(sub) -> None:
     p.add_argument("--build-dir", help="HLS/RTL build root to scan for component.xml (optional)")
     p.add_argument("--ip-root", help="Additional IP repo root to scan (optional)")
     p.add_argument("--src-root", help="Root for resolving relative RTL src paths (optional)")
+    p.add_argument("--hls-build-root", help="HLS build root whose reports size delay_cycles: auto, as forge build "
+                                            "does (default: forge.yml's build: hls_build_root)")
     p.add_argument("--json", action="store_true", default=False, help="Machine-readable JSON output")
+    p.add_argument("--variant", default=None,
+                   help="Resolve a variant named under variants: in forge.yml instead of the project's "
+                        "design; with --impact, compared with the project's last build")
     p.add_argument("--emit-ir", help="Write the resolved IR as JSON to this path")
     p.add_argument("--diff", help="Diff against a previously --emit-ir'd IR JSON file")
+    p.add_argument(
+        "--impact", nargs="?", const="", default=None, metavar="IR_JSON",
+        help="Report what changed since IR_JSON (default: the last build), what it affects, which "
+             "merges it misaligns, which verification to rerun and what to regenerate",
+    )
     p.add_argument("--provenance", help="Write a content-hash provenance manifest to this path")
     p.add_argument(
         "--explain-staleness",

@@ -1,9 +1,10 @@
 # Bring Your Own RTL
 
-[The quickstart](quickstart.md) starts from nothing: `forge init` creates a
-project already shaped the way FORGE expects. This page starts from the
-other end — a repository that exists, was laid out by someone who had never
-heard of FORGE, and is not going to be reorganised.
+To compare firmware you already have with reference data, `forge init` and
+[Compare existing firmware](compare-existing-firmware.md) are all you need.
+This page goes further: it builds FORGE's model of a repository that exists,
+was laid out by someone who had never heard of FORGE, and is not going to be
+reorganised, so that its topology can be generated, checked and changed.
 
 You will not write a module registry, a design topology, an interface
 contract or a verification manifest by hand. FORGE reads them out of the
@@ -70,9 +71,11 @@ Created:
 Nothing in `rtl/`, `tb/` or `constraints/` was touched. Two things were
 created:
 
-- **`forge.yml`** — yours. Fifteen lines, and the only file you maintain.
-- **`.forge/`** — FORGE's. Generated from `forge.yml` and your sources, and
-  safe to delete and regenerate at any time.
+- **`forge.yml`** — yours. Every decision about the design goes here, or in
+  a file this one names.
+- **`.forge/`** — FORGE's. Every `forge` command writes it again from
+  `forge.yml` and your sources, so it is safe to delete, and an edit made
+  inside it does not survive.
 
 ```yaml title="forge.yml"
 project: simple_pipeline
@@ -170,14 +173,14 @@ FORGE project status
 ────────────────────────────────────────────────────────────
 
   ✅ Sources                   PASS               3 RTL, 0 HLS, 3 modules
-  ◐  Contracts                 PARTIAL            3 of 3 unreviewed
+  ✅ Contracts                 PASS               3 inferred from source
   ✅ Topology                  PASS               4 connections, 2 in / 2 out
-  ⚠️  Clock/reset model         WARN               clock clk, reset rst_n (active low)
+  ✅ Clock/reset model         PASS               clock clk, reset rst_n (active low, driven by ~ap_rst)
   ◐  Latency model             PARTIAL            0 of 3 declared
   ○  Generated artifacts       NOT CONFIGURED     not generated yet
-  ○  Verification              NOT CONFIGURED     no dataset, no flow
+  ○  Verification              NOT CONFIGURED     no input or expected output
 
-  Project completion: 54% (in progress)
+  Project completion: 64% (in progress)
 ```
 
 `forge check` is to your project what [`forge doctor`](quickstart.md) is to
@@ -199,12 +202,13 @@ Reason
   Generated artifacts: not configured — not generated yet
 
 Run
-  forge build .forge/project/design.yml --contracts-from .forge/project/modules.yml \
-      --consumer-root . --output .forge/generated/algo_top.v --apply
+  forge build
 ```
 
 `forge next` is `forge check` narrowed to one recommendation, so you do not
-have to hold the workflow in your head. Run what it prints:
+have to hold the workflow in your head. Run what it prints. `forge build`,
+`forge test`, `forge report` and `forge inspect` all find `forge.yml` from
+anywhere inside the project, the way `git` finds `.git`:
 
 ```
   ✓ Structural top level: .forge/generated/algo_top.v
@@ -225,7 +229,7 @@ module algo_top (
   ...
   shaper shaper (
     .clk(ap_clk),
-    .rst_n(ap_rst),
+    .rst_n(~ap_rst),
     .decimated(net_decimator_decimated),
     .decimated_valid(net_decimator_decimated_valid),
     .shaped(net_shaper_shaped),
@@ -234,6 +238,18 @@ module algo_top (
 ```
 
 Then `forge check` again and watch the completion figure move.
+
+To simulate it, give `forge test` an input and the output you expect of it,
+as JSON keyed by the top level's interfaces:
+
+```bash
+forge test --input input.json --expected expected.json
+```
+
+FORGE finds a `valid` stream in, `decimator_sample_in`, and one out,
+`packer_packet_out`, generates the testbench, and compares; each module is
+also simulated alone and reported `NOT_VERIFIED_NO_ORACLE` until it has an
+expected output of its own. See [Verify from the design](../how-to/verify-from-the-design.md).
 
 ## Ask why
 
@@ -293,9 +309,12 @@ forge explain artifact:.forge/generated/algo_top.v
 
 ## Let FORGE do the mechanical parts
 
-Some of what `forge check` reports has exactly one right answer. If a
-contract says a port is 31 bits and the RTL says 32, nobody needs to
-adjudicate that:
+Some of what `forge check` reports has exactly one right answer. The
+contracts FORGE infers are rewritten from the ports on every command, so
+they cannot drift; a contract you keep yourself and name in `forge.yml`
+(`modules: {shaper: {contract: contracts/shaper.interface.yaml}}`) can. If
+it says a port is 31 bits and the RTL says 16, nobody needs to adjudicate
+that:
 
 ```bash
 forge fix
@@ -311,8 +330,7 @@ Available: 1 automatic fix(es).
      width_declared_by_source = shaped: 31 -> 16  [deterministic, from rtl/shaper.v]
 
 Needs you — these are decisions, not transcription:
-  - Review the 3 draft contract(s) under .forge/contracts and mark them ready
-  - Confirm how 'rst_n' is driven — FORGE does not model reset polarity
+  - Declare each module's latency in forge.yml (`modules: {decimator: {latency: <cycles>}}`) — it cannot be read from the ports
 
 Run `forge fix --apply` to apply them.
 ```
@@ -355,25 +373,25 @@ that performs it rather than done by a preview command.
 
 ## What FORGE told you about your design
 
-Two of the lines above are worth reading closely, because they are FORGE
-being honest about its own limits rather than about your code:
-
-**`Clock/reset model — WARN`.** Your reset is active-low. FORGE's generators
-collapse every module reset onto one top-level `ap_rst` net and do not model
-its polarity, so `rst_n` is wired straight through. You need to drive
-`ap_rst` with the polarity your modules expect. Better to learn that here
-than from a waveform.
+**`Clock/reset model`.** The generated top level has one active-high
+`ap_rst` input. Your reset is active-low, so each `rst_n` pin is driven by
+`~ap_rst`. FORGE reads the level from the port name; if the name misleads,
+set `reset.active` in `forge.yml` and that wins.
 
 **`Latency model — PARTIAL`.** A module's pipeline depth is not visible in
 its port list, so adoption never invents one. Until you declare it, the
-static latency check has nothing to align. Add it to
-`.forge/project/modules.yml`:
+static latency check has nothing to align. Add it to `forge.yml`, as a
+cycle count or as any latency the [module registry](../concepts/latency-model.md)
+accepts:
 
-```yaml
-- name: shaper
-  latency:
-    kind: fixed
-    cycles: 1
+```yaml title="forge.yml"
+modules:
+  decimator:
+    latency: 2
+  shaper:
+    latency: 1
+  packer:
+    latency: {kind: bounded, min_cycles: 1, max_cycles: 3}
 ```
 
 If your repository contains something FORGE cannot manage at all — a vendor
@@ -441,13 +459,97 @@ question:
   ✅ Supported constructs      PASS               1 opaque: axi_bridge
 ```
 
+### Widths the source does not state
+
+A port whose range FORGE cannot evaluate — a macro defined elsewhere, a
+package constant, a function other than `$clog2` — has no width it can
+generate. Adoption asks for it instead of guessing, and `forge check` and
+`forge build` fail (`ATG051`) until it is declared:
+
+```yaml title="forge.yml"
+modules:
+  lookup:
+    widths:
+      lookup_addr: 4
+```
+
+A declared width for a port whose width the source does state must agree
+with it.
+
+## 4. Verify it
+
+Give `forge test` the design's input and the output you expect for it:
+
+```yaml title="forge.yml"
+verification:
+  input: data/input.json
+  expected: data/expected.json
+```
+
+`forge test` builds the design, drives its input interfaces, compares its
+outputs with the expected words, and writes the evidence under
+`.forge/reports/test/auto/`; `forge report` shows it, and says when a source
+or a data file changed after the run. A level with no expected output is
+`NOT_VERIFIED_NO_ORACLE` and one whose simulator is missing is
+`BLOCKED_MISSING_TOOL`. Both are warnings unless you pass
+`--require-verified`, which is what CI should run:
+
+```bash
+forge test --require-verified
+```
+
+The testbench clock follows `clock.frequency` (or `clock.period_ns`). Pattern
+files (`empv2`, `apx`) and any format registered with
+`forge.verification.dataset_format` are read too; see the
+[support matrix](../reference/support-matrix.md).
+
+## Already have a design.yml?
+
+A project that already describes its design by hand — a `design.yml`, its
+`modules.yml` registry, HLS IP built somewhere — keeps those files and
+names them in `forge.yml` instead of being adopted:
+
+```yaml title="forge.yml"
+project: omtf
+design: forge_utils/designs/design.rpc_fp.yml
+# registry: forge_utils/modules.rpc.yml   # default: the design's own registry: key
+build:
+  hls_build_root: build_hls
+verification:
+  config: forge_utils/verify/design.verification.yml
+```
+
+FORGE then uses the design as it stands: nothing is scanned or derived, and
+everything it writes goes under `.forge/`. `forge build`, `forge test`,
+`forge report` and `forge inspect` need no arguments, and `forge check`
+validates the design and its registry and reports any module whose latency
+neither the registry nor the HLS reports under `build.hls_build_root` give.
+`build:` accepts the `forge build` options `mode`, `top_name`,
+`hls_build_root`, `ip_root`, `ip_info`, `build_dir`, `system` and
+`rtl_resource_root`; an option given on the command line wins.
+
+A flow that simulates a different variant of the design names it, relative
+to the verification file, and `forge test` generates that top level into
+the flow's `dut_rtl_source` before every run:
+
+```yaml title="design.verification.yml"
+flows:
+  - name:           full_chip_algo_top_xsim
+    dut_rtl_source: forge_utils/verify/full_chip_algo_top_xsim
+    design:         ../designs/design.xsim_fp.yml
+```
+
 ## Where to go next
 
 Everything under `.forge/` is ordinary FORGE configuration — the same
-format a hand-authored project uses, which is why `forge topgen validate`,
-`forge inspect`, `forge report` and the rest work on an adopted project
-unchanged. When you need more than adoption can infer, that is where you
-edit:
+format a hand-authored project uses, which is why `forge dev topgen validate`
+and the rest work on an adopted project unchanged. It is rewritten by every
+command, so when you need more than adoption can infer, record it in
+`forge.yml`: a module's latency, a port width the source does not state
+(`modules.<name>.widths`), a contract of your own
+(`modules.<name>.contract`), and what `forge test` verifies against
+(`verification.input`/`expected`, or a plugin flow's
+`design.verification.yml` as `verification.config`).
 
 - [Contracts and protocols](../concepts/contracts-and-protocols.md) — the
   semantics adoption leaves blank (`wiring_kind`, `protocol`, coordinates)

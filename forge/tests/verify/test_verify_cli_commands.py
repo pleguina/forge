@@ -1,21 +1,24 @@
-"""End-to-end coverage for `forge verify` read-only CLI commands.
+"""End-to-end coverage for `forge dev verify` read-only CLI commands.
 
 verify/__main__.py is a ~720-line, ~15%-covered CLI surface, only
 exercised indirectly through integration scripts. These tests call
 forge.verification.__main__.main() in-process (subprocess-based CLI tests, like
 tests/verify/test_cli_error_handling.py, run in a child interpreter that
 --cov=forge in the parent pytest process can't see, so they never counted
-towards coverage) against plugins/passthrough_demo, a real, tiny, checked-in
-FORGE consumer.
+towards coverage) against a prepared copy of plugins/passthrough_demo, a
+tiny FORGE consumer.
 
 Scoped to commands that are read-only or write only to a scratch
 --plugins-root (doctor, release-check, init-plugin --dry-run, and
-argument-validation error paths) — `run`/`prepare`/`generate` need a full
-gen-top'd canonical layout and real xsim execution, out of scope here.
+argument-validation error paths); `run` is covered by test_verify_run_xsim.py.
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -24,9 +27,6 @@ import pytest
 import forge.verification.__main__ as cli
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DESIGN_VERIFICATION_YML = (
-    REPO_ROOT / "plugins/passthrough_demo/forge/verify/design.verification.yml"
-)
 
 
 def _run_verify(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], *args: str):
@@ -40,22 +40,60 @@ def _run_verify(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[s
     return code, captured.out, captured.err
 
 
-def test_doctor_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    code, out, _err = _run_verify(monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML))
+@pytest.fixture
+def prepared_plugin(tmp_path: Path, prepare_plugin_flows) -> Path:
+    """design.verification.yml of a gen-top'd copy of passthrough_demo with
+    its flow files and stimulus written."""
+    from forge.core.cli.main import build_parser
+
+    plugin = tmp_path / "plugins/passthrough_demo"
+    shutil.copytree(
+        REPO_ROOT / "plugins/passthrough_demo", plugin, ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    parsed = build_parser().parse_args([
+        "topgen", "gen-top", str(plugin / "forge/designs/design.yml"),
+        "--mode", "verilog", "--consumer-root", str(tmp_path),
+        "--output", str(tmp_path / "gen-top/design_passthrough_demo/algo_top.v"),
+        "--build-dir", str(tmp_path / "build/passthrough_demo"),
+    ])
+    with contextlib.redirect_stdout(io.StringIO()):
+        parsed.func(parsed)
+    design = plugin / "forge/verify/design.verification.yml"
+    prepare_plugin_flows(design, tmp_path)
+    return design
+
+
+@pytest.fixture
+def stale_design_verification(prepared_plugin: Path) -> Path:
+    """A prepared copy whose design.verification.yml is newer than the flow
+    files generated from it."""
+    plugin = prepared_plugin.parents[2]
+    newest = max(p.stat().st_mtime for p in plugin.rglob("*") if p.is_file())
+    os.utime(prepared_plugin, (newest + 60, newest + 60))
+    return prepared_plugin
+
+
+def _root(design: Path) -> str:
+    return str(design.parents[4])
+
+
+def test_doctor_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], prepared_plugin: Path) -> None:
+    code, out, _err = _run_verify(
+        monkeypatch, capsys, "doctor", str(prepared_plugin), "--consumer-root", _root(prepared_plugin),
+    )
 
     assert code == 0
     assert "PASS" in out
 
 
-def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stale_design_verification: Path) -> None:
     import json
 
-    code, out, _err = _run_verify(monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML), "--json")
+    code, out, _err = _run_verify(monkeypatch, capsys, "doctor", str(stale_design_verification), "--json")
 
     assert code == 0
     report = json.loads(out)
-    # passthrough_demo's fixture genuinely has 2 warnings (stale port_map.yaml)
-    # and 0 errors — this now actually exercises the "warn" branch, closing a
+    # The stale fixture has warnings (stale port_map.yaml) and 0 errors — this now actually exercises the "warn" branch, closing a
     # latent bug where DiagnosticReport.to_dict() only ever emitted
     # "pass"/"fail", never "warn", even with real warnings present.
     assert report["status"] == "warn"
@@ -66,12 +104,12 @@ def test_doctor_json_emits_diagnostic_report(monkeypatch: pytest.MonkeyPatch, ca
 
 
 def test_doctor_json_strict_promotes_warn_to_fail_exit_code(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stale_design_verification: Path
 ) -> None:
     import json
 
     code, out, _err = _run_verify(
-        monkeypatch, capsys, "doctor", str(DESIGN_VERIFICATION_YML), "--json", "--strict",
+        monkeypatch, capsys, "doctor", str(stale_design_verification), "--json", "--strict",
     )
 
     # --strict promotes a warning-only report's exit code to 1, without
@@ -91,22 +129,24 @@ def test_doctor_missing_design_is_guided(monkeypatch: pytest.MonkeyPatch, capsys
     assert "Traceback" not in err
 
 
-def test_release_check_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    code, out, _err = _run_verify(monkeypatch, capsys, "release-check", str(DESIGN_VERIFICATION_YML))
+def test_release_check_passes_on_real_plugin(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], prepared_plugin: Path) -> None:
+    code, out, _err = _run_verify(
+        monkeypatch, capsys, "release-check", str(prepared_plugin), "--consumer-root", _root(prepared_plugin),
+    )
 
     assert code == 0
     assert "PASS" in out
 
 
-def test_release_check_strict_fails_on_stale_warning(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    code, _out, _err = _run_verify(
-        monkeypatch, capsys, "release-check", str(DESIGN_VERIFICATION_YML), "--strict",
+def test_release_check_strict_fails_on_stale_warning(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stale_design_verification: Path) -> None:
+    code, _out, err = _run_verify(
+        monkeypatch, capsys, "release-check", str(stale_design_verification), "--strict",
     )
 
-    # The fixture's port_map.yaml predates design.verification.yml, which
-    # release-check's RC-10 stale-artifact check reports as a warning;
-    # --strict promotes any warning to a failure.
+    # RC-10 reports the stale artifacts as warnings; --strict promotes any
+    # warning to a failure.
     assert code == 1
+    assert "[RC-10]" in err and "is stale" in err
 
 
 def test_init_plugin_dry_run_lists_without_writing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -136,11 +176,8 @@ def test_init_plugin_writes_expected_skeleton(monkeypatch: pytest.MonkeyPatch, c
     assert (created / "forge/verify/tools/bootstrap.py").exists()
 
 
-def test_preflight_missing_consumer_root_is_guided(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    flow = (
-        REPO_ROOT
-        / "plugins/passthrough_demo/forge/verify/passthrough_xsim/verify.flow.yml"
-    )
+def test_preflight_missing_consumer_root_is_guided(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], prepared_plugin: Path) -> None:
+    flow = prepared_plugin.parent / "passthrough_xsim/verify.flow.yml"
 
     code, _out, err = _run_verify(
         monkeypatch, capsys, "preflight", str(flow), "--plugin", "passthrough_demo",
@@ -171,3 +208,24 @@ def test_missing_positional_arg_is_argparse_error(monkeypatch: pytest.MonkeyPatc
 
     assert exc_info.value.code == 2
     assert "usage:" in capsys.readouterr().err.lower()
+
+
+def test_a_flow_with_its_own_testbench_keeps_it(prepared_plugin: Path) -> None:
+    import yaml
+
+    from forge.verification.design_contract import load_verify_design
+    from forge.verification.prepare import prepare_flows
+
+    doc = yaml.safe_load(prepared_plugin.read_text())
+    flow = next(f for f in doc["flows"] if f.get("kind", "") not in ("hls_csim", "hls_cosim"))
+    flow["requires_generated_tb"] = False
+    prepared_plugin.write_text(yaml.safe_dump(doc, sort_keys=False))
+    decl = next(f for f in load_verify_design(prepared_plugin).flows if f.name == flow["name"])
+    consumer_root = prepared_plugin.parents[4]
+    tb = next(consumer_root.rglob(f"{decl.tb_module}.sv"))
+    tb.write_text("// hand-written\n")
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert prepare_flows(prepared_plugin, consumer_root=consumer_root, flow=decl.name) == 0
+
+    assert tb.read_text() == "// hand-written\n"

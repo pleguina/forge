@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structured diagnostics for forge verify commands.
+"""Structured diagnostics for forge dev verify commands.
 
 Provides :class:`Diagnostic` (a single classified finding) and
 :class:`DiagnosticReport` (a collection of findings) as the uniform output
@@ -50,7 +50,7 @@ Usage
         code="FWV004",
         severity=Severity.ERROR,
         message=f"TB not found: {tb_sv}",
-        action=f"Run: forge verify generate {design_yml} --flow {flow_name}",
+        action=f"Run: forge dev verify generate {design_yml} --flow {flow_name}",
         path=str(tb_sv),
         flow=flow_name,
     ))
@@ -101,7 +101,9 @@ class Severity(str, Enum):
     def sort_key(self) -> int:
         return {"note": 0, "warning": 1, "error": 2, "critical": 3}[self.value]
 
-    def __lt__(self, other: "Severity") -> bool:  # for sorting
+    def __lt__(self, other: object) -> bool:  # for sorting
+        if not isinstance(other, Severity):
+            return NotImplemented
         return self.sort_key < other.sort_key
 
 

@@ -170,6 +170,14 @@ class ProjectPaths:
     def ir_json(self) -> Path:
         return self.ir_root / "design.ir.json"
 
+    def top_level(self, mode: str = "verilog", top_name: str = "algo_top") -> Path:
+        """The generated top level for an output *mode*."""
+        if mode == "vhdl":
+            return self.generated_root / f"{top_name}.vhd"
+        if mode == "bd":
+            return self.generated_root / "block_design.tcl"
+        return self.generated_root / f"{top_name}.v"
+
     @property
     def verification_yml(self) -> Path:
         return self.project_config_root / "design.verification.yml"

@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from forge.core.diagnostics import ATGDiagnosticReport
 from forge.project.actions import Action, dedupe
-from forge.project.config import ForgeConfig
+from forge.project.config import ForgeConfig, ModulePolicy
 from forge.project.discovery import (
     AMBIGUOUS,
     KIND_CONNECTION,
@@ -35,6 +35,9 @@ from forge.project.discovery import (
     ProjectDiscovery,
 )
 from forge.project.paths import ROOT_CONFIG_NAME, ProjectPaths, find_project_root
+from forge.project.verification_state import (
+    DATA, VerificationSetup, current_plans, latest_results, overall_status, target_problem, verification_setup,
+)
 
 # ── Section states ────────────────────────────────────────────────────────
 
@@ -242,15 +245,21 @@ def evaluate(
         return status
 
     status.paths = status.config.paths()
-    # The same decisions adoption honours: a question the project has
-    # already answered in forge.yml must not be re-asked by `forge check`
-    # either, or answering it would appear to have done nothing.
-    status.discovery = discovery or ProjectDiscovery(
-        decisions=status.config.decisions()
-    ).scan(root)
+    if (status.config.verification_spec or {}).get("target") == "existing":
+        checks = EXISTING_CHECKS
+    elif status.config.authored:
+        checks = AUTHORED_CHECKS
+    else:
+        checks = CHECKS
+        # The same decisions adoption honours: a question the project has
+        # already answered in forge.yml must not be re-asked by `forge check`
+        # either, or answering it would appear to have done nothing.
+        status.discovery = discovery or ProjectDiscovery(
+            decisions=status.config.decisions()
+        ).scan(root)
 
     ranked: List[Tuple[int, int, Action]] = []
-    for order, check in enumerate(CHECKS):
+    for order, check in enumerate(checks):
         output = check(status)
         if output is None:
             continue
@@ -388,15 +397,15 @@ def _duplicate_modules(discovery: DiscoveryResult) -> Dict[str, List[Path]]:
 
 
 def _check_contracts(status: ProjectStatus) -> _CheckOutput:
-    """Is there a reviewed interface contract for every managed module?
+    """Does every managed module have a contract that matches its source?
 
-    A missing contract blocks generation. A ``draft`` one does not block it
-    but means nobody has confirmed the semantics FORGE could not infer, so
-    it is reported as partial rather than passing — the difference matters
-    to anyone about to trust the generated wiring.
+    A module's contract is inferred from its ports on every command, so it
+    can only disagree with its source when ``forge.yml`` names a contract
+    of the user's own. Those are checked against the source; the inferred
+    ones need nothing from the user.
     """
-    paths, discovery = status.paths, status.discovery
-    assert paths is not None and discovery is not None
+    config, paths, discovery = status.config, status.paths, status.discovery
+    assert config is not None and paths is not None and discovery is not None
 
     managed = discovery.managed_units
     if not managed:
@@ -404,92 +413,69 @@ def _check_contracts(status: ProjectStatus) -> _CheckOutput:
             "Contracts", NOT_CONFIGURED, "no managed modules"))
 
     missing: List[str] = []
-    draft: List[str] = []
     drifted: List[str] = []
+    own = 0
     for unit in managed:
-        contract = paths.contract_root / f"{unit.name}.interface.yaml"
+        policy = config.modules.get(unit.name)
+        if policy is None or not policy.contract:
+            continue
+        own += 1
+        contract = (config.root / policy.contract).resolve()
         if not contract.is_file():
             missing.append(unit.name)
             status.report.error(
                 "ATG034",
-                f"no interface contract for module {unit.name!r} "
-                f"(expected {contract})",
-                action=f"Run `forge adopt {paths.root}` to generate it, or write it by hand",
-                path=contract,
-                module=unit.name,
-            )
-            continue
-        text = contract.read_text()
-        if "normalization_status: draft" in text:
-            draft.append(unit.name)
-            status.report.warn(
-                "ATG035",
-                f"contract for {unit.name!r} is still a draft — the semantics FORGE "
-                f"could not infer (wiring_kind, protocol, coordinates) have not been "
-                f"reviewed",
+                f"forge.yml names {policy.contract} as the contract for module "
+                f"{unit.name!r}, and it does not exist",
                 action=(
-                    f"Review {contract.name} and set normalization_status: ready "
-                    f"once its wiring semantics are correct"
+                    f"Correct modules.{unit.name}.contract in {ROOT_CONFIG_NAME}, or remove "
+                    f"it to use the contract inferred from the ports"
                 ),
                 path=contract,
                 module=unit.name,
             )
+            continue
         for drift in _contract_drift(contract, unit):
             drifted.append(unit.name)
             status.report.error(
                 "ATG036",
                 f"contract for {unit.name!r} disagrees with {unit.path.name}: {drift}",
-                action=(
-                    f"Correct {contract.name}, or re-run `forge adopt {paths.root}` to "
-                    f"regenerate it from the current source"
-                ),
+                action=f"Correct {paths.relative(contract)} to match the module's ports",
                 path=contract,
                 module=unit.name,
             )
 
-    actions: List[Action] = []
     if drifted:
-        actions.append(Action(
-            id="resolve-contract-drift",
-            description=(
-                f"Reconcile the contract(s) for {', '.join(sorted(set(drifted)))} with "
-                f"the module source they describe"
-            ),
-            command=f"forge adopt {paths.root}",
-            auto_fixable=True,
-        ))
         return _CheckOutput(
             StatusSection(
                 "Contracts", FAIL,
                 f"{len(set(drifted))} disagree with their source", ("ATG036",),
             ),
-            actions,
+            [Action(
+                id="resolve-contract-drift",
+                description=(
+                    f"Reconcile the contract(s) for {', '.join(sorted(set(drifted)))} with "
+                    f"the module source they describe"
+                ),
+                auto_fixable=True,
+            )],
         )
     if missing:
-        actions.append(Action(
-            id="generate-missing-contracts",
-            description=f"Generate the missing contract(s) for {', '.join(missing)}",
-            command=f"forge adopt {paths.root}",
-            auto_fixable=True,
-        ))
         return _CheckOutput(
-            StatusSection("Contracts", FAIL, f"{len(missing)} missing", ("ATG034",)), actions)
-    if draft:
-        actions.append(Action(
-            id="review-draft-contracts",
-            description=(
-                f"Review the {len(draft)} draft contract(s) under "
-                f"{paths.relative(paths.contract_root)} and mark them ready"
-            ),
-            safe=False,
-        ))
-        return _CheckOutput(
-            StatusSection(
-                "Contracts", PARTIAL, f"{len(draft)} of {len(managed)} unreviewed", ("ATG035",),
-            ),
-            actions,
+            StatusSection("Contracts", FAIL, f"{len(missing)} missing", ("ATG034",)),
+            [Action(
+                id="fix-contract-paths",
+                description=(
+                    f"Point modules.<name>.contract in {ROOT_CONFIG_NAME} at existing files "
+                    f"for {', '.join(missing)}"
+                ),
+                safe=False,
+            )],
         )
-    return _CheckOutput(StatusSection("Contracts", PASS, f"{len(managed)} reviewed"))
+    detail = f"{len(managed) - own} inferred from source"
+    if own:
+        detail += f", {own} from {ROOT_CONFIG_NAME}"
+    return _CheckOutput(StatusSection("Contracts", PASS, detail))
 
 
 def _contract_drift(contract: Path, unit) -> List[str]:
@@ -596,14 +582,7 @@ def _check_topology(status: ProjectStatus) -> _CheckOutput:
 
 
 def _check_clock_reset(status: ProjectStatus) -> _CheckOutput:
-    """Is there one clock and one reset, and can FORGE express them?
-
-    The active-low warning is the honest one: FORGE's generators collapse
-    every reset onto a single top-level ``ap_rst`` net and do not model its
-    polarity, so an active-low module reset is wired to it unchanged. That
-    is a real limitation, and the plan's rule for limitations is that the
-    user learns about them early rather than from a waveform.
-    """
+    """Is there one clock and one reset, and can FORGE express them?"""
     config, discovery = status.config, status.discovery
     assert config is not None and discovery is not None
 
@@ -673,27 +652,7 @@ def _check_clock_reset(status: ProjectStatus) -> _CheckOutput:
         details.append(f"clock {clocks[0].name}")
 
     if config.reset.active_low:
-        status.report.warn(
-            "ATG041",
-            f"reset {config.reset.port!r} is active-low, and FORGE's generators wire "
-            f"every module reset to one top-level active-high ap_rst net without "
-            f"inverting it",
-            action=(
-                "Drive ap_rst with the polarity your modules expect at the level above "
-                "the generated top, or invert inside the modules"
-            ),
-        )
-        codes.append("ATG041")
-        state = WARN if state == PASS else state
-        details.append(f"reset {config.reset.port} (active low)")
-        actions.append(Action(
-            id="confirm-reset-polarity",
-            description=(
-                f"Confirm how {config.reset.port!r} is driven — FORGE does not model "
-                f"reset polarity and wires it straight through"
-            ),
-            safe=False,
-        ))
+        details.append(f"reset {config.reset.port} (active low, driven by ~ap_rst)")
     elif discovery.managed_resets:
         details.append(f"reset {config.reset.port}")
 
@@ -736,6 +695,14 @@ def _check_unsupported(status: ProjectStatus) -> Optional[_CheckOutput]:
         )
 
     for ambiguity in discovery.unsupported:
+        if ambiguity.action is not None and ambiguity.action.id == "declare-port-widths":
+            status.report.error(
+                "ATG051",
+                ambiguity.question,
+                action=ambiguity.action.description,
+                module=ambiguity.subject,
+            )
+            continue
         status.report.warn(
             "ATG042",
             ambiguity.question,
@@ -754,8 +721,13 @@ def _check_unsupported(status: ProjectStatus) -> Optional[_CheckOutput]:
     detail = f"{len(left_out)} module(s) left out: {', '.join(left_out)}"
     if opaque:
         detail += f"; {len(opaque)} opaque"
+    codes = tuple(sorted({
+        "ATG051" if a.action is not None and a.action.id == "declare-port-widths" else "ATG042"
+        for a in discovery.unsupported
+    }))
     return _CheckOutput(
-        StatusSection("Supported constructs", PARTIAL, detail, ("ATG042",)),
+        StatusSection(
+            "Supported constructs", FAIL if "ATG051" in codes else PARTIAL, detail, codes),
         [a.action for a in discovery.unsupported if a.action],
     )
 
@@ -807,7 +779,7 @@ def _check_hls(status: ProjectStatus) -> Optional[_CheckOutput]:
             f"{assessment.module}: {assessment.description} "
             f"(maturity: {assessment.level})",
             action=(
-                "Run `forge hls run --stages csim,synth` so the real RTL ports are "
+                "Run `forge dev hls run --stages csim,synth` so the real RTL ports are "
                 "known, then re-check to reconcile them against the prediction"
             ),
             module=assessment.module,
@@ -837,9 +809,109 @@ def _check_hls(status: ProjectStatus) -> Optional[_CheckOutput]:
                 "Synthesise the HLS kernels so their real RTL ports are known and "
                 "can be reconciled against the prediction"
             ),
-            command="forge hls run --stages csim,synth",
+            command="forge dev hls run --stages csim,synth",
         )],
     )
+
+
+def _flows_without_simulator(design: Path) -> List[Tuple[str, List[str]]]:
+    """``(flow, missing tools)`` for each flow whose simulator is not on PATH.
+
+    A contract that does not load says nothing here; `forge test` reports it.
+    """
+    from forge.core.toolchain_versions import tool_present
+    from forge.verification.backend_registry import get_adapter
+    from forge.verification.design_contract import load_verify_design
+
+    try:
+        flows = load_verify_design(design).flows
+    except Exception:  # noqa: BLE001
+        return []
+    unrunnable = []
+    for flow in flows:
+        try:
+            required = get_adapter(flow.backend).required_tools
+        except Exception:  # noqa: BLE001 — an unknown backend fails in forge test itself
+            continue
+        missing = [tool for tool in required if not tool_present(tool)]
+        if missing:
+            unrunnable.append((flow.name, missing))
+    return unrunnable
+
+
+def _check_data_verification(status: ProjectStatus, setup: VerificationSetup) -> _CheckOutput:
+    """``verification.input``/``expected``: the files exist, a level has an
+    expected output, a simulator is here, and what the last run found."""
+    from forge.core.toolchain_versions import tool_present
+    from forge.verification.auto import BACKENDS
+
+    paths = status.paths
+    assert paths is not None
+    if setup.missing:
+        for key, path in setup.missing:
+            status.report.error(
+                "ATG044", f"{key} names {paths.relative(path)}, which does not exist",
+                action=f"Correct {key} in {ROOT_CONFIG_NAME}", path=path,
+            )
+        return _CheckOutput(
+            StatusSection("Verification", FAIL,
+                          f"{len(setup.missing)} verification file(s) missing", ("ATG044",)),
+            [Action(id="fix-verification-data",
+                    description="Point " + ", ".join(k for k, _ in setup.missing)
+                    + f" in {ROOT_CONFIG_NAME} at existing files", safe=False)],
+        )
+
+    problem = target_problem(status.config)
+    if problem:
+        status.report.error("ATG044", problem, action=f"Correct verification.targets in {ROOT_CONFIG_NAME}")
+        return _CheckOutput(StatusSection("Verification", FAIL, problem, ("ATG044",)), [])
+
+    actions: List[Action] = []
+    codes: Tuple[str, ...] = ()
+    state = PASS
+    usable = [b for b in setup.backends
+              if b in BACKENDS and all(tool_present(t) for t in BACKENDS[b])]
+    if not usable:
+        status.report.warn(
+            "ATG049",
+            f"no simulator for verification here: {', '.join(setup.backends)} "
+            f"need {'; '.join(', '.join(BACKENDS[b]) for b in setup.backends if b in BACKENDS)}"
+            " — `forge test` records BLOCKED_MISSING_TOOL",
+            action="Put XSim or Verilator on PATH (`forge doctor` lists what it finds)",
+        )
+        codes += ("ATG049",)
+        state = WARN
+    if not setup.expected:
+        status.report.warn(
+            "ATG044",
+            "verification has input but no expected output — `forge test` simulates "
+            "it and checks for X/Z, but verifies nothing (NOT_VERIFIED_NO_ORACLE)",
+            action=f"Set verification.expected in {ROOT_CONFIG_NAME}",
+        )
+        codes += ("ATG044",)
+        state = PARTIAL
+        actions.append(Action(
+            id="add-expected-output",
+            description=f"Add the expected output: verification.expected in {ROOT_CONFIG_NAME}",
+            safe=False,
+        ))
+
+    detail = ", ".join(f"{k.split('.')[-1]} {paths.relative(p)}" for k, p in setup.data_files)
+    records = [r for r in latest_results(paths.report_root, current_plans(status.config))
+               if r.path.name.endswith(".evidence.json")]
+    if records:
+        stale = [r for r in records if r.stale]
+        detail += f"; last forge test: {overall_status(records)}"
+        if stale:
+            detail += f" ({len(stale)} result(s) out of date)"
+            state = WARN if state == PASS else state
+            actions.append(Action(id="run-forge-test", command="forge test", safe=True,
+                                  description="Re-run the verification: results predate a change"))
+    else:
+        detail += "; not run yet"
+        actions.append(Action(id="run-forge-test", description="Run the verification",
+                              command="forge test", safe=True))
+    return _CheckOutput(StatusSection("Verification", state, detail, codes), actions)
 
 
 def _check_verification(status: ProjectStatus) -> _CheckOutput:
@@ -847,9 +919,47 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
     config, paths = status.config, status.paths
     assert config is not None and paths is not None
 
-    if paths.verification_yml.is_file():
-        return _CheckOutput(StatusSection(
-            "Verification", PASS, paths.relative(paths.verification_yml)))
+    if config.verification_config:
+        design = (config.root / config.verification_config).resolve()
+        if design.is_file():
+            unrunnable = _flows_without_simulator(design)
+            if unrunnable:
+                status.report.warn(
+                    "ATG049",
+                    f"{len(unrunnable)} verification flow(s) cannot run here: "
+                    + "; ".join(f"{flow} needs {', '.join(tools)}" for flow, tools in unrunnable)
+                    + " — `forge test` skips them",
+                    action="Put the simulator on PATH (`forge doctor` lists what it finds), "
+                           "or run `forge test` where it is installed",
+                )
+                return _CheckOutput(StatusSection(
+                    "Verification", WARN,
+                    f"{paths.relative(design)}, {len(unrunnable)} flow(s) without their simulator",
+                    ("ATG049",),
+                ))
+            return _CheckOutput(StatusSection(
+                "Verification", PASS, paths.relative(design)))
+        status.report.error(
+            "ATG044",
+            f"verification config {config.verification_config} does not exist",
+            action=f"Correct verification.config in {ROOT_CONFIG_NAME}",
+            path=design,
+        )
+        return _CheckOutput(
+            StatusSection("Verification", FAIL, "verification config missing", ("ATG044",)),
+            [Action(
+                id="fix-verification-config",
+                description=(
+                    f"Point verification.config at a real design.verification.yml "
+                    f"(it names {config.verification_config})"
+                ),
+                safe=False,
+            )],
+        )
+
+    setup = verification_setup(config)
+    if setup.kind == DATA:
+        return _check_data_verification(status, setup)
 
     if config.dataset:
         dataset = (config.root / config.dataset).resolve()
@@ -873,10 +983,11 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
             [Action(
                 id="create-verification-flow",
                 description=(
-                    "Create a verification flow for the dataset — a dataset with no "
-                    "flow to consume it does not test anything yet"
+                    "Create a verification flow for the dataset, then name its "
+                    "design.verification.yml as verification.config in forge.yml — a "
+                    "dataset with no flow to consume it does not test anything yet"
                 ),
-                command=f"forge verify init-plugin {config.project}",
+                command=f"forge dev verify init-plugin {config.project}",
             )],
         )
 
@@ -884,15 +995,18 @@ def _check_verification(status: ProjectStatus) -> _CheckOutput:
         "ATG044",
         "no verification is configured for this design — nothing checks that the "
         "generated top level behaves correctly",
-        action="Add verification.dataset to forge.yml, then run `forge test prepare`",
+        action=(
+            "Set verification.input and verification.expected in forge.yml to the "
+            "design's input and expected output, then run `forge test`"
+        ),
     )
     return _CheckOutput(
-        StatusSection("Verification", NOT_CONFIGURED, "no dataset, no flow", ("ATG044",)),
+        StatusSection("Verification", NOT_CONFIGURED, "no input or expected output", ("ATG044",)),
         [Action(
             id="configure-verification",
             description=(
-                "Configure verification — add verification.dataset to forge.yml "
-                "pointing at the stimulus/expected-output data for this design"
+                "Configure verification — set verification.input and verification.expected "
+                "in forge.yml (or verification.config for a plugin flow)"
             ),
             safe=False,
         )],
@@ -907,82 +1021,129 @@ def _check_latency(status: ProjectStatus) -> _CheckOutput:
     adoption never invents one, and this reports the gap rather than
     letting the latency report be quietly meaningless.
     """
-    import yaml
-
-    paths, discovery = status.paths, status.discovery
-    assert paths is not None and discovery is not None
+    config, discovery = status.config, status.discovery
+    assert config is not None and discovery is not None
 
     managed = discovery.managed_units
     if not managed:
         return _CheckOutput(StatusSection("Latency model", NOT_CONFIGURED, "no modules"))
-    if not paths.modules_yml.is_file():
-        return _CheckOutput(StatusSection(
-            "Latency model", NOT_CONFIGURED, "no module registry"))
 
-    registry = yaml.safe_load(paths.modules_yml.read_text()) or {}
-    entries = registry.get("modules") or []
-    declared = [
-        e for e in entries
-        if e.get("latency") is not None or e.get("latency_hint") is not None
+    undeclared = [
+        unit.name for unit in managed
+        if (config.modules.get(unit.name) or ModulePolicy()).latency is None
     ]
-    if len(declared) == len(entries) and entries:
+    declared = len(managed) - len(undeclared)
+    if not undeclared:
         return _CheckOutput(StatusSection(
-            "Latency model", PASS, f"{len(declared)} of {len(entries)} declared"))
+            "Latency model", PASS, f"{declared} of {len(managed)} declared"))
 
     status.report.warn(
         "ATG045",
-        f"{len(entries) - len(declared)} of {len(entries)} modules declare no latency — "
+        f"{len(undeclared)} of {len(managed)} modules declare no latency — "
         f"the static latency check cannot align a pipeline whose stage depths are unknown",
         action=(
-            f"Add `latency: {{kind: fixed, cycles: N}}` to each module in "
-            f"{paths.relative(paths.modules_yml)}"
+            f"Add `latency: <cycles>` under modules.<name> in {ROOT_CONFIG_NAME} for "
+            f"{', '.join(undeclared)}"
         ),
-        path=paths.modules_yml,
+        path=config.root / ROOT_CONFIG_NAME,
     )
     return _CheckOutput(
         StatusSection(
             "Latency model", PARTIAL,
-            f"{len(declared)} of {len(entries)} declared", ("ATG045",),
+            f"{declared} of {len(managed)} declared", ("ATG045",),
         ),
         [Action(
             id="declare-latency",
             description=(
-                "Declare each module's latency in "
-                f"{paths.relative(paths.modules_yml)} — it cannot be read from the ports"
+                f"Declare each module's latency in {ROOT_CONFIG_NAME} "
+                f"(`modules: {{{undeclared[0]}: {{latency: <cycles>}}}}`) — it cannot be "
+                f"read from the ports"
             ),
             safe=False,
         )],
     )
 
 
+def _changed_by_content(top: Path) -> Optional[List[str]]:
+    """Inputs of *top*'s build whose content changed since, per its provenance; ``None`` without one."""
+    import json
+
+    from forge.ir.provenance import changed_sources
+
+    manifest, provenance = top.parent / "build_manifest.json", top.parent / "provenance.json"
+    if not (manifest.is_file() and provenance.is_file()):
+        return None
+    try:
+        design_dir = Path(json.loads(manifest.read_text())["design_file"]).parent
+    except (OSError, ValueError, KeyError):
+        return None
+    return changed_sources(provenance, design_dir)
+
+
 def _check_generated(status: ProjectStatus) -> _CheckOutput:
     """Has the design been generated, and is what was generated current?
 
-    Staleness is decided by comparing the newest source/config timestamp
-    against the generated top level: reporting a build as done when its
-    inputs have since changed is the failure mode this check exists for.
+    Staleness is decided by content: the provenance written with the top
+    level records a hash of every input, and an input whose content differs
+    makes the build stale whatever its timestamp says (a fresh clone or a
+    restored cache has misleading times). Without a provenance record the
+    newest input timestamp is compared with the top level's.
     """
     config, paths = status.config, status.paths
     assert config is not None and paths is not None
 
-    top = paths.generated_root / "algo_top.v"
+    top = paths.top_level(
+        config.build.get("mode", "verilog"), config.build.get("top_name", "algo_top"),
+    )
     if not top.is_file():
         return _CheckOutput(
             StatusSection("Generated artifacts", NOT_CONFIGURED, "not generated yet"),
             [Action(
                 id="build-design",
                 description="Generate the structural top level",
-                command=_build_command(paths),
+                command="forge build",
             )],
         )
 
+    by_content = _changed_by_content(top)
+    if by_content is not None:
+        if by_content:
+            status.report.warn(
+                "ATG046",
+                f"{paths.relative(top)} was built from other contents of {len(by_content)} of its inputs "
+                f"({', '.join(by_content[:3])}{', …' if len(by_content) > 3 else ''})",
+                action="Re-run `forge build` to regenerate from the current sources",
+                path=top,
+            )
+            return _CheckOutput(
+                StatusSection("Generated artifacts", STALE, f"{len(by_content)} inputs changed", ("ATG046",)),
+                [Action(
+                    id="rebuild-design",
+                    description="Regenerate the top level — its inputs have changed since it was built",
+                    command="forge build",
+                    auto_fixable=True,
+                )],
+            )
+        return _CheckOutput(StatusSection("Generated artifacts", PASS, paths.relative(top)))
+
     generated_at = top.stat().st_mtime
-    inputs = [
-        p for p in
-        [config.root / ROOT_CONFIG_NAME, paths.design_yml, paths.modules_yml]
-        + config.resolve_sources("rtl") + config.resolve_sources("hls")
-        if p.is_file()
-    ]
+    if config.authored:
+        from forge.contracts.design_variant import design_sources
+
+        design, registry = _authored_files(config)
+        candidates = [config.root / ROOT_CONFIG_NAME] + design_sources(design)
+        if registry is not None:
+            candidates.append(registry)
+    else:
+        own_contracts = [
+            (config.root / policy.contract).resolve()
+            for policy in config.modules.values() if policy.contract
+        ]
+        candidates = (
+            [config.root / ROOT_CONFIG_NAME] + own_contracts
+            + config.resolve_sources("rtl") + config.resolve_sources("hls")
+        )
+    inputs = [p for p in candidates if p.is_file()]
     newer = [p for p in inputs if p.stat().st_mtime > generated_at]
     if newer:
         status.report.warn(
@@ -998,7 +1159,7 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
             [Action(
                 id="rebuild-design",
                 description="Regenerate the top level — its inputs have changed since it was built",
-                command=_build_command(paths),
+                command="forge build",
                 auto_fixable=True,
             )],
         )
@@ -1006,19 +1167,137 @@ def _check_generated(status: ProjectStatus) -> _CheckOutput:
         "Generated artifacts", PASS, paths.relative(top)))
 
 
-def _build_command(paths: ProjectPaths) -> str:
-    """The exact ``forge build`` invocation for this project.
+# ── A design named in forge.yml ───────────────────────────────────────────
 
-    Spelled out in full — design, registry, consumer root and output — so it
-    can be pasted from the terminal and run from the project root without
-    the reader having to know which of ``build``'s defaults apply to a
-    ``.forge/`` layout.
+def _authored_files(config: ForgeConfig) -> Tuple[Path, Optional[Path]]:
+    """The design ``forge.yml`` names and the registry that goes with it."""
+    from forge.project.resolve import design_registry
+
+    assert config.design is not None
+    design = (config.root / config.design).resolve()
+    if config.registry:
+        return design, (config.root / config.registry).resolve()
+    return design, design_registry(design) if design.is_file() else None
+
+
+def _check_design(status: ProjectStatus) -> _CheckOutput:
+    """Do the design and registry ``forge.yml`` names exist and validate?"""
+    from forge.contracts.config import DesignConfig
+    from forge.generation.validation import validate_design, validate_registry
+
+    config, paths = status.config, status.paths
+    assert config is not None and paths is not None
+    design, registry = _authored_files(config)
+
+    if not design.is_file():
+        status.report.error(
+            "ATG001",
+            f"{ROOT_CONFIG_NAME} names design {config.design}, which does not exist",
+            action=f"Correct design: in {ROOT_CONFIG_NAME}",
+            path=design,
+        )
+        return _CheckOutput(
+            StatusSection("Design", FAIL, "design missing", ("ATG001",)),
+            [Action(id="fix-design-path", description=f"Point design: in {ROOT_CONFIG_NAME} at a design.yml", safe=False)],
+        )
+    if registry is None or not registry.is_file():
+        named = paths.relative(registry) if registry else "none"
+        status.report.error(
+            "ATG008",
+            f"the design's module registry is missing ({named})",
+            action=f"Set registry: in {ROOT_CONFIG_NAME}, or the design's own registry: key",
+            path=registry or design,
+        )
+        return _CheckOutput(
+            StatusSection("Design", FAIL, "registry missing", ("ATG008",)),
+            [Action(id="fix-registry-path", description="Name the design's modules.yml", safe=False)],
+        )
+
+    try:
+        cfg = DesignConfig.load_relaxed(design)
+    except Exception as exc:  # noqa: BLE001 — the user's file is wrong, not FORGE
+        status.report.error(
+            "ATG015", f"{paths.relative(design)} could not be loaded: {exc}",
+            action=f"Fix {paths.relative(design)}", path=design,
+        )
+        return _CheckOutput(
+            StatusSection("Design", FAIL, "does not load", ("ATG015",)),
+            [Action(id="fix-design", description=f"Fix {paths.relative(design)}", safe=False)],
+        )
+
+    problems = list(validate_design(cfg, design).errors) + list(validate_registry(registry).errors)
+    for problem in problems:
+        status.report.error(
+            "ATG015", f"[{problem.category}] {problem.message}",
+            action=problem.suggestion or f"Fix {paths.relative(design)}",
+            path=design,
+        )
+    if problems:
+        return _CheckOutput(
+            StatusSection("Design", FAIL, f"{len(problems)} validation error(s)", ("ATG015",)),
+            [Action(
+                id="fix-design",
+                description=f"Fix the validation errors in {paths.relative(design)} and its registry",
+                safe=False,
+            )],
+        )
+    return _CheckOutput(StatusSection(
+        "Design", PASS,
+        f"{paths.relative(design)}, {len(cfg.modules)} modules, {len(cfg.connections)} connections",
+    ))
+
+
+def _check_design_latency(status: ProjectStatus) -> Optional[_CheckOutput]:
+    """Does the latency graph know every module's depth?
+
+    Asks the same graph ``forge dev analyze latency-check`` builds, so a module
+    whose latency comes from its HLS reports (under ``build.hls_build_root``)
+    counts as known, exactly as it does there.
     """
-    return (
-        f"forge build {paths.relative(paths.design_yml)} "
-        f"--contracts-from {paths.relative(paths.modules_yml)} "
-        f"--consumer-root {paths.relative(paths.root) or '.'} "
-        f"--output {paths.relative(paths.generated_root / 'algo_top.v')} --apply"
+    from forge.analysis.latency_static.graph import build_resolved_graph
+
+    config, paths = status.config, status.paths
+    assert config is not None and paths is not None
+    design, registry = _authored_files(config)
+    if registry is None or not design.is_file() or not registry.is_file():
+        return None
+
+    hls_root = config.build.get("hls_build_root")
+    try:
+        graph = build_resolved_graph(
+            design, modules_yml_path=registry,
+            hls_build_root=config.root / hls_root if hls_root else None,
+        )
+    except Exception:  # noqa: BLE001 — a design that does not load is _check_design's finding
+        return None
+
+    modules = sorted({node.module for node in graph.nodes.values()})
+    unknown = sorted({node.module for node in graph.nodes.values() if node.latency is None})
+    known = len(modules) - len(unknown)
+    if not unknown:
+        return _CheckOutput(StatusSection(
+            "Latency model", PASS, f"{known} of {len(modules)} known"))
+
+    status.report.warn(
+        "ATG045",
+        f"{len(unknown)} of {len(modules)} modules have no known latency "
+        f"({', '.join(unknown)}) — the static latency check cannot align a pipeline "
+        f"whose stage depths are unknown",
+        action=(
+            f"Declare `latency:` for them in {paths.relative(registry)}, or point "
+            f"build.hls_build_root in {ROOT_CONFIG_NAME} at their HLS reports"
+        ),
+        path=registry,
+    )
+    return _CheckOutput(
+        StatusSection(
+            "Latency model", PARTIAL, f"{known} of {len(modules)} known", ("ATG045",),
+        ),
+        [Action(
+            id="declare-latency",
+            description=f"Declare the missing latencies in {paths.relative(registry)}",
+            safe=False,
+        )],
     )
 
 
@@ -1033,6 +1312,41 @@ CHECKS: Tuple[CheckFn, ...] = (
     _check_unsupported,
     _check_hls,
     _check_latency,
+    _check_generated,
+    _check_verification,
+)
+
+def _check_existing_top(status: ProjectStatus) -> _CheckOutput:
+    """``verification.target: existing``: can the project's own top be
+    simulated as written — found in its sources, every port's width known,
+    forge.yml's clock and reset among its ports?"""
+    from forge.verification.auto import plan_existing
+
+    config = status.config
+    assert config is not None
+    try:
+        level = plan_existing(config, config.verification_spec)
+    except (OSError, ValueError) as exc:
+        status.report.error("ATG044", f"the existing top cannot be simulated: {exc}",
+                            action=f"Correct top:, sources or verification.filelist in {ROOT_CONFIG_NAME}")
+        return _CheckOutput(StatusSection("Existing top", FAIL, str(exc), ("ATG044",)))
+    assert level.bench is not None
+    ifaces = ", ".join(f"{i.name} ({i.protocol})" for i in level.bench.interfaces)
+    return _CheckOutput(StatusSection(
+        "Existing top", PASS,
+        f"{level.top}: {len(level.sources)} source(s), clock {level.bench.clock}, interfaces {ifaces}"))
+
+
+#: The checks for a project that simulates its own top as written.
+EXISTING_CHECKS: Tuple[CheckFn, ...] = (
+    _check_existing_top,
+    _check_verification,
+)
+
+#: The checks for a project whose forge.yml names its own design.
+AUTHORED_CHECKS: Tuple[CheckFn, ...] = (
+    _check_design,
+    _check_design_latency,
     _check_generated,
     _check_verification,
 )

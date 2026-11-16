@@ -1,0 +1,231 @@
+"""A replay package: what a board needs to replay a payload's reference, and
+what a capture from it is compared against.
+
+``forge report --package <target>`` writes, under
+``.forge/reports/packages/<target>/``, the target's input and expected output
+files and their event names, the link each interface is on, how outputs are
+compared, the identity of the build the reference was simulated against, and
+the simulation results that used the same reference. The board's own tools
+load and play the input and capture the output; ``forge test --capture
+<file> --package <dir>`` compares the capture with the scoreboard simulation
+uses, after checking that the reference in ``forge.yml`` is still the
+package's.
+
+A package can also hold one failing boundary (``--package-events``, with a
+pre-roll of the events before it) and the command that reproduces it in
+another checkout. Its plan identity, decoder and memory files say what the
+result depended on; data too large to copy stays where it is
+(``--external-data``), named by path and checksum. Traffic a design target
+recorded is labelled a derived regression reference, never an independent
+oracle.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+PACKAGE_SCHEMA = "forge.replay_package/2"
+MANIFEST = "manifest.json"
+
+
+def package_dir(paths: Any, target: str) -> Path:
+    return paths.report_root / "packages" / target
+
+
+def _generated_dir(level: Any) -> Optional[Path]:
+    return next((f.parent for f in level.sources if (f.parent / "provenance.json").is_file()), None)
+
+
+def _reference(level: Any, external: bool = False) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key in ("input", "expected"):
+        ref = getattr(level, key)
+        entry = {"file": None if external else f"data/{key}{ref.path.suffix}", "format": ref.format,
+                 "sha256": ref.sha256()}
+        if external:
+            entry["path"] = str(ref.path)
+        if ref.events is not None:
+            entry["events"] = {"file": f"data/{key}.events{ref.events.suffix}",
+                               "sha256": ref.to_dict()["events"]["sha256"]}
+        out[key] = entry
+    return out
+
+
+def firmware_intent(root: Path, bitfile: Optional[Path] = None) -> Dict[str, Any]:
+    """The firmware identity a board running this build should read back:
+    the project's git commit (what Hog and most build flows write into a
+    register) and, when given, the bitstream's checksum."""
+    import hashlib
+    import subprocess
+
+    out: Dict[str, Any] = {}
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, timeout=30)
+        if sha.returncode == 0:
+            out["git_sha"] = sha.stdout.strip()
+            dirty = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True,
+                                   timeout=30)
+            out["git_dirty"] = bool(dirty.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if bitfile is not None:
+        out["bitfile_sha256"] = hashlib.sha256(Path(bitfile).read_bytes()).hexdigest()
+    return out
+
+
+def write_package(config: Any, target: str, out: Optional[Path] = None, *, events: Optional[List[str]] = None,
+                  pre_roll: int = 0, external: bool = False, bitfile: Optional[Path] = None) -> Path:
+    """Write the replay package of *target* (a design-scope level of the
+    project's plan) and return its directory. *events* (with *pre_roll*
+    events of history before each) is the boundary the package reproduces;
+    *external* names the reference files by path and checksum instead of
+    copying them."""
+    from forge.project.verification_state import current_plan, latest_results
+    from forge.verification import auto
+    from forge.verification import scoreboard as sb
+
+    plan = current_plan(config)
+    level = next((lv for lv in plan.levels if lv.name == target), None)
+    if level is None:
+        raise ValueError(f"no target {target!r} (have {', '.join(lv.name for lv in plan.levels)})")
+    if level.scope != "design" or level.bench is None:
+        raise ValueError(f"{target}: a board replays the whole payload; package a design-scope target")
+    if level.input is None or level.expected is None:
+        raise ValueError(f"{target}: a replay package needs the input and the expected output")
+    paths = config.paths()
+    out = out or package_dir(paths, target)
+    if out.exists():
+        shutil.rmtree(out)
+    (out / "data").mkdir(parents=True)
+    reference = _reference(level, external)
+    for key, entry in reference.items():
+        ref = getattr(level, key)
+        if entry["file"] is not None:
+            (shutil.copytree if ref.path.is_dir() else shutil.copyfile)(ref.path, out / entry["file"])
+        if ref.events is not None:
+            shutil.copyfile(ref.events, out / entry["events"]["file"])
+    derived = (level.expected.path.parent / auto.DERIVED).is_file()
+    focus: Optional[Dict[str, Any]] = None
+    if events:
+        if level.expected.events is None and level.input.events is None and level.input.format == "json":
+            raise ValueError(f"{target}: --package-events needs data that names its events")
+        focus = {"events": list(events), "pre_roll": pre_roll,
+                 "command": " ".join(["forge test", f"--target {target}", f"--event-list {','.join(events)}",
+                                      *([f"--pre-roll {pre_roll}"] if pre_roll else [])])}
+    simulated = {r.name: {"status": r.status, "evidence_id": r.payload.get("evidence_id"), "stale": r.stale}
+                 for r in latest_results(paths.report_root)
+                 if r.payload.get("level") == target and r.payload.get("backend") != auto.BOARD}
+    links = level.expected.links or level.input.links
+    manifest = {
+        "schema": PACKAGE_SCHEMA,
+        "project": config.project,
+        "target": target,
+        "top": level.top,
+        "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "build": {**auto.build_identity(level, _generated_dir(level)),
+                  "firmware": firmware_intent(config.root, bitfile)},
+        "reference": reference,
+        "links": dict(links),
+        "association": dict(level.expected.association or level.input.association),
+        "compare": level.compare.to_dict(),
+        "checker": sb.CHECKER_VERSION,
+        "clock_period_ns": level.bench.period_ns,
+        "interfaces": [{"name": i.name, "direction": i.direction, "protocol": i.version, "width": i.width,
+                        "link": links.get(i.name)} for i in level.bench.interfaces],
+        "streams": {k: list(v) for k, v in level.streams.items()},
+        "outputs": list(level.outputs) if level.outputs is not None else None,
+        "reference_kind": "derived" if derived else "functional",
+        "plan": {"sha256": auto.plan_identity(level), "parts": auto.plan_parts(level), "level": level.to_dict()},
+        "decoder": auto.decoder_identity(level.decoder),
+        "decoder_files": auto._hashed([Path(f) for f in (auto.decoder_identity(level.decoder) or {}).get("files", [])]),
+        "memory_files": auto._hashed(auto._memory_files(level)),
+        "focus": focus,
+        "simulated": simulated,
+    }
+    (out / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
+    (out / "README.md").write_text(_readme(manifest))
+    return out
+
+
+_INDEX = re.compile(r"(?<=_)\d+(?=_|$)")
+
+
+def _readme(manifest: Dict[str, Any]) -> str:
+    rows: List[str] = []
+    families: Dict[Tuple[str, ...], List[str]] = {}
+    for i in manifest["interfaces"]:
+        shape = (_INDEX.sub("*", i["name"]), i["direction"], i["protocol"], str(i["width"]),
+                 "" if i["link"] is None else "*" if _INDEX.search(i["name"]) else str(i["link"]))
+        families.setdefault(shape, []).append(i["name"])
+    for (pattern, direction, protocol, width, _), names in families.items():
+        links = [manifest["links"].get(n) for n in names]
+        link = ", ".join(str(x) for x in links if x is not None)
+        name = names[0] if len(names) == 1 else f"{pattern} ({len(names)})"
+        rows.append(f"| {name} | {direction} | {protocol} | {width} | {link} |")
+    if manifest.get("streams"):
+        rows += ["", "Streams, read in cycle order: " + "; ".join(
+            f"{k}: {_INDEX.sub('*', v[0])} ({len(v)})" if len({_INDEX.sub('*', n) for n in v}) == 1
+            else f"{k}: {', '.join(v)}" for k, v in manifest["streams"].items())]
+    if manifest.get("outputs") is not None:
+        rows += ["", "Compared: " + ", ".join(manifest["outputs"]) + "; the other outputs are traced only."]
+    sims = ", ".join(f"{k}: {v['status']}" + (" (out of date)" if v["stale"] else "")
+                     for k, v in manifest["simulated"].items()) or "none recorded"
+    kind = ("a derived regression reference (traffic recorded from the design itself): it detects changes, "
+            "not physics errors" if manifest.get("reference_kind") == "derived"
+            else "an independent reference (the emulator's output)")
+    focus = manifest.get("focus")
+    reproduce = [] if not focus else [
+        f"It reproduces event(s) {', '.join(focus['events'])}"
+        + (f" after {focus['pre_roll']} event(s) of history" if focus["pre_roll"] else " on their own") + ":", "",
+        "```bash", focus["command"], "```", ""]
+    external = [f"`{e['path']}` (sha256 {e['sha256'][:16]})" for e in manifest["reference"].values() if e.get("path")]
+    return "\n".join([
+        f"# Replay package: {manifest['project']} / {manifest['target']}", "",
+        f"Build `{manifest['build']['id'][:16]}` of `{manifest['top']}`; simulated against this reference: {sims}.", "",
+        f"The expected output is {kind}.", "",
+        *([f"Reference data kept outside the package: {', '.join(external)}.", ""] if external else []),
+        *reproduce,
+        "| interface | direction | protocol | width | link |", "|---|---|---|---|---|", *rows, "",
+        f"Play `{manifest['reference']['input']['file'] or manifest['reference']['input']['path']}` with the board's "
+        "tools, capture the output links, and compare:",
+        "", "```bash",
+        f"forge test --target {manifest['target']} --capture <capture file> --package <this directory>",
+        "```", "",
+        f"Outputs are compared as `{manifest['compare']['mode']}`; a latency mode also needs `--capture-offset`, "
+        "the capture frame at which the input's frame 0 was played.", "",
+    ])
+
+
+def check_package(package: Path, level: Any) -> Dict[str, Any]:
+    """The manifest of *package*, after checking it is *level*'s and that the
+    reference ``forge.yml`` names is still the one it holds."""
+    manifest_path = package / MANIFEST
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"{package}: no {MANIFEST}; write one with `forge report --package <target>`")
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("schema") not in (PACKAGE_SCHEMA, "forge.replay_package/1"):
+        raise ValueError(f"{manifest_path}: schema {manifest.get('schema')!r}, want {PACKAGE_SCHEMA}")
+    if manifest["target"] != level.name:
+        raise ValueError(f"{package} is the package of {manifest['target']}, not {level.name}")
+    changed = [key for key in ("input", "expected")
+               if getattr(level, key) is None or getattr(level, key).sha256() != manifest["reference"][key]["sha256"]]
+    if level.expected is not None and dict(level.expected.links) != {k: v for k, v in manifest["links"].items()}:
+        changed.append("links")
+    from forge.verification import auto
+
+    if "decoder" in manifest and manifest["decoder"] != auto.decoder_identity(level.decoder):
+        changed.append("decoder")
+    elif any(f["sha256"] != auto._hashed([Path(f["path"])])[0]["sha256"] if Path(f["path"]).is_file() else True
+             for f in manifest.get("decoder_files") or []):
+        changed.append("decoder files")
+    if manifest.get("compare") is not None and manifest["compare"] != level.compare.to_dict():
+        changed.append("comparison")
+    if changed:
+        raise ValueError(f"{level.name}: the {' and '.join(changed)} in forge.yml differ from the package's; "
+                         "compare against the package's reference, or write a new package")
+    return manifest

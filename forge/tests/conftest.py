@@ -17,7 +17,7 @@ This autouse fixture clears both the module cache and the plugin
 registry's bootstrap-declaration state around every test, so each test's
 tmp_path-scoped plugin tooling is always loaded fresh.
 
-``sys.path`` itself needs the same treatment: ``forge/verification/__main__.py``'s ``_bootstrap()`` does
+``sys.path`` itself needs the same treatment: ``forge.verification.run.bootstrap_for_flow()`` does
 ``sys.path.insert(0, tools_dir)`` per test but this fixture never undid
 it, so a real plugin's real (not tmp_path-copied) ``tools/`` directory —
 e.g. ``plugins/vision_pipeline_demo/forge/verify/tools`` — stays in
@@ -39,7 +39,12 @@ same way the module-cache clearing already does.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import runpy
 import sys
+from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -79,3 +84,36 @@ def _isolate_plugin_bootstrap_state():
     yield
     sys.path[:] = original_sys_path
     _clear_plugin_bootstrap_state()
+
+
+@pytest.fixture
+def prepare_plugin_flows() -> Callable[[Path, Path], None]:
+    """Return ``prepare(design_verification, consumer_root)``, which writes a
+    plugin copy's flow files with ``prepare_flows`` and each simulated flow's
+    event-0 stimulus with the copy's ``tools/gen_stimulus.py``, as a user
+    does before ``forge dev verify run``. The repository does not keep
+    these generated files."""
+    from forge.verification.design_contract import load_verify_design
+    from forge.verification.prepare import prepare_flows
+
+    def prepare(design_verification: Path, consumer_root: Path) -> None:
+        log = io.StringIO()
+        with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+            rc = prepare_flows(design_verification, consumer_root=consumer_root)
+        assert rc == 0, log.getvalue()
+
+        tools = design_verification.parent / "tools"
+        argv, path = sys.argv, list(sys.path)
+        sys.path.insert(0, str(tools))
+        try:
+            for flow in load_verify_design(design_verification).flows:
+                if flow.kind in ("hls_csim", "hls_cosim"):
+                    continue
+                sys.argv = ["gen_stimulus.py", "--flow", flow.name, "--event-id", "0"]
+                with contextlib.redirect_stdout(io.StringIO()):
+                    runpy.run_path(str(tools / "gen_stimulus.py"), run_name="__main__")
+        finally:
+            sys.argv, sys.path[:] = argv, path
+            _clear_plugin_bootstrap_state()
+
+    return prepare

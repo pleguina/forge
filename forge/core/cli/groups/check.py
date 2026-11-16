@@ -1,11 +1,10 @@
 """``forge check`` — is this project sufficiently described to work?
 
-The complement to ``forge doctor``, and the distinction is worth keeping
-sharp: ``doctor`` answers "is the FORGE *installation* sane?" and knows
-nothing about any project; ``check`` answers "is *this project* completely
-and consistently described?" and knows nothing about the toolchain. Running
-one when you needed the other is the most common way a new user gets a
-confident PASS that does not mean what they hoped.
+The complement to ``forge doctor``: ``doctor`` answers "is the FORGE
+*installation* sane?" and knows nothing about any project; ``check`` answers
+"is *this project* completely and consistently described, and can its flows
+run here?" — of the toolchain it looks only at the simulators this project's
+verification flows need.
 
 Everything printed here comes from :func:`forge.project.status.evaluate` —
 this module renders, it does not decide. ``forge next`` renders the same

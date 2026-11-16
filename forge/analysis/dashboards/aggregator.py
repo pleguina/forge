@@ -3,7 +3,7 @@
 Read the outputs produced by the other four analyze modules from a reports
 directory and return an :class:`AggregatedReport` used by the renderer.
 
-Expected directory layout (produced by ``forge analyze`` commands)::
+Expected directory layout (produced by ``forge dev analyze`` commands)::
 
     out/reports/
         hls_summary.csv
@@ -12,7 +12,7 @@ Expected directory layout (produced by ``forge analyze`` commands)::
         latency_check.md           # optional
         runtime_latency.md         # optional
         plots/
-            *.png                  # from forge analyze plot-results
+            *.png                  # from forge dev analyze plot-results
         attachments.json           # optional — see forge.analysis.dashboards.attachments
         topology.svg               # optional — from forge report's own topology step
         topology_explorer.html     # optional — interactive companion to topology.svg

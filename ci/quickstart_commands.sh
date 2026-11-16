@@ -30,8 +30,11 @@ set -euo pipefail
 : "${SKIP_INSTALL:=false}"
 
 if [[ -z "${PLUGINS_ROOT}" ]]; then
-    PLUGINS_ROOT="$(mktemp -d)"
-    trap 'rm -rf "${PLUGINS_ROOT}"' EXIT
+    # forge init writes forge.yml and gen-top/ next to the plugins root, so
+    # that parent must be a directory of this run's own.
+    QUICKSTART_ROOT="$(mktemp -d)"
+    PLUGINS_ROOT="${QUICKSTART_ROOT}/plugins"
+    trap 'rm -rf "${QUICKSTART_ROOT}"' EXIT
 fi
 
 # 1. Install FORGE from source (editable). The `parser` extra enables
@@ -52,7 +55,7 @@ forge doctor
 #    The simulation stage is skipped with a note if no simulator (Vivado
 #    xsim) is on PATH — everything else still runs, so this works on a
 #    machine that has never had an EDA tool installed.
-forge init "${PLUGIN_ID}" --plugins-root "${PLUGINS_ROOT}"
+forge init --example "${PLUGIN_ID}" --plugins-root "${PLUGINS_ROOT}"
 
 # 4. Read back what was generated, straight from the canonical IR.
 forge inspect "${PLUGINS_ROOT}/${PLUGIN_ID}/forge/designs/design.yml" \

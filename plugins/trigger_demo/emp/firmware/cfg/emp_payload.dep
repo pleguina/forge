@@ -1,0 +1,8 @@
+# The trigger_demo payload, for any EMP project:
+#   include -c forge:plugins/trigger_demo/emp emp_payload.dep
+# Both components are written by forge (run_emp_sim.sh): trigger_demo_gen:algo by
+# `forge dev framework ipbb-component`, trigger_demo_gen:payload by
+# `forge dev framework emp-payload` (emp_payload.yml) for the project's emp-fwk.
+# The EMP packages come from the board's packages dep file.
+src -c trigger_demo_gen:payload emp_payload.vhd
+include -c trigger_demo_gen:algo algo_top.dep

@@ -86,7 +86,7 @@ class TestCheckTopGenStaleness:
         report = check_top_gen_staleness(tmp_path)
 
         assert any("build_manifest.json" in m for m in report.missing)
-        assert any("forge topgen gen-top" in m for m in report.missing)
+        assert any("forge dev topgen gen-top" in m for m in report.missing)
 
     def test_missing_primary_hdl_output_not_reported(self, tmp_path: Path):
         # algo_top.v/.vhd absence is expected (language-specific) and must
@@ -135,7 +135,7 @@ class TestCheckIpInfoStaleness:
     def test_missing_ip_info_reported(self, tmp_path: Path):
         report = check_ip_info_staleness(tmp_path / "ip_info.yaml")
         assert report.missing
-        assert "forge topgen ip-summary" in report.missing[0]
+        assert "forge dev topgen ip-summary" in report.missing[0]
 
     def test_fresh_ip_info_not_stale(self, tmp_path: Path):
         now = time.time()
@@ -255,4 +255,4 @@ class TestFormatStaleReport:
         lines = format_stale_report(report)
 
         assert any("is stale" in ln for ln in lines)
-        assert any("Re-run: forge topgen gen-top" in ln for ln in lines)
+        assert any("Re-run: forge dev topgen gen-top" in ln for ln in lines)

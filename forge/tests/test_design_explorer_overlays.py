@@ -75,10 +75,10 @@ def test_maturity_summary_reports_a_real_mixed_status_not_just_the_extremes():
 
 
 def test_compute_maturity_summary_exposes_real_per_module_name_lists():
-    from forge.core.cli.groups.topgen import _compute_maturity_summary
+    from forge.generation.artifacts import compute_maturity_summary
 
     project, cfg, match_report = build_project_ir_with_match_report(TRIGGER_DESIGN, contracts_from=TRIGGER_MODULES)
-    summary = _compute_maturity_summary(cfg, match_report)
+    summary = compute_maturity_summary(cfg, match_report)
     assert summary["modules"]["contract_driven_names"] == sorted(match_report.contract_driven_modules)
     assert summary["modules"]["compat_mode_names"] == sorted(match_report.compat_mode_modules)
     assert len(summary["modules"]["contract_driven_names"]) == summary["modules"]["contract_driven"]

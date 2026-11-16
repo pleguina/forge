@@ -188,7 +188,9 @@ class _Types:
 
 def _split_params(text: str) -> List[str]:
     """Split a parameter list on commas that aren't inside <> or ()."""
-    out, depth, current = [], 0, []
+    out: List[str] = []
+    current: List[str] = []
+    depth = 0
     for ch in text:
         if ch in "<([":
             depth += 1

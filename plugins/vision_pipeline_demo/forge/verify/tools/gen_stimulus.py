@@ -101,7 +101,7 @@ def generate_for_flow(
         em.tick()
 
     with em.event_block(f"event_{event_id}"):
-        # Top-level port names are instance-prefixed by `forge topgen
+        # Top-level port names are instance-prefixed by `forge dev topgen
         # gen-top` ("norm_"/"thresh_" — from design.yml's instance
         # names `norm`/`thresh`), not the bare interface-contract role
         # names.

@@ -32,7 +32,7 @@ override is registered.
 
 Auto-registration
 -----------------
-This module is auto-registered by ``forge verify`` at package import time.
+This module is auto-registered by ``forge dev verify`` at package import time.
 No plugin ``bootstrap.py`` needs to call ``register_backend("xsim", ...)``.
 Plugins that wish to override may re-register after import.
 
@@ -49,6 +49,7 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from forge.verification.compile_key import build_key, reusable
 from forge.verification import backend_checker
 from forge.verification.backend_base import (
     ArtifactRequirement,
@@ -136,7 +137,7 @@ class XsimBackend(BackendAdapter):
         if not tb_sv.exists():
             errors.append(
                 f"SV testbench not found: {tb_sv}\n"
-                f"  → Regenerate with: forge verify generate design.verification.yml"
+                f"  → Regenerate with: forge dev verify generate design.verification.yml"
                 f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
             )
 
@@ -148,7 +149,7 @@ class XsimBackend(BackendAdapter):
                 errors.append(
                     f"DUT RTL file not found: {dut_rtl_path}\n"
                     f"  → Run HLS synthesis first:\n"
-                    f"      forge verify generate uses dut_rtl_source from design.verification.yml\n"
+                    f"      forge dev verify generate uses dut_rtl_source from design.verification.yml\n"
                     f"  RTL expected at: {dut_rtl_path}"
                 )
 
@@ -159,27 +160,13 @@ class XsimBackend(BackendAdapter):
             if not wave_tcl.exists():
                 errors.append(
                     f"wave.tcl not found: {wave_tcl}\n"
-                    f"  → Regenerate with: forge verify generate design.verification.yml"
+                    f"  → Regenerate with: forge dev verify generate design.verification.yml"
                     f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}\n"
                     f"  (or set wave_mode: none in design.verification.yml to disable waveforms)"
                 )
 
-        # ── 6. stimulus_current.svh exists ────────────────────────────────
-        from forge.verification.stimulus_contract import STIMULUS_FILE  # noqa: PLC0415
-        stim_svh = flow_dir / STIMULUS_FILE
-        if not stim_svh.exists():
-            errors.append(
-                f"stimulus_current.svh not found: {stim_svh}\n"
-                f"  → Generate it first: python3 tools/gen_stimulus.py"
-                f" --flow {getattr(cfg, 'flow_name', cfg.tb_module)}"
-            )
-        else:
-            # ── 7. Stimulus contract validation ───────────────────────────
-            from forge.verification.stimulus_contract import validate_stimulus  # noqa: PLC0415
-            sc = validate_stimulus(stim_svh)
-            if not sc.ok:
-                for e in sc.errors:
-                    errors.append(e)
+        # stimulus_current.svh is written by prepare_backend_inputs and
+        # checked after it (preflight.validate_stimulus_handoff).
 
         return errors
 
@@ -410,22 +397,33 @@ class XsimBackend(BackendAdapter):
         readmemh_mode = getattr(cfg, "stimulus_mode", "svh_include") == "readmemh"
         build_sentinel = work_dir / ".compile_elaborate_complete"
 
-        if readmemh_mode and build_sentinel.exists():
-            print(f"[xsim 1-2/3] Reusing existing compile+elaborate (stimulus_mode=readmemh)")
+        xvlog_cmd = ["xvlog", "--incr", "--relax"]
+        if self.xvlog_use_sv_flag(cfg):
+            xvlog_cmd.append("--sv")
+        xvlog_cmd += ["--include", str(flow_dir)]
+        for inc_dir in self.extra_include_dirs(cfg):
+            xvlog_cmd += ["--include", str(inc_dir)]
+        xvlog_cmd += self.extra_compile_flags(cfg)
+        if getattr(ctx, "probe_log", False):
+            xvlog_cmd += ["-d", "PROBE_LOG=1"]
+        xvlog_cmd += ["-prj", str(prj_file)]
+        xelab_cmd = [
+            "xelab", "--incr", "--debug", "typical", "--relax",
+            "-L", "xil_defaultlib",
+        ]
+        xelab_cmd += self.extra_elab_lib_flags(cfg)
+        xelab_cmd += self.extra_elab_flags(cfg)
+        xelab_cmd.append(self.qualify_top_name(cfg))
+        xelab_cmd += self.extra_top_modules(cfg)
+        xelab_cmd += ["-s", snapshot]
+        key = build_key(prj_file, [xvlog_cmd, xelab_cmd], ["xvlog"]) if readmemh_mode else None
+
+        if key is not None and reusable(build_sentinel, key):
+            print(f"[xsim 1-2/3] Reusing the compile+elaborate of identical inputs (stimulus_mode=readmemh)")
         else:
+            build_sentinel.unlink(missing_ok=True)
             # ── xvlog ──────────────────────────────────────────────────────
             print(f"[xsim 1/3] Compiling  ({cfg.tb_module})")
-            xvlog_cmd = ["xvlog", "--incr", "--relax"]
-            if self.xvlog_use_sv_flag(cfg):
-                xvlog_cmd.append("--sv")
-            xvlog_cmd += ["--include", str(flow_dir)]
-            for inc_dir in self.extra_include_dirs(cfg):
-                xvlog_cmd += ["--include", str(inc_dir)]
-            xvlog_cmd += self.extra_compile_flags(cfg)
-            if getattr(ctx, "probe_log", False):
-                xvlog_cmd += ["-d", "PROBE_LOG=1"]
-            xvlog_cmd += ["-prj", str(prj_file)]
-
             run = _run_logged(xvlog_cmd, xvlog_log, cwd=work_dir)
             if run.exit_code != 0:
                 return ExecutionResult(
@@ -437,15 +435,6 @@ class XsimBackend(BackendAdapter):
 
             # ── xelab ──────────────────────────────────────────────────────
             print(f"[xsim 2/3] Elaborating (snapshot={snapshot})")
-            xelab_cmd = [
-                "xelab", "--incr", "--debug", "typical", "--relax",
-                "-L", "xil_defaultlib",
-            ]
-            xelab_cmd += self.extra_elab_lib_flags(cfg)
-            xelab_cmd += self.extra_elab_flags(cfg)
-            xelab_cmd.append(self.qualify_top_name(cfg))
-            xelab_cmd += self.extra_top_modules(cfg)
-            xelab_cmd += ["-s", snapshot]
             run = _run_logged(xelab_cmd, xelab_log, cwd=work_dir)
             if run.exit_code != 0:
                 return ExecutionResult(
@@ -455,8 +444,8 @@ class XsimBackend(BackendAdapter):
                     backend_metadata={"step": "xelab"},
                 )
 
-            if readmemh_mode:
-                build_sentinel.write_text("1")
+            if key is not None:
+                build_sentinel.write_text(key + "\n")
 
         # ── xsim ───────────────────────────────────────────────────────────
         print("[xsim 3/3] Simulating")

@@ -1,4 +1,4 @@
-"""End-to-end coverage for `forge hls` (core/cli/groups/hls.py, ~12%).
+"""End-to-end coverage for `forge dev hls` (core/cli/groups/hls.py, ~12%).
 
 `gen-tcl` is pure Jinja templating (no Vitis HLS invocation), so it's
 exercised for real against plugins/trigger_demo's HLS module registry.

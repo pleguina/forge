@@ -20,5 +20,5 @@ def test_clean_missing_design_is_guided_without_traceback(tmp_path: Path) -> Non
 
     assert result.returncode == 1
     assert f"❌ Design file not found: {missing.resolve()}" in result.stderr
-    assert "Check the design.yml path and re-run forge topgen clean." in result.stderr
+    assert "Check the design.yml path and re-run forge dev topgen clean." in result.stderr
     assert "Traceback" not in result.stderr

@@ -237,7 +237,8 @@ def _synthesized(ports: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
-def documented_reason(case: Dict[str, Any], difference: PortDifference) -> Optional[str]:
+def documented_reason(case: Dict[str, Any], difference: PortDifference,
+                      version: Optional[str] = None) -> Optional[str]:
     """The corpus's reason for *difference*, or ``None`` if it has none.
 
     Gaps are declared per kernel in ``cases.json``, by exact port name
@@ -245,9 +246,12 @@ def documented_reason(case: Dict[str, Any], difference: PortDifference) -> Optio
     specific known port and cannot quietly swallow a real regression next
     to it. Prefixes are used only for the AXI bundles, whose port lists are
     width- and version-dependent, which is the documented reason they are
-    not predicted in the first place.
+    not predicted in the first place. A gap seen in some releases only lists
+    them under ``versions``.
     """
     for gap in case.get("documented_gaps", ()):
+        if "versions" in gap and version not in gap["versions"]:
+            continue
         reason = gap.get("reason", "")
         if difference.port in gap.get("ports", ()):
             return reason
@@ -266,13 +270,14 @@ def predicted_ports(case: Dict[str, Any]) -> List[Any]:
     ).ports
 
 
-def validate_case(name: str, case: Dict[str, Any], synthesized: Sequence[Dict[str, Any]]) -> CaseResult:
+def validate_case(name: str, case: Dict[str, Any], synthesized: Sequence[Dict[str, Any]],
+                  version: Optional[str] = None) -> CaseResult:
     """Predict *case*'s interface and compare it against real output."""
     result = reconcile(name, predicted_ports(case), _synthesized(synthesized))
     documented: List[Tuple[PortDifference, str]] = []
     unexplained: List[PortDifference] = []
     for difference in result.differences:
-        reason = documented_reason(case, difference)
+        reason = documented_reason(case, difference, version)
         if reason:
             documented.append((difference, reason))
         else:
@@ -308,7 +313,7 @@ def validate_version(version: str) -> VersionReport:
                 f"golden output for {name!r} under Vitis HLS {version} has no "
                 f"entry in {CASES_FILE.name}"
             )
-        report.cases.append(validate_case(name, case, golden[name]))
+        report.cases.append(validate_case(name, case, golden[name], version))
     return report
 
 

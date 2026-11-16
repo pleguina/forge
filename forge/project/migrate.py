@@ -1,6 +1,6 @@
 """Bring a whole project up to the schemas this FORGE understands.
 
-``forge topgen migrate`` has done the individual migrations for a while, and
+``forge dev topgen migrate`` has done the individual migrations for a while, and
 does them well — but it asks the user to already know the answer: which
 files need migrating, and which of the four migrations each one needs. That
 is fine for the author of the migration and useless for the person who just
@@ -367,7 +367,7 @@ def _manual_migrations(root: Path) -> List[Action]:
                     f"moves files, so it is not performed by a preview command"
                 ),
                 command=(
-                    f"forge topgen migrate --kind legacy-plugin-layout "
+                    f"forge dev topgen migrate --kind legacy-plugin-layout "
                     f"--plugin-root {plugin_root}"
                 ),
                 safe=False,
@@ -385,7 +385,7 @@ def _manual_migrations(root: Path) -> List[Action]:
                     f"move, so it is not performed here"
                 ),
                 command=(
-                    f"forge topgen migrate --kind rename-verify-contract "
+                    f"forge dev topgen migrate --kind rename-verify-contract "
                     f"--plugin-root {plugin_root}"
                 ),
                 safe=False,

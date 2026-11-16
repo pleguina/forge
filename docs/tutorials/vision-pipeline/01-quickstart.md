@@ -64,32 +64,32 @@ pip install -e forge/
 Or the full manual sequence, so you can see what that one line does:
 
 ```bash
-forge topgen validate           plugins/vision_pipeline_demo/forge/designs/design.yml
-forge topgen validate-registry  plugins/vision_pipeline_demo/forge/modules.yml
+forge dev topgen validate           plugins/vision_pipeline_demo/forge/designs/design.yml
+forge dev topgen validate-registry  plugins/vision_pipeline_demo/forge/modules.yml
 
-forge hls gen-tcl --hls-config plugins/vision_pipeline_demo/forge/modules.yml \
+forge dev hls gen-tcl --hls-config plugins/vision_pipeline_demo/forge/modules.yml \
   --output-dir build_hls_vision_pipeline_demo
-forge hls run --registry plugins/vision_pipeline_demo/forge/modules.yml \
+forge dev hls run --registry plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo --stages csim,synth \
   --modules pixel_normalizer
 
-forge topgen gen-top plugins/vision_pipeline_demo/forge/designs/design.yml \
+forge dev topgen gen-top plugins/vision_pipeline_demo/forge/designs/design.yml \
   --mode verilog \
   --consumer-root . \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo \
   --output gen-top/design_vision_pipeline_quickstart/algo_top.v
 
-forge verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+forge dev verify generate plugins/vision_pipeline_demo/forge/verify/design.verification.yml
 python3 plugins/vision_pipeline_demo/forge/verify/tools/gen_stimulus.py \
   --flow quickstart_pipeline_xsim --event-id 0
 
-forge verify doctor plugins/vision_pipeline_demo/forge/verify/design.verification.yml
+forge dev verify doctor plugins/vision_pipeline_demo/forge/verify/design.verification.yml
 
 export CSIM_TB_TB_PIXEL_NORMALIZER="build_hls_vision_pipeline_demo/pixel_normalizer/solution1/csim/build/csim.exe"
-forge verify run plugins/vision_pipeline_demo/forge/verify/pixel_normalizer_csim/verify.flow.yml \
+forge dev verify run plugins/vision_pipeline_demo/forge/verify/pixel_normalizer_csim/verify.flow.yml \
   --plugin vision_pipeline_demo --consumer-root .
-forge verify run plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml \
+forge dev verify run plugins/vision_pipeline_demo/forge/verify/quickstart_pipeline_xsim/verify.flow.yml \
   --plugin vision_pipeline_demo --consumer-root .
 ```
 

@@ -70,8 +70,8 @@ Two concrete problems came from this, not just aesthetics:
 
 ## Decision
 
-**Packages are nouns; CLI commands are verbs.** `forge verify`,
-`forge analyze`, and `forge build` are good command names — a user
+**Packages are nouns; CLI commands are verbs.** `forge dev verify`,
+`forge dev analyze`, and `forge build` are good command names — a user
 invokes an action. `forge.verification`, `forge.analysis` are better
 package names — a package owns a capability, not an action. The two
 vocabularies are allowed to diverge: renaming a package must not, by
@@ -180,7 +180,7 @@ rename).
 
 - New subsystem code goes into the noun that names its capability, never
   into `core/` because "it didn't fit anywhere else."
-- CLI command names (`forge verify`, `forge analyze`, `forge framework`)
+- CLI command names (`forge dev verify`, `forge dev analyze`, `forge dev framework`)
   are stable independent of the packages backing them; a future package
   rename is not, by itself, a CLI-breaking change.
 - No package in `forge/` has a compatibility alias at an old name. Any

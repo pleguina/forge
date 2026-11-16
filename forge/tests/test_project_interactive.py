@@ -500,3 +500,31 @@ def test_interactive_cli_writes_the_answer_and_adopts_from_it(tmp_path, monkeypa
         {"from": "producer.payload_out", "to": "consumer_a.payload_in"}
     ]
     assert plan_adoption(root).unresolved == []
+
+
+def test_answering_a_question_keeps_every_other_choice_in_forge_yml(tmp_path):
+    root = _write_ambiguous_project(tmp_path)
+    plan_adoption(root).write()
+    config = yaml.safe_load((root / "forge.yml").read_text())
+    config["sources"]["rtl"] = ["rtl/*.v"]
+    config["build"] = {"mode": "vhdl"}
+    config["verification"] = {"input": "data/in.json", "expected": "data/exp.json",
+                              "backends": ["verilator"]}
+    config["modules"] = {"producer": {"latency": 2, "widths": {"payload_out": 16}}}
+    (root / "forge.yml").write_text(yaml.safe_dump(config, sort_keys=False))
+
+    plan = plan_adoption(root)
+    answered, answers, _ = resolve_interactively(
+        plan.config, plan.unresolved, ask=_answers("1"), echo=_silent,
+    )
+    assert answers
+    answered.save()
+
+    written = yaml.safe_load((root / "forge.yml").read_text())
+    assert written["build"] == {"mode": "vhdl"}
+    assert written["verification"] == {"input": "data/in.json", "expected": "data/exp.json",
+                                       "backends": ["verilator"]}
+    assert written["modules"]["producer"]["latency"] == 2
+    assert written["modules"]["producer"]["widths"] == {"payload_out": 16}
+    assert written["sources"]["rtl"] == ["rtl/*.v"]
+    assert written["connections"] == [{"from": "producer.payload_out", "to": "consumer_a.payload_in"}]

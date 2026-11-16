@@ -1,6 +1,6 @@
 """forge.analysis.latency_runtime.probe
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Read simulation probe data from files written by forge verify runs.
+Read simulation probe data from files written by forge dev verify runs.
 
 Expected probe CSV format (long)
 ---------------------------------

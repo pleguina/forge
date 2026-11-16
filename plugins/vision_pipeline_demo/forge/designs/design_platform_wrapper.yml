@@ -28,13 +28,13 @@
 #                                                  │ [async FIFO x2: pixel -> output]
 #   output (clk_output, 125MHz)                   ┴-> pktz -> external forge.packet_stream.v1
 #
-# The Blobfish-specific `forge framework emit-payload` path (payload.v
+# The Blobfish-specific `forge dev framework emit-payload` path (payload.v
 # generation) does not apply here -- its generator hardcodes
 # GT-transceiver/CSP-framing/single-clock semantics into its own control
 # flow (forge/integration/payload_generator.py), not just its fixture
 # content, and is structurally incompatible with this plugin's real
 # 256-bit packet_stream output and genuine multi-clock-domain topology.
-# `forge topgen gen-top` (the same mechanism already used for every
+# `forge dev topgen gen-top` (the same mechanism already used for every
 # other design in this reference project) is the real, already-generic
 # wrapper-generation path -- this design is a generic platform fixture
 # built the same way as every other design here, not new machinery.
@@ -49,7 +49,7 @@
 # (norm) that itself feeds a further downstream merge point (merge)
 # alongside a real straight-line branch (sobel). Fixed by a new
 # LatencyEdge.unknown_cdc flag, propagated through both functions --
-# `forge analyze latency-check` now correctly reports 0 mismatches here
+# `forge dev analyze latency-check` now correctly reports 0 mismatches here
 # (real, hand-verified: sobel's branch is norm(3)+winbld(10)+sobel(4)=17;
 # threshcfg's branch is norm(3)+threshcfg(2)+delay_cycles(12)=17), where
 # before the fix it falsely reported a 3-cycle mismatch and a wrong
@@ -60,7 +60,7 @@
 # Status interface: `merge.tag_mismatch`/`tjoin.join_mismatch`/
 # `tjoin.out_end_of_frame` -- three real diagnostic/completion signals
 # every prior design left as dangling internal outputs ("OUTPUTS LEFT
-# OPEN" in every earlier `forge topgen gen-top` report) -- exposed here
+# OPEN" in every earlier `forge dev topgen gen-top` report) -- exposed here
 # as real top-level status ports, needing no new RTL.
 #
 # Frame scale: back to the 8x8 quickstart size, not

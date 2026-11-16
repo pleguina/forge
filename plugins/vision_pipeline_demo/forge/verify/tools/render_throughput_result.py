@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a real ``forge.throughput_result.v1`` artifact for the
 packetizer design from real HLS synthesis reports plus a real Tier 2
-probe CSV (``algo_top_probe.csv``, produced by ``forge verify run
+probe CSV (``algo_top_probe.csv``, produced by ``forge dev verify run
 --probe-log``).
 
 Known, honestly-stated limitation (found running this exact design, not

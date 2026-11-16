@@ -63,17 +63,30 @@ def test_build_registered_as_top_level_command() -> None:
     assert parsed.func.__name__ == "cmd_build"
 
 
-def test_plan_writes_zero_files(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    """--plan (the default) must never write — same read-only guarantee as
+def test_dry_run_writes_zero_files(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    """--dry-run must never write — same read-only guarantee as
     `forge inspect`/`gen-top --dry-run`."""
     before = _tree_snapshot(tmp_path)
     result = _run_build(
         capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
-        "--output", str(tmp_path / "algo_top.v"),
+        "--output", str(tmp_path / "algo_top.v"), "--dry-run",
     )
     after = _tree_snapshot(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
     assert before == after
+
+
+def test_system_yml_is_read(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    system_yml = tmp_path / "system.yml"
+    system_yml.write_text("connections: []\n")
+
+    result = _run_build(
+        capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
+        "--output", str(tmp_path / "out/algo_top.v"), "--system", str(system_yml),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "out/algo_top.v").is_file()
 
 
 def test_plan_human_output_sections(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -212,7 +225,9 @@ def test_apply_respects_accept_plan_hash_before_writing(
     assert before == after  # --apply never ran
 
 
-def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tuple[Path, Path]:
+def _write_two_clock_domain_design(
+    tmp_path: Path, *, cdc_block: str = "", src_clock: str = "clk_a", dst_clock: str = "clk_b",
+) -> tuple[Path, Path]:
     """Same synthetic two-RTL-module, two-clock-domain design used by
     `tests/test_topgen_cli_commands.py`'s `gen-top --strict` tests (kept
     as a local copy rather than a cross-test-file import, to avoid
@@ -227,7 +242,7 @@ def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tu
         "  ip_info_key: src\n"
         "  source_type: rtl\n"
         "  roles:\n"
-        "    clock_primary: {raw_port: clk_a, direction: input, width: 1}\n"
+        f"    clock_primary: {{raw_port: {src_clock}, direction: input, width: 1}}\n"
         "    reset_primary: {raw_port: rst, direction: input, width: 1}\n"
         "    dout: {raw_port: dout, direction: output, width: 8}\n"
     )
@@ -237,7 +252,7 @@ def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tu
         "  ip_info_key: dst\n"
         "  source_type: rtl\n"
         "  roles:\n"
-        "    clock_primary: {raw_port: clk_b, direction: input, width: 1}\n"
+        f"    clock_primary: {{raw_port: {dst_clock}, direction: input, width: 1}}\n"
         "    reset_primary: {raw_port: rst, direction: input, width: 1}\n"
         "    din: {raw_port: din, direction: input, width: 8}\n"
     )
@@ -276,34 +291,125 @@ def _write_two_clock_domain_design(tmp_path: Path, *, cdc_block: str = "") -> tu
     return design_yml, modules_yml
 
 
-def test_plan_flags_undeclared_cdc_as_a_plan_error_regardless_of_strict(
+def test_undeclared_cdc_stops_the_build_with_or_without_strict(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """Pre-existing behavior (unchanged by this slice): an undeclared
-    clock-domain crossing is a `plan.unresolved_issues` ERROR — surfaced
-    unconditionally, since `compute_gen_top_plan`'s CDC check always runs
-    (`verify_cdc`), and `forge build`'s own final status has always
-    treated any `unresolved_issues` error as a plan failure independent
-    of `--strict` (only `gen-top --apply`'s *generation-time* checks are
-    strict-gated). `--strict` is plan-only, so nothing is ever written
-    either way."""
     design_yml, modules_yml = _write_two_clock_domain_design(tmp_path)
-    before = _tree_snapshot(tmp_path)
 
-    for strict_flag in ([], ["--strict"]):
+    for flags in (["--dry-run"], ["--strict"], []):
         result = _run_build(
             capsys, str(design_yml), "--contracts-from", str(modules_yml),
-            "--output", str(tmp_path / "out" / "algo_top.v"), "--json", *strict_flag,
+            "--output", str(tmp_path / "out" / "algo_top.v"), "--json", *flags,
         )
-        assert result.returncode == 1, result.stdout + result.stderr
+        assert result.returncode == 1, (flags, result.stdout + result.stderr)
         payload = json.loads(result.stdout)
         assert payload["status"] == "fail"
         assert any(
             "undeclared clock-domain crossing" in d["message"]
             for d in payload["diagnostics"]
         )
+        assert not (tmp_path / "out" / "algo_top.v").exists()
 
-    assert _tree_snapshot(tmp_path) == before  # plan-only: nothing written
+
+def test_clock_ports_on_the_one_global_clock_are_not_a_crossing(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    """`connect_clock` ties `ap_clk` and `clk` to the same top-level net."""
+    design_yml, modules_yml = _write_two_clock_domain_design(
+        tmp_path, src_clock="ap_clk", dst_clock="clk",
+    )
+
+    result = _run_build(
+        capsys, str(design_yml), "--contracts-from", str(modules_yml),
+        "--output", str(tmp_path / "out" / "algo_top.v"), "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] in ("pass", "warn")
+    assert not any(d["category"] == "cdc" for d in payload["diagnostics"])
+    assert (tmp_path / "out" / "algo_top.v").is_file()
+
+
+def test_waived_cdc_builds_a_direct_wire(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    design_yml, modules_yml = _write_two_clock_domain_design(
+        tmp_path, cdc_block="cdc: {kind: waived, reason: clk_b is clk_a divided by 2}",
+    )
+
+    result = _run_build(
+        capsys, str(design_yml), "--contracts-from", str(modules_yml),
+        "--output", str(tmp_path / "out" / "algo_top.v"), "--strict", "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    top = (tmp_path / "out" / "algo_top.v").read_text()
+    assert "cdc_sync" not in top
+
+
+def test_waived_cdc_requires_a_reason(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path,
+) -> None:
+    design_yml, modules_yml = _write_two_clock_domain_design(
+        tmp_path, cdc_block="cdc: {kind: waived}",
+    )
+
+    result = _run_build(
+        capsys, str(design_yml), "--contracts-from", str(modules_yml),
+        "--output", str(tmp_path / "out" / "algo_top.v"), "--json",
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "requires a 'reason'" in result.stdout + result.stderr
+    assert not (tmp_path / "out" / "algo_top.v").exists()
+
+
+def _break_cardinality(tmp_path: Path) -> None:
+    contract = tmp_path / "interfaces" / "dst.interface.yaml"
+    contract.write_text(contract.read_text().replace(
+        "din: {raw_port: din, direction: input, width: 8}",
+        "din: {raw_port: din, direction: input, width: 8, "
+        "cardinality: {producers: {min: 2, max: 2}}}",
+    ))
+
+
+def _break_topology_group(tmp_path: Path) -> None:
+    design = tmp_path / "design.yml"
+    design.write_text(design.read_text() + (
+        "topology_groups:\n"
+        "  - name: tg\n"
+        "    family: wk\n"
+        "    from: src\n"
+        "    to: dst\n"
+        "    wiring_kind: no_such_kind\n"
+    ))
+
+
+@pytest.mark.parametrize("break_design, message", [
+    (_break_cardinality, "cardinality"),
+    (_break_topology_group, "no_such_kind"),
+])
+@pytest.mark.parametrize("command", ["build", "gen-top"])
+def test_a_violated_declaration_stops_generation_without_strict(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, break_design, message: str, command: str,
+) -> None:
+    design_yml, modules_yml = _write_two_clock_domain_design(
+        tmp_path, src_clock="ap_clk", dst_clock="clk",
+    )
+    break_design(tmp_path)
+    output = tmp_path / "out" / "algo_top.v"
+
+    run = _run_build if command == "build" else _run_topgen
+    extra = ["--mode", "verilog"] if command == "gen-top" else []
+    result = run(
+        capsys, *([command] if command == "gen-top" else []), str(design_yml), *extra,
+        "--contracts-from", str(modules_yml), "--output", str(output),
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert message in result.stdout + result.stderr
+    assert not output.exists()
 
 
 def test_strict_plan_only_passes_with_declared_cdc_adapter(
@@ -440,13 +546,13 @@ def test_strict_flags_compat_mode_module_that_plain_plan_only_warns_on(
 def test_dry_run_is_a_true_alias_for_plan_only(
     capsys: pytest.CaptureFixture[str], tmp_path: Path,
 ) -> None:
-    """--dry-run must behave identically to omitting --apply (today's
-    default) — same plan_hash, same exit code, nothing written."""
+    """--dry-run and --plan behave identically — same plan_hash, same exit
+    code, nothing written."""
     before = _tree_snapshot(tmp_path)
 
     default_result = _run_build(
         capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),
-        "--output", str(tmp_path / "algo_top.v"), "--json",
+        "--output", str(tmp_path / "algo_top.v"), "--plan", "--json",
     )
     dry_run_result = _run_build(
         capsys, str(PASSTHROUGH_DESIGN), "--contracts-from", str(PASSTHROUGH_MODULES),

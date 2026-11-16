@@ -1,6 +1,6 @@
 """Coverage for SVTestbenchGenerator / generate_sv_testbench.
 
-This is the testbench generator wired into `forge topgen gen-top --mode
+This is the testbench generator wired into `forge dev topgen gen-top --mode
 verilog --gen-testbench` (forge/core/cli/groups/topgen.py:2140) — a real,
 gated-behind-a-flag CLI feature, not dead code — but it measured 5%
 covered as of 2026-09-17, the file the most recent shipped bugfix
@@ -21,7 +21,7 @@ this repo.
 A real, previously-live gap was found while writing this suite: the
 checked-in gen-top/design_passthrough_demo/ reference build's
 probe_map.yaml never declared the cycle_in_bx Tier 2 probe this
-generator required, so `forge topgen gen-top --mode verilog
+generator required, so `forge dev topgen gen-top --mode verilog
 --gen-testbench` run fresh against it raised ValueError instead of
 regenerating tb_algo_top.sv. Root cause: passthrough_demo has no
 bx_timing_bx0_global port at all — it's a generic algorithm passthrough,
@@ -631,7 +631,7 @@ def test_real_passthrough_artifacts_regenerate_testbench(tmp_path):
     """Regression test for a real, previously-live gap (see module
     docstring): passthrough_demo has no bx_timing_bx0_global port, so it's
     not a BX-timed design, and used to hit the unconditional cycle_in_bx
-    requirement anyway -- `forge topgen gen-top --mode verilog
+    requirement anyway -- `forge dev topgen gen-top --mode verilog
     --gen-testbench` raised ValueError against this exact checked-in
     reference build. Now that BX machinery is gated on has_bx_timing, this
     real, non-BX design regenerates its testbench successfully.

@@ -25,21 +25,23 @@ def test_restores_columns_env_var(monkeypatch) -> None:
 def test_covers_every_top_level_group_and_standalone_command() -> None:
     page = generate_cli_reference_page()
     for command in (
-        "forge core", "forge topgen", "forge hls", "forge verify",
-        "forge analyze", "forge framework", "forge doctor", "forge inspect",
+        "forge dev core", "forge dev topgen", "forge dev hls", "forge dev verify",
+        "forge dev analyze", "forge dev framework", "forge doctor", "forge inspect",
         "forge build", "forge test", "forge report", "forge init",
     ):
         assert f"`{command}`" in page, f"{command} missing from CLI reference"
 
 
 def test_verify_delegated_subcommands_are_documented() -> None:
-    """forge verify hands off to its own separate parser via REMAINDER —
+    """forge dev verify hands off to its own separate parser via REMAINDER —
     a naive walk of the main tree alone would stop at the bare 'verify'
     leaf and miss its real subcommands entirely."""
     page = generate_cli_reference_page()
-    assert "`forge verify generate`" in page
-    assert "`forge verify doctor`" in page
-    assert "`forge verify run`" in page
+    assert "`forge dev verify generate`" in page
+    assert "`forge dev verify doctor`" in page
+    assert "`forge dev verify run`" in page
+    # Documented once, under `forge dev`, not again under the old name.
+    assert "### `forge " + "verify`" not in page
 
 
 def test_no_absolute_filesystem_paths_leak() -> None:

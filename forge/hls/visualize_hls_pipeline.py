@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 import yaml
 
 # Check for matplotlib
@@ -50,11 +50,12 @@ class HLSPipelineVisualizer:
     def __init__(self, design_file: Path, metrics_file: Path):
         self.design_file = design_file
         self.metrics_file = metrics_file
-        self.design = None
-        self.metrics = None
-        self.name_mapping = {}  # design name -> metrics key
-        self.hls_modules = []   # Only HLS modules from design
-        self.module_colors = {}  # Unique color per module
+        self.design: Dict[str, Any] = {}
+        self.metrics: Dict[str, Any] = {}
+        self.name_mapping: Dict[str, str] = {}  # design name -> metrics key
+        self.hls_modules: List[Dict[str, Any]] = []   # Only HLS modules from design
+        self.module_colors: Dict[str, str] = {}  # Unique color per module
+        self.register_stages_map: Dict[Tuple[str, str], int] = {}
 
         self.load_data()
         self.build_name_mapping()
@@ -155,7 +156,7 @@ class HLSPipelineVisualizer:
 
         # Build adjacency graph (only HLS modules)
         hls_names = set(self.name_mapping.keys())
-        graph = {name: [] for name in hls_names}
+        graph: Dict[str, List[str]] = {name: [] for name in hls_names}
         
         # Store register stages info: (from_mod, to_mod) -> register_stages
         self.register_stages_map = {}
@@ -175,7 +176,7 @@ class HLSPipelineVisualizer:
 
         # Find pipeline stages using topological ordering
         visited = set()
-        stages = []
+        stages: List[List[str]] = []
 
         def get_stage(node, current_stage=0):
             if node in visited:
@@ -222,7 +223,7 @@ class HLSPipelineVisualizer:
         fig, ax = plt.subplots(figsize=(16, 10))
 
         # Calculate positions
-        y_pos = 0
+        y_pos = 0.0
         y_spacing = 1.2
         cumulative_latency = 0
         max_latency = 0
@@ -563,9 +564,9 @@ class HLSPipelineVisualizer:
         hls_names = set(self.name_mapping.keys())
 
         # Forward map: from_module -> [to_modules]
-        forward_map = {}
+        forward_map: Dict[str, List[str]] = {}
         # Reverse map: to_module -> [from_modules]
-        reverse_map = {}
+        reverse_map: Dict[str, List[str]] = {}
 
         for conn in connections:
             from_mod = conn.get('from')
@@ -595,11 +596,11 @@ class HLSPipelineVisualizer:
         stages = self.analyze_pipeline_flow()
 
         y_spacing = 1.2
-        y_offset = 0
+        y_offset = 0.0
         max_x = 0
 
-        stage_positions = {}  # module_name -> (x_start, y_pos, latency)
-        gap_info = []  # List of (x_start, x_end, y_pos, gap_cycles, affected_module)
+        stage_positions: Dict[str, Tuple[int, float, int]] = {}  # module_name -> (x_start, y_pos, latency)
+        gap_info: List[Dict[str, Any]] = []  # x_start, x_end, y_pos, gap_cycles, waiting_for, module
 
         for stage_idx, stage_modules in enumerate(stages):
             # Calculate when this stage can start
@@ -630,15 +631,15 @@ class HLSPipelineVisualizer:
                     if len(input_finish_times) > 1:
                         # Multiple inputs - there might be gaps
                         for input_mod, finish_time in input_finish_times.items():
-                            gap = max_input_finish - finish_time
-                            if gap > 0:
+                            wait = max_input_finish - finish_time
+                            if wait > 0:
                                 # This input finishes early and must wait
                                 inp_x, inp_y, inp_lat = stage_positions[input_mod]
                                 gap_info.append({
                                     'x_start': inp_x + inp_lat,
-                                    'x_end': inp_x + inp_lat + gap,
+                                    'x_end': inp_x + inp_lat + wait,
                                     'y_pos': inp_y,
-                                    'gap_cycles': gap,
+                                    'gap_cycles': wait,
                                     'waiting_for': design_name,
                                     'module': input_mod
                                 })
@@ -795,7 +796,7 @@ class HLSPipelineVisualizer:
     def plot_block_diagram(self, output_dir: Path):
         """Create a block diagram showing module connections with bit widths and register stages."""
         try:
-            import networkx as nx
+            import networkx as nx  # type: ignore[import-untyped]
         except ImportError:
             print("⚠️  Block diagram requires networkx. Install with: pip install networkx")
             print("   Skipping block diagram generation...")
@@ -817,8 +818,8 @@ class HLSPipelineVisualizer:
         connection_data = []
         
         # Track fanout for better positioning
-        module_fanout = {}
-        module_fanin = {}
+        module_fanout: Dict[str, List[str]] = {}
+        module_fanin: Dict[str, List[str]] = {}
         
         # Track external ports per module
         module_ext_inputs = {}   # module -> list of input port names

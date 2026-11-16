@@ -94,7 +94,7 @@ real top-level ports, needing no new RTL. All three read `0` throughout
 a passing run.
 
 ```bash
-forge analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_platform_wrapper.yml \
+forge dev analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_platform_wrapper.yml \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo
 ```
@@ -120,7 +120,7 @@ A real product rarely has just one clock domain doing one job — a
 control plane that configures behavior at runtime, a pixel plane doing
 the real work, and an output plane draining results, are three
 genuinely different concerns. This design proves FORGE's ordinary
-`forge topgen gen-top` path (the same mechanism every earlier chapter
+`forge dev topgen gen-top` path (the same mechanism every earlier chapter
 used) handles that assembly with no new core machinery.
 
 ## Common failure

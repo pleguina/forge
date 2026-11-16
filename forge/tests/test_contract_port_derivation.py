@@ -173,7 +173,7 @@ def test_unresolvable_gap_is_reported_rather_than_silently_dropped(tmp_path):
 
 
 def test_verify_contract_accepts_a_slim_contract_against_real_ports(tmp_path):
-    """`forge core verify-contract` reads the contract file directly rather
+    """`forge dev core verify-contract` reads the contract file directly rather
     than through contract_loader, so it needs the same defaulting rule —
     otherwise a slim contract that builds correctly fails verification.
     Checking the omitted fields against the *real* built ports is exactly

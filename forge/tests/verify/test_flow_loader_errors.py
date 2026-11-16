@@ -16,7 +16,7 @@ def test_load_generic_flow_missing_file_raises_typed_error(tmp_path: Path) -> No
         load_generic_flow(missing, consumer_root=tmp_path)
 
     assert "verify.flow.yml not found" in str(exc_info.value)
-    assert "re-run forge verify generate" in exc_info.value.action
+    assert "re-run forge dev verify generate" in exc_info.value.action
 
 
 def test_load_generic_flow_missing_required_field_raises_typed_error(tmp_path: Path) -> None:

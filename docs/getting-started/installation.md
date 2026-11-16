@@ -22,11 +22,14 @@ subdirectory of this repository, plus two optional extras:
   regex-based fallback is used automatically when it's absent, so plugins
   work without it, just with slightly less precise port extraction.
 
-Two more extras exist, for other purposes:
+More extras exist, for other purposes:
 
-- **`docs`** — `mkdocs`, `mkdocs-material`, `mike`. Only needed to build
-  this documentation site locally.
-- **`all`** — shorthand for `forge[dev,parser,docs]`.
+- **`plot`** — `matplotlib`, for `forge dev analyze plot-results`, which
+  fails without it.
+- **`docs`** — `mkdocs`, `mkdocs-material`, `mike`, plus `Pillow` and
+  `matplotlib` for the tutorial's figures. Only needed to build this
+  documentation site locally.
+- **`all`** — shorthand for `forge[dev,parser,plot,docs]`.
 
 If you only want to use FORGE as a plugin author (not contribute to
 FORGE itself, not build docs), `pip install -e "forge[parser]"` is enough
@@ -41,46 +44,44 @@ installation story, not a placeholder waiting for a PyPI slot: install
 directly from this git repository. See `CONTRIBUTING.md`'s
 "Distribution: git install, not PyPI" section for the full rationale.
 
-### Install a release, not a branch
+### Pin a commit, not a branch
 
-Pin a release tag:
-
-```bash
-pip install "git+https://github.com/pleguina/forge.git@v2.0.0#subdirectory=forge"
-```
-
-Every release also publishes a built wheel and source archive with
-checksums, release notes, migration notes, the support matrix, and the
-environment the release was actually tested in. If your organisation
-mirrors artifacts internally, install the wheel directly and verify it
-first:
+No release has been published on GitHub yet: the repository has no
+release and no version tag (check
+[tags](https://github.com/pleguina/forge/tags) and
+[releases](https://github.com/pleguina/forge/releases) for the current
+state). Until one is, pin the full commit SHA you tested with:
 
 ```bash
-sha256sum -c SHA256SUMS
-pip install forge-2.0.0-py3-none-any.whl
+pip install "git+https://github.com/pleguina/forge.git@<commit-sha>#subdirectory=forge"
 ```
 
-**Do not install from a moving branch.** `@main` is whatever was merged
-most recently: it will change under you, it is not what any release note
-describes, and two machines installing "the same way" a week apart get
-different code. Track a tag, and move deliberately when you choose to.
-Editable installs from a checkout (`pip install -e "forge[dev,parser]"`)
-are for developing FORGE itself — see
-[contributing](../development/contributing.md).
+Development happens on `forge_devel`; `main` receives periodic syncs of it
+and lags behind. The commands and `forge.yml` keys in this documentation
+describe `forge_devel`. When a release is tagged, pin that tag instead.
+
+**Do not install from a moving branch.** `@main` or `@forge_devel` is
+whatever was merged most recently: it will change under you, and two
+machines installing "the same way" a week apart get different code. Move
+your pin deliberately. Editable installs from a checkout
+(`pip install -e "forge[dev,parser]"`) are for developing FORGE itself —
+see [contributing](../development/contributing.md).
 
 ## System-level tools
 
 A few things live outside the Python package and are installed separately,
 only if you need them:
 
-- **GHDL** — used by `forge topgen lint` for VHDL linting (`apt-get install ghdl` / `dnf install ghdl` / `brew install ghdl`).
-- **Verilator** — used by `forge topgen lint-verilog` for Verilog linting only, not as a simulation backend (`apt-get install verilator` / `dnf install verilator` / `brew install verilator`).
-- **Vivado / XSim** — required for any `forge verify run` flow that uses the `xsim` backend.
-- **Vitis HLS** — required for `forge hls run` and any `hls_csim` verification flow.
+- **GHDL** — used by `forge dev topgen lint` for VHDL linting (`apt-get install ghdl` / `dnf install ghdl` / `brew install ghdl`).
+- **Verilator** — a simulation backend for `forge test` and for `verilator` verification flows, and the linter behind `forge dev topgen lint-verilog` (`apt-get install verilator` / `dnf install verilator` / `brew install verilator`).
+- **Vivado / XSim** — the `xsim` simulation backend, for `forge test` and `xsim` verification flows.
+- **Vitis HLS** — required for `forge dev hls run` and any `hls_csim` verification flow.
 
+Which simulator runs which kind of verification is listed in the
+generated [support matrix](../reference/support-matrix.md).
 None of these are required just to install FORGE and scaffold a plugin —
 you'll hit a clear, specific error (or an honest `FAIL` from
-`forge verify doctor`) if a step needs one that isn't on `PATH`.
+`forge dev verify doctor`) if a step needs one that isn't on `PATH`.
 
 ## Next
 

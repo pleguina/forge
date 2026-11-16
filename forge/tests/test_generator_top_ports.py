@@ -16,7 +16,7 @@ from forge.contracts.contract_loader import load_contracts_for_design, synthesiz
 from forge.contracts.matcher import auto_match_ports
 from forge.generation.generators.structural_verilog import write_structural_verilog
 from core.utils.hdl_parser import _scan_verilog_ports
-from core.cli.groups.topgen import generate_port_map
+from forge.generation.artifacts import generate_port_map
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PASSTHROUGH_DESIGN = REPO_ROOT / "plugins/passthrough_demo/forge/designs/design.yml"

@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 VPD_DESIGN_VERIFICATION = REPO_ROOT / "plugins/vision_pipeline_demo/forge/verify/design.verification.yml"
 VPD_HLS_BUILD_ROOT = REPO_ROOT / "build_hls_vision_pipeline_demo"
 VPD_ALGO_TOP = REPO_ROOT / "gen-top/design_vision_pipeline_quickstart/algo_top.v"
+PASSTHROUGH_ALGO_TOP = REPO_ROOT / "gen-top/design_passthrough_demo/algo_top.v"
 
 
 def _run_test(capsys: pytest.CaptureFixture[str], *args: str):
@@ -63,6 +64,8 @@ def test_forge_test_run_writes_real_golden_comparison_artifact(tmp_path, capsys)
     assert len(payload["events"][0]["checks"]) == 3
 
 
+@pytest.mark.skipif(not shutil.which("xsim"), reason="Vivado xsim not on PATH")
+@pytest.mark.skipif(not PASSTHROUGH_ALGO_TOP.exists(), reason="no generated passthrough_demo algo_top.v")
 def test_forge_test_run_omits_golden_comparison_artifact_without_a_sidecar(tmp_path, capsys):
     """passthrough_demo's golden XML is still hand-typed — no real
     GoldenModelProvider, so gen_stimulus.py never writes a

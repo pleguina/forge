@@ -70,7 +70,7 @@ Scoreboard check: PASS
 ## Artifacts to inspect
 
 ```bash
-forge analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_tile_stats.yml \
+forge dev analyze latency-check plugins/vision_pipeline_demo/forge/designs/design_tile_stats.yml \
   --contracts-from plugins/vision_pipeline_demo/forge/modules.yml \
   --hls-build-root build_hls_vision_pipeline_demo
 ```
@@ -90,7 +90,7 @@ difference from chapter 04's merge point:
   bounded) is slower for a given tile, not by its own 1-cycle
   match-and-forward step.
 
-`forge topgen validate` checks that the two windows genuinely overlap;
+`forge dev topgen validate` checks that the two windows genuinely overlap;
 `tile_summary_join_rtl`'s own `join_mismatch` output re-verifies the same
 `tile_id`/`frame_id` agreement at runtime.
 
@@ -117,7 +117,7 @@ one to check it correctly.
 ## Common failure
 
 A merge point whose two predecessors' windows don't actually overlap is
-caught by `forge topgen validate`, the same way an `exact_cycle`
+caught by `forge dev topgen validate`, the same way an `exact_cycle`
 mismatch is in chapter 04 — see [chapter
 12](12-diagnostics-and-negative-fixtures.md).
 

@@ -15,12 +15,16 @@ figures this script produces):
    XML plus this plugin's own `GoldenModelProvider` output — never
    invented pixel values.
 3. Performance figures (`figures/fifo-high-water-mark.png`) are rendered
-   by FORGE core's generic `forge analyze plot-results`, fed a CSV built
+   by FORGE core's generic `forge dev analyze plot-results`, fed a CSV built
    from this plugin's own checked-in `throughput_result.json` files.
 4. `manifest.json` records the design content hash (for diagrams) or
    source dataset hash (for image/performance figures) each committed
    figure was generated from, so `--check` can prove they're still
-   fresh without re-running Vivado/Vitis.
+   fresh without re-running Vivado/Vitis, and the Graphviz, matplotlib and
+   Pillow versions that rendered them. `--check` also compares the files
+   byte for byte, but only those whose renderer here is the version that
+   rendered the committed file: other versions draw the same inputs
+   differently.
 
 Usage:
     python3 plugins/vision_pipeline_demo/tutorial/generate_reference_assets.py
@@ -53,6 +57,24 @@ DIAGRAM_DESIGNS = [
     ("full-functional", "design_full_functional.yml"),
     ("platform-wrapper", "design_platform_wrapper.yml"),
 ]
+
+
+def _renderer_versions() -> dict:
+    import matplotlib
+    import PIL
+
+    dot = subprocess.run(["dot", "-V"], capture_output=True, text=True, check=True)
+    return {
+        "graphviz": (dot.stderr or dot.stdout).strip().split("version", 1)[-1].strip(),
+        "matplotlib": matplotlib.__version__,
+        "Pillow": PIL.__version__,
+    }
+
+
+def _renderer_of(rel_path: Path) -> str:
+    if rel_path.parts[0] == "diagrams":
+        return "graphviz"
+    return "matplotlib" if rel_path.stem == "fifo-high-water-mark" else "Pillow"
 
 
 def _load_image_panels():
@@ -181,7 +203,7 @@ def generate_performance_figures(output_dir: Path, manifest: dict) -> None:
             "    figsize: [8, 5]\n"
         )
         subprocess.run(
-            ["forge", "analyze", "plot-results", "--config", str(config_path),
+            ["forge", "dev", "analyze", "plot-results", "--config", str(config_path),
              "--observed", str(csv_path), "--output", str(figures_dir)],
             cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
         )
@@ -191,7 +213,7 @@ def generate_performance_figures(output_dir: Path, manifest: dict) -> None:
 
 
 def generate_all(output_dir: Path) -> dict:
-    manifest = {"schema_version": 1, "diagrams": {}, "figures": {}}
+    manifest = {"schema_version": 1, "diagrams": {}, "figures": {}, "renderers": _renderer_versions()}
     (output_dir / "diagrams").mkdir(parents=True, exist_ok=True)
     (output_dir / "figures").mkdir(parents=True, exist_ok=True)
     generate_diagrams(output_dir, manifest)
@@ -226,13 +248,26 @@ def main(argv=None) -> int:
                 mismatches.append("figures manifest (source dataset hash changed)")
 
             # Byte-for-byte, so a renderer-code change with unchanged
-            # source data is caught too, not just a source-data change.
+            # source data is caught too, where the renderer is the version
+            # the committed file came from.
+            here = fresh_manifest["renderers"]
+            committed_renderers = committed_manifest.get("renderers", {})
+            hash_only = set()
             for rel in sorted(list((tmp_path / "diagrams").glob("*")) + list((tmp_path / "figures").glob("*"))):
                 rel_path = rel.relative_to(tmp_path)
+                renderer = _renderer_of(rel_path)
+                if here[renderer] != committed_renderers.get(renderer):
+                    hash_only.add(renderer)
+                    continue
                 committed_path = _OUTPUT_ROOT / rel_path
                 if not committed_path.is_file() or committed_path.read_bytes() != rel.read_bytes():
                     mismatches.append(f"file differs: {rel_path}")
 
+        for renderer in sorted(hash_only):
+            print(
+                f"note: {renderer} {here[renderer]} here, {committed_renderers.get(renderer)} for the "
+                f"committed assets; those are checked by source hash only"
+            )
         if mismatches:
             print("STALE: committed reference assets do not match a fresh regeneration:", file=sys.stderr)
             for m in mismatches:

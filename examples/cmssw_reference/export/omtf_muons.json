@@ -1,0 +1,4188 @@
+{
+ "provenance": {
+  "cmssw_release": "CMSSW_20_0_0",
+  "cmssw_commit": "0338fcce45b",
+  "cmssw_branch": "wp8-csc-r-extrapolation",
+  "cmssw_remote": "https://github.com/pleguina/cmssw.git",
+  "config": {
+   "file": "gen_ntest9_real_pos.py (a configuration kept next to the release area, not in the repository), first 500 events, CSC fixed-point R and eta",
+   "sha256": "3183e3fa66c06fa0e8eeb3ae588fea83158040769cb05e9a684250a22ca54027"
+  },
+  "input": "SingleMuFlatPt2To100_Run4D110_GENSIMDIGIL1_pos.root (single muons, flat pT 2-100 GeV, Phase-2 Run4 D110)",
+  "producer": "L1TMuonOverlapPhase2 simOmtfPhase2Digis, dumpResultToXML",
+  "dump": "TestEvents_swnew_p1scale_ntest9_real_pos_part000.xml",
+  "dump_sha256": "a98a2cc6d146ba846d06dbb1121dd768c023a07cf0fca9e82d6e809e168455da"
+ },
+ "events": [
+  {
+   "id": 1,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 196,
+     "eta": 1428,
+     "phi": -2326,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 2,
+     "pt": 1275,
+     "eta": 1344,
+     "phi": -2325,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1799,
+     "eta": -1386,
+     "phi": 1876,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 196,
+     "eta": 1428,
+     "phi": -2326,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 2,
+     "pt": 1275,
+     "eta": 1344,
+     "phi": -2325,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1799,
+     "eta": -1386,
+     "phi": 1876,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 214,
+     "eta": 1246,
+     "phi": 2045,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 204,
+     "eta": -1134,
+     "phi": -964,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 214,
+     "eta": 1246,
+     "phi": 2045,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 204,
+     "eta": -1134,
+     "phi": -964,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 338,
+     "eta": 1176,
+     "phi": 1271,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 192,
+     "eta": -1176,
+     "phi": -2218,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 338,
+     "eta": 1176,
+     "phi": 1271,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 192,
+     "eta": -1176,
+     "phi": -2218,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1920,
+     "eta": 1162,
+     "phi": -1132,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1920,
+     "eta": 1162,
+     "phi": -1132,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 294,
+     "eta": 1372,
+     "phi": 2336,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 389,
+     "eta": -1162,
+     "phi": -1172,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 294,
+     "eta": 1372,
+     "phi": 2336,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 389,
+     "eta": -1162,
+     "phi": -1172,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 125,
+     "eta": 1694,
+     "phi": 3237,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 5,
+     "pt": 2544,
+     "eta": -1680,
+     "phi": -832,
+     "charge": 0,
+     "qual": 0
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 125,
+     "eta": 1694,
+     "phi": 3237,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 5,
+     "pt": 2544,
+     "eta": -1680,
+     "phi": -832,
+     "charge": 0,
+     "qual": 0
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 192,
+     "eta": 1540,
+     "phi": -3000,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 888,
+     "eta": -1540,
+     "phi": 1175,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 192,
+     "eta": 1540,
+     "phi": -3000,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 888,
+     "eta": -1540,
+     "phi": 1175,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 623,
+     "eta": 1106,
+     "phi": -3490,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 380,
+     "eta": -1050,
+     "phi": 940,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 623,
+     "eta": 1106,
+     "phi": -3490,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 380,
+     "eta": -1050,
+     "phi": 940,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 428,
+     "eta": 1400,
+     "phi": 4090,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 381,
+     "eta": -1386,
+     "phi": 518,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 428,
+     "eta": 1400,
+     "phi": 4090,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 381,
+     "eta": -1386,
+     "phi": 518,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 508,
+     "eta": 1162,
+     "phi": 177,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 508,
+     "eta": 1162,
+     "phi": 177,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 662,
+     "eta": -1162,
+     "phi": -3569,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 508,
+     "eta": 1162,
+     "phi": 177,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 508,
+     "eta": 1162,
+     "phi": 177,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 662,
+     "eta": -1162,
+     "phi": -3569,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1337,
+     "eta": 1610,
+     "phi": -1947,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 2037,
+     "eta": -1638,
+     "phi": 2227,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1337,
+     "eta": 1610,
+     "phi": -1947,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 2037,
+     "eta": -1638,
+     "phi": 2227,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2206,
+     "eta": 1386,
+     "phi": -1143,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2235,
+     "eta": -1372,
+     "phi": 3050,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2270,
+     "eta": -1218,
+     "phi": 3050,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2206,
+     "eta": 1386,
+     "phi": -1143,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2235,
+     "eta": -1372,
+     "phi": 3050,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2270,
+     "eta": -1218,
+     "phi": 3050,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2081,
+     "eta": 1540,
+     "phi": -1326,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2987,
+     "eta": -1526,
+     "phi": 2861,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 3006,
+     "eta": -1526,
+     "phi": 2861,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2081,
+     "eta": 1540,
+     "phi": -1326,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2987,
+     "eta": -1526,
+     "phi": 2861,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 3006,
+     "eta": -1526,
+     "phi": 2861,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2045,
+     "eta": 1386,
+     "phi": 3530,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2155,
+     "eta": -1288,
+     "phi": -469,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2045,
+     "eta": 1386,
+     "phi": 3530,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2155,
+     "eta": -1288,
+     "phi": -469,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 3051,
+     "eta": 1106,
+     "phi": 2880,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 3051,
+     "eta": 1106,
+     "phi": 2880,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2914,
+     "eta": -1106,
+     "phi": -1144,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 3051,
+     "eta": 1106,
+     "phi": 2880,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 3051,
+     "eta": 1106,
+     "phi": 2880,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2914,
+     "eta": -1106,
+     "phi": -1144,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 3014,
+     "eta": 1540,
+     "phi": 2098,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2765,
+     "eta": -1540,
+     "phi": -1939,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 3014,
+     "eta": 1540,
+     "phi": 2098,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2765,
+     "eta": -1540,
+     "phi": -1939,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2108,
+     "eta": 1162,
+     "phi": -3299,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2126,
+     "eta": -1162,
+     "phi": 892,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2108,
+     "eta": 1162,
+     "phi": -3299,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2126,
+     "eta": -1162,
+     "phi": 892,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1639,
+     "eta": 1400,
+     "phi": -1287,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1116,
+     "eta": -1526,
+     "phi": 2934,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1135,
+     "eta": -1526,
+     "phi": 2934,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1639,
+     "eta": 1400,
+     "phi": -1287,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1116,
+     "eta": -1526,
+     "phi": 2934,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1135,
+     "eta": -1526,
+     "phi": 2934,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 500,
+     "eta": 1638,
+     "phi": -1877,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 543,
+     "eta": -1638,
+     "phi": 2576,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 500,
+     "eta": 1638,
+     "phi": -1877,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 543,
+     "eta": -1638,
+     "phi": 2576,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1687,
+     "eta": 1162,
+     "phi": 189,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 1687,
+     "eta": 1162,
+     "phi": 189,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1577,
+     "eta": -1148,
+     "phi": -3770,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1687,
+     "eta": 1162,
+     "phi": 189,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 1687,
+     "eta": 1162,
+     "phi": 189,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1577,
+     "eta": -1148,
+     "phi": -3770,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1339,
+     "eta": 1106,
+     "phi": -220,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1265,
+     "eta": -1176,
+     "phi": 4026,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1339,
+     "eta": 1106,
+     "phi": -220,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1265,
+     "eta": -1176,
+     "phi": 4026,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1913,
+     "eta": 1610,
+     "phi": -117,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 2031,
+     "eta": -1596,
+     "phi": 4050,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1913,
+     "eta": 1610,
+     "phi": -117,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 2031,
+     "eta": -1596,
+     "phi": 4050,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1479,
+     "eta": 1512,
+     "phi": 819,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1559,
+     "eta": -1512,
+     "phi": -3150,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1479,
+     "eta": 1512,
+     "phi": 819,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1559,
+     "eta": -1512,
+     "phi": -3150,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2531,
+     "eta": 1596,
+     "phi": 254,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 2,
+     "pt": 2418,
+     "eta": 1596,
+     "phi": 254,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 2438,
+     "eta": -1610,
+     "phi": -3783,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2531,
+     "eta": 1596,
+     "phi": 254,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 2,
+     "pt": 2418,
+     "eta": 1596,
+     "phi": 254,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 2438,
+     "eta": -1610,
+     "phi": -3783,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "candidates": [],
+   "samuons": []
+  },
+  {
+   "id": 26,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 690,
+     "eta": 1386,
+     "phi": -1851,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 595,
+     "eta": -1386,
+     "phi": 2563,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 690,
+     "eta": 1386,
+     "phi": -1851,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 595,
+     "eta": -1386,
+     "phi": 2563,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 185,
+     "eta": 1162,
+     "phi": 3270,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 189,
+     "eta": -1218,
+     "phi": 368,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 96,
+     "eta": -1134,
+     "phi": 344,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 185,
+     "eta": 1162,
+     "phi": 3270,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 189,
+     "eta": -1218,
+     "phi": 368,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 96,
+     "eta": -1134,
+     "phi": 344,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 486,
+     "eta": 1246,
+     "phi": -123,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 534,
+     "eta": -1148,
+     "phi": -3798,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 486,
+     "eta": 1246,
+     "phi": -123,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 534,
+     "eta": -1148,
+     "phi": -3798,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 990,
+     "eta": 1176,
+     "phi": 1291,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 975,
+     "eta": -1162,
+     "phi": -2608,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 975,
+     "eta": -1162,
+     "phi": -2608,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 990,
+     "eta": 1176,
+     "phi": 1291,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 975,
+     "eta": -1162,
+     "phi": -2608,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 975,
+     "eta": -1162,
+     "phi": -2608,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1600,
+     "eta": 1498,
+     "phi": -3135,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2527,
+     "eta": -1512,
+     "phi": 1022,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1600,
+     "eta": 1498,
+     "phi": -3135,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2527,
+     "eta": -1512,
+     "phi": 1022,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 295,
+     "eta": 1246,
+     "phi": 2023,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 302,
+     "eta": -1176,
+     "phi": -1389,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 295,
+     "eta": 1246,
+     "phi": 2023,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 302,
+     "eta": -1176,
+     "phi": -1389,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2275,
+     "eta": 1386,
+     "phi": 2368,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2054,
+     "eta": -1386,
+     "phi": -1640,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2275,
+     "eta": 1386,
+     "phi": 2368,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2054,
+     "eta": -1386,
+     "phi": -1640,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1135,
+     "eta": 1162,
+     "phi": -1921,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 967,
+     "eta": -1372,
+     "phi": 2362,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1135,
+     "eta": 1162,
+     "phi": -1921,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 967,
+     "eta": -1372,
+     "phi": 2362,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2176,
+     "eta": 1106,
+     "phi": -1146,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2176,
+     "eta": 1106,
+     "phi": -1146,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2225,
+     "eta": 1176,
+     "phi": -2775,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2081,
+     "eta": -1246,
+     "phi": 1423,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2225,
+     "eta": 1176,
+     "phi": -2775,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2081,
+     "eta": -1246,
+     "phi": 1423,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 160,
+     "eta": 1666,
+     "phi": -13,
+     "charge": 1,
+     "qual": 0
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 160,
+     "eta": 1666,
+     "phi": -13,
+     "charge": 1,
+     "qual": 0
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2134,
+     "eta": 1414,
+     "phi": 993,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2511,
+     "eta": -1386,
+     "phi": -2997,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2134,
+     "eta": 1414,
+     "phi": 993,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2511,
+     "eta": -1386,
+     "phi": -2997,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 152,
+     "eta": 1638,
+     "phi": -1501,
+     "charge": 1,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 1973,
+     "eta": -1638,
+     "phi": 2664,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 152,
+     "eta": 1638,
+     "phi": -1501,
+     "charge": 1,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 1973,
+     "eta": -1638,
+     "phi": 2664,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1555,
+     "eta": 1106,
+     "phi": 3522,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1419,
+     "eta": -1106,
+     "phi": -442,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1555,
+     "eta": 1106,
+     "phi": 3522,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1419,
+     "eta": -1106,
+     "phi": -442,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 476,
+     "eta": 1246,
+     "phi": -2756,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 384,
+     "eta": -1428,
+     "phi": 1770,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 476,
+     "eta": 1246,
+     "phi": -2756,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 384,
+     "eta": -1428,
+     "phi": 1770,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1600,
+     "eta": 1302,
+     "phi": 3941,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2909,
+     "eta": -1400,
+     "phi": -85,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1600,
+     "eta": 1302,
+     "phi": 3941,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2909,
+     "eta": -1400,
+     "phi": -85,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 42,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 535,
+     "eta": 1358,
+     "phi": 3860,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 570,
+     "eta": -1358,
+     "phi": 118,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 573,
+     "eta": -1386,
+     "phi": 121,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 535,
+     "eta": 1358,
+     "phi": 3860,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 570,
+     "eta": -1358,
+     "phi": 118,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 573,
+     "eta": -1386,
+     "phi": 121,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1094,
+     "eta": 1624,
+     "phi": -3068,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 2438,
+     "eta": -1624,
+     "phi": 1108,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1094,
+     "eta": 1624,
+     "phi": -3068,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 3,
+     "pt": 2438,
+     "eta": -1624,
+     "phi": 1108,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 44,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 250,
+     "eta": 1246,
+     "phi": 1260,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 299,
+     "eta": -1176,
+     "phi": -2117,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 250,
+     "eta": 1246,
+     "phi": 1260,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 299,
+     "eta": -1176,
+     "phi": -2117,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 45,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2648,
+     "eta": 1526,
+     "phi": 2859,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 3166,
+     "eta": 1526,
+     "phi": 2859,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1959,
+     "eta": -1526,
+     "phi": -1164,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2648,
+     "eta": 1526,
+     "phi": 2859,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 3166,
+     "eta": 1526,
+     "phi": 2859,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1959,
+     "eta": -1526,
+     "phi": -1164,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 46,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2809,
+     "eta": 1134,
+     "phi": -3073,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2455,
+     "eta": -1204,
+     "phi": 1092,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2809,
+     "eta": 1134,
+     "phi": -3073,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2455,
+     "eta": -1204,
+     "phi": 1092,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 47,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 543,
+     "eta": 1666,
+     "phi": -1457,
+     "charge": 0,
+     "qual": 0
+    },
+    {
+     "link": 3,
+     "pt": 448,
+     "eta": -1666,
+     "phi": 2929,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 4,
+     "pt": 448,
+     "eta": -1666,
+     "phi": 2929,
+     "charge": 1,
+     "qual": 0
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 543,
+     "eta": 1666,
+     "phi": -1457,
+     "charge": 0,
+     "qual": 0
+    },
+    {
+     "link": 3,
+     "pt": 448,
+     "eta": -1666,
+     "phi": 2929,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 4,
+     "pt": 448,
+     "eta": -1666,
+     "phi": 2929,
+     "charge": 1,
+     "qual": 0
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1222,
+     "eta": 1400,
+     "phi": 719,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1579,
+     "eta": -1400,
+     "phi": -3223,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1222,
+     "eta": 1400,
+     "phi": 719,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1579,
+     "eta": -1400,
+     "phi": -3223,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 49,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2777,
+     "eta": 1372,
+     "phi": 361,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 2473,
+     "eta": 1358,
+     "phi": 392,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 2164,
+     "eta": -1386,
+     "phi": -3649,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2777,
+     "eta": 1372,
+     "phi": 361,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 2473,
+     "eta": 1358,
+     "phi": 392,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 2164,
+     "eta": -1386,
+     "phi": -3649,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 50,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1669,
+     "eta": 1162,
+     "phi": -1501,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1650,
+     "eta": -1176,
+     "phi": 2712,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1669,
+     "eta": 1162,
+     "phi": -1501,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1650,
+     "eta": -1176,
+     "phi": 2712,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2775,
+     "eta": 1162,
+     "phi": -1143,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2775,
+     "eta": 1162,
+     "phi": -1143,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 52,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 642,
+     "eta": 1386,
+     "phi": -808,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 820,
+     "eta": -1526,
+     "phi": 3543,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 642,
+     "eta": 1386,
+     "phi": -808,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 820,
+     "eta": -1526,
+     "phi": 3543,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 53,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2750,
+     "eta": 1568,
+     "phi": 2170,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1785,
+     "eta": -1568,
+     "phi": -1862,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2750,
+     "eta": 1568,
+     "phi": 2170,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1785,
+     "eta": -1568,
+     "phi": -1862,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 54,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2071,
+     "eta": 1162,
+     "phi": -2206,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1476,
+     "eta": -1176,
+     "phi": 2004,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2071,
+     "eta": 1162,
+     "phi": -2206,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1476,
+     "eta": -1176,
+     "phi": 2004,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 55,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2988,
+     "eta": 1106,
+     "phi": -2951,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2035,
+     "eta": -1162,
+     "phi": 1222,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2988,
+     "eta": 1106,
+     "phi": -2951,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2035,
+     "eta": -1162,
+     "phi": 1222,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 56,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2047,
+     "eta": 1386,
+     "phi": -604,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2109,
+     "eta": -1386,
+     "phi": 3578,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2047,
+     "eta": 1386,
+     "phi": -604,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2109,
+     "eta": -1386,
+     "phi": 3578,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 57,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2134,
+     "eta": 1176,
+     "phi": 3474,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2122,
+     "eta": -1106,
+     "phi": -521,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2134,
+     "eta": 1176,
+     "phi": 3474,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2122,
+     "eta": -1106,
+     "phi": -521,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 58,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1289,
+     "eta": 1568,
+     "phi": -979,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 185,
+     "eta": -1568,
+     "phi": 4055,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1289,
+     "eta": 1568,
+     "phi": -979,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 185,
+     "eta": -1568,
+     "phi": 4055,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 314,
+     "eta": 1680,
+     "phi": -946,
+     "charge": 0,
+     "qual": 0
+    },
+    {
+     "link": 4,
+     "pt": 278,
+     "eta": -1680,
+     "phi": 3688,
+     "charge": 1,
+     "qual": 0
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 314,
+     "eta": 1680,
+     "phi": -946,
+     "charge": 0,
+     "qual": 0
+    },
+    {
+     "link": 4,
+     "pt": 278,
+     "eta": -1680,
+     "phi": 3688,
+     "charge": 1,
+     "qual": 0
+    }
+   ]
+  },
+  {
+   "id": 60,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 293,
+     "eta": 1148,
+     "phi": -3148,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 400,
+     "eta": -1148,
+     "phi": 1664,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 293,
+     "eta": 1148,
+     "phi": -3148,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 400,
+     "eta": -1148,
+     "phi": 1664,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 61,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 205,
+     "eta": 1162,
+     "phi": 2838,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 202,
+     "eta": 1162,
+     "phi": 2838,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 214,
+     "eta": -1162,
+     "phi": -154,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 205,
+     "eta": 1162,
+     "phi": 2838,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 202,
+     "eta": 1162,
+     "phi": 2838,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 214,
+     "eta": -1162,
+     "phi": -154,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 177,
+     "eta": 1176,
+     "phi": 1295,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 174,
+     "eta": -1106,
+     "phi": -1461,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 177,
+     "eta": 1176,
+     "phi": 1295,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 174,
+     "eta": -1106,
+     "phi": -1461,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 63,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1217,
+     "eta": 1162,
+     "phi": -500,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1455,
+     "eta": -1134,
+     "phi": 3753,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1217,
+     "eta": 1162,
+     "phi": -500,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1455,
+     "eta": -1134,
+     "phi": 3753,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 64,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1798,
+     "eta": 1106,
+     "phi": -1123,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2152,
+     "eta": -1134,
+     "phi": 3110,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1798,
+     "eta": 1106,
+     "phi": -1123,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2152,
+     "eta": -1134,
+     "phi": 3110,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1351,
+     "eta": 1232,
+     "phi": 268,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 1351,
+     "eta": 1232,
+     "phi": 268,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1679,
+     "eta": -1204,
+     "phi": -3692,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1351,
+     "eta": 1232,
+     "phi": 268,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 1351,
+     "eta": 1232,
+     "phi": 268,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1679,
+     "eta": -1204,
+     "phi": -3692,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 66,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 256,
+     "eta": 1106,
+     "phi": 131,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 256,
+     "eta": 1106,
+     "phi": 131,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 321,
+     "eta": -1050,
+     "phi": -3370,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 256,
+     "eta": 1106,
+     "phi": 131,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 256,
+     "eta": 1106,
+     "phi": 131,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 321,
+     "eta": -1050,
+     "phi": -3370,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 67,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2556,
+     "eta": 1582,
+     "phi": -1477,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1909,
+     "eta": -1568,
+     "phi": 2677,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2556,
+     "eta": 1582,
+     "phi": -1477,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1909,
+     "eta": -1568,
+     "phi": 2677,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 68,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1469,
+     "eta": 1106,
+     "phi": -3399,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 96,
+     "eta": -1162,
+     "phi": 813,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1469,
+     "eta": 1106,
+     "phi": -3399,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 96,
+     "eta": -1162,
+     "phi": 813,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1299,
+     "eta": 1400,
+     "phi": 2651,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1566,
+     "eta": -1386,
+     "phi": -1308,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1299,
+     "eta": 1400,
+     "phi": 2651,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1566,
+     "eta": -1386,
+     "phi": -1308,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 70,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1690,
+     "eta": 1400,
+     "phi": -3921,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1920,
+     "eta": -1386,
+     "phi": 289,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1920,
+     "eta": -1386,
+     "phi": 289,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1690,
+     "eta": 1400,
+     "phi": -3921,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1920,
+     "eta": -1386,
+     "phi": 289,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1920,
+     "eta": -1386,
+     "phi": 289,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 71,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1520,
+     "eta": 1162,
+     "phi": 1204,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1732,
+     "eta": -1176,
+     "phi": -2760,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1520,
+     "eta": 1162,
+     "phi": 1204,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1732,
+     "eta": -1176,
+     "phi": -2760,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 72,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2243,
+     "eta": 1176,
+     "phi": 1979,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2820,
+     "eta": -1176,
+     "phi": -2041,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2243,
+     "eta": 1176,
+     "phi": 1979,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2820,
+     "eta": -1176,
+     "phi": -2041,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 73,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1243,
+     "eta": 1176,
+     "phi": -3497,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1064,
+     "eta": -1162,
+     "phi": 785,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1243,
+     "eta": 1176,
+     "phi": -3497,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1064,
+     "eta": -1162,
+     "phi": 785,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 74,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1062,
+     "eta": 1512,
+     "phi": 3193,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 529,
+     "eta": -1512,
+     "phi": -521,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1062,
+     "eta": 1512,
+     "phi": 3193,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 529,
+     "eta": -1512,
+     "phi": -521,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 75,
+   "candidates": [
+    {
+     "link": 4,
+     "pt": 1440,
+     "eta": -1050,
+     "phi": 4068,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 4,
+     "pt": 1440,
+     "eta": -1050,
+     "phi": 4068,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 76,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2628,
+     "eta": 1386,
+     "phi": -3937,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2326,
+     "eta": -1400,
+     "phi": 242,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2326,
+     "eta": -1400,
+     "phi": 242,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2628,
+     "eta": 1386,
+     "phi": -3937,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2326,
+     "eta": -1400,
+     "phi": 242,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2326,
+     "eta": -1400,
+     "phi": 242,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 77,
+   "candidates": [
+    {
+     "link": 5,
+     "pt": 192,
+     "eta": -1680,
+     "phi": -1686,
+     "charge": 1,
+     "qual": 0
+    }
+   ],
+   "samuons": [
+    {
+     "link": 5,
+     "pt": 192,
+     "eta": -1680,
+     "phi": -1686,
+     "charge": 1,
+     "qual": 0
+    }
+   ]
+  },
+  {
+   "id": 78,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1665,
+     "eta": 1050,
+     "phi": -16,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1898,
+     "eta": -1106,
+     "phi": -3995,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1665,
+     "eta": 1050,
+     "phi": -16,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1898,
+     "eta": -1106,
+     "phi": -3995,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 79,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1047,
+     "eta": 1568,
+     "phi": 1985,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1280,
+     "eta": -1554,
+     "phi": -1958,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1047,
+     "eta": 1568,
+     "phi": 1985,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1280,
+     "eta": -1554,
+     "phi": -1958,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 80,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 661,
+     "eta": 1638,
+     "phi": -1184,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 730,
+     "eta": -1652,
+     "phi": 3113,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 661,
+     "eta": 1638,
+     "phi": -1184,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 4,
+     "pt": 730,
+     "eta": -1652,
+     "phi": 3113,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 81,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 164,
+     "eta": 1386,
+     "phi": -2616,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 164,
+     "eta": 1246,
+     "phi": -2616,
+     "charge": 0,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 164,
+     "eta": 1386,
+     "phi": -2616,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 164,
+     "eta": 1246,
+     "phi": -2616,
+     "charge": 0,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 82,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 962,
+     "eta": 1512,
+     "phi": -2796,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1218,
+     "eta": -1512,
+     "phi": 1483,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 962,
+     "eta": 1512,
+     "phi": -2796,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1218,
+     "eta": -1512,
+     "phi": 1483,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 83,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1275,
+     "eta": 1386,
+     "phi": 2102,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1554,
+     "eta": -1386,
+     "phi": -1844,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1275,
+     "eta": 1386,
+     "phi": 2102,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1554,
+     "eta": -1386,
+     "phi": -1844,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 84,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2352,
+     "eta": 1106,
+     "phi": -2543,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 2352,
+     "eta": 1106,
+     "phi": -2543,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2318,
+     "eta": -1148,
+     "phi": 1647,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2352,
+     "eta": 1106,
+     "phi": -2543,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 2,
+     "pt": 2352,
+     "eta": 1106,
+     "phi": -2543,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 2318,
+     "eta": -1148,
+     "phi": 1647,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 85,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1600,
+     "eta": 1162,
+     "phi": -456,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2430,
+     "eta": -1148,
+     "phi": 3727,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1600,
+     "eta": 1162,
+     "phi": -456,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2430,
+     "eta": -1148,
+     "phi": 3727,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 86,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1967,
+     "eta": 1400,
+     "phi": -2059,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1774,
+     "eta": -1386,
+     "phi": 2143,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1967,
+     "eta": 1400,
+     "phi": -2059,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1774,
+     "eta": -1386,
+     "phi": 2143,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 87,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 838,
+     "eta": 1498,
+     "phi": 2377,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2702,
+     "eta": -1484,
+     "phi": -1653,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 838,
+     "eta": 1498,
+     "phi": 2377,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2702,
+     "eta": -1484,
+     "phi": -1653,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 88,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2412,
+     "eta": 1176,
+     "phi": 2073,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2463,
+     "eta": -1162,
+     "phi": -1945,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2412,
+     "eta": 1176,
+     "phi": 2073,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 2463,
+     "eta": -1162,
+     "phi": -1945,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 89,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 693,
+     "eta": 1386,
+     "phi": 3557,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 961,
+     "eta": -1386,
+     "phi": -284,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 693,
+     "eta": 1386,
+     "phi": 3557,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 961,
+     "eta": -1386,
+     "phi": -284,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 90,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 640,
+     "eta": 1162,
+     "phi": -856,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 849,
+     "eta": -1176,
+     "phi": 3465,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 640,
+     "eta": 1162,
+     "phi": -856,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 849,
+     "eta": -1176,
+     "phi": 3465,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 91,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 1297,
+     "eta": 1148,
+     "phi": -3138,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1041,
+     "eta": -1162,
+     "phi": 1133,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 1297,
+     "eta": 1148,
+     "phi": -3138,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1041,
+     "eta": -1162,
+     "phi": 1133,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 92,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 2444,
+     "eta": 1106,
+     "phi": 1612,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2429,
+     "eta": -1050,
+     "phi": -2411,
+     "charge": 1,
+     "qual": 8
+    },
+    {
+     "link": 5,
+     "pt": 4584,
+     "eta": -1050,
+     "phi": -2411,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 2444,
+     "eta": 1106,
+     "phi": 1612,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 2429,
+     "eta": -1050,
+     "phi": -2411,
+     "charge": 1,
+     "qual": 8
+    },
+    {
+     "link": 5,
+     "pt": 4584,
+     "eta": -1050,
+     "phi": -2411,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 93,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 160,
+     "eta": 1666,
+     "phi": -4018,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 3,
+     "pt": 1555,
+     "eta": -1666,
+     "phi": 150,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 5,
+     "pt": 1491,
+     "eta": -1666,
+     "phi": 150,
+     "charge": 1,
+     "qual": 0
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 160,
+     "eta": 1666,
+     "phi": -4018,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 3,
+     "pt": 1555,
+     "eta": -1666,
+     "phi": 150,
+     "charge": 1,
+     "qual": 0
+    },
+    {
+     "link": 5,
+     "pt": 1491,
+     "eta": -1666,
+     "phi": 150,
+     "charge": 1,
+     "qual": 0
+    }
+   ]
+  },
+  {
+   "id": 94,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 1129,
+     "eta": 1106,
+     "phi": -79,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1268,
+     "eta": -1106,
+     "phi": -4004,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 1129,
+     "eta": 1106,
+     "phi": -79,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1268,
+     "eta": -1106,
+     "phi": -4004,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 95,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 1524,
+     "eta": 1134,
+     "phi": 3058,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 1240,
+     "eta": 1134,
+     "phi": 3058,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1468,
+     "eta": -1106,
+     "phi": -873,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 1524,
+     "eta": 1134,
+     "phi": 3058,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 1,
+     "pt": 1240,
+     "eta": 1134,
+     "phi": 3058,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 1468,
+     "eta": -1106,
+     "phi": -873,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 96,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 112,
+     "eta": 1820,
+     "phi": -2285,
+     "charge": 0,
+     "qual": 0
+    },
+    {
+     "link": 4,
+     "pt": 124,
+     "eta": -1610,
+     "phi": 3694,
+     "charge": 1,
+     "qual": 1
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 112,
+     "eta": 1820,
+     "phi": -2285,
+     "charge": 0,
+     "qual": 0
+    },
+    {
+     "link": 4,
+     "pt": 124,
+     "eta": -1610,
+     "phi": 3694,
+     "charge": 1,
+     "qual": 1
+    }
+   ]
+  },
+  {
+   "id": 97,
+   "candidates": [
+    {
+     "link": 0,
+     "pt": 660,
+     "eta": 1554,
+     "phi": 2726,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 768,
+     "eta": -1288,
+     "phi": -1328,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 5,
+     "pt": 667,
+     "eta": -1526,
+     "phi": -1087,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 0,
+     "pt": 660,
+     "eta": 1554,
+     "phi": 2726,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 5,
+     "pt": 768,
+     "eta": -1288,
+     "phi": -1328,
+     "charge": 0,
+     "qual": 1
+    },
+    {
+     "link": 5,
+     "pt": 667,
+     "eta": -1526,
+     "phi": -1087,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 98,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 877,
+     "eta": 1176,
+     "phi": -733,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 812,
+     "eta": -1162,
+     "phi": 3618,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 877,
+     "eta": 1176,
+     "phi": -733,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 812,
+     "eta": -1162,
+     "phi": 3618,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 99,
+   "candidates": [
+    {
+     "link": 2,
+     "pt": 2886,
+     "eta": 1162,
+     "phi": -1228,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1806,
+     "eta": -1162,
+     "phi": 2958,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1806,
+     "eta": -1162,
+     "phi": 2958,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 2,
+     "pt": 2886,
+     "eta": 1162,
+     "phi": -1228,
+     "charge": 0,
+     "qual": 12
+    },
+    {
+     "link": 3,
+     "pt": 1806,
+     "eta": -1162,
+     "phi": 2958,
+     "charge": 1,
+     "qual": 12
+    },
+    {
+     "link": 4,
+     "pt": 1806,
+     "eta": -1162,
+     "phi": 2958,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  },
+  {
+   "id": 100,
+   "candidates": [
+    {
+     "link": 1,
+     "pt": 2105,
+     "eta": 1050,
+     "phi": -3117,
+     "charge": 0,
+     "qual": 8
+    },
+    {
+     "link": 3,
+     "pt": 2745,
+     "eta": -1134,
+     "phi": 1046,
+     "charge": 1,
+     "qual": 12
+    }
+   ],
+   "samuons": [
+    {
+     "link": 1,
+     "pt": 2105,
+     "eta": 1050,
+     "phi": -3117,
+     "charge": 0,
+     "qual": 8
+    },
+    {
+     "link": 3,
+     "pt": 2745,
+     "eta": -1134,
+     "phi": 1046,
+     "charge": 1,
+     "qual": 12
+    }
+   ]
+  }
+ ]
+}

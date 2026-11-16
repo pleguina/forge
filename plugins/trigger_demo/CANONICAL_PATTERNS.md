@@ -142,7 +142,7 @@ modules:
     external_out_ports: [trigger_word, out_valid]
 ```
 
-**Effect:** `forge topgen gen-top` promotes these to `input`/`output` ports of
+**Effect:** `forge dev topgen gen-top` promotes these to `input`/`output` ports of
 `algo_top` (with `dec_<i>_raw_hit`, `dec_<i>_raw_valid`, `tout_trigger_word`,
 `tout_out_valid` naming). The full-chip TB (`tb_algo_top.sv`) drives them via
 `run_stimulus()`.
@@ -168,7 +168,7 @@ modules:
 
 **Key rule:** `verify.flow.yml`, `tb_*.sv`, `wave.tcl` are **framework-generated**
 — do not hand-edit. `stimulus_current.svh` is **plugin-generated** via
-`gen_stimulus.py`. Both are committed to the repo as the CI baseline.
+`gen_stimulus.py`. Neither is committed; tests generate what they check.
 
 ---
 

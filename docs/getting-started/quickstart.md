@@ -27,10 +27,46 @@ can find on `PATH`, and the resolved location of each framework resource.
 Optional tools are reported as warnings, not failures — a clean install
 with no EDA tools installed still passes.
 
-## 3. Scaffold and run a plugin
+## 3. Your own firmware
+
+In the repository of a payload you already have, one command writes the only
+file FORGE needs:
 
 ```bash
-forge init my_plugin
+forge init --expected data/expected.txt --input data/input.txt
+```
+
+```
+forge init — /work/my_payload/forge.yml
+  ✅ sources: Hog project algo (Top/algo/list)
+  ✅ top: payload_top
+  ✅ clock: clk
+  ✅ reset: rst (active high)
+```
+
+It reads where your sources are described (a Hog project, a `.f` compile
+list, else the directories holding RTL), the top, the clock and the reset;
+nothing is moved and no other file is written. What it cannot tell from the
+repository, such as which of two tops you mean, comes back as a question
+with the flag that answers it (`--top`, `--clock`, `--reset`,
+`--hog-project`, `--filelist`). Without `--expected`, `forge test` still
+simulates, and says there was nothing to compare against. Then:
+
+```bash
+forge check
+forge test
+```
+
+[Compare existing firmware](compare-existing-firmware.md) goes on from here.
+
+## 3b. The example plugin
+
+`forge init --example` installs an example plugin, a pass-through design with
+its verification files, to show the generation chain working end to end. It
+is the starting point for extension authors, not for an existing payload.
+
+```bash
+forge init --example my_plugin
 ```
 
 This is the whole loop in one command. It scaffolds the topology side
@@ -43,6 +79,7 @@ simulates it, and writes a report bundle:
 forge init — scaffolding 'my_plugin'
   ✅ topology scaffold
   ✅ verification scaffold
+  ✅ forge.yml written
   ✅ design validated
   ✅ top level generated (algo_top.v)
   ✅ testbench prepared
@@ -57,18 +94,24 @@ simulation result.
 
 !!! note "No simulator installed?"
     The simulation stage needs Vivado xsim on `PATH`. Without it that one
-    stage is skipped with a note and everything else still runs, so this
-    command works on a machine that has never had an EDA tool installed.
+    stage is skipped and everything else still runs, so this command works
+    on a machine that has never had an EDA tool installed. Nothing has then
+    checked the generated top level, so the result is `WARN`, not `PASS`.
     `forge doctor` tells you what's missing.
 
 Add `--verbose` to see each underlying stage's full output instead of one
 line per stage, or `--json` for the machine-readable envelope.
 
+`forge init --example` also writes `forge.yml` (unless the directory already has
+one), naming the plugin's design and verification file. From then on, anywhere
+under this directory, `forge check`, `forge build`, `forge test` and
+`forge report` need no arguments: after you edit the RTL or the golden
+data, `forge test` regenerates the top level and simulates it again.
+
 ## 4. Read the design back
 
 ```bash
-forge inspect plugins/my_plugin/forge/designs/design.yml \
-    --contracts-from plugins/my_plugin/forge/modules.yml
+forge inspect
 ```
 
 `forge inspect` resolves the design into FORGE's canonical IR and prints

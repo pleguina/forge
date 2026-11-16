@@ -53,6 +53,8 @@ _TIE_OFF = "$tie_off"
 # ── Node/reference vocabulary ────────────────────────────────────────────
 
 class GraphNodeKind(str, Enum):
+    """What a node of the design-explorer graph stands for."""
+
     INSTANCE = "instance"              # a real ResolvedInstance
     EXTERNAL_PORT = "external-port"    # a top-level I/O/clock/reset net, or a synthesized tie-off source
     MODULE_GROUP = "module-group"      # the compound parent for all instances of one module definition
@@ -86,6 +88,8 @@ class ProjectionDiagnostic:
 # ── Contract-maturity rollup ─────────────────────────────────────────────
 
 class MaturityStatus(str, Enum):
+    """How a module's connections are wired: by contract, by name matching, or both."""
+
     CONTRACT = "contract"              # every classified connection touching this module is contract_wiring
     MIXED = "mixed"                    # a real mix
     COMPATIBILITY = "compatibility"    # every classified connection is auto_match/heuristic

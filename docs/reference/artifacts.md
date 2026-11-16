@@ -65,7 +65,7 @@ A ``{"name", "version"}`` tag carried by every structured artifact
 The resolved cardinality bound an endpoint's interface declared,
     checked against how many connections actually exist. Descriptive only
     — ``forge.contracts.cardinality.verify_cardinality`` is what actually
-    enforces this design-wide under ``--strict``.
+    enforces this design-wide.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -442,7 +442,7 @@ A losing producer for a connection's consumer pin, sourced read-only
 
 A named clock domain — one per distinct resolved clock net.
 
-    ``name`` is the resolved net's raw port name (e.g.
+    ``name`` is the top-level net the clock ports are wired to (e.g.
     ``"ap_clk"``), not a hardcoded literal. ``instances`` is *derived* from
     each ``ResolvedInstance.clock_domain`` (the per-instance scalar is the
     source of truth — this list is a grouping view of it, not maintained
@@ -493,7 +493,7 @@ A resolved wire between two endpoints.
     (``ResolvedInstance.clock_domain``/``.reset_domain``) whenever both are
     known and differ. They report a fact; they don't enforce anything —
     ``forge.contracts.cdc.verify_cdc`` is what actually rejects an
-    undeclared crossing under ``--strict``.
+    undeclared crossing.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
@@ -642,6 +642,22 @@ A module definition (shared across all its instances).
 | `latency` | `Optional[ForwardRef('LatencyDeclaration')]` | optional | `None` |
 | `ip_info_key` | `Optional[str]` | optional | `None` |
 | `declaration_order` | `int` | optional | `0` |
+| `language` | `Optional[str]` | optional | `None` |
+| `ports` | `list[ResolvedModulePort]` | optional | `[]` |
+
+### `ResolvedModulePort`
+
+*Defined in `forge.ir.model`.*
+
+One physical port of a module, as its port metadata states it: the
+    scanned RTL, the built IP, or the contract standing in for either.
+    ``direction`` is ``in``/``out``/``inout``.
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `name` | `str` | required | — |
+| `direction` | `str` | required | — |
+| `width` | `int` | required | — |
 
 ### `ResolvedPhysicalBinding`
 
@@ -668,7 +684,7 @@ Top-level IR object returned by ``forge.ir.build.build_project_ir``.
 | Field | Type | Required | Default |
 |---|---|---|---|
 | `design` | `ResolvedDesign` | required | — |
-| `schema_version` | `str` | optional | `'0.3.0'` |
+| `schema_version` | `str` | optional | `'0.4.0'` |
 | `forge_version` | `str` | optional | `''` |
 | `generated_from` | `dict[str, Optional[str]]` | optional | `{}` |
 
@@ -737,10 +753,11 @@ A generated (or declared-and-approved) element sitting on a
       ``'register'`` before the IR schema 0.2.0 kind-vocabulary expansion).
     - ``latency_delay`` — from ``Connection.delay_cycles`` with no
       ``boundary`` tag (was ``'delay'``).
-    - ``slr_crossing`` — from ``Connection.delay_cycles`` *with* a
-      ``boundary`` tag (the generator emits ``slr_crossing_delay`` instead
-      of ``signal_delay`` for this case — one RTL instance, one
-      transformation, not both `latency_delay` and `slr_crossing`).
+    - ``slr_crossing`` — the protected crossing of a connection with a
+      ``boundary`` tag: its ``register_stages`` when declared, else its
+      ``delay_cycles`` (the generator emits ``slr_crossing_delay`` instead
+      of ``RegisterStage``/``signal_delay`` for it). A ``delay_cycles``
+      after a register-stage crossing is a separate ``latency_delay``.
       ``tag`` carries the boundary string.
     - ``fanout`` — computed generically (no new schema) whenever a
       producer pin drives more than one connection; excludes clock/reset
@@ -984,7 +1001,7 @@ A stage in a backend's execution pipeline.
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-An enumeration.
+What a node of the design-explorer graph stands for.
 
 | Member | Value |
 |---|---|
@@ -997,7 +1014,7 @@ An enumeration.
 
 *Defined in `forge.analysis.design_explorer.graph_model`.*
 
-An enumeration.
+How a module's connections are wired: by contract, by name matching, or both.
 
 | Member | Value |
 |---|---|

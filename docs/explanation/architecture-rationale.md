@@ -22,7 +22,7 @@ yet have a contract — not as the primary mechanism. This ordering matters
 for a specific, real reason: heuristic matching that happens to work
 today can silently start wiring the wrong ports tomorrow, once port names
 drift, with no contract to catch it. A contract makes wiring intent
-explicit and checkable — `forge topgen gen-top --strict` can (and does)
+explicit and checkable — `forge dev topgen gen-top --strict` can (and does)
 fail loudly when a connection falls back to auto-match or a topology
 group has verification errors, exactly because heuristic wiring is
 something FORGE wants surfaced, not silently accepted. Every
@@ -61,8 +61,9 @@ flowchart TD
     Project --> Generators["Verilog / VHDL / Block-Design generators"]
 ```
 
-This isn't just tidiness. Once `write_structural_verilog`/
-`write_structural_vhdl`/`write_bd_tcl` all consume the same projected IR
+This isn't just tidiness. Once `write_structural_verilog` and
+`write_bd_tcl` (and the VHDL entity `--mode vhdl` wraps around the Verilog
+top) all consume the same projected IR
 connection topology, "does this design mean the same thing in every
 output mode" stops being a question you answer by re-reading three
 generators and becomes a question the IR itself already answers once.

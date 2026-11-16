@@ -65,12 +65,17 @@ def test_every_step_design_file_exists(manifest):
         assert design_path.is_file(), f"step {step['id']!r}: design file not found: {design_path}"
 
 
-def test_every_step_flow_dir_exists(manifest):
+def test_every_step_flow_is_declared(manifest):
+    from forge.verification.design_contract import load_verify_design
+
+    declared = {
+        f.name for f in load_verify_design(_PLUGIN_ROOT / "forge/verify/design.verification.yml").flows
+    }
     for step in manifest["steps"]:
         for flow in step.get("flows", []):
-            flow_dir = _PLUGIN_ROOT / "forge" / "verify" / flow["name"]
-            assert flow_dir.is_dir(), f"step {step['id']!r}: flow dir not found: {flow_dir}"
-            assert (flow_dir / "verify.flow.yml").is_file()
+            assert flow["name"] in declared, (
+                f"step {step['id']!r}: flow {flow['name']!r} is not in design.verification.yml"
+            )
 
 
 def test_every_capability_is_in_the_vocabulary(manifest):

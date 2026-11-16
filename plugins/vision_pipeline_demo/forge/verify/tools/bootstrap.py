@@ -3,7 +3,7 @@
 to forge verify.
 
 After importing this module, vision_pipeline_demo is known to the
-framework and forge verify generate / run will work for declared flows.
+framework and forge dev verify generate / run will work for declared flows.
 """
 from __future__ import annotations
 

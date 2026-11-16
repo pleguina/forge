@@ -56,7 +56,7 @@ Interface contracts and verify artefacts live _inside_ `forge/`, so they do not 
 
 `dut_rtl_source:` entries in generated `verify.flow.yml` are the only paths that are
 relative to the **consumer root** (the framework checkout root). These are build artefacts
-produced by `forge hls run synth` and placed under `build_hls_<plugin>/`. Plugins never
+produced by `forge dev hls run synth` and placed under `build_hls_<plugin>/`. Plugins never
 hand-author consumer-root-relative paths.
 
 ### Mounting the plugin
@@ -66,10 +66,10 @@ Pass it explicitly on the command line:
 
 ```bash
 # From the framework root:
-forge topgen validate-registry plugins/<plugin>/forge/modules.yml
-forge topgen gen-top  plugins/<plugin>/forge/designs/design.yml --contracts-from plugins/<plugin>/forge/modules.yml
-forge verify generate plugins/<plugin>/forge/verify/design.verification.yml
-forge verify run      plugins/<plugin>/forge/verify/<flow>/verify.flow.yml --consumer-root .
+forge dev topgen validate-registry plugins/<plugin>/forge/modules.yml
+forge dev topgen gen-top  plugins/<plugin>/forge/designs/design.yml --contracts-from plugins/<plugin>/forge/modules.yml
+forge dev verify generate plugins/<plugin>/forge/verify/design.verification.yml
+forge dev verify run      plugins/<plugin>/forge/verify/<flow>/verify.flow.yml --consumer-root .
 ```
 
 The plugin does not need to know where it is mounted — all paths inside `forge/` resolve
@@ -89,7 +89,7 @@ to generate an exported IP package in `ips/<module_name>/`.
 Run the `ip-summary` extractor to update `ip_info.yaml` with your module's physical ports:
 
 ```bash
-forge topgen ip-summary plugins/<plugin>/forge/designs/design.yml --ip-root ips --output ip_info.yaml
+forge dev topgen ip-summary plugins/<plugin>/forge/designs/design.yml --ip-root ips --output ip_info.yaml
 ```
 
 ### 3. Write the interface contract
@@ -98,7 +98,7 @@ Start from a generated skeleton rather than a blank file — it emits every
 port the module actually has as a role:
 
 ```bash
-forge contract infer my_module --contracts-from plugins/<plugin>/forge/modules.yml \
+forge dev contract infer my_module --contracts-from plugins/<plugin>/forge/modules.yml \
     -o plugins/<plugin>/forge/interfaces/my_module.interface.yaml
 ```
 
@@ -142,7 +142,7 @@ roles (`raw_port_prefix`/`count`, `raw_port_tpl`/`dims`).
 Two exceptions where the facts must be written out:
 
 * **HLS modules.** There is no HDL to scan until the IP is built, so an HLS
-  contract declares `direction` and `width` itself. `forge contract infer
+  contract declares `direction` and `width` itself. `forge dev contract infer
   --ip-info ...` emits them for you once the IP exists.
 * **Array and template roles.** Their binding is a real decision, and
   expanding it needs `count`/`dims` that no port list supplies.
@@ -193,18 +193,18 @@ connections:
 
 ```bash
 # Verify contract against ip_info
-forge core verify-contract --ip-info ip_info.yaml \
+forge dev core verify-contract --ip-info ip_info.yaml \
     --contract plugins/<plugin>/forge/interfaces/my_module.interface.yaml
 
 # Generate structural Verilog
-forge topgen gen-top plugins/<plugin>/forge/designs/design.yml \
+forge dev topgen gen-top plugins/<plugin>/forge/designs/design.yml \
     --mode verilog --consumer-root . --build-dir build \
     --hls-build-root build_hls --ip-root ips \
     --contracts-from plugins/<plugin>/forge/modules.yml \
     --output algo_top.v
 
 # Strict mode (CI grade — rejects port_map_ranges, auto-match, missing contracts)
-forge topgen gen-top ... --strict
+forge dev topgen gen-top ... --strict
 ```
 
 ---
@@ -424,6 +424,32 @@ allowed_unconnected:
     - "my_module.unused_cfg"
 ```
 
+## A Variant of Another Design
+
+A design that differs from another in a few places — a simulation build
+without the board's register bus or routing delays, say — is written as
+those differences rather than as a copy, so a change to the base reaches it:
+
+```yaml
+# design.sim.yml, next to design.yml
+variant_of: design.yml
+remove:
+  modules: [tx_dly]                  # with every connection and topology group touching it
+  connections: [{from: a, to: b}]    # a fan-out connection loses only this destination
+  topology_groups: [cfg_to_dt]
+modules:
+  dt: {external_in_ports: [csp_in, cfg64, cfg_valid]}   # null removes a field
+add:
+  allowed_unconnected: {open_outputs: ["tx_linker.orbit_out"]}
+```
+
+`add:` appends to the base's lists and merges into its mappings; any other
+top-level key replaces the base's value. The base must be in the same
+directory, so its relative paths keep their meaning, and every module,
+connection and group the variant names must exist in it. Every FORGE command
+reads the resolved design, and `forge check` reports the generated top level
+stale when either file changes.
+
 ---
 
 ## Troubleshooting
@@ -442,7 +468,7 @@ Pass `--contracts-from plugins/<plugin>/forge/modules.yml` and ensure your modul
 
 Migrate the connection to a `topology_group` entry. See topology group strategies above.
 
-### `--strict` fails: "topology group verification error(s)"
+### Generation fails: "topology group verification error(s)"
 
 Check that partition labels in `instance_assign` match the consumer contract,
 role names in `role_pairs` exist in the contracts, and `wiring_kind` matches roles
@@ -468,7 +494,7 @@ Add `allowed_unconnected` patterns in `design.yml`.
 
 ## Latency and Performance Analysis
 
-After topology generation and verification pass, use `forge analyze` to measure latency,
+After topology generation and verification pass, use `forge dev analyze` to measure latency,
 check pipeline balance, and produce plots and an HTML dashboard.
 
 **Plugin requirements for full analysis:**
@@ -554,12 +580,12 @@ nothing about raw naming conventions or internal HLS coding style:
 
 ```bash
 # Verify one IP contract:
-forge core verify-contract \
+forge dev core verify-contract \
     --ip-info ip_info.yaml \
     --contract plugins/<plugin>/forge/interfaces/my_ip.interface.yaml
 
 # Verify all known contracts in the workspace:
-forge core verify-contract \
+forge dev core verify-contract \
     --ip-info ip_info.yaml \
     --all-contracts plugins/<plugin>/forge/interfaces/
 ```

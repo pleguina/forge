@@ -74,7 +74,7 @@ reset_domains:
 # depend on these) -- bound here via forge.verification.gen_sim's Tier 2 probe
 # mechanism directly to algo_top's internal `sync_net_*` wires (hierarchical
 # `dut.<net>` references, real net names confirmed against a real
-# `forge topgen gen-top` run of this exact design), for
+# `forge dev topgen gen-top` run of this exact design), for
 # forge.analysis.throughput_runtime.probe.build_runtime_throughput_result
 # to consume from the resulting wide-format probe CSV
 # (forge.throughput_result.v1).

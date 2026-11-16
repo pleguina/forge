@@ -92,7 +92,10 @@ class HLSMetricsExtractor:
             "interval_min": self.get_int(f"{base_path}/Interval-min"),
             "interval_max": self.get_int(f"{base_path}/Interval-max"),
             "pipeline_depth": self.get_int(f"{base_path}/PipelineDepth"),
-            "pipeline_type": self.get_text("PerformanceEstimates/PipelineType", "no")
+            "pipeline_type": self.get_text("PerformanceEstimates/PipelineType", "no"),
+            # False when the report has no number (absent or N/A): worst_case_latency
+            # is then the default 0, not a 0-cycle module.
+            "worst_case_latency_reported": self.get_int(f"{base_path}/Worst-caseLatency", None) is not None,
         }
 
         return latency

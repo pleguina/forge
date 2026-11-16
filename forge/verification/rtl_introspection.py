@@ -66,7 +66,7 @@ class RTLFileNotFound(IntrospectionError):
         super().__init__(
             f"RTL file not found: {verilog_path}",
             action=(
-                "Run HLS synthesis first, then re-run forge verify generate.\n"
+                "Run HLS synthesis first, then re-run forge dev verify generate.\n"
                 f"  Expected: {verilog_path}"
             ),
         )

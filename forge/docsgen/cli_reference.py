@@ -15,13 +15,13 @@ import os
 from argparse import ArgumentParser, _SubParsersAction
 from typing import Iterator, Tuple
 
-from forge.core.cli.main import build_parser
+from forge.core.cli.main import DEV_GROUPS, build_parser
 from forge.verification.__main__ import build_parser as build_verify_parser
 
-# forge verify delegates its own subcommand tree to a separate parser via
+# forge dev verify delegates its own subcommand tree to a separate parser via
 # REMAINDER (forge/core/cli/groups/verify.py::cmd_verify_dispatch) — it's a
 # leaf in the main tree, so its real subcommands are walked separately here.
-_DELEGATED_GROUP_PARSERS = {"verify": build_verify_parser}
+_DELEGATED_GROUP_PARSERS = {("dev", "verify"): build_verify_parser}
 
 # Pinned so generated help text never depends on the terminal width of
 # whichever machine/CI runner regenerates it — the same determinism
@@ -52,11 +52,15 @@ def _iter_command_tree(
 def _build_full_tree() -> "dict[Tuple[str, ...], ArgumentParser]":
     tree: "dict[Tuple[str, ...], ArgumentParser]" = {}
     for path, parser in _iter_command_tree(build_parser()):
+        # The old top-level names of the `forge dev` groups are the same
+        # parsers, documented once under `forge dev`.
+        if path and path[0] in DEV_GROUPS:
+            continue
         tree[path] = parser
-    # Overwrites the thin top-level "verify" leaf with the real delegated
-    # parser at the same path, then adds its real subcommands beneath it.
-    for group_name, build_delegate in _DELEGATED_GROUP_PARSERS.items():
-        for path, parser in _iter_command_tree(build_delegate(), (group_name,)):
+    # Overwrites the thin "dev verify" leaf with the real delegated parser
+    # at the same path, then adds its real subcommands beneath it.
+    for prefix, build_delegate in _DELEGATED_GROUP_PARSERS.items():
+        for path, parser in _iter_command_tree(build_delegate(), prefix):
             tree[path] = parser
     return tree
 
@@ -91,7 +95,8 @@ def generate_cli_reference_page() -> str:
             lines.append(f"{_heading_level(path)} `{label}`")
             lines.append("")
             lines.append("```text")
-            lines.append(parser.format_help().rstrip())
+            # Python 3.10 renamed argparse's "optional arguments:" heading.
+            lines.append(parser.format_help().rstrip().replace("\noptional arguments:\n", "\noptions:\n"))
             lines.append("```")
             lines.append("")
         return "\n".join(lines).rstrip() + "\n"

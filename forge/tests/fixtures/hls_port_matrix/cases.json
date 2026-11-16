@@ -223,6 +223,15 @@
         "ports": [
           "ap_clk"
         ]
+      },
+      {
+        "reason": "under 2023.2 this kernel also synthesised with no ap_rst; 2024.1 and 2025.2.1 keep it",
+        "ports": [
+          "ap_rst"
+        ],
+        "versions": [
+          "2023.2"
+        ]
       }
     ]
   },

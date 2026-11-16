@@ -16,7 +16,7 @@ pattern (``forge.verification.golden_model.register_golden_model_provider``,
 ``bootstrap.py`` calls :func:`register_report_attachment_provider` at
 import time, and ``forge report --plugin <id>`` bootstraps that plugin
 before collecting attachments — the same bootstrap mechanism
-``forge verify run --plugin`` already uses.
+``forge dev verify run --plugin`` already uses.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class ReportAttachment:
     ``path`` must be a file the provider has already written, relative
     to the ``output_dir`` passed into ``build_attachments`` (so it
     survives being written into ``attachments.json`` and read back by
-    a separate process, e.g. `forge analyze dashboard` run later against
+    a separate process, e.g. `forge dev analyze dashboard` run later against
     the same output directory).
     """
     provider_id: str

@@ -1,7 +1,10 @@
-"""forge init — unify the two existing plugin scaffolders and chain the
-whole golden path: `forge init <plugin_id>`
-runs, in order, the topgen-side scaffolder, the (now-fixed) verify-side
-scaffolder, `forge topgen validate`, `forge build --apply`, `forge test
+"""forge init — a ``forge.yml`` for the firmware a repository already has
+(:mod:`forge.project.init_minimal`), or, with ``--example <plugin_id>``, the
+example plugin for extension authors.
+
+The example unifies the two plugin scaffolders and chains the whole golden
+path: `forge init --example <plugin_id>` runs, in order, the topgen-side scaffolder, the (now-fixed) verify-side
+scaffolder, `forge dev topgen validate`, `forge build`, `forge test
 prepare`/`run`, and `forge report` — real invocations of those real
 commands (constructed as argv and run in-process through the full `forge`
 parser, exactly as a user typing each command would get), not
@@ -12,48 +15,71 @@ step failed — never silently continuing past a failure and claiming
 success (governing rule 11).
 
 This command depends on the verify-side scaffolder templates in
-`forge/verification/__main__.py` matching the scaffolded RTL (an exact
+`forge/verification/plugin_scaffold.py` matching the scaffolded RTL (an exact
 copy of `plugins/passthrough_demo`'s working RTL): both halves are real
 and matched, so the whole chain runs with zero manual edits.
 """
 
 from __future__ import annotations
 
-import contextlib
-import io
+import argparse
+import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List
 
 
-def _run_forge_command(argv: List[str], *, quiet: bool) -> Tuple[int, str]:
-    """Run a real `forge <argv>` invocation in-process through the full
-    parser — the same argv a user would type, so every step here is a
-    real command, not a hand-built call into internals.
+def cmd_init_minimal(args) -> None:
+    """``forge init`` without a plugin name: a ``forge.yml`` for existing firmware."""
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.project.init_minimal import minimal_project
+    from forge.project.paths import ROOT_CONFIG_NAME
 
-    Returns ``(exit_code, captured_stdout)``. When *quiet*, the step's own
-    output is captured rather than printed, so `forge init` can report one
-    line per stage instead of relaying seven commands' full output — and
-    can still show the captured text if that stage fails.
-    """
-    from forge.core.cli.main import build_parser
-
-    parser = build_parser()
-    parsed = parser.parse_args(argv)
-    buffer = io.StringIO()
-    ctx = contextlib.redirect_stdout(buffer) if quiet else contextlib.nullcontext()
-    with ctx:
-        try:
-            result = parsed.func(parsed)
-        except SystemExit as exc:
-            return (0 if exc.code is None else int(exc.code)), buffer.getvalue()
-    return (0 if result is None else int(result)), buffer.getvalue()
+    json_mode = getattr(args, "json", False)
+    root = Path(getattr(args, "consumer_root", None) or ".").expanduser().resolve()
+    target = root / ROOT_CONFIG_NAME
+    if target.exists() and not getattr(args, "force", False):
+        sys.exit(emit(CommandEnvelope(status="fail", diagnostics=[{
+            "severity": "error", "message": f"{target} already exists; edit it, or pass --force to replace it"}]),
+            json_mode=json_mode))
+    try:
+        made = minimal_project(root, top=args.top, clock=args.clock, reset=args.reset, input=args.input,
+                               expected=args.expected, hog_project=args.hog_project, filelist=args.filelist)
+    except (OSError, ValueError) as exc:
+        sys.exit(emit(CommandEnvelope(status="fail", diagnostics=[{"severity": "error", "message": str(exc)}]),
+                      json_mode=json_mode))
+    path = made.config.save(target)
+    if not json_mode:
+        print(f"forge init — {path}")
+        for line in made.found:
+            print(f"  ✅ {line}")
+        for line in made.missing:
+            print(f"  ❓ {line}")
+    blocking = [m for m in made.missing if not m.startswith("the output")]
+    sys.exit(emit(CommandEnvelope(
+        status="warn" if made.missing else "pass",
+        diagnostics=[{"severity": "warning", "message": m} for m in made.missing],
+        artifacts=[str(path)],
+        metrics={"found": made.found, "missing": made.missing},
+        next_actions=(["Answer the questions above (flags of `forge init --force`, or edit forge.yml)"]
+                      if blocking else []) + ["`forge check`, then `forge test`"],
+    ), json_mode=json_mode))
 
 
 def cmd_init(args) -> None:
+    from forge.core.cli._shared import run_forge_command
     from forge.core.cli.envelope import CommandEnvelope, emit
 
     json_mode = getattr(args, "json", False)
+    if getattr(args, "name", None):
+        sys.exit(emit(CommandEnvelope(status="fail", diagnostics=[{
+            "severity": "error",
+            "message": f"`forge init {args.name}`: forge init writes forge.yml for the firmware in this "
+                       f"repository and takes no name; the example plugin is `forge init --example {args.name}`"}]),
+            json_mode=json_mode))
+    if not getattr(args, "plugin_id", None):
+        cmd_init_minimal(args)
+        return
     dry_run = getattr(args, "dry_run", False)
     plugin_id = args.plugin_id
 
@@ -109,7 +135,7 @@ def cmd_init(args) -> None:
 
     def _step(name: str, label: str, argv: List[str]) -> None:
         """Run one stage, record it, and report it as a single line."""
-        code, output = _run_forge_command(argv, quiet=quiet)
+        code, output = run_forge_command(argv, quiet=quiet)
         if code != 0:
             _fail(name, code, output)
         steps_completed.append(name)
@@ -121,14 +147,14 @@ def cmd_init(args) -> None:
 
     # ── Step 1: topgen-side scaffold ────────────────────────────────────────
     _step("topgen-init-plugin", "topology scaffold", [
-        "topgen", "init-plugin", plugin_id,
+        "dev", "topgen", "init-plugin", plugin_id,
         "--plugins-root", str(plugins_root), "--algo-root", str(algo_root),
         *(["--dry-run"] if dry_run else []),
     ])
 
     # ── Step 2: verify-side scaffold ────────────────────────────────────────
     _step("verify-init-plugin", "verification scaffold", [
-        "verify", "init-plugin", plugin_id,
+        "dev", "verify", "init-plugin", plugin_id,
         "--plugins-root", str(plugins_root),
         *(["--dry-run"] if dry_run else []),
     ])
@@ -139,13 +165,32 @@ def cmd_init(args) -> None:
             metrics={"steps_completed": steps_completed, "dry_run": True},
             next_actions=[
                 f"Re-run without --dry-run to write the plugin skeleton and chain "
-                f"validate -> build --apply -> test -> report for {plugin_id!r}",
+                f"validate -> build -> test -> report for {plugin_id!r}",
             ],
         )
         sys.exit(emit(envelope, json_mode=json_mode))
 
+    # The project file the bare commands read, unless the repository already
+    # has one for another design.
+    from forge.project.config import ForgeConfig
+    from forge.project.paths import ROOT_CONFIG_NAME
+
+    forge_yml = consumer_root / ROOT_CONFIG_NAME
+    wrote_forge_yml = not forge_yml.exists()
+    if wrote_forge_yml:
+        ForgeConfig(
+            project=plugin_id,
+            root=consumer_root,
+            design=os.path.relpath(design_yml, consumer_root),
+            verification_config=os.path.relpath(design_verification_yml, consumer_root),
+        ).save()
+        if not json_mode:
+            print(f"  ✅ {ROOT_CONFIG_NAME} written")
+    elif not json_mode:
+        print(f"  ⏭️  {forge_yml} already exists, left as it is")
+
     # ── Step 3: validate immediately ────────────────────────────────────────
-    _step("validate", "design validated", ["topgen", "validate", str(design_yml)])
+    _step("validate", "design validated", ["dev", "topgen", "validate", str(design_yml)])
 
     # ── Step 4: build immediately (real generation) ────────────────────────
     _step("build", f"top level generated ({gen_top_output.name})", [
@@ -153,7 +198,6 @@ def cmd_init(args) -> None:
         "--contracts-from", str(modules_yml),
         "--consumer-root", str(consumer_root),
         "--output", str(gen_top_output),
-        "--apply",
     ])
 
     # ── Step 5: run at least one test ───────────────────────────────────────
@@ -195,7 +239,7 @@ def cmd_init(args) -> None:
         str(p) for p in (
             design_yml, modules_yml, interface_yaml, rtl_stub,
             design_verification_yml, bootstrap_py, gen_stimulus_py, golden_xml,
-            junit_path,
+            junit_path, *([forge_yml] if wrote_forge_yml else []),
         )
         if p.exists()
     ]
@@ -203,7 +247,13 @@ def cmd_init(args) -> None:
         artifacts.extend(str(p) for p in sorted(report_dir.glob("*")) if p.is_file())
 
     envelope = CommandEnvelope(
-        status="pass",
+        # Nothing has checked the generated top level when the simulation
+        # did not run, so this is not a pass.
+        status="warn" if skipped_steps else "pass",
+        diagnostics=[{
+            "severity": "warning",
+            "message": "the generated top level was not simulated — xsim is not on PATH",
+        }] if skipped_steps else [],
         artifacts=artifacts,
         metrics={
             "steps_completed": steps_completed,
@@ -218,6 +268,10 @@ def cmd_init(args) -> None:
             ] if skipped_steps else []),
             f"Open {report_dir / 'dashboard.html'} to see the generated topology, "
             f"latency check and simulation result",
+            *([
+                f"From {consumer_root}, `forge check`, `forge build`, `forge test` and "
+                f"`forge report` work on {plugin_id!r} with no arguments"
+            ] if wrote_forge_yml else []),
             f"Replace the scaffolded RTL stub ({rtl_stub}) with your real algorithm, "
             f"then replace {golden_xml} with real golden data",
         ],
@@ -229,9 +283,26 @@ def register(sub) -> None:
     """Register the top-level ``forge init`` command."""
     p = sub.add_parser(
         "init",
-        help="Scaffold a new plugin and chain validate -> build -> test -> report",
+        help="Write forge.yml for the firmware you have (or --example: scaffold the example plugin)",
+        description="Write one forge.yml that compares the firmware already in this repository with "
+                    "reference data: its top, clock, reset and source description; nothing else is written. "
+                    "--example scaffolds the full example plugin for extension authors and chains "
+                    "validate -> build -> test -> report.",
     )
-    p.add_argument("plugin_id", help="Plugin identifier (e.g. 'my_algo')")
+    p.add_argument("name", nargs="?", default=None, help=argparse.SUPPRESS)
+    p.add_argument("--example", dest="plugin_id", default=None, metavar="PLUGIN_ID",
+                   help="Scaffold the example plugin PLUGIN_ID (topology, contracts, RTL stub, verification flow) "
+                        "and chain validate -> build -> test -> report, for extension authors")
+    existing = p.add_argument_group("existing firmware")
+    existing.add_argument("--top", default=None, help="The top-level module (default: the one discovery finds)")
+    existing.add_argument("--clock", default=None, help="Its clock port")
+    existing.add_argument("--reset", default=None, help="Its reset port")
+    existing.add_argument("--input", default=None, help="Input data (JSON, EMP or APx pattern file)")
+    existing.add_argument("--expected", default=None, help="The output the firmware should produce")
+    existing.add_argument("--hog-project", dest="hog_project", default=None,
+                          help="Read the sources from this Hog project (Top/<name>/list)")
+    existing.add_argument("--filelist", default=None, help="Read the sources from this .f compile list")
+    existing.add_argument("--force", action="store_true", default=False, help="Replace an existing forge.yml")
     p.add_argument(
         "--plugins-root", default="plugins",
         help="Root directory under which to create <plugin_id>/forge/ (default: plugins/)",

@@ -16,6 +16,22 @@ framework, not its scope. See
 current distribution story (git-install-only, no PyPI publish — a closed
 decision, not a placeholder pending one).
 
+## Start with a task
+
+1. **Compare my existing firmware with reference data** — your top, your
+   compile list, your data; no generation. See
+   [compare existing firmware](getting-started/compare-existing-firmware.md).
+2. **Bring my RTL under FORGE** — adopt the sources, let FORGE generate and
+   check the structural top. See [bring your own RTL](getting-started/bring-your-own-rtl.md).
+3. **Change or replace a processing stage** — see what it affects, which
+   merges it misaligns and which checks to rerun: [change a processing stage](how-to/change-a-processing-stage.md).
+4. **Assemble and maintain a payload of many copies** — define a chain once,
+   name board and simulation variants: [repeat a chain and name variants](how-to/repeat-a-chain-and-name-variants.md).
+5. **Compare a trigger payload with CMSSW** — consume the emulator's export
+   through a small project adapter, compare objects by their fields, find a
+   failing event again: [compare with a CMSSW export](how-to/compare-with-a-cmssw-export.md).
+6. **Start a new design from scratch** — see the [quickstart](getting-started/quickstart.md).
+
 ## Current scope
 
 FORGE's public identity for this release is deliberately narrower than
@@ -24,9 +40,9 @@ FORGE's public identity for this release is deliberately narrower than
 | Axis | Current support |
 |---|---|
 | Toolchains | Vivado (structural Verilog/VHDL, Block Design TCL), Vitis HLS, XSim |
-| Simulation backends | `xsim`, `csim`; Verilator is available as a lint tool only, not a simulation backend |
-| Verification datasets | XML and JSON, behind a registered-loader protocol (`forge.verification.dataset_format.DatasetFormatLoader`) — a further format is a loader registration, not a change to verification. A project-owned adapter protocol (`ProjectDatasetAdapter`) covers interpreting arbitrary external data; adapters for specific formats (HDF5, ROOT, NumPy, binary captures) are the project's to write, not built in |
-| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect. Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist, gated behind `gen-top --strict` (see [Clock and Reset Domains](concepts/clock-and-reset-domains.md)) |
+| Simulation backends | `xsim` and `verilator` for RTL, `csim` for HLS C simulation — per verification kind in the generated [support matrix](reference/support-matrix.md) |
+| Verification datasets | XML, JSON, EMPv2 and APx pattern files, behind a registered-loader protocol (`forge.verification.dataset_format.DatasetFormatLoader`) — a further format is a loader registration, not a change to verification. A project-owned adapter protocol (`ProjectDatasetAdapter`) covers interpreting arbitrary external data; adapters for specific formats (HDF5, ROOT, NumPy, binary captures) are the project's to write, not built in |
+| Clock/reset domains | A single functional clock/reset domain per module — `clock_secondary`/`reset_secondary` roles exist in the schema but are explicitly **reserved** and have no functional effect. Real, structural cross-module CDC crossing detection and synchronizer generation *do* exist: an undeclared crossing stops generation (see [Clock and Reset Domains](concepts/clock-and-reset-domains.md)) |
 | Topology matching | Contract-driven wiring, scatter/gather, N-D template and prefix-array bindings, structured `coordinates:`/legacy `partition:` matching (see [Contracts and Protocols](concepts/contracts-and-protocols.md)) |
 | Vendors/toolchains **not** supported | Intel/Altera, Lattice, generic ASIC flows, GHDL or cocotb/VUnit as a primary simulation path |
 

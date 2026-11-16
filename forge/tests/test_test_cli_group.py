@@ -49,7 +49,9 @@ def _run(capsys: pytest.CaptureFixture[str], group: str, *args: str) -> Result:
 
 
 @pytest.fixture
-def consumer_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
+def consumer_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], prepare_plugin_flows,
+) -> Path:
     """An isolated, gen-top'd copy of plugins/passthrough_demo rooted at
     tmp_path — same fixture recipe as
     tests/verify/test_verify_run_xsim.py's own `consumer_root`."""
@@ -65,6 +67,7 @@ def consumer_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
         "--build-dir", str(tmp_path / "build/passthrough_demo"),
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    prepare_plugin_flows(tmp_path / "plugins/passthrough_demo/forge/verify/design.verification.yml", tmp_path)
 
     return tmp_path
 
@@ -181,7 +184,7 @@ def test_run_all_events_produces_two_distinct_per_event_results(
         assert float(tc.get("time")) > 0
 
     # Regression guard for a real bug found while building this slice:
-    # `forge verify prepare`'s own stimulus check never *generates*
+    # `forge dev verify prepare`'s own stimulus check never *generates*
     # stimulus_current.svh (that's a separate, plugin-owned step) — so
     # without `forge test run` regenerating it per event, a second event
     # would silently re-simulate the first event's stale golden data and
@@ -415,12 +418,12 @@ def test_run_readmemh_mode_compiles_once_across_two_events(
     xvlog/xelab exactly once, not twice — confirmed via the real
     stdout narration (the "[xsim 1/3] Compiling" progress line, which only
     ever prints on a real xvlog invocation, vs. the real
-    "[xsim 1-2/3] Reusing existing compile+elaborate" skip line) — and
+    "[xsim 1-2/3] Reusing the compile+elaborate of identical inputs" skip line) — and
     both real events must still produce correct, distinct results."""
     results_path = consumer_root / "results.json"
 
     # No --json: json_mode swallows all narrative print()s (including the
-    # real "[xsim 1/3] Compiling" / "Reusing existing compile+elaborate"
+    # real "[xsim 1/3] Compiling" / "Reusing the compile+elaborate"
     # progress lines this test needs to observe) into a StringIO — human
     # mode is required to see them on real stdout. --results-json still
     # writes the structured file regardless of --json.
@@ -436,7 +439,7 @@ def test_run_readmemh_mode_compiles_once_across_two_events(
     # The real, observable compile-count reduction: exactly one real
     # compile, one real reuse — not two compiles, and not zero.
     assert result.stdout.count("[xsim 1/3] Compiling") == 1
-    assert result.stdout.count("[xsim 1-2/3] Reusing existing compile+elaborate") == 1
+    assert result.stdout.count("[xsim 1-2/3] Reusing the compile+elaborate of identical inputs") == 1
     assert result.stdout.count("[xsim 3/3] Simulating") == 2  # both events still really run
 
     flow_result = json.loads(results_path.read_text())
@@ -489,7 +492,7 @@ def test_run_svh_include_flows_unaffected_by_readmemh_mechanism(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.count("[xsim 1/3] Compiling") == 2  # real recompile, both events
-    assert "Reusing existing compile+elaborate" not in result.stdout
+    assert "Reusing the compile+elaborate" not in result.stdout
 
     per_event = (
         consumer_root
@@ -499,10 +502,15 @@ def test_run_svh_include_flows_unaffected_by_readmemh_mechanism(
     assert (per_event / "1" / "simulate.log").exists()
 
 
-def test_run_requires_flow_argument(capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_requires_flow_argument_with_a_design_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     parser = build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["test", "run", "design.verification.yml"])
+    parsed = parser.parse_args(["test", "run", "design.verification.yml"])
+    with pytest.raises(SystemExit) as exc:
+        parsed.func(parsed)
+    assert exc.value.code == 1
+    assert "--flow is required" in capsys.readouterr().err
 
 
 def test_registered_as_top_level_command() -> None:
