@@ -494,6 +494,11 @@ class Connection:
     # cdc: mailbox_transfer/async_fifo edge is already exempted for a
     # different reason (genuinely unknowable, not deliberately scheduled).
     control_strobe: bool = False
+    # The source holds its value (a configuration word written before the
+    # data it configures, a constant): the cycle it arrives in does not
+    # matter, so the connection takes no part in merge-point alignment or in
+    # sizing delay_cycles: auto. Unlike control_strobe, nothing schedules it.
+    static: bool = False
     # The data on this connection *enters the design at the source node* —
     # through one of that node's ``external_in_ports`` — rather than flowing
     # into it from its own predecessors. A node can be both a merge point for
@@ -546,6 +551,8 @@ class TopologyGroup:
     # carries enter the design at ``from_`` through that module's
     # ``external_in_ports``, so the latency chain-fold must stop there.
     external_source: bool = False
+    # Same meaning as Connection.static.
+    static: bool = False
     # Same meaning as Connection.delay_cycles / Connection.boundary, applied to
     # every instance pair the group resolves to. With a boundary tag the
     # generator emits one protected slr_crossing_delay per resolved wire.
@@ -781,6 +788,13 @@ class DesignConfig:
             cdc = c.get("cdc", None)
             control_strobe = bool(c.get("control_strobe", False))
             external_source = bool(c.get("external_source", False))
+            static = bool(c.get("static", False))
+            if static and delay_auto:
+                raise ValueError(
+                    f"Connection {c['from']!r} -> {c.get('to')!r} is static and declares "
+                    "delay_cycles: auto; a static input has no arrival to align, so give "
+                    "the delay as a number or drop it"
+                )
 
             # Validation: a boundary tag without an actual register stage is
             # meaningless — the generator cannot emit a protected crossing delay
@@ -897,6 +911,7 @@ class DesignConfig:
                         cdc             = cdc,
                         control_strobe  = control_strobe,
                         external_source = external_source,
+                        static          = static,
                     )
                 )
 
@@ -976,6 +991,12 @@ class DesignConfig:
             )
             if tg_delay < 0:
                 raise ValueError(f"topology_group {tg['name']!r}: delay_cycles must be >= 0")
+            tg_static = bool(tg.get("static", False))
+            if tg_static and tg_delay_auto:
+                raise ValueError(
+                    f"topology_group {tg['name']!r} is static and declares delay_cycles: auto; "
+                    "a static input has no arrival to align, so give the delay as a number or drop it"
+                )
             if tg_boundary and tg_delay <= 0:
                 raise ValueError(
                     f"topology_group {tg['name']!r} sets boundary={tg_boundary!r} "
@@ -995,6 +1016,7 @@ class DesignConfig:
                     src_instance_offset=src_offset,
                     notes=tg.get("notes"),
                     external_source=bool(tg.get("external_source", False)),
+                    static=tg_static,
                     delay_cycles=tg_delay,
                     delay_auto=tg_delay_auto,
                     boundary=tg_boundary,

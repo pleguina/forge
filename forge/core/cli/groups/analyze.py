@@ -149,6 +149,7 @@ def cmd_latency_check(args) -> None:
             "merge_points_checked": len(mismatch_reports),
             "mismatches": len(mismatches),
             "unknowns": len(unknowns),
+            "static_inputs": sum(1 for e in graph.edges if e.static),
             "auto_delays": {f"{d.kind}[{d.index}]": d.cycles for d in auto_delays.delays},
         },
     )

@@ -137,6 +137,31 @@ changed: a fixed input that arrives late is reported as a mismatch. `auto`
 is not accepted together with `boundary`, whose depth is a physical
 register chain and must be given explicitly.
 
+## `static: true`: inputs that hold their value
+
+A configuration word written before the data it configures, or a constant,
+arrives in some cycle that does not matter. Declare the connection or
+topology group `static: true` and it takes no part in merge-point alignment
+or in sizing `delay_cycles: auto`:
+
+```yaml
+topology_groups:
+  - name: cfg_to_decoder
+    family: configuration
+    from: cfg
+    to: decoder
+    role_pairs: [[cfg_word_out, cfg_word]]
+    static: true
+```
+
+Without it, a configuration sampler of unknown latency makes every module it
+configures a merge point with an unknown input. The report lists the static
+inputs it left out; one data connection between the same two instances keeps
+their edge aligned. `static: true` with `delay_cycles: auto` is an error: a
+static input has no arrival to align. Unlike `control_strobe`, which marks a
+strobe whose cycle the receiving design schedules, a static input has no
+cycle that matters at all.
+
 For the commands that run this check, read its report, and compare
 predicted latency against simulation-observed latency, see
 [How to Analyze Performance](../how-to/analyze-performance.md).
