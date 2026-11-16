@@ -898,8 +898,12 @@ def auto_match_ports(
                         for i in range(m.instances):
                             global_nets.setdefault(clk_port, []).append((_inst(m, i), clk_port))
                         report.contract_wired_roles.append((m.name, "clock_primary", clk_port))
+                elif clk_port is None:
+                    report.warnings.append(
+                        f"[{m.name}] contract has no clock_primary role; declare "
+                        f"clock_free: true (or combinatorial: true) if the module has no clock"
+                    )
                 else:
-                    # Contract says there should be a clock but port not found → warning
                     report.warnings.append(
                         f"[{m.name}] contract declares clock_primary={clk_port!r} "
                         f"but port not found in ip_info"
@@ -913,6 +917,11 @@ def auto_match_ports(
                         for i in range(m.instances):
                             global_nets.setdefault(rst_port, []).append((_inst(m, i), rst_port))
                         report.contract_wired_roles.append((m.name, "reset_primary", rst_port))
+                elif rst_port is None:
+                    report.warnings.append(
+                        f"[{m.name}] contract has no reset_primary role; declare "
+                        f"reset_free: true (or combinatorial: true) if the module has no reset"
+                    )
                 else:
                     report.warnings.append(
                         f"[{m.name}] contract declares reset_primary={rst_port!r} "

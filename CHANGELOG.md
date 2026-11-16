@@ -18,6 +18,13 @@ for the versioning policy.
   the four data merge points are checked and balanced.
 
 ### Fixed
+- **A contract without a clock or reset role is named as such.** Generation
+  warned "contract declares clock_primary=None but port not found"; it now
+  says the role is missing and that `clock_free: true`, `reset_free: true` or
+  `combinatorial: true` declares a module without one.
+- **The vision tutorial runner validates every design but the negative CDC
+  fixture**, whose rejection its own `gen-top --strict` step checks. The
+  validate step stopped the run once undeclared crossings became errors.
 - **`forge dev verify generate` checks a flow's `port_map.yaml` against the
   RTL.** A hand-written map that is missing an RTL port, names a port the RTL
   does not have, or disagrees on direction or width stops generation with the
