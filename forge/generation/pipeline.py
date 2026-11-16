@@ -761,10 +761,10 @@ def print_generation_report(report: dict) -> None:
 def strict_port_failure(report: dict, cfg) -> Optional[str]:
     """The ``--strict`` report of ports neither connected nor allowed open, or ``None``."""
     unaccounted_open = filter_unaccounted(
-        report.get("open_outputs", []), cfg.allowed_unconnected.open_outputs
+        report.get("open_outputs", []), cfg.allowed_unconnected.open_outputs, cfg.modules
     )
     unaccounted_tied = filter_unaccounted(
-        report.get("tied_to_zero", []), cfg.allowed_unconnected.tied_inputs
+        report.get("tied_to_zero", []), cfg.allowed_unconnected.tied_inputs, cfg.modules
     )
     if not unaccounted_open and not unaccounted_tied:
         return None

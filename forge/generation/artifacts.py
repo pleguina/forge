@@ -40,18 +40,22 @@ def resolve_interface_metadata(interface_metadata: dict | None) -> dict:
     return copy.deepcopy(interface_metadata or {})
 
 
-def filter_unaccounted(port_list, patterns):
+def filter_unaccounted(port_list, patterns, modules=()):
     """Return entries from *port_list* not matched by any fnmatch *pattern*.
 
     *port_list* is a list of ``(instance, port, width)`` tuples.
-    *patterns* is a list of ``instance.port`` glob patterns.
+    *patterns* is a list of ``instance.port`` or ``module.port`` glob patterns;
+    a module name covers every instance of that module in *modules*.
     Returns the subset of *port_list* that no pattern covers.
     """
     from fnmatch import fnmatch
+    module_of = {mod.instance_id(i): mod.name for mod in modules for i in range(mod.instances)}
     unaccounted = []
     for inst, port, width in port_list:
-        key = f"{inst}.{port}"
-        if not any(fnmatch(key, pat) for pat in patterns):
+        keys = [f"{inst}.{port}"]
+        if inst in module_of:
+            keys.append(f"{module_of[inst]}.{port}")
+        if not any(fnmatch(key, pat) for key in keys for pat in patterns):
             unaccounted.append((inst, port, width))
     return unaccounted
 
@@ -100,8 +104,8 @@ def compute_maturity_summary(
 
     open_outputs = report.get("open_outputs", [])
     tied_inputs = report.get("tied_to_zero", [])
-    unaccounted_open = filter_unaccounted(open_outputs, cfg.allowed_unconnected.open_outputs)
-    unaccounted_tied = filter_unaccounted(tied_inputs, cfg.allowed_unconnected.tied_inputs)
+    unaccounted_open = filter_unaccounted(open_outputs, cfg.allowed_unconnected.open_outputs, cfg.modules)
+    unaccounted_tied = filter_unaccounted(tied_inputs, cfg.allowed_unconnected.tied_inputs, cfg.modules)
 
     summary["ports"] = {
         "open_outputs": len(open_outputs),

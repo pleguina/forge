@@ -23,6 +23,9 @@ for the versioning policy.
   unconnected (the stale map that dropped `trigger_logic`'s clock). A map
   generate derived from the RTL records `derived_from:` and is derived again
   when the RTL changes.
+- **`allowed_unconnected` patterns may name a module.** An entry such as
+  `csc.dbg_s2_r` now covers every instance of `csc`; it matched none of
+  them before, and `--strict` reported each instance's port.
 
 ### Changed
 - **One configuration path for a `forge.yml` project.** `forge build`,
