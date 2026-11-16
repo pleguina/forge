@@ -724,3 +724,72 @@ def test_without_external_source_the_injected_branch_is_double_counted():
     # 13, reporting a phantom 13-cycle mismatch on an aligned design.
     assert sorted(p.total_cycles for p in sink.paths) == [13, 26]
     assert sink.delta == 13
+
+
+def test_a_bounded_branch_is_its_input_arrival_plus_its_range():
+    graph = LatencyGraph(
+        nodes={
+            "src": _node("src", 3),
+            "tbnd": LatencyNode(
+                name="tbnd", ref="tbnd", instances=1, kind="rtl",
+                latency=LatencyValue(kind="bounded", min_cycles=1, max_cycles=17,
+                                     provenance=LatencyProvenance("explicit_contract")),
+            ),
+            "fixed": _node("fixed", 4),
+            "join": _node("join", 1),
+        },
+        edges=[
+            LatencyEdge(src="src", dst="tbnd", latency=None),
+            LatencyEdge(src="tbnd", dst="join", latency=None),
+            LatencyEdge(src="fixed", dst="join", latency=None),
+        ],
+    )
+    report = next(r for r in check_merge_points(graph) if r.merge_node == "join")
+    bounded = next(p for p in report.paths if p.path[0] == "tbnd")
+    assert (bounded.range_lo, bounded.range_hi) == (4, 20)
+    assert report.alignment == "bounded_skew"
+    assert not report.has_unknowns and not report.is_mismatch
+
+
+def test_a_bounded_branch_that_cannot_overlap_is_a_mismatch():
+    graph = LatencyGraph(
+        nodes={
+            "src": _node("src", 30),
+            "tbnd": LatencyNode(
+                name="tbnd", ref="tbnd", instances=1, kind="rtl",
+                latency=LatencyValue(kind="bounded", min_cycles=1, max_cycles=5,
+                                     provenance=LatencyProvenance("explicit_contract")),
+            ),
+            "fixed": _node("fixed", 4),
+            "join": _node("join", 1),
+        },
+        edges=[
+            LatencyEdge(src="src", dst="tbnd", latency=None),
+            LatencyEdge(src="tbnd", dst="join", latency=None),
+            LatencyEdge(src="fixed", dst="join", latency=None),
+        ],
+    )
+    report = next(r for r in check_merge_points(graph) if r.merge_node == "join")
+    assert report.is_mismatch
+
+
+def test_a_framed_merge_does_not_report_unknown_arrivals():
+    from forge.contracts.config import InputAlignment
+    graph = LatencyGraph(
+        nodes={
+            "a": _node("a", None),
+            "b": _node("b", None),
+            "pktz": LatencyNode(
+                name="pktz", ref="pktz", instances=1, kind="rtl",
+                latency=LatencyValue(cycles=3, provenance=LatencyProvenance("explicit_contract")),
+                alignment=InputAlignment(kind="framed"),
+            ),
+        },
+        edges=[
+            LatencyEdge(src="a", dst="pktz", latency=None, unknown_cdc=True),
+            LatencyEdge(src="b", dst="pktz", latency=None, unknown_cdc=True),
+        ],
+    )
+    report = next(r for r in check_merge_points(graph) if r.merge_node == "pktz")
+    assert report.alignment == "framed"
+    assert not report.has_unknowns and not report.is_mismatch

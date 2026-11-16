@@ -100,6 +100,7 @@ connections:
 
 - from: ctrl_level
   to: pxsink
+  static: true  # a held control level, not data to align
   cdc:
     kind: level_sync
   port_map:
@@ -107,6 +108,7 @@ connections:
 
 - from: ctrl_pulse
   to: pxsink
+  control_strobe: true  # an event pulse, not data to align
   cdc:
     kind: pulse_sync
     min_spacing_cycles: 20
@@ -115,6 +117,7 @@ connections:
 
 - from: ctrl_mailbox
   to: pxsink
+  static: true  # a held configuration word
   cdc:
     kind: mailbox_transfer
   port_map:

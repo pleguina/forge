@@ -309,5 +309,9 @@ modules:
   latency:
     kind: fixed
     cycles: 3
+  # Both inputs arrive through async FIFOs as framed records; the packetizer
+  # takes them in order, so their arrival cycles are not aligned.
+  input_alignment:
+    kind: framed
   interface_contract: interfaces/packetizer_rtl.interface.yaml
   src: [../algo/rtl/packetizer_rtl.v]
