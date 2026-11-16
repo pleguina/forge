@@ -7,6 +7,23 @@ for the versioning policy.
 
 ## [Unreleased]
 
+### Added
+- **`static: true` on connections and topology groups.** A source that holds
+  its value (a configuration word, a constant) is left out of merge-point
+  alignment and of `delay_cycles: auto` sizing; `latency-check` lists the
+  static inputs and reports their count as `static_inputs`. On OMTF the 132
+  configuration links had made 66 of 70 merge points unknown; declared static,
+  the four data merge points are checked and balanced.
+
+### Fixed
+- **`forge dev verify generate` checks a flow's `port_map.yaml` against the
+  RTL.** A hand-written map that is missing an RTL port, names a port the RTL
+  does not have, or disagrees on direction or width stops generation with the
+  differences listed, instead of producing a testbench that leaves the port
+  unconnected (the stale map that dropped `trigger_logic`'s clock). A map
+  generate derived from the RTL records `derived_from:` and is derived again
+  when the RTL changes.
+
 ### Changed
 - **One configuration path for a `forge.yml` project.** `forge build`,
   `forge test`, `forge report` and `forge inspect` with no design argument
