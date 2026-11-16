@@ -82,7 +82,12 @@ def render_markdown(
                 "|-----------|---------------------|--------|",
             ]
             for p in r.paths:
-                lat_str = str(p.total_cycles) if p.total_cycles is not None else "unknown"
+                if p.total_cycles is not None:
+                    lat_str = str(p.total_cycles)
+                elif p.range_lo is not None and p.range_hi is not None:
+                    lat_str = f"{p.range_lo}..{p.range_hi}"
+                else:
+                    lat_str = "unknown"
                 if p.offset:
                     lat_str += f" (offset {p.offset})"
                 path_str = " → ".join(p.path)

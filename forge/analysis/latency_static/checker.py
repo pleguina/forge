@@ -111,6 +111,9 @@ class MismatchReport:
 
     @property
     def has_unknowns(self) -> bool:
+        # an alignment that never compares arrival times needs none of them
+        if self.alignment in ("elastic_buffer", "transaction_order", "framed"):
+            return False
         return any(p.has_unknown for p in self.paths)
 
 
@@ -240,6 +243,27 @@ def _branch_upstream(graph: LatencyGraph, pred: str, edge) -> "tuple[Optional[in
     return _upstream_chain_latency(graph, pred)
 
 
+def _arrival_at(graph: LatencyGraph, name: str) -> "tuple[Optional[int], bool]":
+    """(cycles, is_unknown) at which data reaches the input of *name*: its
+    aligned predecessors' folded chains plus their edges, without *name*'s
+    own latency. Several predecessors must agree."""
+    edges = [
+        e for e in graph.edges
+        if e.dst == name and e.aligned and not e.unknown_cdc
+    ]
+    if not edges:
+        return (0, False)
+    totals = set()
+    for e in edges:
+        upstream, unknown = _branch_upstream(graph, e.src, e)
+        if unknown or upstream is None:
+            return (None, True)
+        totals.add(upstream + (e.latency.cycles if (e.latency and e.latency.cycles) else 0))
+    if len(totals) != 1:
+        return (None, True)
+    return (totals.pop(), False)
+
+
 def check_merge_points(
     graph: LatencyGraph,
     *,
@@ -327,20 +351,35 @@ def analyse_merge_point(
 
         range_lo: Optional[int] = None
         range_hi: Optional[int] = None
-        if kind == "bounded" and src_node.latency and src_node.latency.min_cycles is not None \
-                and src_node.latency.max_cycles is not None:
-            range_lo = src_node.latency.min_cycles + edge_cycles - offset
-            range_hi = src_node.latency.max_cycles + edge_cycles - offset
+        bounds = (src_node.latency.min_cycles, src_node.latency.max_cycles) if src_node.latency else (None, None)
+        if kind == "bounded" and bounds[0] is not None and bounds[1] is not None \
+                and not (edge and edge.unknown_cdc):
+            # A bounded block has no single latency, so its own chain fold is
+            # unknown; the interval is its input arrival plus [min, max].
+            arrival: Optional[int]
+            if edge is not None and getattr(edge, "external_source", False):
+                arrival, arrival_unknown = 0, False
+            else:
+                arrival, arrival_unknown = _arrival_at(graph, src)
+            if not arrival_unknown and arrival is not None:
+                range_lo = arrival + bounds[0] + edge_cycles - offset
+                range_hi = arrival + bounds[1] + edge_cycles - offset
+                unknown = False
         elif total is not None:
             range_lo = range_hi = total
 
-        provenance = (
-            LatencyProvenance(
+        if total is not None:
+            provenance = LatencyProvenance(
                 "inferred",
                 detail=f"{src_node.latency_source}:{node_cycles} + edge:{edge_cycles}",
             )
-            if total is not None else None
-        )
+        elif range_lo is not None:
+            provenance = LatencyProvenance(
+                "inferred",
+                detail=f"bounded:{bounds[0]}..{bounds[1]} + edge:{edge_cycles}",
+            )
+        else:
+            provenance = None
         path_lats.append(PathLatency(
             path=[src, node_name],
             total_cycles=total,
