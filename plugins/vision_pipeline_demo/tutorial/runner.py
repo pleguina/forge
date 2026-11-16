@@ -165,6 +165,10 @@ def _clean(plan: Plan) -> None:
 def _validate(plan: Plan) -> None:
     _run(["forge", "dev", "topgen", "validate-registry", str(_MODULES_YML)], check=True)
     for step in plan.steps:
+        # A negative fixture fails validation by design; its rejection is
+        # checked by _negative_gen_top_reject.
+        if step["kind"] == "topgen_reject":
+            continue
         design_path = _DESIGNS_DIR / step["design"]
         _run(["forge", "dev", "topgen", "validate", str(design_path)], check=True)
 
