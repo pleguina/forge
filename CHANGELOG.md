@@ -16,6 +16,17 @@ for the versioning policy.
   the four data merge points are checked and balanced.
 
 ### Fixed
+- **A bounded-latency branch is checked as an interval.** Its range was the
+  block's own `[min, max]` without the cycles upstream of it, and the path was
+  reported unknown, so no merge with a bounded input was ever checked. It is
+  now the arrival at the block's input plus `[min, max]`, compared by overlap.
+- **A merge that declares framed alignment, or whose inputs are elastic or
+  ready/valid, no longer reports unknown arrivals**: it never compares them.
+- **vision_pipeline_demo declares what its control links are**: the CDC
+  variant's level and mailbox inputs and the platform wrapper's threshold
+  mailbox are `static: true`, the CDC pulse is a `control_strobe`, and the
+  packetizer takes framed records. Every reference design's latency check now
+  has no unknown and no mismatch.
 - **`forge dev verify generate` checks a flow's `port_map.yaml` against the
   RTL.** A hand-written map that is missing an RTL port, names a port the RTL
   does not have, or disagrees on direction or width stops generation with the
