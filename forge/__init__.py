@@ -17,7 +17,7 @@ Usage:
     cfg = DesignConfig.load("design.yaml")
 """
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 
 from .contracts.config import DesignConfig, Module, Connection
 from .generation.generators.structural_verilog import write_structural_verilog

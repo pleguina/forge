@@ -7,6 +7,8 @@ for the versioning policy.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-16
+
 ### Added
 - **`static: true` on connections and topology groups.** A source that holds
   its value (a configuration word, a constant) is left out of merge-point

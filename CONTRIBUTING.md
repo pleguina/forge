@@ -92,7 +92,7 @@ in CI; read its header comment before adding an allowlist entry to it.
 
 ## Versioning
 
-The package version (`forge/pyproject.toml`, currently `2.0.0`) follows
+The package version (`forge/pyproject.toml`, currently `3.0.0`) follows
 [semver](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
 - **MAJOR** — anything that breaks an existing consumer without a

@@ -12,8 +12,8 @@ authors:
 repository-code: "https://github.com/pleguina/forge"
 url: "https://github.com/pleguina/forge"
 license: MIT
-version: 2.0.0
-date-released: "2026-07-27"
+version: 3.0.0
+date-released: "2026-11-16"
 keywords:
   - fpga
   - hdl

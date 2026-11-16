@@ -115,11 +115,12 @@ full rationale and package-ownership boundaries.
 Two independent version numbers appear in this repo — they track different
 things and are not expected to match:
 
-- **Package version** (`forge/pyproject.toml`, currently `2.0.0`) — the
+- **Package version** (`forge/pyproject.toml`, currently `3.0.0`) — the
   installed `forge` Python package/CLI release. Follows semver; see
   `CONTRIBUTING.md` for what counts as a MAJOR/MINOR/PATCH change here.
   `2.0.0` is the ARC → FORGE rename — a breaking, shim-free change to the
-  CLI/package/directory surface. See `MIGRATION.md`.
+  CLI/package/directory surface. `3.0.0` moves the stage groups under
+  `forge dev` and changes what `forge init` writes. See `MIGRATION.md`.
 - **Verification contract version** (currently `v1.0`, referenced throughout
   `docs/`) — the version of the Layer 1 verification model itself
   (`design.verification.yml` schema, generated artifact set, CLI contract

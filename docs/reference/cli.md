@@ -26,7 +26,7 @@ options:
   --debug     Print Python tracebacks for unexpected failures.
 
 Commands:
-  init        Scaffold a plugin, write forge.yml, and run build -> test -> report
+  init        Write forge.yml for the firmware in this repository (--example: scaffold a plugin)
   adopt       Scan an existing repository and create forge.yml from what is in it
   check       Report what is missing or inconsistent, and whether the tools are here
   build       Generate the structural top level

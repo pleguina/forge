@@ -1,5 +1,23 @@
 # Migration Notes
 
+## 2.x to 3.0.0
+
+- **Stage groups live under `forge dev`.** `forge topgen`, `forge contract`,
+  `forge verify`, `forge hls`, `forge analyze`, `forge framework` and
+  `forge core` are now `forge dev <group>`. The old top-level names still run
+  and print a note; scripts should use the new form.
+- **`forge init` writes one `forge.yml`** for firmware that already exists in
+  the repository (top, clock, reset, sources, reference data) and nothing
+  else. The old scaffold-and-run behaviour is `forge init --example NAME`.
+- **An undeclared clock- or reset-domain crossing stops `gen-top`, `build`
+  and `topgen validate`** with or without `--strict`. Declare the crossing
+  with a `cdc:` block, or `cdc: {kind: waived, reason: ...}` when it needs no
+  synchronizer.
+- **`--mode vhdl` writes a VHDL entity around the Verilog top** (written as
+  `<top>_core.v`); the structural VHDL emitter was removed.
+- **The reference plugins' generated flow files are no longer committed.**
+  Run `forge dev verify generate` (or `forge test`) to produce them.
+
 ## `forge.verify`/`forge.analyze`/`forge.topgen` package renames
 
 Per `docs/development/adr/0005-package-and-cli-naming.md`,
