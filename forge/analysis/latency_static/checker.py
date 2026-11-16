@@ -166,7 +166,7 @@ def _upstream_chain_latency(graph: LatencyGraph, name: str) -> "tuple[Optional[i
     # predecessor for chain-folding purposes either.
     real_preds = [
         p for p in preds
-        if not (edges_by_pred.get(p) and (edges_by_pred[p].unknown_cdc or edges_by_pred[p].control_strobe))
+        if not (edges_by_pred.get(p) and (edges_by_pred[p].unknown_cdc or not edges_by_pred[p].aligned))
     ]
 
     if own_unknown or own_cycles is None or own_kind in ("bounded", "elastic"):
@@ -295,7 +295,7 @@ def analyse_merge_point(
     # strobes) this was found needed for.
     preds = [
         p for p in graph.predecessors(node_name)
-        if not (edge_by_pair.get((p, node_name)) and edge_by_pair[(p, node_name)].control_strobe)
+        if not (edge_by_pair.get((p, node_name)) and not edge_by_pair[(p, node_name)].aligned)
     ]
     if len(preds) < 2:
         return None
