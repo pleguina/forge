@@ -351,18 +351,19 @@ def analyse_merge_point(
 
         range_lo: Optional[int] = None
         range_hi: Optional[int] = None
-        if kind == "bounded" and src_node.latency and src_node.latency.min_cycles is not None \
-                and src_node.latency.max_cycles is not None \
+        bounds = (src_node.latency.min_cycles, src_node.latency.max_cycles) if src_node.latency else (None, None)
+        if kind == "bounded" and bounds[0] is not None and bounds[1] is not None \
                 and not (edge and edge.unknown_cdc):
             # A bounded block has no single latency, so its own chain fold is
             # unknown; the interval is its input arrival plus [min, max].
+            arrival: Optional[int]
             if edge is not None and getattr(edge, "external_source", False):
                 arrival, arrival_unknown = 0, False
             else:
                 arrival, arrival_unknown = _arrival_at(graph, src)
-            if not arrival_unknown:
-                range_lo = arrival + src_node.latency.min_cycles + edge_cycles - offset
-                range_hi = arrival + src_node.latency.max_cycles + edge_cycles - offset
+            if not arrival_unknown and arrival is not None:
+                range_lo = arrival + bounds[0] + edge_cycles - offset
+                range_hi = arrival + bounds[1] + edge_cycles - offset
                 unknown = False
         elif total is not None:
             range_lo = range_hi = total
@@ -375,7 +376,7 @@ def analyse_merge_point(
         elif range_lo is not None:
             provenance = LatencyProvenance(
                 "inferred",
-                detail=f"bounded:{src_node.latency.min_cycles}..{src_node.latency.max_cycles} + edge:{edge_cycles}",
+                detail=f"bounded:{bounds[0]}..{bounds[1]} + edge:{edge_cycles}",
             )
         else:
             provenance = None
