@@ -129,6 +129,9 @@ class LatencyEdge:
     # latency table), not unknowable. See Connection.control_strobe for
     # the external-consumer example this covers.
     control_strobe: bool = False
+    # Every connection this edge stands for is static (Connection.static):
+    # the source holds its value, so the edge is not aligned either.
+    static: bool = False
     # The data on this edge enters the design at ``src`` — through one of
     # that node's ``external_in_ports`` — rather than flowing into it from
     # its own predecessors (Connection.external_source). The chain-fold must
@@ -144,6 +147,11 @@ class LatencyEdge:
     @property
     def auto(self) -> bool:
         return any(is_auto for _, _, is_auto in self.refs)
+
+    @property
+    def aligned(self) -> bool:
+        """Whether this edge takes part in merge-point alignment."""
+        return not (self.control_strobe or self.static)
 
 
 @dataclasses.dataclass
@@ -562,6 +570,7 @@ def _build_graph_from_ir(
         src: str, dst: str, latency: Optional[LatencyValue] = None,
         unknown_cdc: bool = False, control_strobe: bool = False,
         external_source: bool = False, ref: Optional[Tuple[str, int, bool]] = None,
+        static: bool = False,
     ) -> None:
         if src not in nodes or dst not in nodes:
             return
@@ -569,11 +578,14 @@ def _build_graph_from_ir(
         if existing is not None:
             if ref is not None and ref not in existing.refs:
                 existing.refs.append(ref)
+            # one data connection between the pair makes the edge a data edge
+            existing.static = existing.static and static
             return
         edge = LatencyEdge(
             src=src, dst=dst, latency=latency,
             unknown_cdc=unknown_cdc, control_strobe=control_strobe,
             external_source=external_source, refs=[ref] if ref is not None else [],
+            static=static,
         )
         edge_by_pair[(src, dst)] = edge
         edges.append(edge)
@@ -611,6 +623,7 @@ def _build_graph_from_ir(
         latency: Optional[LatencyValue] = None, unknown_cdc: bool = False,
         positional_pairs: Optional[List[tuple]] = None, control_strobe: bool = False,
         external_source: bool = False, ref: Optional[Tuple[str, int, bool]] = None,
+        static: bool = False,
     ) -> None:
         src_mod = mod_by_name.get(src_mod_name)
         dst_mod = mod_by_name.get(dst_mod_name)
@@ -628,11 +641,11 @@ def _build_graph_from_ir(
             for i_s, i_d in pairs:
                 if 0 <= i_s < len(src_names) and 0 <= i_d < len(dst_names):
                     _add_edge(src_names[i_s], dst_names[i_d], latency, unknown_cdc,
-                              control_strobe, external_source, ref)
+                              control_strobe, external_source, ref, static)
             return
         for s in src_names:
             for d in dst_names:
-                _add_edge(s, d, latency, unknown_cdc, control_strobe, external_source, ref)
+                _add_edge(s, d, latency, unknown_cdc, control_strobe, external_source, ref, static)
 
     for conn_idx, conn in enumerate(cfg.connections):
         conn_cdc_kind = conn.cdc.get("kind") if conn.cdc else None
@@ -646,6 +659,7 @@ def _build_graph_from_ir(
             control_strobe=conn.control_strobe,
             external_source=getattr(conn, "external_source", False),
             ref=("connection", conn_idx, conn.delay_auto),
+            static=conn.static,
         )
     for tg_idx, tg in enumerate(cfg.topology_groups):
         # TopologyGroup carries delay_cycles/boundary only (no register_stages
@@ -658,6 +672,7 @@ def _build_graph_from_ir(
             _edge_latency_from_connection(tg),
             external_source=getattr(tg, "external_source", False),
             ref=("topology_group", tg_idx, tg.delay_auto),
+            static=tg.static,
         )
 
     return LatencyGraph(nodes=nodes, edges=edges)

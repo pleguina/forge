@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+import yaml
+
 
 # ── Introspection error hierarchy ──────────────────────────────────────────
 
@@ -316,6 +318,29 @@ def extract_ports(
     )
 
 
+def port_map_drift(port_map_path: Path, verilog_path: Path) -> list[str]:
+    """How a flat ``ports:`` port map differs from the ports of *verilog_path*.
+
+    Empty when they agree, or when the map is not a flat port list. Raises
+    ``IntrospectionError`` when the RTL ports cannot be read.
+    """
+    data = yaml.safe_load(Path(port_map_path).read_text()) or {}
+    listed = data.get("ports") if isinstance(data, dict) else None
+    if not isinstance(listed, list) or not all(isinstance(p, dict) and "name" in p for p in listed):
+        return []
+    mapped = {str(p["name"]): p for p in listed}
+    rtl = {p.name: p for p in extract_ports(verilog_path)}
+    problems = [f"{name} is in the RTL but not in the map" for name in rtl if name not in mapped]
+    problems += [f"{name} is in the map but not in the RTL" for name in mapped if name not in rtl]
+    for name in rtl.keys() & mapped.keys():
+        entry, port = mapped[name], rtl[name]
+        if entry.get("direction") not in (None, port.direction):
+            problems.append(f"{name} is {entry['direction']} in the map, {port.direction} in the RTL")
+        if entry.get("width") is not None and int(entry["width"]) != port.width:
+            problems.append(f"{name} is {entry['width']} bits in the map, {port.width} in the RTL")
+    return problems
+
+
 # ── File writers ───────────────────────────────────────────────────────────
 
 def write_port_map_yaml(
@@ -323,6 +348,7 @@ def write_port_map_yaml(
     out_path: Path,
     *,
     signature_hash: str | None = None,
+    derived_from: str | None = None,
 ) -> None:
     """Write a ``port_map.yaml`` from *ports*.
 
@@ -343,8 +369,13 @@ def write_port_map_yaml(
         out_path:        Destination path.
         signature_hash:  Optional SHA-256 string to embed as
                          ``port_signature_hash`` (enables preflight cross-check).
+        derived_from:    The RTL the ports were read from, recorded so that a
+                         later ``forge dev verify generate`` derives the map
+                         again when that RTL changes instead of refusing it.
     """
     lines: list[str] = []
+    if derived_from:
+        lines.append(f"derived_from: {derived_from}")
     if signature_hash:
         lines.append(f"port_signature_hash: {signature_hash}")
     lines.append("ports:")
@@ -412,6 +443,7 @@ def extract_and_write(
     signature_out: Path | None = None,
     *,
     mode: Literal["auto", "parser", "regex"] = "auto",
+    derived_from: str | None = None,
 ) -> list[PortInfo]:
     """Extract ports and write ``port_map.yaml`` (and optionally ``port_signature.json``).
 
@@ -434,6 +466,6 @@ def extract_and_write(
         sig_hash = write_port_signature(ports, signature_out)
 
     port_map_out.parent.mkdir(parents=True, exist_ok=True)
-    write_port_map_yaml(ports, port_map_out, signature_hash=sig_hash)
+    write_port_map_yaml(ports, port_map_out, signature_hash=sig_hash, derived_from=derived_from)
 
     return ports

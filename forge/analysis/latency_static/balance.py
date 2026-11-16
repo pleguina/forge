@@ -47,7 +47,7 @@ class AutoDelayResult:
 
 
 def _data_edges(graph: LatencyGraph) -> List[LatencyEdge]:
-    return [e for e in graph.edges if not e.control_strobe]
+    return [e for e in graph.edges if e.aligned]
 
 
 def _topological_order(graph: LatencyGraph) -> Tuple[List[str], List[str]]:
@@ -91,7 +91,7 @@ def resolve_auto_delays(graph: LatencyGraph) -> AutoDelayResult:
     edge_by_pair = {(e.src, e.dst): e for e in graph.edges}
 
     for node in on_cycle:
-        if any(e.auto for e in graph.edges if e.dst == node and not e.control_strobe):
+        if any(e.auto for e in graph.edges if e.dst == node and e.aligned):
             problems.append(f"'{node}' is on a feedback loop; delay_cycles: auto into it cannot be resolved")
 
     for node in order:
