@@ -34,14 +34,59 @@ from typing import Any, Dict, List, Set
 
 import yaml
 
+from forge.contracts.design_subsystems import expand_subsystems
+
 VARIANT_KEY = "variant_of"
 _VARIANT_KEYS = (VARIANT_KEY, "remove", "modules", "add")
 _REMOVABLE = ("modules", "connections", "topology_groups")
 
 
 def load_design_document(path: "Path | str") -> Dict[str, Any]:
-    """The design at *path* as a plain mapping, with ``variant_of:`` applied."""
+    """The design at *path* as a plain mapping, with ``variant_of:`` applied
+    and its subsystems expanded into blocks."""
+    resolved = Path(path).expanduser().resolve()
+    return expand_subsystems(_load(resolved, []), resolved)
+
+
+def load_design_unexpanded(path: "Path | str") -> Dict[str, Any]:
+    """The design at *path* with ``variant_of:`` applied and its subsystem
+    uses left as written, for a variant to change."""
     return _load(Path(path).expanduser().resolve(), [])
+
+
+def apply_variant(base: Dict[str, Any], changes: Dict[str, Any], where: "Path | str") -> Dict[str, Any]:
+    """*base* with a variant's *changes* (``remove``, ``modules``, ``add``,
+    top-level keys) applied; *where* names the changes in errors."""
+    return _apply(base, changes, Path(where))
+
+
+_DESIGN_PATH_KEYS = ("registry", "interface_metadata_file")
+_MODULE_PATH_KEYS = ("src", "tb", "includes", "rtl_include_dirs", "rtl_packages")
+
+
+def relocate_design(design: Dict[str, Any], base_dir: Path) -> Dict[str, Any]:
+    """*design* with every path it holds made absolute against *base_dir*, so
+    the document can be written anywhere and mean the same."""
+    from forge.contracts.config import resolve_declared_path
+
+    def entries(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+        out = list(doc.get("modules") or [])
+        for body in (doc.get("subsystems") or {}).values():
+            out += list((body or {}).get("modules") or [])
+        return out
+
+    design = copy.deepcopy(design)
+    for key in _DESIGN_PATH_KEYS:
+        if design.get(key):
+            design[key] = str(resolve_declared_path(design[key], base_dir))
+    for entry in entries(design):
+        for key in _MODULE_PATH_KEYS:
+            if isinstance(entry.get(key), list):
+                entry[key] = [str(resolve_declared_path(v, base_dir)) for v in entry[key]]
+            elif entry.get(key):
+                entry[key] = str(resolve_declared_path(entry[key], base_dir))
+    design.pop(VARIANT_KEY, None)
+    return design
 
 
 def design_sources(path: "Path | str") -> List[Path]:

@@ -78,7 +78,8 @@ emits the same {schema_version, status, diagnostics, artifacts, metrics,
 next_actions} envelope (docs/development/cli_exit_codes.md).
 
 Examples:
-  forge init my_plugin
+  forge init
+  forge init --example my_plugin
   forge adopt .
   forge check
   forge build

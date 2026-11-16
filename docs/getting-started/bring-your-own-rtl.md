@@ -1,9 +1,10 @@
 # Bring Your Own RTL
 
-[The quickstart](quickstart.md) starts from nothing: `forge init` creates a
-project already shaped the way FORGE expects. This page starts from the
-other end — a repository that exists, was laid out by someone who had never
-heard of FORGE, and is not going to be reorganised.
+To compare firmware you already have with reference data, `forge init` and
+[Compare existing firmware](compare-existing-firmware.md) are all you need.
+This page goes further: it builds FORGE's model of a repository that exists,
+was laid out by someone who had never heard of FORGE, and is not going to be
+reorganised, so that its topology can be generated, checked and changed.
 
 You will not write a module registry, a design topology, an interface
 contract or a verification manifest by hand. FORGE reads them out of the

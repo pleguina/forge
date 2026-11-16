@@ -133,17 +133,30 @@ def _resolve_ip_info(
     ``forge inspect`` is read-only by default.
     """
     if ip_info_path is not None and ip_info_path.exists():
-        return load_ip_info(ip_info_path)
-    if contracts:
+        info = load_ip_info(ip_info_path)
+    elif contracts:
         mapped: Dict[str, LoadedContract] = {}
         for m in cfg.modules:
             c = contracts.get(m.name) or (m.ip_info_key and contracts.get(m.ip_info_key))
             if c:
                 mapped[m.name] = c
         return synthesize_ip_info(mapped)
-    if build_dir is not None:
+    elif build_dir is not None:
         return collect_all(build_root=build_dir, modules=cfg.modules, ip_root=ip_root, src_root=src_root)
-    return {}
+    else:
+        info = {}
+    # A module the last build never saw (a variant's, a new subsystem copy's)
+    # is read from its sources, in memory, as a build would.
+    missing = [m for m in cfg.modules if m.name not in info and (m.ip_info_key or m.name) not in info]
+    if missing:
+        import contextlib
+        import io
+
+        design_dir = Path(getattr(cfg, "_source_file", "") or ".").parent
+        with contextlib.redirect_stdout(io.StringIO()):
+            info.update({k: v for k, v in collect_all(build_root=design_dir / "build", modules=missing,
+                                                      ip_root=ip_root, src_root=src_root).items() if v})
+    return info
 
 
 def _cardinality_dict(primary_role: Dict[str, Any], direction: str) -> Optional[Dict[str, Any]]:
@@ -347,6 +360,7 @@ def _build_project_ir_full(
     build_dir: Optional[Path | str] = None,
     ip_root: Optional[Path | str] = None,
     src_root: Optional[Path | str] = None,
+    hls_build_root: Optional[Path | str] = None,
 ) -> Tuple[ResolvedProject, DesignConfig, Any]:
     """Shared body of :func:`build_project_ir` and
     :func:`build_project_ir_with_match_report` — loads everything from
@@ -380,6 +394,13 @@ def _build_project_ir_full(
     conn_map, global_nets, match_report = auto_match_ports(
         cfg, ip_info_data, contracts=contracts or None,
     )
+    # delay_cycles: auto is sized as generation sizes it (HLS report latencies
+    # under hls_build_root), so the IR's timing is the generated top's
+    if any(c.delay_auto for c in cfg.connections) or any(t.delay_auto for t in cfg.topology_groups):
+        from forge.analysis.latency_static.balance import apply_auto_delays, resolve_design_auto_delays
+        auto_delays = resolve_design_auto_delays(design_path, _as_path(hls_build_root), conn_map)
+        if not auto_delays.problems:
+            apply_auto_delays(cfg, auto_delays)
 
     project = assemble_project_ir(
         cfg,
@@ -438,6 +459,7 @@ def build_project_ir_with_match_report(
     build_dir: Optional[Path | str] = None,
     ip_root: Optional[Path | str] = None,
     src_root: Optional[Path | str] = None,
+    hls_build_root: Optional[Path | str] = None,
 ) -> Tuple[ResolvedProject, DesignConfig, Any]:
     """Same as :func:`build_project_ir`, but also returns the ``cfg``/
     ``match_report`` the matcher produced along the way — for callers that
@@ -452,6 +474,7 @@ def build_project_ir_with_match_report(
         build_dir=build_dir,
         ip_root=ip_root,
         src_root=src_root,
+        hls_build_root=hls_build_root,
     )
 
 

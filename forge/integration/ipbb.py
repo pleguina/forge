@@ -178,13 +178,12 @@ def _vhdl_order(files: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]
     return [files[i] for i in done]
 
 
-def xsim_compile_script(src_dir: Path, component: str, depfile: str, *, toolset: str = "sim") -> str:
-    """xvhdl/xvlog commands for the dep tree rooted at *component* (``package:path``)'s *depfile*.
-
-    Files keep ipbb's library and VHDL-2008 flag, and its order except that a VHDL
-    file comes after the ones declaring what it uses; consecutive files sharing a
-    compiler, library and standard are compiled in one call.
-    """
+def dep_tree_files(src_dir: Path, component: str, depfile: str, *,
+                   toolset: str = "sim") -> List[Tuple[str, str, str]]:
+    """``(path, tool, library)`` of every simulation source in the dep tree rooted
+    at *component* (``package:path``)'s *depfile*, in the order XSim compiles
+    them: ipbb's, except that a VHDL file comes after the ones declaring what it
+    uses. *tool* is ``xvlog``, ``xvlog --sv``, ``xvhdl`` or ``xvhdl --2008``."""
     try:
         from ipbb.depparser import DepFileParser, Pathmaker  # type: ignore[import]
     except ImportError as exc:
@@ -204,9 +203,18 @@ def xsim_compile_script(src_dir: Path, component: str, depfile: str, *, toolset:
         if tool == "xvhdl" and src.vhdl2008:
             tool = "xvhdl --2008"
         files.append((src.filepath, tool, src.lib or "xil_defaultlib"))
+    return _vhdl_order(files)
 
+
+def xsim_compile_script(src_dir: Path, component: str, depfile: str, *, toolset: str = "sim") -> str:
+    """xvhdl/xvlog commands for the dep tree rooted at *component* (``package:path``)'s *depfile*.
+
+    Files keep ipbb's library and VHDL-2008 flag, and its order except that a VHDL
+    file comes after the ones declaring what it uses; consecutive files sharing a
+    compiler, library and standard are compiled in one call.
+    """
     calls: List[Tuple[str, List[str]]] = []
-    for filepath, tool, lib in _vhdl_order(files):
+    for filepath, tool, lib in dep_tree_files(src_dir, component, depfile, toolset=toolset):
         head = f"{tool} -work {lib}"
         if calls and calls[-1][0] == head:
             calls[-1][1].append(filepath)

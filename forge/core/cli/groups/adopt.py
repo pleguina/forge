@@ -1,6 +1,6 @@
 """``forge adopt`` — enter an existing repository instead of replacing it.
 
-``forge init`` creates a project shaped like FORGE. That covers the first
+``forge init --example`` creates a project shaped like FORGE. That covers the first
 five minutes and nothing after: the moment a user has a repository of their
 own, ``init`` has nothing to offer them, and the documented alternative was
 to hand-author a module registry, a design topology and one interface
@@ -175,7 +175,7 @@ def cmd_adopt(args) -> None:
                 ),
                 "action": (
                     "Point `forge adopt` at the directory holding the design's "
-                    "sources, or run `forge init <name>` to start a new project"
+                    "sources, or run `forge init --example <name>` to start from the example plugin"
                 ),
             }],
             metrics={"root": str(root), "scanned_files": len(plan.discovery.files)},
@@ -185,7 +185,7 @@ def cmd_adopt(args) -> None:
         print(f"❌ No RTL modules or HLS kernels found under {root}.", file=sys.stderr)
         print(f"   Scanned {len(plan.discovery.files)} files.", file=sys.stderr)
         print("   → Point `forge adopt` at the design's source directory, or run "
-              "`forge init <name>` to start a new project.", file=sys.stderr)
+              "`forge init --example <name>` to start from the example plugin.", file=sys.stderr)
         sys.exit(1)
 
     interactive = getattr(args, "interactive", False)

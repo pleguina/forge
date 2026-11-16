@@ -27,16 +27,46 @@ can find on `PATH`, and the resolved location of each framework resource.
 Optional tools are reported as warnings, not failures — a clean install
 with no EDA tools installed still passes.
 
-## 3. Scaffold and run a plugin
+## 3. Your own firmware
 
-`forge init` installs an example plugin, a pass-through design with its
-verification files, to show the whole chain working. For your own algorithm,
-use `forge adopt` on its sources instead
-([Bring your own RTL](bring-your-own-rtl.md)): nothing is scaffolded, and
-`forge test --input --expected` verifies it.
+In the repository of a payload you already have, one command writes the only
+file FORGE needs:
 
 ```bash
-forge init my_plugin
+forge init --expected data/expected.txt --input data/input.txt
+```
+
+```
+forge init — /work/my_payload/forge.yml
+  ✅ sources: Hog project algo (Top/algo/list)
+  ✅ top: payload_top
+  ✅ clock: clk
+  ✅ reset: rst (active high)
+```
+
+It reads where your sources are described (a Hog project, a `.f` compile
+list, else the directories holding RTL), the top, the clock and the reset;
+nothing is moved and no other file is written. What it cannot tell from the
+repository, such as which of two tops you mean, comes back as a question
+with the flag that answers it (`--top`, `--clock`, `--reset`,
+`--hog-project`, `--filelist`). Without `--expected`, `forge test` still
+simulates, and says there was nothing to compare against. Then:
+
+```bash
+forge check
+forge test
+```
+
+[Compare existing firmware](compare-existing-firmware.md) goes on from here.
+
+## 3b. The example plugin
+
+`forge init --example` installs an example plugin, a pass-through design with
+its verification files, to show the generation chain working end to end. It
+is the starting point for extension authors, not for an existing payload.
+
+```bash
+forge init --example my_plugin
 ```
 
 This is the whole loop in one command. It scaffolds the topology side
@@ -72,7 +102,7 @@ simulation result.
 Add `--verbose` to see each underlying stage's full output instead of one
 line per stage, or `--json` for the machine-readable envelope.
 
-`forge init` also writes `forge.yml` (unless the directory already has
+`forge init --example` also writes `forge.yml` (unless the directory already has
 one), naming the plugin's design and verification file. From then on, anywhere
 under this directory, `forge check`, `forge build`, `forge test` and
 `forge report` need no arguments: after you edit the RTL or the golden

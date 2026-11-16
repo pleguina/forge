@@ -10,16 +10,19 @@ same commands into a **golden path** (the six you need in order) and
 
 ## The golden path
 
-There are two ways in. Starting from nothing, `forge init my_plugin` runs
-the entire sequence for you on a new plugin — scaffold, validate, generate,
-simulate, report. Starting from a repository you already have,
-`forge adopt .` reads it and builds the project model out of its own
-sources. Either way, each stage is also a command in its own right.
+There are two ways in. With firmware you already have, `forge init` writes
+one `forge.yml` naming its top, clock, reset and source description, and
+`forge test` compares it with your reference data; `forge adopt .` goes
+further and builds the project model out of its sources, for assembling a
+payload from blocks. Starting from nothing, `forge init --example
+my_plugin` runs the entire sequence on an example plugin — scaffold,
+validate, generate, simulate, report. Either way, each stage is also a
+command in its own right.
 
 | Command | What it does |
 |---|---|
 | `forge doctor` | Checks the install: Python and FORGE versions, every simulation/synthesis tool on `PATH`, and the resolved location of each framework resource. Read-only, and honest about which tools are optional. |
-| `forge init` | Scaffolds a plugin — topology side and verification side — then chains validate → build → test → report. Skips the simulation stage with a note if no simulator is installed. |
+| `forge init` | Writes `forge.yml` for the firmware in this repository (top, clock, reset, Hog/`.f` sources, reference data). `--example` scaffolds a plugin — topology side and verification side — then chains validate → build → test → report. Skips the simulation stage with a note if no simulator is installed. |
 | `forge adopt` | Reads an existing repository — modules, ports, instantiation graph, clocks, resets, HLS kernels, testbenches, constraints — and writes the project model that follows. Nothing in your tree is moved or rewritten. See [Bring Your Own RTL](getting-started/bring-your-own-rtl.md). |
 | `forge check` | Reports whether *this project* is completely and consistently described — the project-level counterpart to `forge doctor`'s installation check. Every blocker comes with the step that clears it. |
 | `forge next` | The same assessment narrowed to one recommendation, so the workflow does not have to be memorised. |

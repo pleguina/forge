@@ -165,34 +165,49 @@ def _events(args) -> Optional[List[str]]:
     return None
 
 
-def _build_subsystems(project, spec, select, json_mode: bool) -> None:
-    """Generate the top level of each subsystem target from the design, and
-    refuse one whose connections are not exactly the design's."""
-    import yaml
-
+def _build_design(project, design: Path, output: Path, what: str, json_mode: bool) -> None:
+    """`forge build` of *design* into *output*, with the project's build
+    options and the design's own registry."""
     from forge.core.cli._shared import run_forge_command
     from forge.project.resolve import design_registry
+
+    argv = ["build", str(design), "--mode", "verilog", "--top-name", output.stem,
+            "--output", str(output), "--consumer-root", str(project.root)]
+    registry = design_registry(design)
+    if registry is not None:
+        argv += ["--contracts-from", str(registry)]
+    for option, value in project.build_options().items():
+        if option not in ("mode", "top_name"):
+            argv += [f"--{option.replace('_', '-')}", value]
+    code, output_text = run_forge_command(argv, quiet=True)
+    if code != 0:
+        if output_text:
+            print(output_text, file=sys.stderr)
+        sys.exit(_guided_run_failure(f"{what} did not build", json_mode=json_mode))
+
+
+def _build_variants_and_subsystems(project, spec, select, json_mode: bool) -> None:
+    """Generate each selected target's variant, and the top level of each
+    subsystem target from the design, refusing a subsystem whose connections
+    are not exactly the design's."""
+    import yaml
+
     from forge.project.subsystem import subsystem_design, subsystem_difference, subsystems
+    from forge.project.variants import variant_design
     from forge.verification import auto
 
+    targets = spec.get("targets") if isinstance(spec.get("targets"), dict) else {}
+    for name in sorted({str((t or {}).get("variant")) for n, t in targets.items()
+                        if (t or {}).get("variant") and (not select or n in select)}):
+        design = variant_design(project.config, project.design, name)
+        _build_design(project, design, auto.variant_generated_dir(project, name) / "algo_top.v", f"variant {name}", json_mode)
     for name, instances in subsystems(project, spec, select).items():
         gen = auto.subsystem_dir(project, name)
         gen.mkdir(parents=True, exist_ok=True)
         design = gen.parent / "design.yml"
         design.write_text(yaml.safe_dump(subsystem_design(project, instances), sort_keys=False))
-        argv = ["build", str(design), "--mode", "verilog", "--top-name", f"{name.replace('.', '_').replace('-', '_')}_top",
-                "--output", str(gen / f"{name}_top.v"), "--consumer-root", str(project.root)]
-        registry = design_registry(design)
-        if registry is not None:
-            argv += ["--contracts-from", str(registry)]
-        for option, value in project.build_options().items():
-            if option not in ("mode", "top_name"):
-                argv += [f"--{option.replace('_', '-')}", value]
-        code, output = run_forge_command(argv, quiet=True)
-        if code != 0:
-            if output:
-                print(output, file=sys.stderr)
-            sys.exit(_guided_run_failure(f"subsystem {name} did not build", json_mode=json_mode))
+        top = f"{name.replace('.', '_').replace('-', '_')}_top"
+        _build_design(project, design, gen / f"{top}.v", f"subsystem {name}", json_mode)
         difference = subsystem_difference(project, name, instances)
         if difference:
             sys.exit(_guided_run_failure(
@@ -241,13 +256,18 @@ def cmd_auto_test(args, project) -> None:
                     print(output, file=sys.stderr)
                 sys.exit(_guided_run_failure("the design did not build", json_mode=json_mode))
             if not getattr(args, "plan", False):
-                _build_subsystems(project, spec, select, json_mode)
+                _build_variants_and_subsystems(project, spec, select, json_mode)
         plan = auto.plan(project, spec=spec, input_override=ref(args.input, args.input_format),
-                         expected_override=ref(args.expected, args.expected_format), select=select, events=events)
+                         expected_override=ref(args.expected, args.expected_format), select=select, events=events,
+                         pre_roll=getattr(args, "pre_roll", None))
     except (OSError, ValueError, KeyError) as exc:
         sys.exit(_guided_run_failure(str(exc), json_mode=json_mode,
                                      action="Declare the interfaces under verification.protocols in forge.yml"
                                      if isinstance(exc, KeyError) else None))
+    if getattr(args, "capture", None) and not getattr(args, "plan", False):
+        sys.exit(_compare_capture(args, project, plan, json_mode))
+    if getattr(args, "implementation", None) and not getattr(args, "plan", False):
+        sys.exit(_import_implementation(args, project, plan, json_mode))
     if getattr(args, "plan", False):
         if json_mode:
             print(json.dumps(plan.to_dict(), indent=2))
@@ -331,6 +351,123 @@ def cmd_auto_test(args, project) -> None:
         next_actions=_auto_next_actions([e for e in evidence if e.doc.get("required", True)]),
     )
     sys.exit(emit(envelope, json_mode=json_mode))
+
+
+def _compare_capture(args, project, plan, json_mode: bool) -> int:
+    """`forge test --capture`: a board capture compared with a design target's
+    expected output, recorded as that target's ``board`` result."""
+    from datetime import datetime, timezone
+
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.project.replay_package import check_package
+    from forge.project.verification_state import evidence_dir, runs_dir
+    from forge.verification import auto
+
+    levels = [lv for lv in plan.levels if lv.scope == "design" and lv.expected is not None]
+    if len(levels) != 1:
+        return _guided_run_failure(
+            "--capture compares one design target with an expected output: name it with --target "
+            f"(have {', '.join(lv.name for lv in levels) or 'none'})", json_mode=json_mode)
+    level = levels[0]
+    try:
+        if getattr(args, "package", None):
+            build = {**check_package(Path(args.package).resolve(), level)["build"], "package": str(Path(args.package).resolve())}
+        else:
+            from forge.project.replay_package import firmware_intent
+
+            generated = next((f.parent for f in level.sources if (f.parent / "provenance.json").is_file()), None)
+            build = {**auto.build_identity(level, generated), "firmware": firmware_intent(project.root),
+                     "package": None}
+        firmware = None
+        if getattr(args, "firmware_id", None):
+            firmware = json.loads(Path(args.firmware_id).read_text())
+            if not isinstance(firmware, dict):
+                raise ValueError(f"{args.firmware_id}: want a JSON object of the identity fields read back "
+                                 "(git_sha, bitfile_sha256, a firmware ID register, ...)")
+        capture = auto.DataRef.from_spec(
+            {"path": str(Path(args.capture).resolve()), **({"format": args.capture_format} if args.capture_format else {})},
+            project.root)
+        evidence = auto.compare_capture(level, capture, input_offset=getattr(args, "capture_offset", None),
+                                        build=build, firmware=firmware)
+    except (OSError, ValueError, KeyError) as exc:
+        return _guided_run_failure(str(exc), json_mode=json_mode)
+    name = f"{level.name.replace(':', '_')}.{auto.BOARD}.evidence.json"
+    run_dir = runs_dir(project.paths.report_root) / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = evidence_dir(project.paths.report_root)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    evidence.write(out_dir / name)
+    evidence.write(run_dir / name)
+    (run_dir / "run.json").write_text(json.dumps({
+        "run": run_dir.name, "verification": evidence.status, "levels": {f"{level.name}[board]": evidence.status},
+        "evidence": {f"{level.name}[board]": evidence.doc["evidence_id"]}, "capture": str(capture.path)}, indent=2) + "\n")
+    detail = ", ".join(f"{r['interface']} {r['matched']}/{r['expected']}" for r in evidence.doc.get("interfaces", []))
+    rows = [(r["interface"], row) for r in evidence.doc.get("interfaces", []) for row in r.get("rows") or []]
+    if not json_mode:
+        print(f"  {_STATUS_ICON[evidence.status]} {level.name} [board]: {evidence.status} ({detail}), "
+              f"build {build['id'][:12]}")
+        for iface, row in rows[:10]:
+            print(f"      {iface} {row.get('kind')}" + "".join(
+                f" {k}={row[k]}" for k in ("event", "index", "cycle", "expected", "observed") if k in row))
+    status = {"VERIFIED": "pass", "FAILED": "fail"}.get(evidence.status, "warn")
+    fw = evidence.doc["firmware"]
+    diagnostics = [{"severity": "error", "message": f"{level.name} [board]: {detail}"}] if status == "fail" else []
+    if fw["status"] != "confirmed":
+        diagnostics.append({"severity": "warning", "message": f"{level.name} [board]: firmware {fw['status']}"
+                            + (f": {fw['reason']}" if fw.get("reason") else
+                               f": {', '.join(fw.get('differ', {}))} differ" if fw.get("differ") else "")})
+        if status == "pass":
+            status = "warn"
+    if not json_mode:
+        print(f"      firmware: {fw['status']}")
+    return emit(CommandEnvelope(
+        status=status,
+        diagnostics=diagnostics,
+        artifacts=[str(out_dir / name), str(run_dir)],
+        metrics={"verification": evidence.status, "levels": {f"{level.name}[board]": evidence.status},
+                 "build": build["id"], "firmware": fw["status"], "capture": str(capture.path)},
+    ), json_mode=json_mode)
+
+
+def _import_implementation(args, project, plan, json_mode: bool) -> int:
+    """`forge test --implementation`: a timing summary of the build, recorded
+    as a design target's ``implementation`` result."""
+    from forge.core.cli.envelope import CommandEnvelope, emit
+    from forge.project.replay_package import firmware_intent
+    from forge.project.verification_state import evidence_dir
+    from forge.verification import auto
+
+    levels = [lv for lv in plan.levels if lv.scope == "design" and lv.bench is not None]
+    if len(levels) != 1:
+        return _guided_run_failure(
+            "--implementation records one design target's build: name it with --target "
+            f"(have {', '.join(lv.name for lv in levels) or 'none'})", json_mode=json_mode)
+    level = levels[0]
+    generated = next((f.parent for f in level.sources if (f.parent / "provenance.json").is_file()), None)
+    build = {**auto.build_identity(level, generated), "firmware": firmware_intent(project.root)}
+    try:
+        evidence = auto.implementation_evidence(level, Path(args.implementation).resolve(),
+                                                [Path(c).resolve() for c in args.constraints or []], build)
+    except (OSError, ValueError) as exc:
+        return _guided_run_failure(str(exc), json_mode=json_mode)
+    out_dir = evidence_dir(project.paths.report_root)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{level.name.replace(':', '_')}.{auto.IMPLEMENTATION}.evidence.json"
+    evidence.write(path)
+    impl = evidence.doc["implementation"]
+    if not json_mode:
+        print(f"  {_STATUS_ICON[evidence.status]} {level.name} [implementation]: {evidence.status} "
+              f"(WNS {impl['wns_ns']} ns, TNS {impl['tns_ns']} ns)")
+    diagnostics = [] if evidence.status == "VERIFIED" else [{"severity": "error", "message": evidence.doc["reason"]}]
+    if not args.constraints:
+        diagnostics.append({"severity": "warning", "message":
+                            "no --constraints given: a constraints change will not make this result out of date"})
+    return emit(CommandEnvelope(
+        status="pass" if evidence.status == "VERIFIED" else "fail",
+        diagnostics=diagnostics,
+        artifacts=[str(path)],
+        metrics={"implementation": evidence.status, "wns_ns": impl["wns_ns"], "tns_ns": impl["tns_ns"]},
+    ), json_mode=json_mode)
 
 
 _REFERENCE_WORDS = {"functional": "reference comparison", "derived": "replay of recorded traffic",
@@ -697,6 +834,11 @@ def register(sub) -> None:
         "--all-events", dest="all_events", action="store_true", default=False,
         help="Run every event in the dataset",
     )
+    p_test.add_argument(
+        "--pre-roll", dest="pre_roll", type=int, default=None,
+        help="With --event-id/--event-list: also replay and compare this many events before each one, "
+             "for a design that keeps state across events (default: the target's pre_roll, else 0)",
+    )
     p_test.add_argument("--plugin", help="Plugin ID to bootstrap (when flow.plugin is absent from YAML)")
     auto = p_test.add_argument_group(
         "without a verification config",
@@ -723,6 +865,24 @@ def register(sub) -> None:
     auto.add_argument("--record-modules", dest="record_modules", action="store_true", default=False,
                       help="Record each module instance's inputs and outputs during the design-level run, "
                            "as data a module level can be checked against (derived, not independent)")
+    auto.add_argument("--capture", default=None,
+                      help="Compare this board capture (a pattern file) with the target's expected output, "
+                           "using verification.links, instead of simulating")
+    auto.add_argument("--capture-format", dest="capture_format", default=None,
+                      help="The capture's dataset format (default: from the file)")
+    auto.add_argument("--capture-offset", dest="capture_offset", type=int, default=None,
+                      help="Capture frame at which the input's frame 0 was played (for the latency modes)")
+    auto.add_argument("--package", default=None,
+                      help="With --capture: the replay package the board ran (forge report --package); "
+                           "its reference must still be forge.yml's")
+    auto.add_argument("--implementation", default=None, metavar="TIMING_SUMMARY",
+                      help="Record this Vivado report_timing_summary of the target's build as its implementation "
+                           "result, instead of simulating")
+    auto.add_argument("--constraints", nargs="+", default=None, metavar="XDC",
+                      help="With --implementation: the constraints the build used, recorded by content")
+    auto.add_argument("--firmware-id", dest="firmware_id", default=None,
+                      help="With --capture: JSON of the firmware identity read back from the board (git_sha, "
+                           "bitfile_sha256, ID registers); without it the capture's firmware is unconfirmed")
     auto.add_argument("--plan", action="store_true", default=False,
                       help="Print what would be verified, and what was inferred, without simulating")
     p_test.add_argument(

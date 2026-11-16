@@ -164,7 +164,14 @@ verification:
     hit: {protocol: valid, data: [hit_lo, hit_hi], valid: hit_strobe}
   links: {l0: 0, q: 1}               # interface -> link, for pattern files
   association: {max_skew: 0, missing: error}   # grouping pattern-file packets into events
-  decoder: tools/decode.py:decode    # decode(interface, word) -> {field: value}
+  decoder: tools/decode.py:decode    # decode(interface, word) -> {field: value}, None = no object
+  # codecs: {"q*": codecs/muon.yml}  # field layouts instead of a decoder (forge.integration.objects)
+  # compare: {fields: [pt, eta, phi], order: event}   # decoded fields only; any order within an event
+  streams: {gmt: "gmt_out_*"}        # several output ports read as one stream, in cycle order
+  outputs: [gmt]                     # outputs the reference covers; the others are traced only
+  drain: 400                         # cycles after the last input (free-running designs)
+  settle: 200                        # cycles after reset in which X on an output is not an error
+  xsim: {elab_libs: [unisims_ver], extra_top_modules: [glbl], extra_sources: [...]}
   targets:                           # instead of input/expected: named things to check
     payload: {input: data/in.json, expected: data/exp.json}   # scope: design
     sorter: {scope: "instance:sorter_3", replay: payload}     # traffic payload recorded
@@ -175,6 +182,12 @@ verification:
 Only required targets (default) decide the status and `--require-verified`.
 Without `targets`, the design is required and a module only when it has its
 own expected output.
+
+`variants: {board: design.board.yml, sim: {modules: {lane: {instances: 2}}}}`
+names variants of the design (`forge build --variant sim`, a target's
+`variant: sim`). In a hand-written design, `subsystems:` defines a chain of
+blocks once; `{name: lane, subsystem: lane, instances: 6, overrides: {3: {post:
+{ref: other}}}}` makes copies named `lane_<k>__<block>`.
 
 A project with a hand-written design keeps it: `design: path/design.yml`,
 `registry: path/modules.yml`, `verification.config: path/design.verification.yml`
@@ -188,7 +201,13 @@ JSON keyed by interface name, one entry per transaction, in order:
 {"decimator_sample_in": [4660, "0x1a2b", 7]}
 ```
 
-A value is a number or a mapping from data port to value. Interfaces are
+A value is a number or a mapping from data port to value. A dataset of
+events (`{"events": [{"id": "442:1", "<port>": [...]}, ...]}`) names each
+event; an entry with `"id": null` holds words of no event (configuration
+before the first event, idle words after the last), kept by `--event-id`.
+Per-cycle (`scalar`) inputs are aligned at every entry; an event whose
+per-cycle inputs give different numbers of words is an error. A
+`provenance` mapping in the expected file shows in the report. Interfaces are
 found from port names: `x` + `x_valid` is `valid`; adding `x_ready` makes it
 `ready_valid`; `x_tdata/x_tvalid/x_tready` is AXI4-Stream; `x_data` + `x_valid`
 + two of `x_start/x_last/x_start_of_orbit/x_strobe` is `emp_lword`;
@@ -246,6 +265,7 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | FAILED, compile or simulation error | the evidence's `reason` names its `compile.log` or `sim.log` |
 | FAILED, rows | report the first rows (interface, index, cycle, expected, observed, event) to the user |
 | Only design-level reference | `forge test --record-modules` records each instance's I/O as a derived module reference |
+| The reference is a CMSSW (or other emulator) export | a project adapter writes the dataset of events and the expected objects with their `provenance`; `decoder` + `compare: {fields, order: event}`; `streams` for time-multiplexed links; start from examples/cmssw_reference (docs/how-to/compare-with-a-cmssw-export.md) |
 | One instance or event is wrong in a slow payload | declare an `instance:` target with `replay: <design target>`; `forge test --target <design> --event-id N`, then `forge test --target <instance>` after each edit |
 
 ## Commands
@@ -256,11 +276,14 @@ recomputes staleness; re-run `forge test` when it says out of date.
 | `forge adopt --json [path]` | create `forge.yml` from an existing repository (`--dry-run` to preview) |
 | `forge check --json [--strict]` | project status, every blocker with its action |
 | `forge next --json` | the single most urgent step |
-| `forge build --json [--dry-run]` | generate the top level into `.forge/generated/` |
+| `forge build --json [--dry-run] [--variant V]` | generate the top level into `.forge/generated/` (a variant into `.forge/variants/V/`) |
 | `forge test --json [--plan] [--target T] [--event-list E] [--backend B] [--require-verified]` | simulate and compare |
 | `forge test --input F --expected F --json` | one-off data without editing `forge.yml` |
 | `forge report --json` | collect results into `.forge/reports/` |
+| `forge report --package T --json` | replay package of target T for the board: reference files, links, comparison, build identity |
+| `forge test --target T --capture F [--package DIR] [--capture-offset N] --json` | compare a board capture (pattern file) with T's expected output; recorded as `T[board]` |
 | `forge inspect --json [--emit-ir F]` | the resolved design (canonical IR) |
+| `forge inspect --impact [OLD_IR] --json` | what changed since the last build (or a snapshot), what it affects, misaligned merges, targets to rerun, files to regenerate |
 | `forge explain <target> --json` | why FORGE decided (or refused to decide) something |
 | `forge fix --json [--apply]` | source-proven repairs, previewed as a diff |
 | `forge connect a.port b.port --json` | record one connection in `forge.yml` |

@@ -152,6 +152,8 @@ site under [`docs/`](docs/) (build it locally with `pip install -e "forge[docs]"
   **[RTL Example](docs/tutorials/rtl-example.md)**, and
   **[Mixed HLS/RTL Example](docs/tutorials/mixed-hls-rtl-example.md)** —
   shorter, single-design walkthroughs.
+- **[CMSSW reference example](examples/cmssw_reference/README.md)** — a payload compared with a real
+  CMSSW sample, laid out for another algorithm to replace the export, codecs and RTL.
 - **[Agent skill](skills/forge/SKILL.md)** — how an AI coding agent should
   drive the CLI: the JSON envelope, which decisions to leave to the user,
   and how to read verification results.

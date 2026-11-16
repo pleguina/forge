@@ -123,6 +123,27 @@ class GenTopPlanContext:
     # delay_cycles: auto, resolved from the module latencies (None: the design
     # has no auto delay). Already applied to cfg when it has no problems.
     auto_delays: Any = None
+    # Merges whose known input latencies break the alignment they require.
+    misaligned: List[str] = dataclasses.field(default_factory=list)
+
+
+def _misaligned_merges(design_path: Path, modules_yml: Optional[Path], hls_build_root: Optional[Path]) -> List[str]:
+    """One line per merge whose inputs, at the latencies known before
+    generation (auto delays sized), break the alignment it requires (exact by
+    default, or its ``input_alignment``). A branch whose latency is unknown is
+    not judged here: the latency check reports it as unknown."""
+    from forge.analysis.latency_static.balance import resolve_auto_delays
+    from forge.analysis.latency_static.checker import check_merge_points
+    from forge.analysis.latency_static.graph import build_resolved_graph
+
+    try:
+        graph = build_resolved_graph(design_path, modules_yml_path=modules_yml, hls_build_root=hls_build_root)
+    except Exception:  # noqa: BLE001 — a design the graph cannot read is reported by validation
+        return []
+    resolve_auto_delays(graph)
+    return [f"{r.merge_node}: inputs differ by {r.delta} cycle(s) ({r.alignment})"
+            + (f"; {r.suggestion}" if r.suggestion else "")
+            for r in check_merge_points(graph) if r.is_mismatch and not r.has_unknowns]
 
 
 def compute_gen_top_plan(
@@ -343,6 +364,8 @@ def compute_gen_top_plan(
         cdc_issues=cdc_issues,
         contract_conflicts=contract_conflicts,
         auto_delays=auto_delays,
+        misaligned=_misaligned_merges(design_path, _modules_yml_path if _modules_yml_path and
+                                      _modules_yml_path.exists() else None, hls_build_root),
     )
 
 
@@ -356,6 +379,11 @@ def _print_auto_delays(cfg: DesignConfig, result) -> None:
         print(f"  ❌ {problem}")
 
 
+MISALIGNED_HINT = ("   Let FORGE size the delay (delay_cycles: auto on the connection), set it yourself, or "
+                   "declare the merge's input_alignment (window or framed) if it does not need its inputs "
+                   "on the same cycle.")
+
+
 def gate_failure(ctx: GenTopPlanContext, options: GenTopOptions) -> Optional[str]:
     """The report of the first finding that stops this plan from being
     generated, or ``None``. ``--strict`` adds the findings about heuristic
@@ -365,6 +393,9 @@ def gate_failure(ctx: GenTopPlanContext, options: GenTopOptions) -> Optional[str
 
     if ctx.auto_delays is not None and ctx.auto_delays.problems:
         return f"\n❌ {len(ctx.auto_delays.problems)} delay_cycles: auto could not be resolved (listed above)."
+    if ctx.misaligned:
+        return "\n".join(["\n❌ Merge inputs out of alignment at the declared latencies:",
+                          *(f"   • {m}" for m in ctx.misaligned), MISALIGNED_HINT])
     if options.strict and ctx.contract_conflicts:
         return (
             f"\n❌ Strict mode: {len(ctx.contract_conflicts)} interface contract "

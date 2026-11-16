@@ -130,20 +130,34 @@ class ResultRecord:
 
 
 def _sha256(path: Path) -> Optional[str]:
+    from forge.verification.auto import path_sha256
+
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return path_sha256(path) if path.exists() else None
     except OSError:
         return None
 
 
-def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = None) -> str:
-    """What changed since *doc* was recorded: a source, a header, the data, or
-    — when *plans* (level -> :func:`forge.verification.auto.plan_identity`) is
-    given — the level's verification settings."""
+def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, Any]] = None) -> str:
+    """What changed since *doc* was recorded: a source, a header, a memory
+    file, a decoder file, the data, the simulator, or — when *plans* (level
+    -> :func:`forge.verification.auto.plan_parts`, or its single
+    :func:`~forge.verification.auto.plan_identity`) is given — the part of the
+    level's verification settings that changed."""
+    from forge.verification import auto
+
     changed: List[str] = []
     for src in [*(doc.get("sources") or []), *(doc.get("headers") or [])]:
         if _sha256(Path(src["path"])) != src.get("sha256"):
             changed.append(Path(src["path"]).name)
+    for key, what in (("memory_files", "the memory file"), ("decoder_files", "the decoder file"),
+                      ("format_files", "the format reader")):
+        for f in doc.get(key) or []:
+            if _sha256(Path(f["path"])) != f.get("sha256"):
+                changed.append(f"{what} {Path(f['path']).name}")
+    tool = _tool_change(doc)
+    if tool:
+        changed.append(tool)
     for key in ("input", "expected"):
         ref = doc.get(key)
         if ref and _sha256(Path(ref["path"])) != ref.get("sha256"):
@@ -151,16 +165,53 @@ def _evidence_staleness(doc: Dict[str, Any], plans: Optional[Dict[str, str]] = N
         names = (ref or {}).get("events")
         if names and _sha256(Path(names["path"])) != names.get("sha256"):
             changed.append(f"the {key} event names {Path(names['path']).name}")
+    for f in doc.get("constraints") or []:
+        if _sha256(Path(f["path"])) != f.get("sha256"):
+            changed.append(f"the constraints {Path(f['path']).name}")
+    report = (doc.get("implementation") or {}).get("report")
+    if report and _sha256(Path(report["path"])) != report.get("sha256"):
+        changed.append(f"the implementation report {Path(report['path']).name}")
+    capture = doc.get("capture")
+    if capture and _sha256(Path(capture["path"])) != capture.get("sha256"):
+        changed.append(f"the capture {Path(capture['path']).name}")
     replay = doc.get("replay") or {}
     if any(_sha256(Path(f["path"])) != f.get("sha256") for f in replay.get("files") or []):
         changed.append(f"the traffic {replay.get('source')} recorded")
     if plans is not None:
         level = str(doc.get("level", ""))
-        if level not in plans:
+        current = plans.get(level)
+        if current is None:
             changed.append("the level is no longer in the verification plan")
-        elif doc.get("plan_sha256") != plans[level]:
+        elif isinstance(current, dict):
+            recorded = doc.get("plan_parts")
+            if isinstance(recorded, dict):
+                changed += [what for part, what in auto.PLAN_PARTS.items() if recorded.get(part) != current.get(part)]
+            elif doc.get("plan_sha256") != auto.identity_of(current):
+                changed.append("its verification settings")
+        elif doc.get("plan_sha256") != current:
             changed.append("its verification settings")
     return ", ".join(changed)
+
+
+def _tool_change(doc: Dict[str, Any]) -> str:
+    """The simulator a result came from, when the one installed now reports
+    another version; nothing when it is not installed here."""
+    import shutil
+
+    from forge.verification import auto
+    from forge.verification.compile_key import tool_version
+
+    tools = auto.BACKENDS.get(str(doc.get("backend", "")))
+    recorded = doc.get("tool")
+    if not tools or not recorded or shutil.which(tools[0]) is None:
+        return ""
+    return "" if tool_version(tools[0]) == recorded else f"the simulator ({tools[0]} version)"
+
+
+def current_plan(config: Any) -> Any:
+    """The data-driven plan of a loaded ``forge.yml`` and its last build; raises
+    what :func:`forge.verification.auto.plan` raises."""
+    return _plan(config)
 
 
 def _plan(config: Any) -> Any:
@@ -175,17 +226,17 @@ def _plan(config: Any) -> Any:
     return auto.plan(project, spec=dict(config.verification_spec))
 
 
-def current_plans(config: Any) -> Optional[Dict[str, str]]:
-    """level -> plan identity of the data-driven plan for a loaded ``forge.yml``
-    and its last build, or None when no plan can be made (nothing built yet).
-    Reads only; nothing under ``.forge/`` is rewritten."""
+def current_plans(config: Any) -> Optional[Dict[str, Dict[str, str]]]:
+    """level -> plan identity parts of the data-driven plan for a loaded
+    ``forge.yml`` and its last build, or None when no plan can be made
+    (nothing built yet). Reads only; nothing under ``.forge/`` is rewritten."""
     from forge.verification import auto
 
     try:
         plan = _plan(config)
     except Exception:  # noqa: BLE001 — applicability then rests on file hashes alone
         return None
-    return {level.name: auto.plan_identity(level) for level in plan.levels}
+    return {level.name: auto.plan_parts(level) for level in plan.levels}
 
 
 def target_problem(config: Any) -> Optional[str]:
@@ -227,7 +278,7 @@ def run_history(report_root: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def latest_results(report_root: Path, plans: Optional[Dict[str, str]] = None) -> List[ResultRecord]:
+def latest_results(report_root: Path, plans: Optional[Dict[str, Any]] = None) -> List[ResultRecord]:
     """Every result under *report_root*: data-driven evidence and flow results.
 
     *plans* (see :func:`current_plans`) also marks a result out of date when
@@ -305,6 +356,16 @@ def render_markdown(records: List[ResultRecord]) -> str:
         lines.append(f"| {r.name} | {r.status} | {'yes' if r.required else 'no'} | {reference} | {fresh} | "
                      f"{detail} | {r.path.name} |")
     lines.append("")
+    origins: Dict[str, Dict[str, Any]] = {}
+    for r in records:
+        origin = (r.payload.get("expected") or {}).get("provenance")
+        if isinstance(origin, dict) and origin:
+            origins[r.name] = origin
+    if origins:
+        lines += ["Where each reference came from:", ""]
+        lines += [f"- {name}: " + ", ".join(f"{k} {v}" for k, v in origin.items() if not isinstance(v, (dict, list)))
+                  for name, origin in origins.items()]
+        lines.append("")
     for r in records:
         rows = [(i["interface"], row) for i in r.payload.get("interfaces") or [] for row in i.get("rows") or []]
         if not rows:
